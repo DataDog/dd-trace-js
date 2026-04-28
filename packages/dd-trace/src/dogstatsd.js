@@ -16,6 +16,8 @@ const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
 const TYPE_HISTOGRAM = 'h'
 
+const GAUGE_EVICTION_FLUSHES = 60 // roughly 10 minutes at the 10s flush cadence
+
 /**
  * @import { DogStatsD } from "../../../index.d.ts"
  * @implements {DogStatsD}
@@ -263,7 +265,7 @@ class MetricsAggregationClient {
   }
 
   _captureGauges () {
-    this._captureTree(this._gauges, (node, name, tags) => {
+    this._captureAndPrune(this._gauges, (node, name, tags) => {
       this._client.gauge(name, node.value, tags)
     })
   }
@@ -277,13 +279,8 @@ class MetricsAggregationClient {
   }
 
   _captureHistograms () {
-    this._captureTree(this._histograms, (node, name, tags) => {
-      let stats = node.value
-
-      // Stats can contain garbage data when a value was never recorded.
-      if (stats.count === 0) {
-        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
-      }
+    this._captureAndPrune(this._histograms, (node, name, tags) => {
+      const stats = node.value
 
       this._client.gauge(`${name}.min`, stats.min, tags)
       this._client.gauge(`${name}.max`, stats.max, tags)
@@ -294,7 +291,7 @@ class MetricsAggregationClient {
       this._client.gauge(`${name}.median`, stats.median, tags)
       this._client.gauge(`${name}.95percentile`, stats.p95, tags)
 
-      node.value.reset()
+      stats.reset()
     })
   }
 
@@ -314,6 +311,41 @@ class MetricsAggregationClient {
       this._captureNode(next, name, tags, fn)
       tags.pop()
     }
+  }
+
+  _captureAndPrune (tree, emit) {
+    for (const [name, root] of tree) {
+      if (this._captureAndPruneNode(root, name, [], emit)) {
+        tree.delete(name)
+      }
+    }
+  }
+
+  // Returns true when the node and all its descendants are fully cold and can be evicted.
+  _captureAndPruneNode (node, name, tags, emit) {
+    let canPrune
+
+    if (node.touched) {
+      emit(node, name, tags)
+      node.touched = false
+      node.coldFlushes = 0
+      canPrune = false
+    } else {
+      node.coldFlushes++
+      canPrune = node.coldFlushes >= GAUGE_EVICTION_FLUSHES
+    }
+
+    for (const [tag, next] of node.nodes) {
+      tags.push(tag)
+      if (this._captureAndPruneNode(next, name, tags, emit)) {
+        node.nodes.delete(tag)
+      } else {
+        canPrune = false
+      }
+      tags.pop()
+    }
+
+    return canPrune
   }
 
   _ensureTree (tree, name, tags = [], value) {
@@ -336,7 +368,7 @@ class MetricsAggregationClient {
     let node = container.get(key)
 
     if (!node) {
-      node = { nodes: new Map(), touched: false, value }
+      node = { nodes: new Map(), touched: false, coldFlushes: 0, value }
 
       if (typeof key === 'string') {
         container.set(key, node)
@@ -413,4 +445,5 @@ module.exports = {
   DogStatsDClient,
   CustomMetrics,
   MetricsAggregationClient,
+  GAUGE_EVICTION_FLUSHES,
 }

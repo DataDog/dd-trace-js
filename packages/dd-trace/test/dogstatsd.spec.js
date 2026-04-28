@@ -15,6 +15,8 @@ describe('dogstatsd', () => {
   let client
   let DogStatsDClient
   let CustomMetrics
+  let MetricsAggregationClient
+  let GAUGE_EVICTION_FLUSHES
   let dgram
   let udp4
   let udp6
@@ -76,6 +78,8 @@ describe('dogstatsd', () => {
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
+    MetricsAggregationClient = dogstatsd.MetricsAggregationClient
+    GAUGE_EVICTION_FLUSHES = dogstatsd.GAUGE_EVICTION_FLUSHES
 
     httpData = []
     statusCode = 200
@@ -657,6 +661,85 @@ describe('dogstatsd', () => {
 
       sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar|c:ci-1234\n')
+    })
+  })
+
+  describe('MetricsAggregationClient', () => {
+    let aggregator
+    let gaugeCalls
+    let incrementCalls
+
+    beforeEach(() => {
+      gaugeCalls = []
+      incrementCalls = []
+      const inner = {
+        gauge: (name, value, tags) => gaugeCalls.push([name, value, tags?.slice()]),
+        increment: (name, value, tags) => incrementCalls.push([name, value, tags?.slice()]),
+        distribution: () => {},
+        histogram: () => {},
+        flush: () => {},
+      }
+      aggregator = new MetricsAggregationClient(inner)
+    })
+
+    it('emits a gauge once and then stays silent until it is set again', () => {
+      aggregator.gauge('test.avg', 5)
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [['test.avg', 5, []]])
+
+      gaugeCalls.length = 0
+      aggregator.flush()
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [])
+    })
+
+    it('re-emits a gauge on every flush when it is updated each cycle', () => {
+      for (let i = 1; i <= 3; i++) {
+        aggregator.gauge('test.avg', i)
+        aggregator.flush()
+      }
+
+      assert.deepStrictEqual(gaugeCalls, [
+        ['test.avg', 1, []],
+        ['test.avg', 2, []],
+        ['test.avg', 3, []],
+      ])
+    })
+
+    it('does not re-emit a histogram once observations stop', () => {
+      aggregator.histogram('test.hist', 10)
+      aggregator.flush()
+
+      assert(gaugeCalls.length > 0 && incrementCalls.length > 0)
+
+      gaugeCalls.length = 0
+      incrementCalls.length = 0
+      aggregator.flush()
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [])
+      assert.deepStrictEqual(incrementCalls, [])
+    })
+
+    it('evicts a cold gauge subtree after GAUGE_EVICTION_FLUSHES silent flushes', () => {
+      aggregator.gauge('test.avg', 5, ['t:1'])
+      aggregator.flush()
+
+      assert.strictEqual(aggregator._gauges.size, 1)
+
+      for (let i = 0; i < GAUGE_EVICTION_FLUSHES; i++) {
+        aggregator.flush()
+      }
+
+      assert.strictEqual(aggregator._gauges.size, 0)
+
+      gaugeCalls.length = 0
+      aggregator.gauge('test.avg', 7, ['t:1'])
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [['test.avg', 7, ['t:1']]])
     })
   })
 })
