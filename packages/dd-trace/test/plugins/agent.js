@@ -4,7 +4,7 @@ const assert = require('assert')
 const http = require('http')
 const path = require('path')
 const util = require('util')
-const { setTimeout } = require('timers/promises')
+const { setTimeout: wait } = require('timers/promises')
 
 const bodyParser = require('body-parser')
 const express = require('express')
@@ -347,7 +347,7 @@ module.exports = {
     // TODO: Fix the root cause.
     const innerAgent = agent
 
-    await setTimeout(1)
+    await wait(1)
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
