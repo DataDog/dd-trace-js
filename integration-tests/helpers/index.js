@@ -540,8 +540,14 @@ async function createSandbox (
   const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
-  const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--trust']
+  const addOptions = {
+    cwd: folder,
+    env: {
+      ...restOfEnv,
+      NODE_OPTIONS: '--dns-result-order=ipv4first',
+    },
+  }
+  const addFlags = ['--trust', '--verbose']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
