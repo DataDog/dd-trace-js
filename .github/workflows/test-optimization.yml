@@ -72,6 +72,7 @@ jobs:
           - playwright-test-management
           - playwright-active-test-span
           - playwright-impacted-tests
+          - playwright-tia
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:

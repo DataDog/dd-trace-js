@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('node:path')
+
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
@@ -39,12 +41,22 @@ const {
   TEST_SUITE,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_FORCED_RUN,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_CODE_COVERAGE_ENABLED,
+  ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
@@ -57,6 +69,9 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
+    this._coverageFilesByTestSuite = new Map()
+    this._finishedTestSuites = new Set()
+    this._testSuiteAbsolutePathBySpan = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
@@ -75,6 +90,13 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isSuitesSkipped,
+      numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
+      itrCorrelationId,
       onDone,
     }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -99,6 +121,34 @@ class PlaywrightPlugin extends CiPlugin {
       if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
+      this.testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+      this.testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+      if (isSuitesSkippingEnabled) {
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_TYPE, 'suite')
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, 'suite')
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites || 0)
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites || 0)
+      }
+      if (isSuitesSkipped) {
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+      } else if (isSuitesSkippingEnabled) {
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+        this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+      }
+      if (hasUnskippableSuites) {
+        this.testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+      }
+      if (hasForcedToRunSuites) {
+        this.testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+      }
+      if (itrCorrelationId) {
+        this.testSessionSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
 
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -112,10 +162,15 @@ class PlaywrightPlugin extends CiPlugin {
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
       this.numFailedTests = 0
+      this.numFailedSuites = 0
+      this._coverageFilesByTestSuite.clear()
+      this._finishedTestSuites.clear()
+      this._testSuiteAbsolutePathBySpan.clear()
+      this._testSuiteSpansByTestSuiteAbsolutePath.clear()
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, testSourceFileAbsolutePath } = ctx
+      const { testSuiteAbsolutePath, testSourceFileAbsolutePath, isUnskippable, isForcedToRun } = ctx
 
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
@@ -137,6 +192,14 @@ class PlaywrightPlugin extends CiPlugin {
         testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
         testSuiteMetadata[TEST_SOURCE_START] = 1
       }
+      if (isUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+      }
+      if (isForcedToRun) {
+        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+      }
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {
         testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
@@ -155,6 +218,7 @@ class PlaywrightPlugin extends CiPlugin {
       ctx.currentStore = { ...store, testSuiteSpan }
 
       this._testSuiteSpansByTestSuiteAbsolutePath.set(testSuiteAbsolutePath, testSuiteSpan)
+      this._testSuiteAbsolutePathBySpan.set(testSuiteSpan, testSuiteAbsolutePath)
 
       return ctx.currentStore
     })
@@ -172,8 +236,34 @@ class PlaywrightPlugin extends CiPlugin {
         this.numFailedSuites++
       }
 
+      // Export TIA coverage for this suite if workers reported any files.
+      const absolutePath = this._testSuiteAbsolutePathBySpan?.get(testSuiteSpan)
+      const coverageFiles = absolutePath && this._coverageFilesByTestSuite?.get(absolutePath)
+      if (absolutePath) {
+        this._finishedTestSuites.add(absolutePath)
+      }
+      if (coverageFiles?.size) {
+        this._exportCoverageFiles(testSuiteSpan, absolutePath, coverageFiles)
+      }
+
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+    })
+
+    // Aggregate per-test coverage payloads reported by workers so we can
+    // export one coverage event per test suite once it finishes.
+    this.addSub('ci:playwright:worker-report:coverage', ({ testSuiteAbsolutePath, coverageFiles }) => {
+      if (!testSuiteAbsolutePath || !coverageFiles?.length) return
+      let set = this._coverageFilesByTestSuite.get(testSuiteAbsolutePath)
+      if (!set) {
+        set = new Set()
+        this._coverageFilesByTestSuite.set(testSuiteAbsolutePath, set)
+      }
+      for (const file of coverageFiles) set.add(file)
+      if (this._finishedTestSuites.has(testSuiteAbsolutePath)) {
+        const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
+        this._exportCoverageFiles(testSuiteSpan, testSuiteAbsolutePath, set)
+      }
     })
 
     this.addSub('ci:playwright:test:page-goto', ({
@@ -467,6 +557,31 @@ class PlaywrightPlugin extends CiPlugin {
 
       span.finish()
     })
+  }
+
+  /**
+   * Export a Playwright suite coverage event from worker-reported files.
+   *
+   * @param {{ context: Function } | undefined} testSuiteSpan
+   * @param {string | undefined} absolutePath
+   * @param {Set<string> | undefined} coverageFiles
+   * @returns {void}
+   */
+  _exportCoverageFiles (testSuiteSpan, absolutePath, coverageFiles) {
+    if (!testSuiteSpan || !absolutePath || !coverageFiles?.size || !this.tracer._exporter?.exportCoverage) return
+
+    const { _traceId, _spanId } = testSuiteSpan.context()
+    const relativeCoverageFiles = [...coverageFiles, absolutePath]
+      .map(filename => {
+        if (!path.isAbsolute(filename)) return filename
+        return getTestSuitePath(filename, this.repositoryRoot || this.rootDir)
+      })
+    this.tracer._exporter.exportCoverage({
+      sessionId: _traceId,
+      suiteId: _spanId,
+      files: relativeCoverageFiles,
+    })
+    this._coverageFilesByTestSuite.delete(absolutePath)
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)

@@ -146,6 +146,7 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 
 // playwright worker variables
 const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
+const PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE = 91
 
 // vitest worker variables
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
@@ -166,7 +167,10 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 // Library configuration request error tag
 const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
 
-const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['vitest'])
+const MINIMUM_FRAMEWORK_VERSION_FOR_TIA = {
+  playwright: '>=1.38.0',
+}
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
@@ -266,6 +270,7 @@ module.exports = {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   TEST_IS_TEST_FRAMEWORK_WORKER,
@@ -1133,7 +1138,10 @@ function getFormattedError (error, repositoryRoot) {
   return newError
 }
 
-function isTiaSupported (testFramework) {
+function isTiaSupported (testFramework, frameworkVersion) {
+  if (testFramework === 'playwright') {
+    return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_TIA[testFramework])
+  }
   return !UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)
 }
 
@@ -1177,7 +1185,7 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
 
 function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
   return {
-    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, frameworkVersion)
       ? '1'
       : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionSupported(testFramework, frameworkVersion)

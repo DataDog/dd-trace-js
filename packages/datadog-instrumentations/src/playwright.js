@@ -10,10 +10,18 @@ const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
+const {
+  resolveCoverageToSourceFiles,
+  resetCache: resetCoverageSourceMapCache,
+} = require('../../dd-trace/src/ci-visibility/code-coverage/source-map-resolver')
+const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
+const { isTrue } = require('../../dd-trace/src/util')
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const log = require('../../dd-trace/src/log')
 const {
   getValueFromEnvSources,
@@ -33,11 +41,14 @@ const knownTestsCh = channel('ci:playwright:known-tests')
 const testManagementTestsCh = channel('ci:playwright:test-management-tests')
 const modifiedFilesCh = channel('ci:playwright:modified-files')
 const isModifiedCh = channel('ci:playwright:test:is-modified')
+const skippableSuitesCh = channel('ci:playwright:test-suite:skippable')
+const itrSkippedSuitesCh = channel('ci:playwright:itr:skipped-suites')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const workerReportCoverageCh = channel('ci:playwright:worker-report:coverage')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const testToCtx = new WeakMap()
@@ -47,6 +58,8 @@ const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
 const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
+const PLAYWRIGHT_BROWSER_COVERAGE_ENABLED_ENV = 'DATADOG_PLAYWRIGHT_BROWSER_COVERAGE_ENABLED'
+const PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV = 'DATADOG_PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT'
 
 let applyRepeatEachIndex = null
 
@@ -76,11 +89,23 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
+// TIA (Node-side V8 coverage)
+let isCodeCoverageEnabledForRun = false
+let isSuitesSkippingEnabledForRun = false
+let suitesToSkip = []
+let skippedSuites = []
+let isSuitesSkipped = false
+let hasUnskippableSuites = false
+let hasForcedToRunSuites = false
+let itrCorrelationId = ''
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 const newTestsWithDynamicNames = new Set()
 let rootDir = ''
 let sessionProjects = []
+let activeBrowserCoverage = null
+let hasWarnedNoChromiumBrowserCoverage = false
+let hasWarnedBrowserSourceMapUnavailable = false
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
@@ -237,6 +262,41 @@ function getBrowserNameFromProjects (projects, test) {
   })?.name
 }
 
+/**
+ * Resolve the configured Playwright browser for a project.
+ *
+ * @param {object} project
+ * @returns {string|undefined}
+ */
+function getProjectBrowserName (project) {
+  return project?.use?.browserName || project?.use?.defaultBrowserType || project?.browserName || project?.name
+}
+
+/**
+ * Check whether a Playwright project runs on Chromium.
+ *
+ * @param {object} project
+ * @returns {boolean}
+ */
+function isChromiumProject (project) {
+  return getProjectBrowserName(project) === 'chromium'
+}
+
+/**
+ * Warn once when TIA browser coverage is enabled but no project can collect CDP coverage.
+ *
+ * @param {object[]} projects
+ * @returns {void}
+ */
+function warnIfNoChromiumProjectsForBrowserCoverage (projects) {
+  if (hasWarnedNoChromiumBrowserCoverage || !projects?.length || projects.some(isChromiumProject)) return
+
+  hasWarnedNoChromiumBrowserCoverage = true
+  const message = 'Playwright TIA browser coverage requires Chromium. No Chromium project was detected, so browser ' +
+    'coverage will not be collected and TIA may not skip suites for this run.'
+  log.warn('%s', message)
+}
+
 function formatTestHookError (error, hookType, isTimeout) {
   let hookError = error
   if (error) {
@@ -283,6 +343,194 @@ function getChannelPromise (channelToPublishTo, params) {
   })
 }
 
+function isBrowserCoverageEnabledForWorker () {
+  return isTrue(getValueFromEnvSources(PLAYWRIGHT_BROWSER_COVERAGE_ENABLED_ENV))
+}
+
+function getBrowserCoverageRepositoryRoot () {
+  return getValueFromEnvSources(PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV) || process.cwd()
+}
+
+/**
+ * Execute a CDP command and swallow failures so coverage never breaks a test.
+ *
+ * @param {{send: Function}} session
+ * @param {string} method
+ * @param {object} [params]
+ * @returns {Promise<object|null>}
+ */
+async function cdpCommand (session, method, params) {
+  try {
+    return await session.send(method, params)
+  } catch (err) {
+    log.debug('Playwright CDP command %s failed: %s', method, err?.message)
+    return null
+  }
+}
+
+function isSupportedCoverageUrl (url) {
+  try {
+    const { protocol } = new URL(url)
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'file:'
+  } catch {
+    return false
+  }
+}
+
+function shouldSkipCoverageUrl (url) {
+  if (!isSupportedCoverageUrl(url)) return true
+  return url.startsWith('chrome-extension://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('data:') ||
+    url.startsWith('blob:') ||
+    url.includes('__playwright') ||
+    url.includes('playwright-core')
+}
+
+/**
+ * Extract executed V8 block ranges from a CDP precise coverage snapshot.
+ *
+ * @param {{result?: Array}} payload
+ * @returns {Array<{scriptId: string, url: string, ranges: number[]}>}
+ */
+function extractHitCoverage (payload) {
+  if (!payload || !Array.isArray(payload.result)) return []
+  const out = []
+  for (const script of payload.result) {
+    const url = script.url
+    if (!url || shouldSkipCoverageUrl(url)) continue
+
+    const ranges = []
+    if (Array.isArray(script.functions)) {
+      for (const fn of script.functions) {
+        if (!Array.isArray(fn.ranges)) continue
+        for (const range of fn.ranges) {
+          if (range.count > 0) {
+            ranges.push(range.startOffset, range.endOffset)
+          }
+        }
+      }
+    }
+    if (ranges.length) {
+      out.push({ scriptId: script.scriptId, url, ranges })
+    }
+  }
+  return out
+}
+
+async function addScriptSource (session, coverage) {
+  const { scriptId } = coverage
+  if (scriptId) {
+    const source = await cdpCommand(session, 'Debugger.getScriptSource', { scriptId })
+    if (typeof source?.scriptSource === 'string') {
+      coverage.source = source.scriptSource
+    }
+  }
+  delete coverage.scriptId
+}
+
+async function addScriptSources (session, coverages) {
+  await Promise.all(coverages.map(coverage => addScriptSource(session, coverage)))
+  return coverages
+}
+
+async function detachCdpSession (session) {
+  try {
+    await session.detach()
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Start browser V8 coverage for a Playwright page via Chromium CDP.
+ *
+ * @param {object} page
+ * @returns {Promise<void>}
+ */
+async function startBrowserCoverageForPage (page) {
+  if (!activeBrowserCoverage || !page?.context) return
+  if (activeBrowserCoverage.pageStatesByPage.has(page)) return
+
+  let session
+  try {
+    session = await page.context().newCDPSession(page)
+  } catch (err) {
+    log.debug('Playwright CDP coverage is unavailable for this page: %s', err?.message)
+    return
+  }
+
+  const enabled = await cdpCommand(session, 'Profiler.enable')
+  if (enabled === null) {
+    await detachCdpSession(session)
+    return
+  }
+
+  const started = await cdpCommand(session, 'Profiler.startPreciseCoverage', {
+    callCount: true,
+    detailed: false,
+  })
+  if (started === null) {
+    await detachCdpSession(session)
+    return
+  }
+
+  await cdpCommand(session, 'Debugger.enable')
+
+  const pageState = { session }
+  activeBrowserCoverage.pageStatesByPage.set(page, pageState)
+  activeBrowserCoverage.pageStates.push(pageState)
+}
+
+async function takeBrowserCoverageForPage (pageState) {
+  const { session } = pageState
+  try {
+    const snapshot = await cdpCommand(session, 'Profiler.takePreciseCoverage')
+    await cdpCommand(session, 'Profiler.stopPreciseCoverage')
+    if (!snapshot) return []
+
+    const coverages = extractHitCoverage(snapshot)
+    if (!coverages.length) return []
+
+    await addScriptSources(session, coverages)
+    return coverages
+  } finally {
+    await detachCdpSession(session)
+  }
+}
+
+async function finishBrowserCoverage () {
+  const coverageState = activeBrowserCoverage
+  activeBrowserCoverage = null
+
+  if (!coverageState?.pageStates.length) return []
+
+  const coverageLists = await Promise.all(coverageState.pageStates.map(takeBrowserCoverageForPage))
+  const coverages = coverageLists.flat()
+  if (!coverages.length) return []
+
+  try {
+    return await resolveCoverageToSourceFiles(coverages, {
+      repositoryRoot: getBrowserCoverageRepositoryRoot(),
+      onSourceMapUnavailable: ({ url, reason }) => {
+        if (hasWarnedBrowserSourceMapUnavailable) return
+        hasWarnedBrowserSourceMapUnavailable = true
+        const reasonMessage = reason === 'load-failed' ? 'could not load a source map' : 'did not find a source map'
+        const message = 'Playwright TIA browser coverage %s for %s. Coverage for bundled applications may be ' +
+          'reported against generated files instead of original source files; expose source maps to make TIA accurate.'
+        log.warn(
+          message,
+          reasonMessage,
+          url
+        )
+      },
+    })
+  } catch (err) {
+    log.debug('Playwright CDP coverage resolution failed: %s', err?.message)
+    return []
+  }
+}
+
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
@@ -307,6 +555,23 @@ function shouldFinishTestSuite (testSuiteAbsolutePath) {
   return !remainingTests.length || remainingTests.every(test => test.expectedStatus === 'skipped')
 }
 
+/**
+ * Reads and caches whether a Playwright test file is marked as unskippable.
+ *
+ * @param {string} testSuiteAbsolutePath
+ * @param {Map<string, boolean>} unskippableSuites
+ * @returns {boolean}
+ */
+function isUnskippableTestSuite (testSuiteAbsolutePath, unskippableSuites) {
+  if (unskippableSuites.has(testSuiteAbsolutePath)) {
+    return unskippableSuites.get(testSuiteAbsolutePath)
+  }
+
+  const isUnskippable = !!isMarkedAsUnskippable({ path: testSuiteAbsolutePath })
+  unskippableSuites.set(testSuiteAbsolutePath, isUnskippable)
+  return isUnskippable
+}
+
 function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -329,7 +594,12 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteCtx = { testSuiteAbsolutePath, testSourceFileAbsolutePath }
+    const testSuiteCtx = {
+      testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
+      isUnskippable: test._ddIsUnskippable,
+      isForcedToRun: test._ddIsForcedToRun,
+    }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
@@ -527,6 +797,14 @@ function dispatcherRunWrapperNew (run) {
       testGroups = testGroups.filter(group => group.tests.length > 0)
     }
 
+    // Filter out TIA-skipped test files so workers never execute them.
+    if (isSuitesSkippingEnabledForRun) {
+      for (const group of testGroups) {
+        group.tests = group.tests.filter(test => !test._ddIsSkippedByItr)
+      }
+      testGroups = testGroups.filter(group => group.tests.length > 0)
+    }
+
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
@@ -644,6 +922,41 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     let onDone
 
     rootDir = getRootDir(this, config)
+    startedSuites = []
+    remainingTestsByFile = {}
+    testSuiteToCtx.clear()
+    testSuiteToTestStatuses.clear()
+    testSuiteToErrors.clear()
+    testsToTestStatuses.clear()
+    isKnownTestsEnabled = false
+    isEarlyFlakeDetectionEnabled = false
+    earlyFlakeDetectionNumRetries = 0
+    isEarlyFlakeDetectionFaulty = false
+    earlyFlakeDetectionFaultyThreshold = 0
+    isFlakyTestRetriesEnabled = false
+    flakyTestRetriesCount = 0
+    knownTests = {}
+    isTestManagementTestsEnabled = false
+    testManagementAttemptToFixRetries = 0
+    testManagementTests = {}
+    isImpactedTestsEnabled = false
+    modifiedFiles = {}
+    isCodeCoverageEnabledForRun = false
+    isSuitesSkippingEnabledForRun = false
+    suitesToSkip = []
+    skippedSuites = []
+    isSuitesSkipped = false
+    hasUnskippableSuites = false
+    hasForcedToRunSuites = false
+    hasWarnedNoChromiumBrowserCoverage = false
+    hasWarnedBrowserSourceMapUnavailable = false
+    itrCorrelationId = ''
+    sessionProjects = []
+    activeBrowserCoverage = null
+    quarantinedOrDisabledTestsAttemptToFix.length = 0
+    quarantinedButNotAttemptToFixFqns = new Set()
+    newTestsWithDynamicNames.clear()
+    resetCoverageSourceMapCache()
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
@@ -664,13 +977,37 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+        isCodeCoverageEnabledForRun = !!libraryConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabledForRun = !!libraryConfig.isSuitesSkippingEnabled
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       isTestManagementTestsEnabled = false
       isImpactedTestsEnabled = false
+      isCodeCoverageEnabledForRun = false
+      isSuitesSkippingEnabledForRun = false
       log.error('Playwright session start error', e)
+    }
+
+    if (isSuitesSkippingEnabledForRun) {
+      try {
+        const { err: skippableErr, skippableSuites: receivedSkippableSuites, itrCorrelationId: receivedCorrelationId } =
+          await getChannelPromise(skippableSuitesCh)
+        if (skippableErr) {
+          suitesToSkip = []
+          itrCorrelationId = ''
+          isSuitesSkippingEnabledForRun = false
+        } else {
+          suitesToSkip = receivedSkippableSuites || []
+          itrCorrelationId = receivedCorrelationId || ''
+        }
+      } catch (err) {
+        log.error('Playwright skippable suites error', err)
+        suitesToSkip = []
+        itrCorrelationId = ''
+        isSuitesSkippingEnabledForRun = false
+      }
     }
 
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
@@ -723,6 +1060,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     }
 
     const projects = getProjectsFromRunner(this, config)
+    if (isCodeCoverageEnabledForRun) {
+      warnIfNoChromiumProjectsForBrowserCoverage(projects)
+    }
 
     // ATR and `--retries` are now compatible with Test Management.
     // Test Management tests have their retries set to 0 at the test level,
@@ -807,6 +1147,13 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled: isCodeCoverageEnabledForRun,
+      isSuitesSkippingEnabled: isSuitesSkippingEnabledForRun,
+      isSuitesSkipped,
+      numSkippedSuites: skippedSuites.length,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
+      itrCorrelationId,
       onDone,
     })
     await flushWait
@@ -929,11 +1276,12 @@ addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
   versions: ['>=1.38.0'],
-}, (loadUtilsPackage) => {
+}, (loadUtilsPackage, playwrightVersion) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled &&
+        !isSuitesSkippingEnabledForRun) {
       return oldCreateRootSuite.apply(this, arguments)
     }
 
@@ -942,6 +1290,42 @@ addHook({
     const rootSuite = createRootSuiteReturnValue.rootSuite || createRootSuiteReturnValue
 
     const allTests = rootSuite.allTests()
+
+    if (isSuitesSkippingEnabledForRun) {
+      // The skippable API returns suite paths relative to the repository
+      // root (that's how coverage is uploaded). Playwright's `rootDir` is
+      // the testDir, which can be a subdirectory, so we must resolve test
+      // file paths against the repository root for a correct comparison.
+      const repoRoot = getRepositoryRoot() || rootDir
+      const skippedFiles = new Set()
+      const skipSet = new Set(suitesToSkip)
+      const unskippableSuites = new Map()
+      for (const test of allTests) {
+        const testSuiteAbsolutePath = test._requireFile
+        const relative = getTestSuitePath(testSuiteAbsolutePath, repoRoot)
+
+        if (isUnskippableTestSuite(testSuiteAbsolutePath, unskippableSuites)) {
+          test._ddIsUnskippable = true
+          hasUnskippableSuites = true
+          if (skipSet.has(relative)) {
+            test._ddIsForcedToRun = true
+            hasForcedToRunSuites = true
+          }
+          continue
+        }
+
+        if (skipSet.has(relative)) {
+          test._ddIsSkippedByItr = true
+          test.expectedStatus = 'skipped'
+          skippedFiles.add(relative)
+        }
+      }
+      if (skippedFiles.size) {
+        skippedSuites = [...skippedFiles]
+        isSuitesSkipped = true
+        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion: playwrightVersion })
+      }
+    }
 
     if (isTestManagementTestsEnabled) {
       const fileSuitesWithManagedTestsToProjects = new Map()
@@ -1086,19 +1470,29 @@ addHook({
   versions: ['>=1.38.0'],
 }, (processHostPackage) => {
   shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
+    const repositoryRoot = getRepositoryRoot() || rootDir
     this._extraEnv = {
       ...this._extraEnv,
       // Used to detect that we're in a playwright worker
       DD_PLAYWRIGHT_WORKER: '1',
+      ...(isCodeCoverageEnabledForRun
+        ? {
+            [PLAYWRIGHT_BROWSER_COVERAGE_ENABLED_ENV]: '1',
+            [PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV]: repositoryRoot,
+          }
+        : {}),
     }
 
     const res = await startRunner.apply(this, arguments)
 
     // We add a new listener to `this.process`, which is represents the worker
     this.process.on('message', (message) => {
-      // These messages are [code, payload]. The payload is test data
-      if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
-        workerReportCh.publish(message[1])
+      if (!Array.isArray(message)) return
+      const [code, payload] = message
+      if (code === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
+        workerReportCh.publish(payload)
+      } else if (code === PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE) {
+        workerReportCoverageCh.publish(payload)
       }
     })
 
@@ -1114,6 +1508,10 @@ addHook({
   versions: ['>=1.38.0'],
 }, (pagePackage) => {
   shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
+    if (activeBrowserCoverage) {
+      await startBrowserCoverageForPage(this)
+    }
+
     const response = await goto.apply(this, arguments)
 
     const page = this
@@ -1153,11 +1551,19 @@ addHook({
   let steps = []
   const stepInfoByStepId = {}
 
+  const isBrowserCoverageEnabled = isBrowserCoverageEnabledForWorker()
+
   shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
     if (test.expectedStatus === 'skipped') {
       return _runTest.apply(this, arguments)
     }
     steps = []
+    if (isBrowserCoverageEnabled) {
+      activeBrowserCoverage = {
+        pageStates: [],
+        pageStatesByPage: new WeakMap(),
+      }
+    }
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -1226,6 +1632,15 @@ addHook({
               // ignore errors
               log.error('afterEach hook error', e)
             }
+            if (isBrowserCoverageEnabled) {
+              const browserCoverageFiles = await finishBrowserCoverage()
+              if (browserCoverageFiles.length && process.send) {
+                process.send([
+                  PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
+                  { testSuiteAbsolutePath, coverageFiles: browserCoverageFiles },
+                ])
+              }
+            }
           },
           title: 'afterEach hook',
           _ddHook: true,
@@ -1236,7 +1651,14 @@ addHook({
 
       testInfo = this._currentTest
     })
-    await res
+    try {
+      await res
+    } catch (err) {
+      if (isBrowserCoverageEnabled) {
+        await finishBrowserCoverage()
+      }
+      throw err
+    }
 
     const { status, error, annotations, retry, testId } = testInfo
 
@@ -1274,6 +1696,18 @@ addHook({
 
     // Wait for the properties to be received
     await ddPropertiesPromise
+
+    const coverageFiles = isBrowserCoverageEnabled ? await finishBrowserCoverage() : []
+
+    // Emit per-test coverage delta to the main process. The main aggregates
+    // per-suite and exports once testSuiteFinishCh fires.
+    if (coverageFiles.length && process.send) {
+      const dedupedCoverageFiles = [...new Set(coverageFiles)]
+      process.send([
+        PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
+        { testSuiteAbsolutePath, coverageFiles: dedupedCoverageFiles },
+      ])
+    }
 
     testFinishCh.publish({
       testStatus: STATUS_TO_TEST_STATUS[status],
