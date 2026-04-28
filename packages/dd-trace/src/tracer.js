@@ -17,6 +17,7 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 const traceTimingEnabled = false
 
+
 function traceTiming (message) {
   if (traceTimingEnabled) {
     // eslint-disable-next-line no-console
