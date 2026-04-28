@@ -29,7 +29,7 @@ const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
 
-const traceTimingEnabled = process.env.DD_TRACE_AGENT_LOAD_TIMING === 'true'
+const traceTimingEnabled = true
 
 function traceTiming (message) {
   if (traceTimingEnabled) {

@@ -15,7 +15,7 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
-const traceTimingEnabled = process.env.DD_TRACE_AGENT_LOAD_TIMING === 'true'
+const traceTimingEnabled = true
 
 function traceTiming (message) {
   if (traceTimingEnabled) {

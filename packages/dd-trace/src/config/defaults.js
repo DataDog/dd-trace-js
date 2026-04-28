@@ -4,7 +4,7 @@ const dns = require('dns')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
-const traceTimingEnabled = process.env.DD_TRACE_AGENT_LOAD_TIMING === 'true'
+const traceTimingEnabled = true
 
 function traceTiming (message) {
   if (traceTimingEnabled) {
