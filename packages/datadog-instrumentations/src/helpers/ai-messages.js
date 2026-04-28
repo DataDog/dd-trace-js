@@ -174,150 +174,90 @@ function buildOutputMessages (inputMessages, content) {
 }
 
 /**
- * Normalizes OpenAI chat.completions messages to AI Guard style.
+ * Converts OpenAI Responses API input/output items to OpenAI chat-style messages.
  *
- * OpenAI messages are already `{role, content, name?, tool_calls?, tool_call_id?}`. This
- * shallow-copies each valid message and strips non-standard fields so we do not leak
- * vendor-specific internals to AI Guard.
- *
- * @param {Array<{role: string, content?: unknown, name?: string, tool_calls?: Array, tool_call_id?: string}>} messages
+ * @param {string|Array<object>|undefined} items
+ * @param {string} defaultRole
  * @returns {Array<object>}
  */
-function convertChatCompletionMessages (messages) {
-  if (!Array.isArray(messages)) return []
-  const out = []
-  for (const msg of messages) {
-    if (!msg || typeof msg !== 'object' || !msg.role) continue
-    const normalized = { role: msg.role }
-    if (msg.content !== undefined) normalized.content = msg.content
-    if (msg.name) normalized.name = msg.name
-    if (msg.tool_calls) normalized.tool_calls = msg.tool_calls
-    if (msg.tool_call_id) normalized.tool_call_id = msg.tool_call_id
-    out.push(normalized)
+function convertOpenAIResponseItemsToMessages (items, defaultRole) {
+  if (typeof items === 'string') return [{ role: defaultRole, content: items }]
+  if (!Array.isArray(items)) return []
+
+  const messages = []
+  for (const item of items) {
+    const message = openAIResponseItemToMessage(item, defaultRole)
+    if (message) messages.push(message)
   }
-  return out
+  return messages
 }
 
 /**
- * Appends the assistant response from a chat.completions result to the input messages.
+ * Converts one OpenAI Responses API item to an OpenAI chat-style message.
  *
- * @param {Array<object>} inputMessages
- * @param {{role?: string, content?: string, tool_calls?: Array}|undefined} message
- *   The message from `response.choices[0].message`.
- * @returns {Array<object>|undefined} The new message list, or undefined when the response
- *   carries no assistant content to evaluate.
+ * @param {object} item
+ * @param {string} defaultRole
+ * @returns {object|undefined}
  */
-function buildChatCompletionOutputMessages (inputMessages, message) {
-  if (!message || typeof message !== 'object') return
-  const appended = { role: message.role || 'assistant' }
-  if (message.content != null) appended.content = message.content
-  if (message.tool_calls?.length) appended.tool_calls = message.tool_calls
-  if (appended.content == null && !appended.tool_calls) return
-  return [...inputMessages, appended]
+function openAIResponseItemToMessage (item, defaultRole) {
+  if (!item || typeof item !== 'object') return
+  const type = item.type ?? 'message'
+
+  if (type === 'message') {
+    const content = openAIResponseContentToMessageContent(item.content)
+    if (content != null) return { role: item.role || defaultRole, content }
+  } else if (type === 'function_call') {
+    return {
+      role: 'assistant',
+      tool_calls: [{
+        id: item.call_id,
+        function: {
+          name: item.name,
+          arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments),
+        },
+      }],
+    }
+  } else if (type === 'function_call_output') {
+    return {
+      role: 'tool',
+      tool_call_id: item.call_id,
+      content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+    }
+  }
 }
 
 /**
- * Collapses OpenAI Responses API content (string or array of typed parts) into a single
- * string. Accepts `input_text`, `output_text`, and `text` parts; ignores unknown types.
+ * Converts OpenAI Responses API content to OpenAI chat-style message content.
  *
- * @param {string|Array<string|{type?: string, text?: string}>|undefined} content
- * @returns {string|undefined}
+ * @param {string|Array<string|{type?: string, text?: string, image_url?: string|{url?: string}}>|undefined} content
+ * @returns {string|Array<{type: string, text?: string, image_url?: {url: string}}>|undefined}
  */
-const RESPONSES_TEXT_PART_TYPES = new Set(['input_text', 'output_text', 'text'])
-
-function normalizeResponsesContent (content) {
+function openAIResponseContentToMessageContent (content) {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return
+
   const parts = []
+  let hasImages = false
+
   for (const part of content) {
     if (!part) continue
     if (typeof part === 'string') {
-      parts.push(part)
-    } else if (RESPONSES_TEXT_PART_TYPES.has(part.type) && typeof part.text === 'string') {
-      parts.push(part.text)
+      parts.push({ type: 'text', text: part })
+    } else if ((part.type === 'input_text' || part.type === 'output_text' || part.type === 'text') &&
+      typeof part.text === 'string') {
+      parts.push({ type: 'text', text: part.text })
+    } else if (part.type === 'input_image' || part.type === 'image_url') {
+      const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url || part.url
+      if (url) {
+        hasImages = true
+        parts.push({ type: 'image_url', image_url: { url } })
+      }
     }
   }
-  return parts.length ? parts.join('\n') : undefined
-}
 
-/**
- * Converts the OpenAI Responses API `input` field to AI Guard style messages.
- *
- * `input` is either a plain string (shorthand for a single user message) or an array of
- * items. Supported item types: `message`, `function_call`, `function_call_output`. Other
- * types (e.g. `item_reference`) cannot be dereferenced client-side and are skipped.
- *
- * @param {string|Array<object>|undefined} input
- * @returns {Array<object>}
- */
-function convertResponsesInput (input) {
-  if (typeof input === 'string') {
-    return [{ role: 'user', content: input }]
-  }
-  if (!Array.isArray(input)) return []
-  const out = []
-  for (const item of input) {
-    if (!item || typeof item !== 'object') continue
-    const type = item.type ?? 'message'
-    if (type === 'message') {
-      const content = normalizeResponsesContent(item.content)
-      if (content == null) continue
-      out.push({ role: item.role || 'user', content })
-    } else if (type === 'function_call') {
-      out.push({
-        role: 'assistant',
-        tool_calls: [{
-          id: item.call_id,
-          function: {
-            name: item.name,
-            arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments),
-          },
-        }],
-      })
-    } else if (type === 'function_call_output') {
-      out.push({
-        role: 'tool',
-        tool_call_id: item.call_id,
-        content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
-      })
-    }
-  }
-  return out
-}
-
-/**
- * Appends the assistant response from a responses.create result to the input messages.
- *
- * Walks `response.output[]` looking for `type: 'message'` (assistant text) and
- * `type: 'function_call'` (tool call). Other output item types are ignored.
- *
- * @param {Array<object>} inputMessages
- * @param {Array<object>|undefined} output - `response.output`
- * @returns {Array<object>|undefined}
- */
-function buildResponsesOutputMessages (inputMessages, output) {
-  if (!Array.isArray(output) || output.length === 0) return
-  const appended = []
-  for (const item of output) {
-    if (!item || typeof item !== 'object') continue
-    if (item.type === 'message') {
-      const content = normalizeResponsesContent(item.content)
-      if (content != null) appended.push({ role: item.role || 'assistant', content })
-    } else if (item.type === 'function_call') {
-      appended.push({
-        role: 'assistant',
-        tool_calls: [{
-          id: item.call_id,
-          function: {
-            name: item.name,
-            arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments),
-          },
-        }],
-      })
-    }
-  }
-  if (!appended.length) return
-  return [...inputMessages, ...appended]
+  if (!parts.length) return
+  if (hasImages) return parts
+  return parts.map(part => part.text).join('\n')
 }
 
 module.exports = {
@@ -326,9 +266,6 @@ module.exports = {
   buildToolCallOutputMessages,
   buildTextOutputMessages,
   buildOutputMessages,
-  convertChatCompletionMessages,
-  buildChatCompletionOutputMessages,
-  convertResponsesInput,
-  buildResponsesOutputMessages,
-  normalizeResponsesContent,
+  convertOpenAIResponseItemsToMessages,
+  openAIResponseContentToMessageContent,
 }

@@ -263,12 +263,41 @@ app.get('/openai-chat-tool', async (req, res) => {
   }
 })
 
+app.get('/openai-chat-after-deny', async (req, res) => {
+  try {
+    const result = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI' },
+        { role: 'user', content: 'Hello there' },
+      ],
+      metadata: { mock_response: 'deny' },
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
 app.get('/openai-responses', async (req, res) => {
   const deny = req.query.deny === 'true'
   try {
     const result = await openaiClient.responses.create({
       model: 'gpt-4o-mini',
       input: deny ? 'You should not trust me [deny]' : 'Hello there',
+    })
+    res.status(200).json({ blocked: false, output: result.output })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-responses-after-deny', async (req, res) => {
+  try {
+    const result = await openaiClient.responses.create({
+      model: 'gpt-4o-mini',
+      input: 'Hello there',
+      metadata: { mock_response: 'deny' },
     })
     res.status(200).json({ blocked: false, output: result.output })
   } catch (error) {

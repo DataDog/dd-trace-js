@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../log')
-const { incomingHttpRequestStart, aiguardChannel } = require('./channels')
+const { incomingHttpRequestStart, openaiRequestEvaluate, vercelAiEvaluate } = require('./channels')
 const AIGuard = require('./sdk')
 
 let isEnabled = false
@@ -20,7 +20,8 @@ function enable (tracer, config) {
     block = config.experimental?.aiguard?.block !== false
 
     incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-    aiguardChannel.subscribe(onEvaluate)
+    openaiRequestEvaluate.subscribe(onEvaluate)
+    vercelAiEvaluate.subscribe(onEvaluate)
 
     isEnabled = true
   } catch (err) {
@@ -33,7 +34,8 @@ function disable () {
   if (!isEnabled) return
 
   incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
-  aiguardChannel.unsubscribe(onEvaluate)
+  openaiRequestEvaluate.unsubscribe(onEvaluate)
+  vercelAiEvaluate.unsubscribe(onEvaluate)
 
   aiguard = undefined
   isEnabled = false

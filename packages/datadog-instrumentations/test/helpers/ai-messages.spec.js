@@ -9,11 +9,8 @@ const {
   buildOutputMessages,
   buildTextOutputMessages,
   buildToolCallOutputMessages,
-  convertChatCompletionMessages,
-  buildChatCompletionOutputMessages,
-  convertResponsesInput,
-  buildResponsesOutputMessages,
-  normalizeResponsesContent,
+  convertOpenAIResponseItemsToMessages,
+  openAIResponseContentToMessageContent,
 } = require('../../src/helpers/ai-messages')
 
 describe('ai-messages', () => {
@@ -517,272 +514,124 @@ describe('ai-messages', () => {
     })
   })
 
-  describe('convertChatCompletionMessages', () => {
-    it('returns empty array for non-array input', () => {
-      assert.deepStrictEqual(convertChatCompletionMessages(null), [])
-      assert.deepStrictEqual(convertChatCompletionMessages(undefined), [])
-      assert.deepStrictEqual(convertChatCompletionMessages('string'), [])
-    })
-
-    it('skips entries without a role', () => {
-      assert.deepStrictEqual(convertChatCompletionMessages([{ content: 'x' }, null, 42]), [])
-    })
-
-    it('passes through system, user, assistant messages', () => {
-      const messages = [
-        { role: 'system', content: 'You are helpful' },
-        { role: 'user', content: 'Hi' },
-        { role: 'assistant', content: 'Hello' },
-      ]
-      assert.deepStrictEqual(convertChatCompletionMessages(messages), messages)
-    })
-
-    it('preserves tool_calls and tool_call_id', () => {
-      const tc = { id: 'c1', function: { name: 'search', arguments: '{}' } }
-      const messages = [
-        { role: 'assistant', tool_calls: [tc] },
-        { role: 'tool', tool_call_id: 'c1', content: 'result' },
-      ]
-      assert.deepStrictEqual(convertChatCompletionMessages(messages), messages)
-    })
-
-    it('preserves name when present', () => {
-      const messages = [{ role: 'function', name: 'calculator', content: 'result' }]
-      assert.deepStrictEqual(convertChatCompletionMessages(messages), messages)
-    })
-
-    it('strips unknown fields', () => {
-      const messages = [{ role: 'user', content: 'hi', custom: 'drop me', _internal: 1 }]
-      assert.deepStrictEqual(convertChatCompletionMessages(messages), [
-        { role: 'user', content: 'hi' },
+  describe('convertOpenAIResponseItemsToMessages', () => {
+    it('should convert string input to a default role message', () => {
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages('Hello', 'user'), [
+        { role: 'user', content: 'Hello' },
       ])
     })
 
-    it('keeps content when it is an array of parts (multimodal)', () => {
-      const parts = [{ type: 'text', text: 'look at this' }, { type: 'image_url', image_url: { url: 'x' } }]
-      const messages = [{ role: 'user', content: parts }]
-      assert.deepStrictEqual(convertChatCompletionMessages(messages), messages)
-    })
-  })
-
-  describe('buildChatCompletionOutputMessages', () => {
-    const input = [{ role: 'user', content: 'Hi' }]
-
-    it('returns undefined when message is missing', () => {
-      assert.strictEqual(buildChatCompletionOutputMessages(input, undefined), undefined)
-      assert.strictEqual(buildChatCompletionOutputMessages(input, null), undefined)
+    it('should return empty array for unsupported input', () => {
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(undefined, 'user'), [])
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages({ input: 'Hello' }, 'user'), [])
     })
 
-    it('returns undefined when message has no content and no tool_calls', () => {
-      assert.strictEqual(buildChatCompletionOutputMessages(input, { role: 'assistant' }), undefined)
-    })
-
-    it('appends assistant text content', () => {
-      const out = buildChatCompletionOutputMessages(input, { role: 'assistant', content: 'Hello!' })
-      assert.deepStrictEqual(out, [
-        { role: 'user', content: 'Hi' },
-        { role: 'assistant', content: 'Hello!' },
-      ])
-    })
-
-    it('defaults role to assistant', () => {
-      const out = buildChatCompletionOutputMessages(input, { content: 'Hi' })
-      assert.strictEqual(out[1].role, 'assistant')
-    })
-
-    it('appends tool_calls', () => {
-      const toolCalls = [{ id: 'c1', function: { name: 'search', arguments: '{}' } }]
-      const out = buildChatCompletionOutputMessages(input, { role: 'assistant', tool_calls: toolCalls })
-      assert.deepStrictEqual(out[1], { role: 'assistant', tool_calls: toolCalls })
-    })
-
-    it('keeps empty-string content', () => {
-      const out = buildChatCompletionOutputMessages(input, { role: 'assistant', content: '' })
-      assert.strictEqual(out[1].content, '')
-    })
-
-    it('does not mutate the input messages array', () => {
-      const original = [{ role: 'user', content: 'Hi' }]
-      buildChatCompletionOutputMessages(original, { role: 'assistant', content: 'Hello!' })
-      assert.strictEqual(original.length, 1)
-    })
-  })
-
-  describe('normalizeResponsesContent', () => {
-    it('returns string content as-is', () => {
-      assert.strictEqual(normalizeResponsesContent('hello'), 'hello')
-    })
-
-    it('returns undefined for non-array non-string', () => {
-      assert.strictEqual(normalizeResponsesContent(null), undefined)
-      assert.strictEqual(normalizeResponsesContent(undefined), undefined)
-      assert.strictEqual(normalizeResponsesContent(42), undefined)
-    })
-
-    it('joins input_text and output_text parts', () => {
-      const parts = [
-        { type: 'input_text', text: 'line 1' },
-        { type: 'output_text', text: 'line 2' },
-        { type: 'text', text: 'line 3' },
-      ]
-      assert.strictEqual(normalizeResponsesContent(parts), 'line 1\nline 2\nline 3')
-    })
-
-    it('accepts plain strings in a parts array', () => {
-      assert.strictEqual(normalizeResponsesContent(['a', 'b']), 'a\nb')
-    })
-
-    it('ignores unknown part types', () => {
-      const parts = [
-        { type: 'input_text', text: 'keep' },
-        { type: 'image', image_url: 'drop' },
-      ]
-      assert.strictEqual(normalizeResponsesContent(parts), 'keep')
-    })
-
-    it('returns undefined when nothing normalizes', () => {
-      assert.strictEqual(normalizeResponsesContent([{ type: 'image' }]), undefined)
-    })
-  })
-
-  describe('convertResponsesInput', () => {
-    it('converts string shorthand to a single user message', () => {
-      assert.deepStrictEqual(convertResponsesInput('what time is it?'), [
-        { role: 'user', content: 'what time is it?' },
-      ])
-    })
-
-    it('returns empty for non-array non-string', () => {
-      assert.deepStrictEqual(convertResponsesInput(null), [])
-      assert.deepStrictEqual(convertResponsesInput(undefined), [])
-      assert.deepStrictEqual(convertResponsesInput(42), [])
-    })
-
-    it('defaults missing type to message', () => {
-      const input = [{ role: 'user', content: 'hi' }]
-      assert.deepStrictEqual(convertResponsesInput(input), [{ role: 'user', content: 'hi' }])
-    })
-
-    it('handles message items with typed content parts', () => {
-      const input = [{
+    it('should convert response message items to OpenAI chat-style messages', () => {
+      const items = [{
         type: 'message',
         role: 'user',
-        content: [{ type: 'input_text', text: 'hello' }],
+        content: [{ type: 'input_text', text: 'Hello' }],
       }]
-      assert.deepStrictEqual(convertResponsesInput(input), [{ role: 'user', content: 'hello' }])
-    })
 
-    it('converts function_call to an assistant tool_call', () => {
-      const input = [{
-        type: 'function_call',
-        call_id: 'c1',
-        name: 'search',
-        arguments: '{"q":"test"}',
-      }]
-      assert.deepStrictEqual(convertResponsesInput(input), [{
-        role: 'assistant',
-        tool_calls: [{ id: 'c1', function: { name: 'search', arguments: '{"q":"test"}' } }],
-      }])
-    })
-
-    it('stringifies function_call object arguments', () => {
-      const input = [{
-        type: 'function_call',
-        call_id: 'c1',
-        name: 'search',
-        arguments: { q: 'test' },
-      }]
-      assert.strictEqual(convertResponsesInput(input)[0].tool_calls[0].function.arguments, '{"q":"test"}')
-    })
-
-    it('converts function_call_output to a tool message', () => {
-      const input = [{
-        type: 'function_call_output',
-        call_id: 'c1',
-        output: 'the result',
-      }]
-      assert.deepStrictEqual(convertResponsesInput(input), [{
-        role: 'tool',
-        tool_call_id: 'c1',
-        content: 'the result',
-      }])
-    })
-
-    it('stringifies function_call_output object output', () => {
-      const input = [{ type: 'function_call_output', call_id: 'c1', output: { ok: true } }]
-      assert.strictEqual(convertResponsesInput(input)[0].content, '{"ok":true}')
-    })
-
-    it('skips item_reference and unknown types', () => {
-      const input = [
-        { type: 'item_reference', id: 'x' },
-        { type: 'weird_new_type' },
-        { type: 'message', role: 'user', content: 'hi' },
-      ]
-      assert.deepStrictEqual(convertResponsesInput(input), [{ role: 'user', content: 'hi' }])
-    })
-
-    it('skips malformed entries', () => {
-      assert.deepStrictEqual(convertResponsesInput([null, 42, { type: 'message' }]), [])
-    })
-  })
-
-  describe('buildResponsesOutputMessages', () => {
-    const input = [{ role: 'user', content: 'Hi' }]
-
-    it('returns undefined for empty or missing output', () => {
-      assert.strictEqual(buildResponsesOutputMessages(input, undefined), undefined)
-      assert.strictEqual(buildResponsesOutputMessages(input, []), undefined)
-      assert.strictEqual(buildResponsesOutputMessages(input, 'not-an-array'), undefined)
-    })
-
-    it('returns undefined when output has no known item types', () => {
-      assert.strictEqual(
-        buildResponsesOutputMessages(input, [{ type: 'reasoning' }, { type: 'image' }]),
-        undefined
-      )
-    })
-
-    it('appends assistant text from message output items', () => {
-      const output = [{
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: 'Hello!' }],
-      }]
-      assert.deepStrictEqual(buildResponsesOutputMessages(input, output), [
-        { role: 'user', content: 'Hi' },
-        { role: 'assistant', content: 'Hello!' },
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'user'), [
+        { role: 'user', content: 'Hello' },
       ])
     })
 
-    it('appends tool calls from function_call output items', () => {
-      const output = [{
-        type: 'function_call',
-        call_id: 'c1',
-        name: 'search',
-        arguments: '{"q":"a"}',
+    it('should use the default role when response message item has no role', () => {
+      const items = [{
+        type: 'message',
+        content: [{ type: 'output_text', text: 'Hi' }],
       }]
-      const result = buildResponsesOutputMessages(input, output)
-      assert.deepStrictEqual(result[1], {
+
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'assistant'), [
+        { role: 'assistant', content: 'Hi' },
+      ])
+    })
+
+    it('should preserve image URL content parts', () => {
+      const items = [{
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'Describe this' },
+          { type: 'input_image', image_url: 'https://example.com/image.png' },
+        ],
+      }]
+
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'user'), [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this' },
+          { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        ],
+      }])
+    })
+
+    it('should convert function call items to assistant tool call messages', () => {
+      const items = [{
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'lookup',
+        arguments: { query: 'test' },
+      }]
+
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'assistant'), [{
         role: 'assistant',
-        tool_calls: [{ id: 'c1', function: { name: 'search', arguments: '{"q":"a"}' } }],
-      })
+        tool_calls: [{
+          id: 'call_1',
+          function: {
+            name: 'lookup',
+            arguments: '{"query":"test"}',
+          },
+        }],
+      }])
     })
 
-    it('appends both text and tool calls in order', () => {
-      const output = [
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'planning' }] },
-        { type: 'function_call', call_id: 'c1', name: 'do', arguments: '{}' },
+    it('should convert function call output items to tool messages', () => {
+      const items = [{
+        type: 'function_call_output',
+        call_id: 'call_1',
+        output: { result: 'ok' },
+      }]
+
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'tool'), [{
+        role: 'tool',
+        tool_call_id: 'call_1',
+        content: '{"result":"ok"}',
+      }])
+    })
+  })
+
+  describe('openAIResponseContentToMessageContent', () => {
+    it('should return string content unchanged', () => {
+      assert.strictEqual(openAIResponseContentToMessageContent('Hello'), 'Hello')
+    })
+
+    it('should join text-only parts', () => {
+      const content = [
+        { type: 'input_text', text: 'Line 1' },
+        { type: 'output_text', text: 'Line 2' },
       ]
-      const result = buildResponsesOutputMessages(input, output)
-      assert.strictEqual(result.length, 3)
-      assert.strictEqual(result[1].content, 'planning')
-      assert.ok(result[2].tool_calls)
+
+      assert.strictEqual(openAIResponseContentToMessageContent(content), 'Line 1\nLine 2')
     })
 
-    it('ignores message items with no normalizable content', () => {
-      const output = [{ type: 'message', role: 'assistant', content: [{ type: 'image' }] }]
-      assert.strictEqual(buildResponsesOutputMessages(input, output), undefined)
+    it('should return text and image parts when image content is present', () => {
+      const content = [
+        'Look at this',
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+      ]
+
+      assert.deepStrictEqual(openAIResponseContentToMessageContent(content), [
+        { type: 'text', text: 'Look at this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+      ])
+    })
+
+    it('should return undefined for unsupported content', () => {
+      assert.strictEqual(openAIResponseContentToMessageContent(undefined), undefined)
+      assert.strictEqual(openAIResponseContentToMessageContent([{ type: 'refusal', text: 'No' }]), undefined)
     })
   })
 })
