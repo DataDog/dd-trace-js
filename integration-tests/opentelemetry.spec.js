@@ -9,7 +9,7 @@ const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
-    ? agent.assertTelemetryReceived(onMessage, 'generate-metrics', timeout)
+    ? agent.assertTelemetryReceived({ fn: onMessage, requestType: 'generate-metrics', timeout })
     : agent.assertMessageReceived(onMessage, timeout)
 
   const [res] = await Promise.all([

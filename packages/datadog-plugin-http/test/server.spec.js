@@ -8,6 +8,8 @@ const sinon = require('sinon')
 
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
+const { storage } = require('../../datadog-core')
+const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { rawExpectedSchema } = require('./naming')
@@ -87,7 +89,7 @@ describe('Plugin', () => {
             .catch(done)
           const source = axios.CancelToken.source()
           axios.get(`http://localhost:${port}/user`, { cancelToken: source.token })
-            .then(() => {})
+            .then(() => { })
           setTimeout(() => { source.cancel() }, 100)
         })
       })
@@ -144,6 +146,28 @@ describe('Plugin', () => {
 
             const abortController = new AbortController()
             sinon.assert.calledOnceWithExactly(spy, { req, res, abortController }, incomingHttpRequestStart.name)
+
+            done()
+          }
+
+          axios.get(`http://localhost:${port}/user`).catch(done)
+        })
+
+        it('should preserve request access through child scope activation without strong fields', done => {
+          const spy = sinon.spy()
+          incomingHttpRequestStart.subscribe(spy)
+
+          app = (req, res) => {
+            const childSpan = tracer.startSpan('child')
+
+            tracer.scope().activate(childSpan, () => {
+              const store = storage('legacy').getStore()
+
+              sinon.assert.calledOnce(spy)
+              assert.strictEqual(getRequest(store), req)
+              assert.strictEqual(Object.hasOwn(store, 'req'), false)
+              assert.strictEqual(Object.hasOwn(store, 'res'), false)
+            })
 
             done()
           }
@@ -227,7 +251,7 @@ describe('Plugin', () => {
 
         // see https://github.com/DataDog/dd-trace-js/issues/2453
         it('should not have disabled tracing', (done) => {
-          agent.assertSomeTraces(() => {})
+          agent.assertSomeTraces(() => { })
             .then(done)
             .catch(done)
 
@@ -288,7 +312,7 @@ describe('Plugin', () => {
         })
 
         it('should drop traces for blocklist route', done => {
-          const spy = sinon.spy(() => {})
+          const spy = sinon.spy(() => { })
 
           agent
             .assertSomeTraces((traces) => {

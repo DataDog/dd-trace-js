@@ -38,7 +38,7 @@ jobs:
           - name: yarn-berry
             install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
           - name: bun
-            install: bun add
+            install: bun add --linker=hoisted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -74,13 +74,10 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8 # v3.0.0
+      - uses: DataDog/junit-upload-github-action@ce82dc1f14a32888a057bfeeb47adfd0fd96e555 # v3.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ steps.dd-sts.outputs.api_key }}
-          # TODO: remove once https://github.com/DataDog/junit-upload-github-action/pull/54 lands
-          # and junit-upload-github-action releases are tied to datadog-ci releases.
-          datadog-ci-version: 5.13.1
           service: dd-trace-js-tests
 
   core:
@@ -179,8 +176,8 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts express@4 # Use older express to support old Node.js versions
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
