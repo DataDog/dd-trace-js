@@ -446,9 +446,10 @@
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
       {
-        "implementation": "B",
-        "type": "boolean",
-        "default": "false"
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "allowed": "github|gitlab|circleci"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
