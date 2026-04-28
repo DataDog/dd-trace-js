@@ -547,7 +547,7 @@ async function createSandbox (
       NODE_OPTIONS: '--dns-result-order=ipv4first',
     },
   }
-  const addFlags = ['--trust', '--verbose']
+  const addFlags = ['--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
