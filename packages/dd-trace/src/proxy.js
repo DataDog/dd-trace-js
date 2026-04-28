@@ -1,13 +1,9 @@
 'use strict'
 
 const NoopProxy = require('./noop/proxy')
-const DatadogTracer = require('./tracer')
-const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
-const DynamicInstrumentation = require('./debugger')
-const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
@@ -28,6 +24,31 @@ function traceTiming (message) {
     // eslint-disable-next-line no-console
     console.log(message)
   }
+}
+
+let DatadogTracer
+let DynamicInstrumentation
+let getConfig
+let telemetry
+
+function getDatadogTracer () {
+  DatadogTracer ??= require('./tracer')
+  return DatadogTracer
+}
+
+function getDynamicInstrumentation () {
+  DynamicInstrumentation ??= require('./debugger')
+  return DynamicInstrumentation
+}
+
+function getTracerConfig () {
+  getConfig ??= require('./config')
+  return getConfig
+}
+
+function getTelemetry () {
+  telemetry ??= require('./telemetry')
+  return telemetry
 }
 
 class LazyModule {
@@ -114,7 +135,7 @@ class Tracer extends NoopProxy {
 
     try {
       let _t = performance.now()
-      const config = getConfig(options) // TODO: support dynamic code config
+      const config = getTracerConfig()(options) // TODO: support dynamic code config
       traceTiming(`[proxy.init]   getConfig:         ${(performance.now() - _t).toFixed(3)}ms`)
 
       // Add config dependent process tags
@@ -135,7 +156,7 @@ class Tracer extends NoopProxy {
       }
 
       _t = performance.now()
-      telemetry.start(config, this._pluginManager)
+      getTelemetry().start(config, this._pluginManager)
       traceTiming(`[proxy.init]   telemetry.start:   ${(performance.now() - _t).toFixed(3)}ms`)
 
       if (config.dogstatsd) {
@@ -198,7 +219,7 @@ class Tracer extends NoopProxy {
         traceTiming(`[proxy.init]     appsecRemoteConfig.enable:   ${(performance.now() - _trc).toFixed(3)}ms`)
 
         if (config.dynamicInstrumentation.enabled) {
-          DynamicInstrumentation.start(config, rc)
+          getDynamicInstrumentation().start(config, rc)
         }
 
         _trc = performance.now()
@@ -329,7 +350,7 @@ class Tracer extends NoopProxy {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        this._tracer = new DatadogTracer(config, prioritySampler)
+        this._tracer = new (getDatadogTracer())(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         traceTiming(`[proxy.#updateTracing]   new DatadogTracer:     ${(performance.now() - _tut).toFixed(3)}ms`)
 
@@ -370,7 +391,7 @@ class Tracer extends NoopProxy {
       traceTiming(`[proxy.#updateTracing]   pluginManager.configure:${(performance.now() - _tut).toFixed(3)}ms`)
 
       _tut = performance.now()
-      DynamicInstrumentation.configure(config)
+      getDynamicInstrumentation().configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
       traceTiming(`[proxy.#updateTracing]   DI+startupLog:         ${(performance.now() - _tut).toFixed(3)}ms`)
@@ -386,19 +407,20 @@ class Tracer extends NoopProxy {
    */
   #updateDebugger (config, rc) {
     const shouldBeEnabled = config.dynamicInstrumentation.enabled
-    const isCurrentlyStarted = DynamicInstrumentation.isStarted()
+    const dynamicInstrumentation = getDynamicInstrumentation()
+    const isCurrentlyStarted = dynamicInstrumentation.isStarted()
 
     if (shouldBeEnabled) {
       if (isCurrentlyStarted) {
         log.debug('[proxy] Reconfiguring Dynamic Instrumentation via remote config')
-        DynamicInstrumentation.configure(config)
+        dynamicInstrumentation.configure(config)
       } else {
         log.debug('[proxy] Starting Dynamic Instrumentation via remote config')
-        DynamicInstrumentation.start(config, rc)
+        dynamicInstrumentation.start(config, rc)
       }
     } else if (isCurrentlyStarted) {
       log.debug('[proxy] Stopping Dynamic Instrumentation via remote config')
-      DynamicInstrumentation.stop()
+      dynamicInstrumentation.stop()
     }
   }
 
