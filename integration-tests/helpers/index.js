@@ -355,11 +355,11 @@ function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
 }
 
 function log (...args) {
-  DEBUG === 'true' && console.log(...args) // eslint-disable-line no-console
+  console.log(...args) // eslint-disable-line no-console
 }
 
 function error (...args) {
-  DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
+  console.error(...args) // eslint-disable-line no-console
 }
 
 function execHelper (command, options) {
