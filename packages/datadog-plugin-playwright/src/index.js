@@ -46,6 +46,8 @@ const {
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_FORCED_RUN,
+  TEST_ITR_UNSKIPPABLE,
   TEST_CODE_COVERAGE_ENABLED,
   ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -54,6 +56,8 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
@@ -91,6 +95,8 @@ class PlaywrightPlugin extends CiPlugin {
       isSuitesSkippingEnabled,
       isSuitesSkipped,
       numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
       itrCorrelationId,
       onDone,
     }) => {
@@ -133,6 +139,14 @@ class PlaywrightPlugin extends CiPlugin {
         this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
         this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
       }
+      if (hasUnskippableSuites) {
+        this.testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+      }
+      if (hasForcedToRunSuites) {
+        this.testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+      }
       if (itrCorrelationId) {
         this.testSessionSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
@@ -157,7 +171,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, testSourceFileAbsolutePath } = ctx
+      const { testSuiteAbsolutePath, testSourceFileAbsolutePath, isUnskippable, isForcedToRun } = ctx
 
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
@@ -178,6 +192,14 @@ class PlaywrightPlugin extends CiPlugin {
       if (testSourceFile) {
         testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
         testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+      if (isUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+      }
+      if (isForcedToRun) {
+        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       }
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {

@@ -21,6 +21,7 @@ const {
 } = require('../../dd-trace/src/ci-visibility/code-coverage/source-map-resolver')
 const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
 const { isTrue } = require('../../dd-trace/src/util')
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const log = require('../../dd-trace/src/log')
 const {
   getValueFromEnvSources,
@@ -94,6 +95,8 @@ let isSuitesSkippingEnabledForRun = false
 let suitesToSkip = []
 let skippedSuites = []
 let isSuitesSkipped = false
+let hasUnskippableSuites = false
+let hasForcedToRunSuites = false
 let itrCorrelationId = ''
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
@@ -503,6 +506,23 @@ function shouldFinishTestSuite (testSuiteAbsolutePath) {
   return !remainingTests.length || remainingTests.every(test => test.expectedStatus === 'skipped')
 }
 
+/**
+ * Reads and caches whether a Playwright test file is marked as unskippable.
+ *
+ * @param {string} testSuiteAbsolutePath
+ * @param {Map<string, boolean>} unskippableSuites
+ * @returns {boolean}
+ */
+function isUnskippableTestSuite (testSuiteAbsolutePath, unskippableSuites) {
+  if (unskippableSuites.has(testSuiteAbsolutePath)) {
+    return unskippableSuites.get(testSuiteAbsolutePath)
+  }
+
+  const isUnskippable = !!isMarkedAsUnskippable({ path: testSuiteAbsolutePath })
+  unskippableSuites.set(testSuiteAbsolutePath, isUnskippable)
+  return isUnskippable
+}
+
 function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -525,7 +545,12 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteCtx = { testSuiteAbsolutePath, testSourceFileAbsolutePath }
+    const testSuiteCtx = {
+      testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
+      isUnskippable: test._ddIsUnskippable,
+      isForcedToRun: test._ddIsForcedToRun,
+    }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
@@ -872,6 +897,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     suitesToSkip = []
     skippedSuites = []
     isSuitesSkipped = false
+    hasUnskippableSuites = false
+    hasForcedToRunSuites = false
     itrCorrelationId = ''
     sessionProjects = []
     activeBrowserCoverage = null
@@ -1070,6 +1097,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       isSuitesSkippingEnabled: isSuitesSkippingEnabledForRun,
       isSuitesSkipped,
       numSkippedSuites: skippedSuites.length,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
       itrCorrelationId,
       onDone,
     })
@@ -1198,7 +1227,7 @@ addHook({
 
   async function newCreateRootSuite () {
     if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled &&
-        !(isSuitesSkippingEnabledForRun && suitesToSkip.length)) {
+        !isSuitesSkippingEnabledForRun) {
       return oldCreateRootSuite.apply(this, arguments)
     }
 
@@ -1208,7 +1237,7 @@ addHook({
 
     const allTests = rootSuite.allTests()
 
-    if (isSuitesSkippingEnabledForRun && suitesToSkip.length) {
+    if (isSuitesSkippingEnabledForRun) {
       // The skippable API returns suite paths relative to the repository
       // root (that's how coverage is uploaded). Playwright's `rootDir` is
       // the testDir, which can be a subdirectory, so we must resolve test
@@ -1216,9 +1245,21 @@ addHook({
       const repoRoot = getRepositoryRoot() || rootDir
       const skippedFiles = new Set()
       const skipSet = new Set(suitesToSkip)
+      const unskippableSuites = new Map()
       for (const test of allTests) {
         const testSuiteAbsolutePath = test._requireFile
         const relative = getTestSuitePath(testSuiteAbsolutePath, repoRoot)
+
+        if (isUnskippableTestSuite(testSuiteAbsolutePath, unskippableSuites)) {
+          test._ddIsUnskippable = true
+          hasUnskippableSuites = true
+          if (skipSet.has(relative)) {
+            test._ddIsForcedToRun = true
+            hasForcedToRunSuites = true
+          }
+          continue
+        }
+
         if (skipSet.has(relative)) {
           test._ddIsSkippedByItr = true
           test.expectedStatus = 'skipped'
