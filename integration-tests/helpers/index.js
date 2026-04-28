@@ -539,7 +539,7 @@ async function createSandbox (
     : path.join(sandboxRoot, 'dd-trace.tgz')
 
   await fs.mkdir(folder, { recursive: true })
-  const addOptions = { cwd: folder, env: restOfEnv, timeout: 90_000 }
+  const addOptions = { cwd: folder, env: restOfEnv, timeout: 60_000 }
   const addFlags = ['--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
