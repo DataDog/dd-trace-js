@@ -19,6 +19,7 @@ module.exports = {
   '@langchain/langgraph': { esmFirst: true, fn: () => require('../langgraph') },
   '@modelcontextprotocol/sdk': () => require('../modelcontextprotocol-sdk'),
   'apollo-server-core': () => require('../apollo-server-core'),
+  '@aws/durable-execution-sdk-js': () => require('../aws-durable-execution'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@azure/functions': () => require('../azure-functions'),
