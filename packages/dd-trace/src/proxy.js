@@ -17,7 +17,7 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
-const traceTimingEnabled = true
+const traceTimingEnabled = false
 
 function traceTiming (message) {
   if (traceTimingEnabled) {

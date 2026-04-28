@@ -28,14 +28,43 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let tracerEnvOverrides = null
 
-const traceTimingEnabled = true
+const traceTimingEnabled = false
 
 function traceTiming (message) {
   if (traceTimingEnabled) {
     // eslint-disable-next-line no-console
     console.log(message)
   }
+}
+
+function applyTracerEnvOverrides (overrides) {
+  /** @type {Record<string, string | undefined>} */
+  const previous = {}
+
+  for (const [name, value] of Object.entries(overrides)) {
+    previous[name] = process.env[name]
+    process.env[name] = value
+  }
+
+  tracerEnvOverrides = previous
+}
+
+function restoreTracerEnvOverrides () {
+  if (!tracerEnvOverrides) {
+    return
+  }
+
+  for (const [name, value] of Object.entries(tracerEnvOverrides)) {
+    if (value === undefined) {
+      delete process.env[name]
+    } else {
+      process.env[name] = value
+    }
+  }
+
+  tracerEnvOverrides = null
 }
 
 function isMatchingTrace (spans, spanResourceMatch) {
@@ -425,6 +454,13 @@ module.exports = {
   async load (pluginNames, config, tracerConfig = {}) {
     const loadStart = performance.now()
 
+    restoreTracerEnvOverrides()
+    applyTracerEnvOverrides({
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'false',
+      DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+      DD_TRACE_STARTUP_LOGS: 'false',
+    })
+
     if (!Array.isArray(pluginNames)) {
       pluginNames = [pluginNames]
     }
@@ -566,21 +602,7 @@ module.exports = {
           flushInterval: 0,
           plugins: false,
           startupLogs: false,
-          remoteConfig: {
-            enabled: false,
-          },
-          dynamicInstrumentation: {
-            enabled: false,
-          },
           ...tracerConfig,
-          remoteConfig: {
-            enabled: false,
-            ...tracerConfig.remoteConfig,
-          },
-          dynamicInstrumentation: {
-            enabled: false,
-            ...tracerConfig.dynamicInstrumentation,
-          },
         })
         traceTiming(`[agent.load]   tracer.init:     ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
 
@@ -780,6 +802,7 @@ module.exports = {
     currentIntegrationName = null
 
     tracer.llmobs.disable()
+    restoreTracerEnvOverrides()
 
     return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
