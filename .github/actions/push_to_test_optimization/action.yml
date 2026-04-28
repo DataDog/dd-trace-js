@@ -25,6 +25,10 @@ runs:
         path: ${{ steps.yarn-global-dir.outputs.dir }}
         key: datadog-ci-${{ env.DATADOG_CI_VERSION }}
     - if: github.actor != 'dependabot[bot]'
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: '20'
+    - if: github.actor != 'dependabot[bot]'
       shell: bash
       run: yarn global add @datadog/datadog-ci@${{ env.DATADOG_CI_VERSION }}
     - if: github.actor != 'dependabot[bot]'
