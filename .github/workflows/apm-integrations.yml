@@ -66,29 +66,11 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - run: yarn config set ignore-engines true
-      - name: Install dependencies
-        uses: ./.github/actions/install
-      - name: Run tests
-        run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          ignore-engines: 'true'
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
 
   amqp10:
     runs-on: ubuntu-latest
@@ -108,7 +90,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   amqplib:
     runs-on: ubuntu-latest
@@ -124,7 +108,9 @@ jobs:
       SERVICES: rabbitmq
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   apollo:
     runs-on: ubuntu-latest
@@ -134,7 +120,9 @@ jobs:
       PLUGINS: apollo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   avsc:
     runs-on: ubuntu-latest
@@ -145,7 +133,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   axios:
     runs-on: ubuntu-latest
@@ -155,7 +145,9 @@ jobs:
       PLUGINS: axios
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          command: yarn test:plugins:upstream
 
   body-parser:
     runs-on: ubuntu-latest
@@ -165,7 +157,9 @@ jobs:
       PLUGINS: body-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          command: yarn test:plugins:upstream
 
   bullmq:
     runs-on: ubuntu-latest
@@ -191,7 +185,9 @@ jobs:
       PLUGINS: bunyan
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   cassandra:
     runs-on: ubuntu-latest
@@ -210,6 +206,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   child_process:
+    strategy:
+      matrix:
+        node-version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -217,25 +216,10 @@ jobs:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: apm-integrations-child-process
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-child-process-${{ matrix.node-version }}
 
   crypto:
     runs-on: ubuntu-latest
@@ -289,26 +273,10 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
 
   cookie-parser:
     runs-on: ubuntu-latest
@@ -358,23 +326,11 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
-      - run: yarn test:plugins:ci --ignore-engines
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-couchbase-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          ignore-engines: 'true'
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
 
   connect:
     runs-on: ubuntu-latest
@@ -384,9 +340,14 @@ jobs:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   dns:
+    strategy:
+      matrix:
+        node-version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -394,30 +355,10 @@ jobs:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-dns
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-dns-${{ matrix.node-version }}
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -435,35 +376,21 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-elasticsearch
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: latest
 
   express:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: express
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/plugins/test
+        with:
+          node-version: latest
 
   express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -533,7 +460,9 @@ jobs:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   grpc:
     runs-on: ubuntu-latest
@@ -586,28 +515,15 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-http-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
 
   http2:
+    strategy:
+      matrix:
+        node-version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -615,30 +531,10 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-http2
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-http2-${{ matrix.node-version }}
 
   kafkajs:
     strategy:
@@ -675,26 +571,10 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
 
   knex:
     runs-on: ubuntu-latest
@@ -714,7 +594,9 @@ jobs:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   ldapjs:
     runs-on: ubuntu-latest
@@ -920,6 +802,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   net:
+    strategy:
+      matrix:
+        node-version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -927,30 +812,10 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-net
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-net-${{ matrix.node-version }}
 
   # TODO: fix performance issues and test more Node versions
 
@@ -958,9 +823,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - 18
-          - latest
         range:
           - ">=10.2.0 <11"
           - ">=11.0.0 <13"
@@ -995,24 +857,10 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-next-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: latest
+          log-suffix: plugins-${{ github.job }}-${{ matrix.range_clean }}
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -1185,27 +1033,10 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - name: Run tests
-        run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
 
   process:
     runs-on: ubuntu-latest
@@ -1226,7 +1057,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   pug:
     runs-on: ubuntu-latest
@@ -1289,17 +1122,20 @@ jobs:
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
   restify:
+    strategy:
+      matrix:
+        node-version: [active, oldest]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/plugins/test
+        with:
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-restify-${{ matrix.node-version }}
 
   rhea:
     runs-on: ubuntu-latest
@@ -1319,7 +1155,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          upstream: 'true'
 
   router:
     runs-on: ubuntu-latest
@@ -1349,24 +1187,9 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-sharedb
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: latest
 
   tedious:
     runs-on: ubuntu-latest
@@ -1386,25 +1209,10 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - uses: ./.github/actions/plugins/test
         with:
-          suffix: plugins-${{ github.job }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: apm-integrations-tedious
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: latest
+          upstream: 'true'
 
   undici:
     runs-on: ubuntu-latest

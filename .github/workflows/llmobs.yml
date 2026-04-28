@@ -60,30 +60,9 @@ jobs:
       PLUGINS: openai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          extra-command: yarn test:llmobs:plugins:ci
 
   langchain:
     runs-on: ubuntu-latest
@@ -93,30 +72,10 @@ jobs:
       PLUGINS: langchain
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-floor: newest-maintenance-lts
+          extra-command: yarn test:llmobs:plugins:ci
 
   bedrock:
     runs-on: ubuntu-latest
@@ -126,28 +85,9 @@ jobs:
       PLUGINS: aws-sdk
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          command: yarn test:llmobs:plugins:ci
 
   vertex-ai:
     runs-on: ubuntu-latest
@@ -157,30 +97,9 @@ jobs:
       PLUGINS: google-cloud-vertexai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          extra-command: yarn test:llmobs:plugins:ci
 
   ai:
     runs-on: ubuntu-latest
@@ -190,30 +109,9 @@ jobs:
       PLUGINS: ai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          extra-command: yarn test:llmobs:plugins:ci
 
   anthropic:
     runs-on: ubuntu-latest
@@ -223,30 +121,9 @@ jobs:
       PLUGINS: anthropic
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          extra-command: yarn test:llmobs:plugins:ci
 
   google-genai:
     runs-on: ubuntu-latest
@@ -256,30 +133,9 @@ jobs:
       PLUGINS: google-genai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          extra-command: yarn test:llmobs:plugins:ci
 
   langgraph:
     runs-on: ubuntu-latest
