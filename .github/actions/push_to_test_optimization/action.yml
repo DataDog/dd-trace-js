@@ -14,7 +14,21 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
-      uses: DataDog/junit-upload-github-action@ce82dc1f14a32888a057bfeeb47adfd0fd96e555 # v3.1.0
+      id: yarn-global-dir
+      shell: bash
+      run: |
+        echo "dir=$(yarn global dir)" >> $GITHUB_OUTPUT
+        echo "DATADOG_CI_VERSION=5.15.0" >> $GITHUB_ENV
+    - if: github.actor != 'dependabot[bot]'
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        api_key: ${{ inputs.dd_api_key }}
-        service: dd-trace-js-tests
+        path: ${{ steps.yarn-global-dir.outputs.dir }}
+        key: datadog-ci-${{ env.DATADOG_CI_VERSION }}
+    - if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: yarn global add @datadog/datadog-ci@${{ env.DATADOG_CI_VERSION }}
+    - if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: datadog-ci junit upload --service dd-trace-js-tests "*.xml"
+      env:
+        DD_API_KEY: ${{ inputs.dd_api_key }}
