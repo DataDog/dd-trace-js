@@ -61,6 +61,8 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   })
 
   it('should mark properties with timeout when deadline is exceeded', async function () {
+    // Override the hrtime stub to advance time on each call
+    // This simulates time passing during collection
     // Drive process.hrtime.bigint() with a plain monotonic counter instead of reading
     // `clock.now`. This works around a sinon fake-timers regression.
     // TODO: Revert when a fix for https://github.com/sinonjs/fake-timers/pull/549#pullrequestreview-4158432441 lands.
