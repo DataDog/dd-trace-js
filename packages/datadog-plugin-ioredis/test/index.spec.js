@@ -52,7 +52,7 @@ describe('Plugin', () => {
             metrics: {
               'network.destination.port': 6379,
             },
-          })
+          }, { spanResourceMatch: /^get$/ })
         })
 
         it('should run the callback in the parent context', () => {
@@ -105,7 +105,7 @@ describe('Plugin', () => {
             metrics: {
               'network.destination.port': 6379,
             },
-          })
+          }, { spanResourceMatch: /^get$/ })
         })
 
         withNamingSchema(
