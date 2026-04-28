@@ -355,11 +355,11 @@ function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
 }
 
 function log (...args) {
-  console.log(...args) // eslint-disable-line no-console
+  DEBUG === 'true' && console.log(...args) // eslint-disable-line no-console
 }
 
 function error (...args) {
-  console.error(...args) // eslint-disable-line no-console
+  DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
 }
 
 function execHelper (command, options) {
@@ -540,13 +540,7 @@ async function createSandbox (
   const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
-  const addOptions = {
-    cwd: folder,
-    env: {
-      ...restOfEnv,
-      NODE_OPTIONS: '--dns-result-order=ipv4first',
-    },
-  }
+  const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
