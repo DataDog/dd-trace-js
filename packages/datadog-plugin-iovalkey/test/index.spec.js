@@ -34,7 +34,6 @@ describe('Plugin', () => {
         afterEach(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation when using callbacks', async () => {
-          agent.assertSomeTraces(() => {}) // wait for initial info command
           const promise = agent.assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
             assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
@@ -48,7 +47,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
             assert.strictEqual(traces[0][0].meta['valkey.raw_command'], 'GET foo')
             assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
-          })
+          }, { spanResourceMatch: /^get$/ })
 
           await Promise.all([
             valkey.get('foo'),

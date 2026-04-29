@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.16.1"
+    "rules_version": "1.18.0"
   },
   "rules": [
     {
@@ -2457,6 +2457,9 @@
           "parameters": {
             "inputs": [
               {
+                "address": "server.request.body.filenames"
+              },
+              {
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
                   "x-filename"
@@ -2472,6 +2475,24 @@
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
                   "x-file-name"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-disposition"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "upload-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "filename"
                 ]
               }
             ],
@@ -2522,6 +2543,9 @@
           "parameters": {
             "inputs": [
               {
+                "address": "server.request.body.filenames"
+              },
+              {
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
                   "x-filename"
@@ -2543,6 +2567,24 @@
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
                   "x-file-name"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-disposition"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "upload-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "filename"
                 ]
               }
             ],
@@ -3144,7 +3186,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "\\bon(?:d(?:r(?:ag(?:en(?:ter|d)|leave|start|over)?|op)|urationchange|blclick)|s(?:e(?:ek(?:ing|ed)|arch|lect)|u(?:spend|bmit)|talled|croll|how)|m(?:ouse(?:(?:lea|mo)ve|o(?:ver|ut)|enter|down|up)|essage)|p(?:a(?:ge(?:hide|show)|(?:st|us)e)|lay(?:ing)?|rogress|aste|ointer(?:cancel|down|enter|leave|move|out|over|rawupdate|up))|c(?:anplay(?:through)?|o(?:ntextmenu|py)|hange|lick|ut)|a(?:nimation(?:iteration|start|end)|(?:fterprin|bor)t|uxclick|fterscriptexecute)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|imeupdate)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?|inish)|(?:(?:volume|hash)chang|o(?:ff|n)lin)e|b(?:efore(?:unload|print)|lur)|load(?:ed(?:meta)?data|start|end)?|r(?:es(?:ize|et)|atechange)|key(?:press|down|up)|w(?:aiting|heel)|in(?:valid|put)|e(?:nded|rror)|unload)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
+            "regex": "\\bon(?:abort|afterprint|afterscriptexecute|animationcancel|animationend|animationiteration|animationstart|auxclick|beforeinput|beforematch|beforeprint|beforescriptexecute|beforeunload|beforexrselect|blur|canplay|canplaythrough|change|click|compositionend|compositionstart|compositionupdate|contentvisibilityautostatechange|contextmenu|copy|cut|dblclick|DOMActivate|DOMMouseScroll|drag|dragend|dragenter|dragleave|dragover|dragstart|drop|durationchange|ended|error|focus|focusin|focusout|fullscreenchange|fullscreenerror|gesturechange|gestureend|gesturestart|gotpointercapture|hashchange|input|invalid|keydown|keypress|keyup|load|loadeddata|loadedmetadata|loadstart|lostpointercapture|message|mousedown|mouseenter|mouseleave|mousemove|mouseout|mouseover|mouseup|mousewheel|MozMousePixelScroll|offline|online|pagehide|pageshow|paste|pause|play|playing|pointercancel|pointerdown|pointerenter|pointerleave|pointermove|pointerout|pointerover|pointerrawupdate|pointerup|progress|ratechange|reset|resize|scroll|scrollend|scrollsnapchange|scrollsnapchanging|search|securitypolicyviolation|seeked|seeking|select|show|stalled|submit|suspend|timeupdate|toggle|touchcancel|touchend|touchmove|touchstart|transitioncancel|transitionend|transitionrun|transitionstart|unload|volumechange|waiting|webkitmouseforcechanged|webkitmouseforcedown|webkitmouseforceup|webkitmouseforcewillbegin|wheel)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
             "options": {
               "min_length": 8
             }
@@ -4529,6 +4571,81 @@
       ]
     },
     {
+      "id": "crs-944-140",
+      "name": "Java Injection Attack: Java Script File Upload Found",
+      "tags": {
+        "type": "unrestricted_file_upload",
+        "crs_id": "944140",
+        "category": "attack_attempt",
+        "cwe": "434",
+        "capec": "1000/152/242",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body.filenames"
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x_filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x.filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-file-name"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-disposition"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "upload-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "filename"
+                ]
+              }
+            ],
+            "regex": "\\.(?:jsp[fx]?|[jw]ar|class|do|action|tagx?|tld|js[fv])\\.?$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
       "id": "crs-944-260",
       "name": "Remote Command Execution: Malicious class-loading payload",
       "tags": {
@@ -5565,6 +5682,167 @@
       "transformers": []
     },
     {
+      "id": "dog-920-100",
+      "name": "File upload with double extension",
+      "tags": {
+        "type": "http_protocol_violation",
+        "category": "attack_attempt",
+        "cwe": "434",
+        "capec": "1000/255/153/267/71",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body.filenames"
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x_filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x.filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-file-name"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-disposition"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "upload-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "filename"
+                ]
+              }
+            ],
+            "regex": "\\w\\.[a-zA-Z0-9]{2,6}\\.[a-zA-Z0-9]+\\.?$",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "dog-920-110",
+      "name": "Zipslip Attack - Unsafe Zip extraction",
+      "tags": {
+        "type": "http_protocol_violation",
+        "category": "attack_attempt",
+        "cwe": "23",
+        "capec": "1000/152/586",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body.filenames"
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x_filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x.filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-file-name"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-disposition"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "upload-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "filename"
+                ]
+              }
+            ],
+            "regex": "\\.(?:zip|(?:(?:tar\\.)?gz|bz2|7z|xz)|rar|tar)$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.fs.file_write"
+              }
+            ],
+            "regex": "(?:^|[/\\\\])\\.\\.[/\\\\]",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-931-001",
       "name": "RFI: URL Payload to well known RFI target",
       "tags": {
@@ -5731,7 +6009,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "(?:<\\?xml[^>]*>.*)<!ENTITY[^>]+SYSTEM\\s+[^>]+>",
+            "regex": "<!DOCTYPE\\b.*<!ENTITY[^>]+SYSTEM\\s+[^>]+>",
             "options": {
               "case_sensitive": false,
               "min_length": 24
@@ -8918,6 +9196,1745 @@
         }
       ],
       "transformers": []
+    },
+    {
+      "id": "strc-913-100",
+      "name": "Found User-Agent associated with security scanner",
+      "enabled": false,
+      "tags": {
+        "type": "security_scanner",
+        "crs_id": "913100",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "list": [
+              "(hydra)",
+              "absinthe",
+              "autogetcontent",
+              "bilbo",
+              "bfac",
+              "cisco-torch",
+              "core-project/1.0",
+              "crimscanner/",
+              "datacha0s",
+              "domino hunter",
+              "dotdotpwn",
+              "email extractor",
+              "fhscan core 1.",
+              "floodgate",
+              "f-secure radar",
+              "get-minimal",
+              "gootkit auto-rooter scanner",
+              "grabber",
+              "grendel-scan",
+              "inspath",
+              "internet ninja",
+              "masscan",
+              "morfeus fucking scanner",
+              "mysqloit",
+              "prog.customcrawler",
+              "qqgamehall",
+              "s.t.a.l.k.e.r.",
+              "springenwerk",
+              "sql power injector",
+              "struts-pwn",
+              "sysscan",
+              "tbi-webscanner",
+              "teh forest lobster",
+              "toata dragostea",
+              "uil2pn",
+              "user-agent:",
+              "vega/",
+              "voideye",
+              "webbandit",
+              "webshag",
+              "webvulnscan",
+              "whatweb",
+              "whcc/",
+              "wordpress hash grabber",
+              "xmlrpc exploit"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ]
+    },
+    {
+      "id": "strc-921-120",
+      "name": "HTTP Response Splitting Attack",
+      "enabled": false,
+      "tags": {
+        "type": "http_protocol_violation",
+        "crs_id": "921120",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "[\\r\\n]\\W*?(?:content-(?:type|length)|set-cookie|location):\\s*\\w",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 11
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ]
+    },
+    {
+      "id": "strc-921-140",
+      "name": "HTTP Header Injection Attack via headers",
+      "enabled": false,
+      "tags": {
+        "type": "http_protocol_violation",
+        "crs_id": "921140",
+        "category": "attack_attempt",
+        "capec": "1000/210/272/220/273",
+        "cwe": "113",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "regex": "[\\n\\r]",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 1
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-930-101",
+      "name": "Obfuscated Path Traversal Attack via URL encoding (/../)",
+      "enabled": false,
+      "tags": {
+        "type": "lfi",
+        "category": "attack_attempt",
+        "cwe": "22",
+        "capec": "1000/255/153/126",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|\\/|\\x5c)(?:%(?:(?:f(?:(?:c%80|8)%8)?0%8|e)0%80%ae|2(?:(?:5(?:c0%25a|2))?e|%45)|u(?:(?:002|ff0)e|2024)|%32(?:%(?:%6|4)5|E)|c0(?:%[256aef]e|\\.))|\\.(?:%0[01]|\\?)?|\\?\\.?|0x2e){2,3}(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|\\/|\\x5c)",
+            "options": {
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-930-111",
+      "name": "Simple Path Traversal Attack (/../)",
+      "enabled": false,
+      "tags": {
+        "type": "lfi",
+        "category": "attack_attempt",
+        "cwe": "22",
+        "capec": "1000/255/153/126",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:(?:^|[\\x5c/])\\.{2,3}[\\x5c/]|[\\x5c/]\\.{2,3}(?:[\\x5c/]|$))",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 3
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-932-100",
+      "name": "Remote Command Execution: Unix Command Injection",
+      "enabled": false,
+      "tags": {
+        "type": "command_injection",
+        "crs_id": "932100",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:[;\\n\\r`]|\\$(?:\\(?\\(|{)|(?:\\|)?\\||\\(\\s*\\)|[<>]\\(|&?&|\\{)\\s*(?:(?:\\w+=(?:[^\\s]*|\\$.*|\\$.*|<.*|>.*|\\'.*\\'|\\\".*\\\")\\s+|(?:\\s*\\(|!)\\s*|\\{|\\$))*\\s*(?:['\\\"])*(?:[\\?\\*\\[\\]\\(\\)\\-\\|+\\w'\\\"\\./\\x5c]+/)?[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*(?:w[\\x5c'\\\"]*p[\\x5c'\\\"]*-[\\x5c'\\\"]*(?:d[\\x5c'\\\"]*(?:o[\\x5c'\\\"]*w[\\x5c'\\\"]*n[\\x5c'\\\"]*l[\\x5c'\\\"]*o[\\x5c'\\\"]*a[\\x5c'\\\"]*d|u[\\x5c'\\\"]*m[\\x5c'\\\"]*p)|r[\\x5c'\\\"]*e[\\x5c'\\\"]*q[\\x5c'\\\"]*u[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*t|m[\\x5c'\\\"]*i[\\x5c'\\\"]*r[\\x5c'\\\"]*r[\\x5c'\\\"]*o[\\x5c'\\\"]*r)|s(?:[\\x5c'\\\"]*(?:b[\\x5c'\\\"]*_[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*l[\\x5c'\\\"]*e[\\x5c'\\\"]*a[\\x5c'\\\"]*s[\\x5c'\\\"]*e|c[\\x5c'\\\"]*p[\\x5c'\\\"]*u|m[\\x5c'\\\"]*o[\\x5c'\\\"]*d|p[\\x5c'\\\"]*c[\\x5c'\\\"]*i|u[\\x5c'\\\"]*s[\\x5c'\\\"]*b|-[\\x5c'\\\"]*F|h[\\x5c'\\\"]*w|o[\\x5c'\\\"]*f))?|z[\\x5c'\\\"]*(?:(?:[ef][\\x5c'\\\"]*)?g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|c[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*t|m[\\x5c'\\\"]*p)|m[\\x5c'\\\"]*(?:o[\\x5c'\\\"]*r[\\x5c'\\\"]*e|a)|d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s)|o[\\x5c'\\\"]*(?:g[\\x5c'\\\"]*(?:(?:n[\\x5c'\\\"]*a[\\x5c'\\\"]*m|s[\\x5c'\\\"]*a[\\x5c'\\\"]*v)[\\x5c'\\\"]*e|i[\\x5c'\\\"]*n[\\x5c'\\\"]*c[\\x5c'\\\"]*t[\\x5c'\\\"]*l)|c[\\x5c'\\\"]*a[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*e|l)[\\x5c'\\\"]*(?:\\s|<|>).*)|e[\\x5c'\\\"]*s[\\x5c'\\\"]*s[\\x5c'\\\"]*(?:(?:f[\\x5c'\\\"]*i[\\x5c'\\\"]*l|p[\\x5c'\\\"]*i[\\x5c'\\\"]*p)[\\x5c'\\\"]*e|e[\\x5c'\\\"]*c[\\x5c'\\\"]*h[\\x5c'\\\"]*o|(?:\\s|<|>).*)|a[\\x5c'\\\"]*s[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*o[\\x5c'\\\"]*g(?:[\\x5c'\\\"]*i[\\x5c'\\\"]*n)?|c[\\x5c'\\\"]*o[\\x5c'\\\"]*m[\\x5c'\\\"]*m|(?:\\s|<|>).*)|d[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*o[\\x5c'\\\"]*n[\\x5c'\\\"]*f[\\x5c'\\\"]*i[\\x5c'\\\"]*g|d[\\x5c'\\\"]*(?:\\s|<|>).*)|(?:[np]|i[\\x5c'\\\"]*n[\\x5c'\\\"]*k[\\x5c'\\\"]*s|y[\\x5c'\\\"]*n[\\x5c'\\\"]*x)[\\x5c'\\\"]*(?:\\s|<|>).*|u[\\x5c'\\\"]*a[\\x5c'\\\"]*(?:5[\\x5c'\\\"]*\\.[\\x5c'\\\"]*[1234]|(?:\\s|<|>).*)|f[\\x5c'\\\"]*t[\\x5c'\\\"]*p(?:[\\x5c'\\\"]*g[\\x5c'\\\"]*e[\\x5c'\\\"]*t)?|t[\\x5c'\\\"]*r[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*e)|c[\\x5c'\\\"]*(?:o[\\x5c'\\\"]*(?:m[\\x5c'\\\"]*(?:p[\\x5c'\\\"]*(?:r[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s[\\x5c'\\\"]*(?:\\s|<|>).*|o[\\x5c'\\\"]*s[\\x5c'\\\"]*e[\\x5c'\\\"]*r)|m[\\x5c'\\\"]*a[\\x5c'\\\"]*n[\\x5c'\\\"]*d[\\x5c'\\\"]*(?:\\s|<|>).*)|p[\\x5c'\\\"]*r[\\x5c'\\\"]*o[\\x5c'\\\"]*c)|h[\\x5c'\\\"]*(?:d[\\x5c'\\\"]*i[\\x5c'\\\"]*r[\\x5c'\\\"]*(?:\\s|<|>).*|f[\\x5c'\\\"]*l[\\x5c'\\\"]*a[\\x5c'\\\"]*g[\\x5c'\\\"]*s|a[\\x5c'\\\"]*t[\\x5c'\\\"]*t[\\x5c'\\\"]*r|m[\\x5c'\\\"]*o[\\x5c'\\\"]*d)|p[\\x5c'\\\"]*(?:u[\\x5c'\\\"]*l[\\x5c'\\\"]*i[\\x5c'\\\"]*m[\\x5c'\\\"]*i[\\x5c'\\\"]*t|(?:\\s|<|>).*|a[\\x5c'\\\"]*n|i[\\x5c'\\\"]*o)|(?:a[\\x5c'\\\"]*(?:p[\\x5c'\\\"]*s[\\x5c'\\\"]*h|t)|c)[\\x5c'\\\"]*(?:\\s|<|>).*|e[\\x5c'\\\"]*r[\\x5c'\\\"]*t[\\x5c'\\\"]*b[\\x5c'\\\"]*o[\\x5c'\\\"]*t|r[\\x5c'\\\"]*o[\\x5c'\\\"]*n[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*b|u[\\x5c'\\\"]*r[\\x5c'\\\"]*l|[89][\\x5c'\\\"]*9|s[\\x5c'\\\"]*h)|b[\\x5c'\\\"]*(?:z[\\x5c'\\\"]*(?:(?:[ef][\\x5c'\\\"]*)?g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s|m[\\x5c'\\\"]*o[\\x5c'\\\"]*r[\\x5c'\\\"]*e|c[\\x5c'\\\"]*a[\\x5c'\\\"]*t|i[\\x5c'\\\"]*p[\\x5c'\\\"]*2)|u[\\x5c'\\\"]*(?:s[\\x5c'\\\"]*(?:y[\\x5c'\\\"]*b[\\x5c'\\\"]*o[\\x5c'\\\"]*x|c[\\x5c'\\\"]*t[\\x5c'\\\"]*l)|n[\\x5c'\\\"]*d[\\x5c'\\\"]*l[\\x5c'\\\"]*e[\\x5c'\\\"]*r[\\x5c'\\\"]*(?:\\s|<|>).*|i[\\x5c'\\\"]*l[\\x5c'\\\"]*t[\\x5c'\\\"]*i[\\x5c'\\\"]*n)|s[\\x5c'\\\"]*d[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*a[\\x5c'\\\"]*t|i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|t[\\x5c'\\\"]*a[\\x5c'\\\"]*r)|a[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*c[\\x5c'\\\"]*h[\\x5c'\\\"]*(?:\\s|<|>).*|s[\\x5c'\\\"]*h)|r[\\x5c'\\\"]*e[\\x5c'\\\"]*a[\\x5c'\\\"]*k[\\x5c'\\\"]*s[\\x5c'\\\"]*w)|e[\\x5c'\\\"]*(?:x[\\x5c'\\\"]*(?:p[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*c[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:\\s|<|>).*|a[\\x5c'\\\"]*n[\\x5c'\\\"]*d|o[\\x5c'\\\"]*r[\\x5c'\\\"]*t|r)|(?:e[\\x5c'\\\"]*c[\\x5c'\\\"]*)?(?:\\s|<|>).*)|n[\\x5c'\\\"]*(?:v(?:[\\x5c'\\\"]*-[\\x5c'\\\"]*u[\\x5c'\\\"]*p[\\x5c'\\\"]*d[\\x5c'\\\"]*a[\\x5c'\\\"]*t[\\x5c'\\\"]*e)?|d[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*f|s[\\x5c'\\\"]*w))|(?:a[\\x5c'\\\"]*s[\\x5c'\\\"]*y[\\x5c'\\\"]*_[\\x5c'\\\"]*i[\\x5c'\\\"]*n[\\x5c'\\\"]*s[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*l|v[\\x5c'\\\"]*a)[\\x5c'\\\"]*l|(?:c[\\x5c'\\\"]*h[\\x5c'\\\"]*o|d)[\\x5c'\\\"]*(?:\\s|<|>).*|g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|m[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*s|s[\\x5c'\\\"]*a[\\x5c'\\\"]*c)|f[\\x5c'\\\"]*(?:i(?:[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*e[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*t|(?:\\s|<|>).*)|n[\\x5c'\\\"]*d[\\x5c'\\\"]*(?:\\s|<|>).*|s[\\x5c'\\\"]*h))?|t[\\x5c'\\\"]*p[\\x5c'\\\"]*(?:s[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*t[\\x5c'\\\"]*s|w[\\x5c'\\\"]*h[\\x5c'\\\"]*o|(?:\\s|<|>).*)|(?:e[\\x5c'\\\"]*t[\\x5c'\\\"]*c[\\x5c'\\\"]*h|l[\\x5c'\\\"]*o[\\x5c'\\\"]*c[\\x5c'\\\"]*k|c)[\\x5c'\\\"]*(?:\\s|<|>).*|u[\\x5c'\\\"]*n[\\x5c'\\\"]*c[\\x5c'\\\"]*t[\\x5c'\\\"]*i[\\x5c'\\\"]*o[\\x5c'\\\"]*n|o[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*h|g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p)|i[\\x5c'\\\"]*(?:p[\\x5c'\\\"]*(?:(?:6[\\x5c'\\\"]*)?t[\\x5c'\\\"]*a[\\x5c'\\\"]*b[\\x5c'\\\"]*l[\\x5c'\\\"]*e[\\x5c'\\\"]*s|c[\\x5c'\\\"]*o[\\x5c'\\\"]*n[\\x5c'\\\"]*f[\\x5c'\\\"]*i[\\x5c'\\\"]*g)|r[\\x5c'\\\"]*b(?:[\\x5c'\\\"]*(?:2[\\x5c'\\\"]*[01234567]|1(?:[\\x5c'\\\"]*[89])?|3[\\x5c'\\\"]*0))?|f[\\x5c'\\\"]*c[\\x5c'\\\"]*o[\\x5c'\\\"]*n[\\x5c'\\\"]*f[\\x5c'\\\"]*i[\\x5c'\\\"]*g|o[\\x5c'\\\"]*n[\\x5c'\\\"]*i[\\x5c'\\\"]*c[\\x5c'\\\"]*e|d[\\x5c'\\\"]*(?:\\s|<|>).*)|h[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*(?:d[\\x5c'\\\"]*i[\\x5c'\\\"]*g[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*t|p[\\x5c'\\\"]*a[\\x5c'\\\"]*s[\\x5c'\\\"]*s[\\x5c'\\\"]*w[\\x5c'\\\"]*d)|o[\\x5c'\\\"]*s[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:n[\\x5c'\\\"]*a[\\x5c'\\\"]*m[\\x5c'\\\"]*e|i[\\x5c'\\\"]*d)|(?:e[\\x5c'\\\"]*a[\\x5c'\\\"]*d|u[\\x5c'\\\"]*p)[\\x5c'\\\"]*(?:\\s|<|>).*|i[\\x5c'\\\"]*s[\\x5c'\\\"]*t[\\x5c'\\\"]*o[\\x5c'\\\"]*r[\\x5c'\\\"]*y)|a[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*a[\\x5c'\\\"]*s[\\x5c'\\\"]*(?:\\s|<|>).*|p[\\x5c'\\\"]*i[\\x5c'\\\"]*n[\\x5c'\\\"]*e)|p[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:-[\\x5c'\\\"]*g[\\x5c'\\\"]*e[\\x5c'\\\"]*t|(?:\\s|<|>).*)|d[\\x5c'\\\"]*d[\\x5c'\\\"]*u[\\x5c'\\\"]*s[\\x5c'\\\"]*e[\\x5c'\\\"]*r|r[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*h[\\x5c'\\\"]*(?:\\s|<|>).*|p)|(?:w[\\x5c'\\\"]*[ks]|t)[\\x5c'\\\"]*(?:\\s|<|>).*)|g[\\x5c'\\\"]*(?:(?:e[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*f[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*l|m)|r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|o)[\\x5c'\\\"]*(?:\\s|<|>).*|z[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*a[\\x5c'\\\"]*t|i[\\x5c'\\\"]*p)|u[\\x5c'\\\"]*n[\\x5c'\\\"]*z[\\x5c'\\\"]*i[\\x5c'\\\"]*p|c[\\x5c'\\\"]*c(?:[\\x5c'\\\"]*(?:\\s|<|>).*)?|i[\\x5c'\\\"]*t(?:[\\x5c'\\\"]*(?:\\s|<|>).*)?|d[\\x5c'\\\"]*b)|d[\\x5c'\\\"]*(?:h[\\x5c'\\\"]*c[\\x5c'\\\"]*l[\\x5c'\\\"]*i[\\x5c'\\\"]*e[\\x5c'\\\"]*n[\\x5c'\\\"]*t|(?:i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|u)[\\x5c'\\\"]*(?:\\s|<|>).*|(?:m[\\x5c'\\\"]*e[\\x5c'\\\"]*s|p[\\x5c'\\\"]*k)[\\x5c'\\\"]*g|o[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*s|n[\\x5c'\\\"]*e)|a[\\x5c'\\\"]*s[\\x5c'\\\"]*h)|j[\\x5c'\\\"]*(?:o[\\x5c'\\\"]*(?:u[\\x5c'\\\"]*r[\\x5c'\\\"]*n[\\x5c'\\\"]*a[\\x5c'\\\"]*l[\\x5c'\\\"]*c[\\x5c'\\\"]*t[\\x5c'\\\"]*l|b[\\x5c'\\\"]*s[\\x5c'\\\"]*(?:\\s|<|>).*)|a[\\x5c'\\\"]*v[\\x5c'\\\"]*a[\\x5c'\\\"]*(?:\\s|<|>).*|e[\\x5c'\\\"]*x[\\x5c'\\\"]*e[\\x5c'\\\"]*c)|k[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*l[\\x5c'\\\"]*l[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*l[\\x5c'\\\"]*l|(?:\\s|<|>).*)|s[\\x5c'\\\"]*h)|G[\\x5c'\\\"]*E[\\x5c'\\\"]*T[\\x5c'\\\"]*(?:\\s|<|>).*|7[\\x5c'\\\"]*z(?:[\\x5c'\\\"]*[ar])?)\\b",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 3
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-932-115",
+      "name": "Remote Command Execution: Windows Command Injection",
+      "enabled": false,
+      "tags": {
+        "type": "command_injection",
+        "crs_id": "932115",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:[;\\n\\r`]|(?:$\\(|<)\\(|(?:\\|)?\\||\\(\\s*\\)|\\$[(?:{]|&?&|>\\|\\{)\\s*(?:(?:\\w+=(?:[^\\s]*|\\$.*|\\$.*|<.*|>.*|\\'.*\\'|\\\".*\\\")\\s+|(?:\\s*\\(|!)\\s*|\\{|\\$))*\\s*(?:['\\\"])*(?:[\\?\\*\\[\\]\\(\\)\\-\\|+\\w'\\\"\\./\\x5c]+/)?[\\x5c'\\\"]*(?:s[\\\"\\^]*(?:y[\\\"\\^]*s[\\\"\\^]*(?:t[\\\"\\^]*e[\\\"\\^]*m[\\\"\\^]*(?:p[\\\"\\^]*r[\\\"\\^]*o[\\\"\\^]*p[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*t[\\\"\\^]*i[\\\"\\^]*e[\\\"\\^]*s[\\\"\\^]*(?:d[\\\"\\^]*a[\\\"\\^]*t[\\\"\\^]*a[\\\"\\^]*e[\\\"\\^]*x[\\\"\\^]*e[\\\"\\^]*c[\\\"\\^]*u[\\\"\\^]*t[\\\"\\^]*i[\\\"\\^]*o[\\\"\\^]*n[\\\"\\^]*p[\\\"\\^]*r[\\\"\\^]*e[\\\"\\^]*v[\\\"\\^]*e[\\\"\\^]*n[\\\"\\^]*t[\\\"\\^]*i[\\\"\\^]*o[\\\"\\^]*n|(?:p[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*f[\\\"\\^]*o[\\\"\\^]*r[\\\"\\^]*m[\\\"\\^]*a[\\\"\\^]*n[\\\"\\^]*c|h[\\\"\\^]*a[\\\"\\^]*r[\\\"\\^]*d[\\\"\\^]*w[\\\"\\^]*a[\\\"\\^]*r)[\\\"\\^]*e|a[\\\"\\^]*d[\\\"\\^]*v[\\\"\\^]*a[\\\"\\^]*n[\\\"\\^]*c[\\\"\\^]*e[\\\"\\^]*d)|i[\\\"\\^]*n[\\\"\\^]*f[\\\"\\^]*o)|k[\\\"\\^]*e[\\\"\\^]*y|d[\\\"\\^]*m)|h[\\\"\\^]*(?:o[\\\"\\^]*(?:w[\\\"\\^]*(?:g[\\\"\\^]*r[\\\"\\^]*p|m[\\\"\\^]*b[\\\"\\^]*r)[\\\"\\^]*s|r[\\\"\\^]*t[\\\"\\^]*c[\\\"\\^]*u[\\\"\\^]*t)|e[\\\"\\^]*l[\\\"\\^]*l[\\\"\\^]*r[\\\"\\^]*u[\\\"\\^]*n[\\\"\\^]*a[\\\"\\^]*s|u[\\\"\\^]*t[\\\"\\^]*d[\\\"\\^]*o[\\\"\\^]*w[\\\"\\^]*n|r[\\\"\\^]*p[\\\"\\^]*u[\\\"\\^]*b[\\\"\\^]*w|a[\\\"\\^]*r[\\\"\\^]*e|i[\\\"\\^]*f[\\\"\\^]*t)|e[\\\"\\^]*(?:t[\\\"\\^]*(?:(?:x[\\\"\\^]*)?(?:[\\s,;]|\\.|/|<|>).*|l[\\\"\\^]*o[\\\"\\^]*c[\\\"\\^]*a[\\\"\\^]*l)|c[\\\"\\^]*p[\\\"\\^]*o[\\\"\\^]*l|l[\\\"\\^]*e[\\\"\\^]*c[\\\"\\^]*t)|c[\\\"\\^]*(?:h[\\\"\\^]*t[\\\"\\^]*a[\\\"\\^]*s[\\\"\\^]*k[\\\"\\^]*s|l[\\\"\\^]*i[\\\"\\^]*s[\\\"\\^]*t)|u[\\\"\\^]*b[\\\"\\^]*(?:i[\\\"\\^]*n[\\\"\\^]*a[\\\"\\^]*c[\\\"\\^]*l|s[\\\"\\^]*t)|(?:t[\\\"\\^]*a|o)[\\\"\\^]*r[\\\"\\^]*t[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*|i[\\\"\\^]*g[\\\"\\^]*v[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*i[\\\"\\^]*f|l[\\\"\\^]*(?:e[\\\"\\^]*e[\\\"\\^]*p|m[\\\"\\^]*g[\\\"\\^]*r)|f[\\\"\\^]*c|v[\\\"\\^]*n)|p[\\\"\\^]*(?:s[\\\"\\^]*(?:s[\\\"\\^]*(?:h[\\\"\\^]*u[\\\"\\^]*t[\\\"\\^]*d[\\\"\\^]*o[\\\"\\^]*w[\\\"\\^]*n|e[\\\"\\^]*r[\\\"\\^]*v[\\\"\\^]*i[\\\"\\^]*c[\\\"\\^]*e|u[\\\"\\^]*s[\\\"\\^]*p[\\\"\\^]*e[\\\"\\^]*n[\\\"\\^]*d)|l[\\\"\\^]*(?:o[\\\"\\^]*g[\\\"\\^]*(?:g[\\\"\\^]*e[\\\"\\^]*d[\\\"\\^]*o[\\\"\\^]*n|l[\\\"\\^]*i[\\\"\\^]*s[\\\"\\^]*t)|i[\\\"\\^]*s[\\\"\\^]*t)|p[\\\"\\^]*(?:a[\\\"\\^]*s[\\\"\\^]*s[\\\"\\^]*w[\\\"\\^]*d|i[\\\"\\^]*n[\\\"\\^]*g)|g[\\\"\\^]*e[\\\"\\^]*t[\\\"\\^]*s[\\\"\\^]*i[\\\"\\^]*d|e[\\\"\\^]*x[\\\"\\^]*e[\\\"\\^]*c|f[\\\"\\^]*i[\\\"\\^]*l[\\\"\\^]*e|i[\\\"\\^]*n[\\\"\\^]*f[\\\"\\^]*o|k[\\\"\\^]*i[\\\"\\^]*l[\\\"\\^]*l)|o[\\\"\\^]*(?:w[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*(?:s[\\\"\\^]*h[\\\"\\^]*e[\\\"\\^]*l[\\\"\\^]*l(?:[\\\"\\^]*_[\\\"\\^]*i[\\\"\\^]*s[\\\"\\^]*e)?|c[\\\"\\^]*f[\\\"\\^]*g)|r[\\\"\\^]*t[\\\"\\^]*q[\\\"\\^]*r[\\\"\\^]*y|p[\\\"\\^]*d)|r[\\\"\\^]*(?:i[\\\"\\^]*n[\\\"\\^]*t[\\\"\\^]*(?:(?:[\\s,;]|\\.|/|<|>).*|b[\\\"\\^]*r[\\\"\\^]*m)|n[\\\"\\^]*(?:c[\\\"\\^]*n[\\\"\\^]*f[\\\"\\^]*g|m[\\\"\\^]*n[\\\"\\^]*g[\\\"\\^]*r)|o[\\\"\\^]*m[\\\"\\^]*p[\\\"\\^]*t)|a[\\\"\\^]*t[\\\"\\^]*h[\\\"\\^]*(?:p[\\\"\\^]*i[\\\"\\^]*n[\\\"\\^]*g|(?:[\\s,;]|\\.|/|<|>).*)|e[\\\"\\^]*r[\\\"\\^]*(?:l(?:[\\\"\\^]*(?:s[\\\"\\^]*h|5))?|f[\\\"\\^]*m[\\\"\\^]*o[\\\"\\^]*n)|y[\\\"\\^]*t[\\\"\\^]*h[\\\"\\^]*o[\\\"\\^]*n(?:[\\\"\\^]*(?:3(?:[\\\"\\^]*m)?|2))?|k[\\\"\\^]*g[\\\"\\^]*m[\\\"\\^]*g[\\\"\\^]*r|h[\\\"\\^]*p(?:[\\\"\\^]*[57])?|u[\\\"\\^]*s[\\\"\\^]*h[\\\"\\^]*d|i[\\\"\\^]*n[\\\"\\^]*g)|r[\\\"\\^]*(?:e[\\\"\\^]*(?:(?:p[\\\"\\^]*l[\\\"\\^]*a[\\\"\\^]*c[\\\"\\^]*e|n(?:[\\\"\\^]*a[\\\"\\^]*m[\\\"\\^]*e)?|s[\\\"\\^]*e[\\\"\\^]*t)[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*|g[\\\"\\^]*(?:s[\\\"\\^]*v[\\\"\\^]*r[\\\"\\^]*3[\\\"\\^]*2|e[\\\"\\^]*d[\\\"\\^]*i[\\\"\\^]*t|(?:[\\s,;]|\\.|/|<|>).*|i[\\\"\\^]*n[\\\"\\^]*i)|c[\\\"\\^]*(?:d[\\\"\\^]*i[\\\"\\^]*s[\\\"\\^]*c|o[\\\"\\^]*v[\\\"\\^]*e[\\\"\\^]*r)|k[\\\"\\^]*e[\\\"\\^]*y[\\\"\\^]*w[\\\"\\^]*i[\\\"\\^]*z)|u[\\\"\\^]*(?:n[\\\"\\^]*(?:d[\\\"\\^]*l[\\\"\\^]*l[\\\"\\^]*3[\\\"\\^]*2|a[\\\"\\^]*s)|b[\\\"\\^]*y[\\\"\\^]*(?:1(?:[\\\"\\^]*[89])?|2[\\\"\\^]*[012]))|a[\\\"\\^]*(?:s[\\\"\\^]*(?:p[\\\"\\^]*h[\\\"\\^]*o[\\\"\\^]*n[\\\"\\^]*e|d[\\\"\\^]*i[\\\"\\^]*a[\\\"\\^]*l)|r[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*)|m[\\\"\\^]*(?:(?:d[\\\"\\^]*i[\\\"\\^]*r[\\\"\\^]*)?(?:[\\s,;]|\\.|/|<|>).*|t[\\\"\\^]*s[\\\"\\^]*h[\\\"\\^]*a[\\\"\\^]*r[\\\"\\^]*e)|o[\\\"\\^]*(?:u[\\\"\\^]*t[\\\"\\^]*e[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*|b[\\\"\\^]*o[\\\"\\^]*c[\\\"\\^]*o[\\\"\\^]*p[\\\"\\^]*y)|s[\\\"\\^]*(?:t[\\\"\\^]*r[\\\"\\^]*u[\\\"\\^]*i|y[\\\"\\^]*n[\\\"\\^]*c)|d[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*)|t[\\\"\\^]*(?:a[\\\"\\^]*(?:s[\\\"\\^]*k[\\\"\\^]*(?:k[\\\"\\^]*i[\\\"\\^]*l[\\\"\\^]*l|l[\\\"\\^]*i[\\\"\\^]*s[\\\"\\^]*t|s[\\\"\\^]*c[\\\"\\^]*h[\\\"\\^]*d|m[\\\"\\^]*g[\\\"\\^]*r)|k[\\\"\\^]*e[\\\"\\^]*o[\\\"\\^]*w[\\\"\\^]*n)|(?:i[\\\"\\^]*m[\\\"\\^]*e[\\\"\\^]*o[\\\"\\^]*u|p[\\\"\\^]*m[\\\"\\^]*i[\\\"\\^]*n[\\\"\\^]*i|e[\\\"\\^]*l[\\\"\\^]*n[\\\"\\^]*e|l[\\\"\\^]*i[\\\"\\^]*s)[\\\"\\^]*t|s[\\\"\\^]*(?:d[\\\"\\^]*i[\\\"\\^]*s[\\\"\\^]*c[\\\"\\^]*o|s[\\\"\\^]*h[\\\"\\^]*u[\\\"\\^]*t[\\\"\\^]*d)[\\\"\\^]*n|y[\\\"\\^]*p[\\\"\\^]*e[\\\"\\^]*(?:p[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*f|(?:[\\s,;]|\\.|/|<|>).*)|r[\\\"\\^]*(?:a[\\\"\\^]*c[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*t|e[\\\"\\^]*e))|w[\\\"\\^]*(?:i[\\\"\\^]*n[\\\"\\^]*(?:d[\\\"\\^]*i[\\\"\\^]*f[\\\"\\^]*f|m[\\\"\\^]*s[\\\"\\^]*d[\\\"\\^]*p|v[\\\"\\^]*a[\\\"\\^]*r|r[\\\"\\^]*[ms])|u[\\\"\\^]*(?:a[\\\"\\^]*(?:u[\\\"\\^]*c[\\\"\\^]*l[\\\"\\^]*t|p[\\\"\\^]*p)|s[\\\"\\^]*a)|s[\\\"\\^]*c[\\\"\\^]*(?:r[\\\"\\^]*i[\\\"\\^]*p[\\\"\\^]*t|u[\\\"\\^]*i)|e[\\\"\\^]*v[\\\"\\^]*t[\\\"\\^]*u[\\\"\\^]*t[\\\"\\^]*i[\\\"\\^]*l|m[\\\"\\^]*i[\\\"\\^]*(?:m[\\\"\\^]*g[\\\"\\^]*m[\\\"\\^]*t|c)|a[\\\"\\^]*i[\\\"\\^]*t[\\\"\\^]*f[\\\"\\^]*o[\\\"\\^]*r|h[\\\"\\^]*o[\\\"\\^]*a[\\\"\\^]*m[\\\"\\^]*i|g[\\\"\\^]*e[\\\"\\^]*t)|u[\\\"\\^]*(?:s[\\\"\\^]*(?:e[\\\"\\^]*r[\\\"\\^]*a[\\\"\\^]*c[\\\"\\^]*c[\\\"\\^]*o[\\\"\\^]*u[\\\"\\^]*n[\\\"\\^]*t[\\\"\\^]*c[\\\"\\^]*o[\\\"\\^]*n[\\\"\\^]*t[\\\"\\^]*r[\\\"\\^]*o[\\\"\\^]*l[\\\"\\^]*s[\\\"\\^]*e[\\\"\\^]*t[\\\"\\^]*t[\\\"\\^]*i[\\\"\\^]*n[\\\"\\^]*g[\\\"\\^]*s|r[\\\"\\^]*s[\\\"\\^]*t[\\\"\\^]*a[\\\"\\^]*t)|n[\\\"\\^]*(?:r[\\\"\\^]*a[\\\"\\^]*r|z[\\\"\\^]*i[\\\"\\^]*p))|q[\\\"\\^]*(?:u[\\\"\\^]*e[\\\"\\^]*r[\\\"\\^]*y[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*|p[\\\"\\^]*r[\\\"\\^]*o[\\\"\\^]*c[\\\"\\^]*e[\\\"\\^]*s[\\\"\\^]*s|w[\\\"\\^]*i[\\\"\\^]*n[\\\"\\^]*s[\\\"\\^]*t[\\\"\\^]*a|g[\\\"\\^]*r[\\\"\\^]*e[\\\"\\^]*p)|o[\\\"\\^]*(?:d[\\\"\\^]*b[\\\"\\^]*c[\\\"\\^]*(?:a[\\\"\\^]*d[\\\"\\^]*3[\\\"\\^]*2|c[\\\"\\^]*o[\\\"\\^]*n[\\\"\\^]*f)|p[\\\"\\^]*e[\\\"\\^]*n[\\\"\\^]*f[\\\"\\^]*i[\\\"\\^]*l[\\\"\\^]*e[\\\"\\^]*s)|v[\\\"\\^]*(?:o[\\\"\\^]*l[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*|e[\\\"\\^]*r[\\\"\\^]*i[\\\"\\^]*f[\\\"\\^]*y)|x[\\\"\\^]*c[\\\"\\^]*(?:a[\\\"\\^]*c[\\\"\\^]*l[\\\"\\^]*s|o[\\\"\\^]*p[\\\"\\^]*y)|z[\\\"\\^]*i[\\\"\\^]*p[\\\"\\^]*(?:[\\s,;]|\\.|/|<|>).*)",
+            "options": {
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-932-120",
+      "name": "Remote Command Execution: Windows PowerShell Command Found",
+      "enabled": false,
+      "tags": {
+        "type": "command_injection",
+        "crs_id": "932120",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "options": {
+              "enforce_word_boundary": true
+            },
+            "list": [
+              "powershell",
+              "add-computer",
+              "add-content",
+              "add-history",
+              "add-jobtrigger",
+              "add-localgroupmember",
+              "add-member",
+              "add-pssnapin",
+              "add-type",
+              "checkpoint-computer",
+              "clear-content",
+              "clear-eventlog",
+              "clear-history",
+              "clear-host",
+              "clear-item",
+              "clear-itemproperty",
+              "clear-recyclebin",
+              "clear-variable",
+              "compare-object",
+              "complete-transaction",
+              "compress-archive",
+              "connect-pssession",
+              "connect-wsman",
+              "convert-path",
+              "convert-string",
+              "convertfrom-csv",
+              "convertfrom-json",
+              "convertfrom-markdown",
+              "convertfrom-sddlstring",
+              "convertfrom-securestring",
+              "convertfrom-string",
+              "convertfrom-stringdata",
+              "convertto-csv",
+              "convertto-html",
+              "convertto-json",
+              "convertto-securestring",
+              "convertto-xml",
+              "copy-item",
+              "copy-itemproperty",
+              "debug-job",
+              "debug-process",
+              "debug-runspace",
+              "disable-computerrestore",
+              "disable-experimentalfeature",
+              "disable-jobtrigger",
+              "disable-localuser",
+              "disable-psbreakpoint",
+              "disable-psremoting",
+              "disable-pssessionconfiguration",
+              "disable-pstrace",
+              "disable-pswsmancombinedtrace",
+              "disable-runspacedebug",
+              "disable-scheduledjob",
+              "disable-wsmancredssp",
+              "disable-wsmantrace",
+              "disconnect-pssession",
+              "disconnect-wsman",
+              "enable-computerrestore",
+              "enable-experimentalfeature",
+              "enable-jobtrigger",
+              "enable-localuser",
+              "enable-psbreakpoint",
+              "enable-psremoting",
+              "enable-pssessionconfiguration",
+              "enable-pstrace",
+              "enable-pswsmancombinedtrace",
+              "enable-runspacedebug",
+              "enable-scheduledjob",
+              "enable-wsmancredssp",
+              "enable-wsmantrace",
+              "enter-pshostprocess",
+              "enter-pssession",
+              "exit-pshostprocess",
+              "exit-pssession",
+              "expand-archive",
+              "export-alias",
+              "export-binarymilog",
+              "export-clixml",
+              "export-console",
+              "export-counter",
+              "export-csv",
+              "export-formatdata",
+              "export-modulemember",
+              "export-odataendpointproxy",
+              "export-pssession",
+              "find-command",
+              "find-dscresource",
+              "find-module",
+              "find-package",
+              "find-packageprovider",
+              "find-rolecapability",
+              "find-script",
+              "foreach-object",
+              "format-custom",
+              "format-hex",
+              "format-list",
+              "format-table",
+              "format-wide",
+              "get-acl",
+              "get-alias",
+              "get-authenticodesignature",
+              "get-childitem",
+              "get-cimassociatedinstance",
+              "get-cimclass",
+              "get-ciminstance",
+              "get-cimsession",
+              "get-clipboard",
+              "get-cmsmessage",
+              "get-command",
+              "get-computerinfo",
+              "get-computerrestorepoint",
+              "get-content",
+              "get-controlpanelitem",
+              "get-counter",
+              "get-credential",
+              "get-date",
+              "get-error",
+              "get-event",
+              "get-eventlog",
+              "get-eventsubscriber",
+              "get-executionpolicy",
+              "get-experimentalfeature",
+              "get-filehash",
+              "get-formatdata",
+              "get-help",
+              "get-history",
+              "get-host",
+              "get-hotfix",
+              "get-installedmodule",
+              "get-installedscript",
+              "get-isesnippet",
+              "get-item",
+              "get-itemproperty",
+              "get-itempropertyvalue",
+              "get-job",
+              "get-jobtrigger",
+              "get-localgroup",
+              "get-localgroupmember",
+              "get-localuser",
+              "get-location",
+              "get-logproperties",
+              "get-markdownoption",
+              "get-module",
+              "get-operationvalidation",
+              "get-psbreakpoint",
+              "get-pscallstack",
+              "get-psdrive",
+              "get-pshostprocessinfo",
+              "get-psprovider",
+              "get-psreadlinekeyhandler",
+              "get-psreadlineoption",
+              "get-psrepository",
+              "get-pssession",
+              "get-pssessioncapability",
+              "get-pssessionconfiguration",
+              "get-pssnapin",
+              "get-pssubsystem",
+              "get-package",
+              "get-packageprovider",
+              "get-packagesource",
+              "get-pfxcertificate",
+              "get-process",
+              "get-random",
+              "get-runspace",
+              "get-runspacedebug",
+              "get-scheduledjob",
+              "get-scheduledjoboption",
+              "get-service",
+              "get-timezone",
+              "get-tracesource",
+              "get-transaction",
+              "get-typedata",
+              "get-uiculture",
+              "get-unique",
+              "get-uptime",
+              "get-variable",
+              "get-verb",
+              "get-wsmancredssp",
+              "get-wsmaninstance",
+              "get-winevent",
+              "get-wmiobject",
+              "group-object",
+              "import-alias",
+              "import-binarymilog",
+              "import-clixml",
+              "import-counter",
+              "import-csv",
+              "import-isesnippet",
+              "import-localizeddata",
+              "import-module",
+              "import-pssession",
+              "import-packageprovider",
+              "import-powershelldatafile",
+              "install-module",
+              "install-package",
+              "install-packageprovider",
+              "install-script",
+              "invoke-asworkflow",
+              "invoke-cimmethod",
+              "invoke-command",
+              "invoke-expression",
+              "invoke-history",
+              "invoke-item",
+              "invoke-operationvalidation",
+              "invoke-restmethod",
+              "invoke-wsmanaction",
+              "invoke-webrequest",
+              "invoke-wmimethod",
+              "join-path",
+              "join-string",
+              "limit-eventlog",
+              "measure-command",
+              "measure-object",
+              "move-item",
+              "move-itemproperty",
+              "new-alias",
+              "new-ciminstance",
+              "new-cimsession",
+              "new-cimsessionoption",
+              "new-event",
+              "new-eventlog",
+              "new-filecatalog",
+              "new-guid",
+              "new-isesnippet",
+              "new-item",
+              "new-itemproperty",
+              "new-jobtrigger",
+              "new-localgroup",
+              "new-localuser",
+              "new-module",
+              "new-modulemanifest",
+              "new-object",
+              "new-psdrive",
+              "new-psrolecapabilityfile",
+              "new-pssession",
+              "new-pssessionconfigurationfile",
+              "new-pssessionoption",
+              "new-pstransportoption",
+              "new-psworkflowexecutionoption",
+              "new-psworkflowsession",
+              "new-scheduledjoboption",
+              "new-scriptfileinfo",
+              "new-service",
+              "new-temporaryfile",
+              "new-timespan",
+              "new-variable",
+              "new-wsmaninstance",
+              "new-wsmansessionoption",
+              "new-webserviceproxy",
+              "new-winevent",
+              "out-default",
+              "out-file",
+              "out-gridview",
+              "out-host",
+              "out-null",
+              "out-printer",
+              "out-string",
+              "pop-location",
+              "protect-cmsmessage",
+              "publish-module",
+              "publish-script",
+              "push-location",
+              "read-host",
+              "receive-job",
+              "receive-pssession",
+              "register-argumentcompleter",
+              "register-cimindicationevent",
+              "register-engineevent",
+              "register-objectevent",
+              "register-psrepository",
+              "register-pssessionconfiguration",
+              "register-packagesource",
+              "register-scheduledjob",
+              "register-wmievent",
+              "remove-alias",
+              "remove-ciminstance",
+              "remove-cimsession",
+              "remove-computer",
+              "remove-event",
+              "remove-eventlog",
+              "remove-item",
+              "remove-itemproperty",
+              "remove-job",
+              "remove-jobtrigger",
+              "remove-localgroup",
+              "remove-localgroupmember",
+              "remove-localuser",
+              "remove-module",
+              "remove-psbreakpoint",
+              "remove-psdrive",
+              "remove-psreadlinekeyhandler",
+              "remove-pssession",
+              "remove-pssnapin",
+              "remove-service",
+              "remove-typedata",
+              "remove-variable",
+              "remove-wsmaninstance",
+              "remove-wmiobject",
+              "rename-computer",
+              "rename-item",
+              "rename-itemproperty",
+              "rename-localgroup",
+              "rename-localuser",
+              "reset-computermachinepassword",
+              "resolve-path",
+              "restart-computer",
+              "restart-service",
+              "restore-computer",
+              "resume-job",
+              "resume-service",
+              "save-help",
+              "save-module",
+              "save-package",
+              "save-script",
+              "select-object",
+              "select-string",
+              "select-xml",
+              "send-mailmessage",
+              "set-acl",
+              "set-alias",
+              "set-authenticodesignature",
+              "set-ciminstance",
+              "set-clipboard",
+              "set-content",
+              "set-date",
+              "set-executionpolicy",
+              "set-item",
+              "set-itemproperty",
+              "set-jobtrigger",
+              "set-localgroup",
+              "set-localuser",
+              "set-location",
+              "set-logproperties",
+              "set-markdownoption",
+              "set-psbreakpoint",
+              "set-psdebug",
+              "set-psreadlinekeyhandler",
+              "set-psreadlineoption",
+              "set-psrepository",
+              "set-pssessionconfiguration",
+              "set-packagesource",
+              "set-scheduledjob",
+              "set-scheduledjoboption",
+              "set-service",
+              "set-strictmode",
+              "set-timezone",
+              "set-tracesource",
+              "set-variable",
+              "set-wsmaninstance",
+              "set-wsmanquickconfig",
+              "set-wmiinstance",
+              "show-command",
+              "show-controlpanelitem",
+              "show-eventlog",
+              "show-markdown",
+              "sort-object",
+              "split-path",
+              "start-job",
+              "start-process",
+              "start-service",
+              "start-sleep",
+              "start-threadjob",
+              "start-trace",
+              "start-transaction",
+              "stop-computer",
+              "stop-job",
+              "stop-process",
+              "stop-service",
+              "stop-trace",
+              "stop-transcript",
+              "suspend-job",
+              "suspend-service",
+              "switch-process",
+              "tee-object",
+              "test-computersecurechannel",
+              "test-connection",
+              "test-filecatalog",
+              "test-json",
+              "test-modulemanifest",
+              "test-pssessionconfigurationfile",
+              "test-path",
+              "test-scriptfileinfo",
+              "test-wsman",
+              "trace-command",
+              "unblock-file",
+              "undo-transaction",
+              "uninstall-module",
+              "uninstall-package",
+              "uninstall-script",
+              "unprotect-cmsmessage",
+              "unregister-event",
+              "unregister-psrepository",
+              "unregister-pssessionconfiguration",
+              "unregister-packagesource",
+              "unregister-scheduledjob",
+              "update-formatdata",
+              "update-help",
+              "update-list",
+              "update-module",
+              "update-modulemanifest",
+              "update-script",
+              "update-scriptfileinfo",
+              "update-typedata",
+              "use-transaction",
+              "wait-debugger",
+              "wait-event",
+              "wait-job",
+              "wait-process",
+              "where-object",
+              "write-debug",
+              "write-error",
+              "write-eventlog",
+              "write-host",
+              "write-information",
+              "write-output",
+              "write-progress",
+              "write-verbose",
+              "write-warning"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ]
+    },
+    {
+      "id": "strc-932-130",
+      "name": "Remote Command Execution: Unix Shell Expression Found",
+      "enabled": false,
+      "tags": {
+        "type": "command_injection",
+        "crs_id": "932130",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:\\$(?:\\((?:\\(.*\\)|.*)\\)|\\{.*})|\\/\\w*\\[!?.+\\]|[<>]\\(.*\\))",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 3
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-932-150",
+      "name": "Remote Command Execution: Direct Unix Command Execution",
+      "enabled": false,
+      "tags": {
+        "type": "command_injection",
+        "crs_id": "932150",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:(?:^|=)\\s*(?:(?:\\w+=(?:[^\\s]*|\\$.*|\\$.*|<.*|>.*|\\'.*\\'|\\\".*\\\")\\s+|(?:\\s*\\(|!)\\s*|\\{|\\$))*\\s*(?:[\\\"'])*(?:[\\?\\*\\[\\]\\(\\)\\-\\|+\\w'\\\"\\./\\x5c]+/)?[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*(?:z(?:[\\x5c'\\\"]*(?:m[\\x5c'\\\"]*(?:a(?:[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*n[\\x5c'\\\"]*f[\\x5c'\\\"]*o|d[\\x5c'\\\"]*e[\\x5c'\\\"]*c))?|o[\\x5c'\\\"]*r[\\x5c'\\\"]*e)|(?:[ef][\\x5c'\\\"]*)?g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|4(?:[\\x5c'\\\"]*c(?:[\\x5c'\\\"]*a[\\x5c'\\\"]*t)?)?|c[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*t|m[\\x5c'\\\"]*p)|d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s))?|s(?:[\\x5c'\\\"]*(?:b[\\x5c'\\\"]*_[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*l[\\x5c'\\\"]*e[\\x5c'\\\"]*a[\\x5c'\\\"]*s[\\x5c'\\\"]*e|c[\\x5c'\\\"]*p[\\x5c'\\\"]*u|m[\\x5c'\\\"]*o[\\x5c'\\\"]*d|p[\\x5c'\\\"]*c[\\x5c'\\\"]*i|u[\\x5c'\\\"]*s[\\x5c'\\\"]*b|-[\\x5c'\\\"]*F|o[\\x5c'\\\"]*f))?|e[\\x5c'\\\"]*s[\\x5c'\\\"]*s[\\x5c'\\\"]*(?:(?:f[\\x5c'\\\"]*i[\\x5c'\\\"]*l|p[\\x5c'\\\"]*i[\\x5c'\\\"]*p)[\\x5c'\\\"]*e|e[\\x5c'\\\"]*c[\\x5c'\\\"]*h[\\x5c'\\\"]*o)|a[\\x5c'\\\"]*s[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*o[\\x5c'\\\"]*g(?:[\\x5c'\\\"]*i[\\x5c'\\\"]*n)?|c[\\x5c'\\\"]*o[\\x5c'\\\"]*m[\\x5c'\\\"]*m)|w[\\x5c'\\\"]*p(?:[\\x5c'\\\"]*-[\\x5c'\\\"]*d[\\x5c'\\\"]*o[\\x5c'\\\"]*w[\\x5c'\\\"]*n[\\x5c'\\\"]*l[\\x5c'\\\"]*o[\\x5c'\\\"]*a[\\x5c'\\\"]*d)?|f[\\x5c'\\\"]*t[\\x5c'\\\"]*p(?:[\\x5c'\\\"]*g[\\x5c'\\\"]*e[\\x5c'\\\"]*t)?|y[\\x5c'\\\"]*n[\\x5c'\\\"]*x)|z[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*p(?:[\\x5c'\\\"]*(?:(?:m[\\x5c'\\\"]*e[\\x5c'\\\"]*r[\\x5c'\\\"]*g|n[\\x5c'\\\"]*o[\\x5c'\\\"]*t)[\\x5c'\\\"]*e|d[\\x5c'\\\"]*e[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*i[\\x5c'\\\"]*l[\\x5c'\\\"]*s|c[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*o[\\x5c'\\\"]*a[\\x5c'\\\"]*k|m[\\x5c'\\\"]*p)|s[\\x5c'\\\"]*p[\\x5c'\\\"]*l[\\x5c'\\\"]*i[\\x5c'\\\"]*t|g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|i[\\x5c'\\\"]*n[\\x5c'\\\"]*f[\\x5c'\\\"]*o|t[\\x5c'\\\"]*o[\\x5c'\\\"]*o[\\x5c'\\\"]*l))?|s[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*d(?:[\\x5c'\\\"]*(?:g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s|(?:c[\\x5c'\\\"]*a|m)[\\x5c'\\\"]*t))?|h)|(?:[ef][\\x5c'\\\"]*)?g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|c[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*t|m[\\x5c'\\\"]*p)|d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s|m[\\x5c'\\\"]*o[\\x5c'\\\"]*r[\\x5c'\\\"]*e|r[\\x5c'\\\"]*u[\\x5c'\\\"]*n)|b[\\x5c'\\\"]*(?:z[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*p[\\x5c'\\\"]*2(?:[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*c[\\x5c'\\\"]*o[\\x5c'\\\"]*v[\\x5c'\\\"]*e[\\x5c'\\\"]*r)?|e[\\x5c'\\\"]*(?:g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|x[\\x5c'\\\"]*e)|(?:f[\\x5c'\\\"]*)?g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|c[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*t|m[\\x5c'\\\"]*p)|d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s|m[\\x5c'\\\"]*o[\\x5c'\\\"]*r[\\x5c'\\\"]*e|z)|u[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*l[\\x5c'\\\"]*t[\\x5c'\\\"]*i[\\x5c'\\\"]*n|n[\\x5c'\\\"]*z[\\x5c'\\\"]*i[\\x5c'\\\"]*p[\\x5c'\\\"]*2|s[\\x5c'\\\"]*y[\\x5c'\\\"]*b[\\x5c'\\\"]*o[\\x5c'\\\"]*x)|s[\\x5c'\\\"]*d[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*a[\\x5c'\\\"]*t|i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|t[\\x5c'\\\"]*a[\\x5c'\\\"]*r)|a[\\x5c'\\\"]*s[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*(?:3[\\x5c'\\\"]*2|6[\\x5c'\\\"]*4|n[\\x5c'\\\"]*c)|h))|s[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*n[\\x5c'\\\"]*v|s[\\x5c'\\\"]*i[\\x5c'\\\"]*d)|n[\\x5c'\\\"]*d[\\x5c'\\\"]*m[\\x5c'\\\"]*a[\\x5c'\\\"]*i[\\x5c'\\\"]*l|d)|h(?:[\\x5c'\\\"]*\\.[\\x5c'\\\"]*d[\\x5c'\\\"]*i[\\x5c'\\\"]*s[\\x5c'\\\"]*t[\\x5c'\\\"]*r[\\x5c'\\\"]*i[\\x5c'\\\"]*b)?|o[\\x5c'\\\"]*(?:u[\\x5c'\\\"]*r[\\x5c'\\\"]*c[\\x5c'\\\"]*e|c[\\x5c'\\\"]*a[\\x5c'\\\"]*t)|t[\\x5c'\\\"]*r[\\x5c'\\\"]*i[\\x5c'\\\"]*n[\\x5c'\\\"]*g[\\x5c'\\\"]*s|y[\\x5c'\\\"]*s[\\x5c'\\\"]*c[\\x5c'\\\"]*t[\\x5c'\\\"]*l|c[\\x5c'\\\"]*(?:h[\\x5c'\\\"]*e[\\x5c'\\\"]*d|p)|d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|f[\\x5c'\\\"]*t[\\x5c'\\\"]*p|u[\\x5c'\\\"]*d[\\x5c'\\\"]*o|s[\\x5c'\\\"]*h|v[\\x5c'\\\"]*n)|p[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*a[\\x5c'\\\"]*r(?:[\\x5c'\\\"]*(?:d[\\x5c'\\\"]*i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p))?|y[\\x5c'\\\"]*t[\\x5c'\\\"]*h[\\x5c'\\\"]*o[\\x5c'\\\"]*n[\\x5c'\\\"]*[23]?[\\x5c'\\\"]*(?:\\.[0-9.\\x5c'\\\"]+)?(?:[dmu]+)?|k[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*x[\\x5c'\\\"]*e[\\x5c'\\\"]*c|i[\\x5c'\\\"]*l[\\x5c'\\\"]*l)|r[\\x5c'\\\"]*i[\\x5c'\\\"]*n[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*n[\\x5c'\\\"]*v|f)|(?:g[\\x5c'\\\"]*r[\\x5c'\\\"]*e|f[\\x5c'\\\"]*t)[\\x5c'\\\"]*p|e[\\x5c'\\\"]*r[\\x5c'\\\"]*l(?:[\\x5c'\\\"]*5)?|h[\\x5c'\\\"]*p(?:[\\x5c'\\\"]*[57])?|(?:i[\\x5c'\\\"]*g|x)[\\x5c'\\\"]*z|o[\\x5c'\\\"]*p[\\x5c'\\\"]*d)|n[\\x5c'\\\"]*(?:c(?:[\\x5c'\\\"]*(?:\\.[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*r[\\x5c'\\\"]*a[\\x5c'\\\"]*d[\\x5c'\\\"]*i[\\x5c'\\\"]*t[\\x5c'\\\"]*i[\\x5c'\\\"]*o[\\x5c'\\\"]*n[\\x5c'\\\"]*a[\\x5c'\\\"]*l|o[\\x5c'\\\"]*p[\\x5c'\\\"]*e[\\x5c'\\\"]*n[\\x5c'\\\"]*b[\\x5c'\\\"]*s[\\x5c'\\\"]*d)|a[\\x5c'\\\"]*t))?|e[\\x5c'\\\"]*t[\\x5c'\\\"]*(?:k[\\x5c'\\\"]*i[\\x5c'\\\"]*t[\\x5c'\\\"]*-[\\x5c'\\\"]*f[\\x5c'\\\"]*t[\\x5c'\\\"]*p|(?:s[\\x5c'\\\"]*t|c)[\\x5c'\\\"]*a[\\x5c'\\\"]*t)|o[\\x5c'\\\"]*h[\\x5c'\\\"]*u[\\x5c'\\\"]*p|p[\\x5c'\\\"]*i[\\x5c'\\\"]*n[\\x5c'\\\"]*g|s[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*t)|t[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*(?:p[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*r[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*e[\\x5c'\\\"]*r[\\x5c'\\\"]*o[\\x5c'\\\"]*u[\\x5c'\\\"]*t[\\x5c'\\\"]*e|i[\\x5c'\\\"]*n[\\x5c'\\\"]*g)|s[\\x5c'\\\"]*h)|r[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*e[\\x5c'\\\"]*r[\\x5c'\\\"]*o[\\x5c'\\\"]*u[\\x5c'\\\"]*t[\\x5c'\\\"]*e(?:[\\x5c'\\\"]*6)?|(?:i[\\x5c'\\\"]*m[\\x5c'\\\"]*e[\\x5c'\\\"]*o[\\x5c'\\\"]*u|e[\\x5c'\\\"]*l[\\x5c'\\\"]*n[\\x5c'\\\"]*e)[\\x5c'\\\"]*t|a[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*l(?:[\\x5c'\\\"]*f)?|r))|r[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*(?:p[\\x5c'\\\"]*(?:l[\\x5c'\\\"]*a[\\x5c'\\\"]*c[\\x5c'\\\"]*e|e[\\x5c'\\\"]*a[\\x5c'\\\"]*t)|a[\\x5c'\\\"]*l[\\x5c'\\\"]*p[\\x5c'\\\"]*a[\\x5c'\\\"]*t[\\x5c'\\\"]*h|n[\\x5c'\\\"]*a[\\x5c'\\\"]*m[\\x5c'\\\"]*e)|u[\\x5c'\\\"]*b[\\x5c'\\\"]*y(?:[\\x5c'\\\"]*(?:1(?:[\\x5c'\\\"]*[89])?|2[\\x5c'\\\"]*[012]))?|m[\\x5c'\\\"]*(?:u[\\x5c'\\\"]*s[\\x5c'\\\"]*e|d[\\x5c'\\\"]*i)[\\x5c'\\\"]*r|n[\\x5c'\\\"]*a[\\x5c'\\\"]*n[\\x5c'\\\"]*o|s[\\x5c'\\\"]*y[\\x5c'\\\"]*n[\\x5c'\\\"]*c|c[\\x5c'\\\"]*p)|u[\\x5c'\\\"]*(?:n[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*o[\\x5c'\\\"]*m[\\x5c'\\\"]*p[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s|z[\\x5c'\\\"]*(?:s[\\x5c'\\\"]*t[\\x5c'\\\"]*d|i[\\x5c'\\\"]*p)|(?:p[\\x5c'\\\"]*i[\\x5c'\\\"]*g|x)[\\x5c'\\\"]*z|l[\\x5c'\\\"]*z[\\x5c'\\\"]*(?:m[\\x5c'\\\"]*a|4)|a[\\x5c'\\\"]*m[\\x5c'\\\"]*e|r[\\x5c'\\\"]*a[\\x5c'\\\"]*r|s[\\x5c'\\\"]*e[\\x5c'\\\"]*t)|s[\\x5c'\\\"]*e[\\x5c'\\\"]*r[\\x5c'\\\"]*(?:(?:a[\\x5c'\\\"]*d|m[\\x5c'\\\"]*o)[\\x5c'\\\"]*d|d[\\x5c'\\\"]*e[\\x5c'\\\"]*l))|m[\\x5c'\\\"]*(?:y[\\x5c'\\\"]*s[\\x5c'\\\"]*q[\\x5c'\\\"]*l[\\x5c'\\\"]*(?:d[\\x5c'\\\"]*u[\\x5c'\\\"]*m[\\x5c'\\\"]*p(?:[\\x5c'\\\"]*s[\\x5c'\\\"]*l[\\x5c'\\\"]*o[\\x5c'\\\"]*w)?|h[\\x5c'\\\"]*o[\\x5c'\\\"]*t[\\x5c'\\\"]*c[\\x5c'\\\"]*o[\\x5c'\\\"]*p[\\x5c'\\\"]*y|a[\\x5c'\\\"]*d[\\x5c'\\\"]*m[\\x5c'\\\"]*i[\\x5c'\\\"]*n|s[\\x5c'\\\"]*h[\\x5c'\\\"]*o[\\x5c'\\\"]*w)|l[\\x5c'\\\"]*o[\\x5c'\\\"]*c[\\x5c'\\\"]*a[\\x5c'\\\"]*t[\\x5c'\\\"]*e|a[\\x5c'\\\"]*i[\\x5c'\\\"]*l[\\x5c'\\\"]*q)|c[\\x5c'\\\"]*(?:o[\\x5c'\\\"]*(?:r[\\x5c'\\\"]*e[\\x5c'\\\"]*_[\\x5c'\\\"]*p[\\x5c'\\\"]*e[\\x5c'\\\"]*r[\\x5c'\\\"]*l[\\x5c'\\\"]*\\/[\\x5c'\\\"]*z[\\x5c'\\\"]*i[\\x5c'\\\"]*p[\\x5c'\\\"]*d[\\x5c'\\\"]*e[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*i[\\x5c'\\\"]*l[\\x5c'\\\"]*s|m[\\x5c'\\\"]*m[\\x5c'\\\"]*a[\\x5c'\\\"]*n[\\x5c'\\\"]*d|p[\\x5c'\\\"]*r[\\x5c'\\\"]*o[\\x5c'\\\"]*c)|u[\\x5c'\\\"]*r[\\x5c'\\\"]*l|9[\\x5c'\\\"]*9|s[\\x5c'\\\"]*h|c)|x[\\x5c'\\\"]*(?:z(?:[\\x5c'\\\"]*(?:(?:[ef][\\x5c'\\\"]*)?g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|d[\\x5c'\\\"]*(?:i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|e[\\x5c'\\\"]*c)|c[\\x5c'\\\"]*(?:a[\\x5c'\\\"]*t|m[\\x5c'\\\"]*p)|l[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*s|m[\\x5c'\\\"]*o[\\x5c'\\\"]*r[\\x5c'\\\"]*e))?|a[\\x5c'\\\"]*r[\\x5c'\\\"]*g[\\x5c'\\\"]*s)|f[\\x5c'\\\"]*(?:t[\\x5c'\\\"]*p[\\x5c'\\\"]*(?:s[\\x5c'\\\"]*t[\\x5c'\\\"]*a[\\x5c'\\\"]*t[\\x5c'\\\"]*s|w[\\x5c'\\\"]*h[\\x5c'\\\"]*o)|i[\\x5c'\\\"]*l[\\x5c'\\\"]*e[\\x5c'\\\"]*t[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*t|e[\\x5c'\\\"]*t[\\x5c'\\\"]*c[\\x5c'\\\"]*h|g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p)|g[\\x5c'\\\"]*(?:z[\\x5c'\\\"]*(?:c[\\x5c'\\\"]*a[\\x5c'\\\"]*t|e[\\x5c'\\\"]*x[\\x5c'\\\"]*e|i[\\x5c'\\\"]*p)|(?:u[\\x5c'\\\"]*n[\\x5c'\\\"]*z[\\x5c'\\\"]*i|r[\\x5c'\\\"]*e)[\\x5c'\\\"]*p|c[\\x5c'\\\"]*c)|e[\\x5c'\\\"]*(?:g[\\x5c'\\\"]*r[\\x5c'\\\"]*e[\\x5c'\\\"]*p|c[\\x5c'\\\"]*h[\\x5c'\\\"]*o|v[\\x5c'\\\"]*a[\\x5c'\\\"]*l|x[\\x5c'\\\"]*e[\\x5c'\\\"]*c|n[\\x5c'\\\"]*v)|d[\\x5c'\\\"]*(?:m[\\x5c'\\\"]*e[\\x5c'\\\"]*s[\\x5c'\\\"]*g|a[\\x5c'\\\"]*s[\\x5c'\\\"]*h|i[\\x5c'\\\"]*f[\\x5c'\\\"]*f|o[\\x5c'\\\"]*a[\\x5c'\\\"]*s)|j[\\x5c'\\\"]*(?:o[\\x5c'\\\"]*b[\\x5c'\\\"]*s[\\x5c'\\\"]*\\s+[\\x5c'\\\"]*-[\\x5c'\\\"]*x|a[\\x5c'\\\"]*v[\\x5c'\\\"]*a)|w[\\x5c'\\\"]*(?:h[\\x5c'\\\"]*o[\\x5c'\\\"]*a[\\x5c'\\\"]*m[\\x5c'\\\"]*i|g[\\x5c'\\\"]*e[\\x5c'\\\"]*t|3[\\x5c'\\\"]*m)|i[\\x5c'\\\"]*r[\\x5c'\\\"]*b(?:[\\x5c'\\\"]*(?:1(?:[\\x5c'\\\"]*[89])?|2[\\x5c'\\\"]*[012]))?|o[\\x5c'\\\"]*n[\\x5c'\\\"]*i[\\x5c'\\\"]*n[\\x5c'\\\"]*t[\\x5c'\\\"]*r|h[\\x5c'\\\"]*(?:e[\\x5c'\\\"]*a[\\x5c'\\\"]*d|u[\\x5c'\\\"]*p)|v[\\x5c'\\\"]*i[\\x5c'\\\"]*(?:g[\\x5c'\\\"]*r|p[\\x5c'\\\"]*w)|7[\\x5c'\\\"]*z(?:[\\x5c'\\\"]*[ar])?|G[\\x5c'\\\"]*E[\\x5c'\\\"]*T|k[\\x5c'\\\"]*s[\\x5c'\\\"]*h)|\\$[\\x5c'\\\"]*(?:\\{[\\x5c'\\\"]*S[\\x5c'\\\"]*H[\\x5c'\\\"]*E[\\x5c'\\\"]*L[\\x5c'\\\"]*L[\\x5c'\\\"]*}|S[\\x5c'\\\"]*H[\\x5c'\\\"]*E[\\x5c'\\\"]*L[\\x5c'\\\"]*L))[\\x5c'\\\"]*(?:\\s|;|\\||&|<|>)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 3
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-933-110",
+      "name": "PHP Injection Attack: PHP Script File Upload Found",
+      "enabled": false,
+      "tags": {
+        "type": "php_code_injection",
+        "crs_id": "933110",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x_filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x.filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-file-name"
+                ]
+              }
+            ],
+            "regex": ".*\\.ph(?:p\\d*|tml|ar|ps|t|pt)\\.*$",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ]
+    },
+    {
+      "id": "strc-933-180",
+      "name": "PHP Injection Attack: Direct Variable Function Call",
+      "enabled": false,
+      "tags": {
+        "type": "php_code_injection",
+        "crs_id": "933180",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "\\$+(?:[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*|\\s*{.+})(?:\\s|\\[.+\\]|{.+}|/\\*.*\\*/|//.*|#.*)*\\(.*\\)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-933-210",
+      "name": "PHP Injection Attack: Indirect/Chained Function Call",
+      "enabled": false,
+      "tags": {
+        "type": "php_code_injection",
+        "crs_id": "933210",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:\\(.+\\)\\(.+\\)|\\(.+\\)['\\\"][a-zA-Z-_0-9]+['\\\"]\\(.+\\)|\\[\\d+\\]\\(.+\\)|\\{\\d+\\}\\(.+\\)|\\$[^(?:\\),.;\\x5c/]+\\(.+\\)|[\\\"'][a-zA-Z0-9-_\\x5c]+[\\\"']\\(.+\\)|\\([^\\)]*string[^\\)]*\\)[a-zA-Z-_0-9\\\"'.{}\\[\\]\\s]+\\([^\\)]*\\));",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-941-100",
+      "name": "XSS Attack Detected via libinjection",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941100",
+        "category": "attack_attempt",
+        "cwe": "79",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "referer"
+                ]
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ]
+          },
+          "operator": "is_xss"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-130",
+      "name": "XSS Filter - Category 3: Attribute Vector",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941130",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "[\\s\\S](?:\\b(?:x(?:link:href|html|mlns)|data:text\\/html|pattern\\b.*?=|formaction)|!ENTITY\\s+(?:\\S+|%\\s+\\S+)\\s+(?:PUBLIC|SYSTEM)|;base64|@import)\\b",
+            "options": {
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-150",
+      "name": "XSS Filter - Category 5: Disallowed HTML Attributes",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941150",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "\\b(?:s(?:tyle|rc)|href)\\b\\s*?=",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-160",
+      "name": "NoScript XSS InjectionChecker: HTML Injection",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941160",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "referer"
+                ]
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:(?:<\\w[\\s\\S]*[\\s/]|['\\\"](?:[\\s\\S]*[\\s/])?)(?:on(?:d(?:e(?:vice(?:(?:orienta|mo)tion|proximity|found|light)|livery(?:success|error)|activate)|r(?:ag(?:e(?:n(?:ter|d)|xit)|(?:gestur|leav)e|start|drop|over)|op)|i(?:s(?:c(?:hargingtimechange|onnect(?:ing|ed))|abled)|aling)|ata(?:setc(?:omplete|hanged)|(?:availabl|chang)e|error)|urationchange|ownloading|blclick)|Moz(?:M(?:agnifyGesture(?:Update|Start)?|ouse(?:PixelScroll|Hittest))|S(?:wipeGesture(?:Update|Start|End)?|crolledAreaChanged)|(?:(?:Press)?TapGestur|BeforeResiz)e|EdgeUI(?:C(?:omplet|ancel)|Start)ed|RotateGesture(?:Update|Start)?|A(?:udioAvailable|fterPaint))|c(?:o(?:m(?:p(?:osition(?:update|start|end)|lete)|mand(?:update)?)|n(?:t(?:rolselect|extmenu)|nect(?:ing|ed))|py)|a(?:(?:llschang|ch)ed|nplay(?:through)?|rdstatechange)|h(?:(?:arging(?:time)?ch)?ange|ecking)|(?:fstate|ell)change|u(?:echange|t)|l(?:ick|ose))|s(?:t(?:a(?:t(?:uschanged|echange)|lled|rt)|k(?:sessione|comma)nd|op)|e(?:ek(?:complete|ing|ed)|(?:lec(?:tstar)?)?t|n(?:ding|t))|(?:peech|ound)(?:start|end)|u(?:ccess|spend|bmit)|croll|how)|m(?:o(?:z(?:(?:pointerlock|fullscreen)(?:change|error)|(?:orientation|time)change|network(?:down|up)load)|use(?:(?:lea|mo)ve|o(?:ver|ut)|enter|wheel|down|up)|ve(?:start|end)?)|essage|ark)|a(?:n(?:imation(?:iteration|start|end)|tennastatechange)|fter(?:(?:scriptexecu|upda)te|print)|udio(?:process|start|end)|d(?:apteradded|dtrack)|ctivate|lerting|bort)|b(?:e(?:fore(?:(?:(?:de)?activa|scriptexecu)te|u(?:nload|pdate)|p(?:aste|rint)|c(?:opy|ut)|editfocus)|gin(?:Event)?)|oun(?:dary|ce)|l(?:ocked|ur)|roadcast|usy)|DOM(?:Node(?:Inserted(?:IntoDocument)?|Removed(?:FromDocument)?)|(?:CharacterData|Subtree)Modified|A(?:ttrModified|ctivate)|Focus(?:Out|In)|MouseScroll)|r(?:e(?:s(?:u(?:m(?:ing|e)|lt)|ize|et)|adystatechange|pea(?:tEven)?t|movetrack|trieving|ceived)|ow(?:s(?:inserted|delete)|e(?:nter|xit))|atechange)|p(?:op(?:up(?:hid(?:den|ing)|show(?:ing|n))|state)|a(?:ge(?:hide|show)|(?:st|us)e|int)|ro(?:pertychange|gress)|lay(?:ing)?)|t(?:ouch(?:(?:lea|mo)ve|en(?:ter|d)|cancel|start)|ransition(?:cancel|end|run)|ime(?:update|out)|ext)|u(?:s(?:erproximity|sdreceived)|p(?:gradeneeded|dateready)|n(?:derflow|load))|f(?:o(?:rm(?:change|input)|cus(?:out|in)?)|i(?:lterchange|nish)|ailed)|l(?:o(?:ad(?:e(?:d(?:meta)?data|nd)|start)|secapture)|evelchange|y)|g(?:amepad(?:(?:dis)?connected|button(?:down|up)|axismove)|et)|e(?:n(?:d(?:Event|ed)?|abled|ter)|rror(?:update)?|mptied|xit)|i(?:cc(?:cardlockerror|infochange)|n(?:coming|valid|put))|o(?:(?:(?:ff|n)lin|bsolet)e|verflow(?:changed)?|pen)|SVG(?:(?:Unl|L)oad|Resize|Scroll|Abort|Error|Zoom)|h(?:e(?:adphoneschange|l[dp])|ashchange|olding)|v(?:o(?:lum|ic)e|ersion)change|w(?:a(?:it|rn)ing|heel)|key(?:press|down|up)|(?:AppComman|Loa)d|no(?:update|match)|Request|zoom)|s(?:tyle|rc)|background|formaction|lowsrc|ping)[\\s\\x08]*?=|<[^\\w<>]*(?:[^<>\\\"'\\s]*:)?[^\\w<>]*\\W*?(?:(?:a\\W*?(?:n\\W*?i\\W*?m\\W*?a\\W*?t\\W*?e|p\\W*?p\\W*?l\\W*?e\\W*?t|u\\W*?d\\W*?i\\W*?o)|b\\W*?(?:i\\W*?n\\W*?d\\W*?i\\W*?n\\W*?g\\W*?s|a\\W*?s\\W*?e|o\\W*?d\\W*?y)|i?\\W*?f\\W*?r\\W*?a\\W*?m\\W*?e|o\\W*?b\\W*?j\\W*?e\\W*?c\\W*?t|i\\W*?m\\W*?a?\\W*?g\\W*?e?|e\\W*?m\\W*?b\\W*?e\\W*?d|p\\W*?a\\W*?r\\W*?a\\W*?m|v\\W*?i\\W*?d\\W*?e\\W*?o|l\\W*?i\\W*?n\\W*?k)[^>\\w]|s\\W*?(?:c\\W*?r\\W*?i\\W*?p\\W*?t|t\\W*?y\\W*?l\\W*?e|e\\W*?t[^>\\w]|v\\W*?g)|m\\W*?(?:a\\W*?r\\W*?q\\W*?u\\W*?e\\W*?e|e\\W*?t\\W*?a[^>\\w])|f\\W*?o\\W*?r\\W*?m))",
+            "options": {
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-190",
+      "name": "IE XSS Filters - Style Tag Injection",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941190",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?i:<style.*?>.*?(?:@[i\\x5c]|(?:[:=]|&#x?0*(?:58|3A|61|3D);?).*?(?:[(?:\\x5c]|&#x?0*(?:40|28|92|5C);?)))",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 9
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-250",
+      "name": "IE XSS Filters - META HTTP-Equiv Injection",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941250",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?i:<META[\\s/+].*?http-equiv[\\s/+]*=[\\s/+]*[\\\"'`]?(?:(?:c|&#x?0*(?:67|43|99|63);?)|(?:r|&#x?0*(?:82|52|114|72);?)|(?:s|&#x?0*(?:83|53|115|73);?)))",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 18
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-260",
+      "name": "IE XSS Filters - META Charset Injection",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941260",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?i:<META[\\s/+].*?charset[\\s/+]*=)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 14
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
+      ]
+    },
+    {
+      "id": "strc-941-370",
+      "name": "XSS Attack: JavaScript Global Variable Access",
+      "enabled": false,
+      "tags": {
+        "type": "xss",
+        "crs_id": "941370",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:self|document|this|top|window)\\s*(?:/\\*|[\\[)]).+?(?:\\]|\\*/)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-941-380",
+      "name": "XSS Attack: AngularJS Client-Side Template Injection",
+      "enabled": false,
+      "tags": {
+        "type": "js_code_injection",
+        "crs_id": "941380",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "^{{[\\w\\s\\.]*[^\\w\\.\\s}][^}]*}}$",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-942-151",
+      "name": "SQL Injection Attack: Common SQL Function Call",
+      "enabled": false,
+      "tags": {
+        "type": "sql_injection",
+        "crs_id": "942151",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "\\b(?:s(?:q(?:lite_(?:compileoption_(?:used|get)|source_id)|rt)|t(?:d(?:dev_(?:sam|po)p)?|r(?:_to_date|cmp))|ub(?:str(?:ing(?:_index)?)?|(?:dat|tim)e)|e(?:ssion_user|c_to_time)|ys(?:tem_user|date)|ha[12]?|oundex|chema|pace|in)|c(?:o(?:n(?:v(?:ert(?:_tz)?)?|cat(?:_ws)?|nection_id)|(?:mpres)?s|ercibility|llation|alesce|t)|ur(?:rent_(?:time(?:stamp)?|date|user)|(?:dat|tim)e)|ha(?:racte)?r_length|iel(?:ing)?|r32)|i(?:s(?:_(?:ipv(?:4(?:_(?:compat|mapped))?|6)|n(?:ot(?:_null)?|ull)|(?:free|used)_lock)|null)|n(?:et(?:6_(?:aton|ntoa)|_(?:aton|ntoa))|s(?:ert|tr)|terval)|fnull)|l(?:o(?:ca(?:ltimestamp|te)|g(?:10|2)|ad_file|wer)|i(?:kel(?:ihood|y)|nestring)|ast_(?:inser_id|day)|e(?:as|f)t|case|trim|pad)|d(?:a(?:t(?:e(?:_(?:format|add|sub)|diff)|abase)|y(?:of(?:month|week|year)|name))|e(?:s_(?:de|en)crypt|grees|code)|count|ump)|u(?:n(?:compress(?:ed_length)?|ix_timestamp|likely|hex)|tc_(?:time(?:stamp)?|date)|uid(?:_short)?|pdatexml|case)|t(?:ime(?:_(?:format|to_sec)|stamp(?:diff|add)?|diff)|o(?:(?:second|day)s|_base64|n?char)|r(?:uncate|im))|m(?:a(?:ke(?:_set|date)|ster_pos_wait)|ulti(?:po(?:lygon|int)|linestring)|i(?:crosecon)?d|onthname|d5)|g(?:e(?:t_(?:format|lock)|ometrycollection)|(?:r(?:oup_conca|eates)|tid_subse)t)|p(?:o(?:(?:siti|lyg)on|w)|eriod_(?:diff|add)|rocedure_analyse|g_sleep)|a(?:s(?:cii(?:str)?|in)|es_(?:de|en)crypt|dd(?:dat|tim)e|tan2?)|f(?:rom_(?:unixtime|base64|days)|i(?:el|n)d_in_set|ound_rows)|e(?:x(?:tract(?:value)?|p(?:ort_set)?)|nc(?:rypt|ode)|lt)|b(?:i(?:t_(?:length|count|x?or|and)|n_to_num)|enchmark)|r(?:a(?:wtohex|dians|nd)|elease_lock|ow_count|trim|pad)|o(?:(?:ld_passwo)?rd|ct(?:et_length)?)|we(?:ek(?:ofyear|day)|ight_string)|json(?:_(?:object|array))?|n(?:ame_const|ot_in|ullif)|var(?:_(?:sam|po)p|iance)|qu(?:arter|ote)|hex(?:toraw)?|yearweek|xmltype)\\W*\\(",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-942-170",
+      "name": "SQL Injection: Benchmark and Sleep Timing Attack",
+      "enabled": false,
+      "tags": {
+        "type": "sql_injection",
+        "crs_id": "942170",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:select|;)\\s+(?:benchmark|sleep|if)\\s*?\\(\\s*?\\(?\\s*?\\w+",
+            "options": {
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-942-190",
+      "name": "Detects MSSQL code execution and information gathering attempts",
+      "enabled": false,
+      "tags": {
+        "type": "sql_injection",
+        "crs_id": "942190",
+        "category": "attack_attempt",
+        "cwe": "89",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:\\b(?:u(?:nion(?:[\\w(?:\\s]*?select|\\sselect\\s@)|ser\\s*?\\([^\\)]*?)|(?:c(?:onnection_id|urrent_user)|database)\\s*?\\([^\\)]*?|s(?:chema\\s*?\\([^\\)]*?|elect.*?\\w?user\\()|into[\\s+]+(?:dump|out)file\\s*?[\\\"'`]|from\\W+information_schema\\W|exec(?:ute)?\\s+master\\.)|[\\\"'`](?:;?\\s*?(?:union\\b\\s*?(?:(?:distin|sele)ct|all)|having|select)\\b\\s*?[^\\s]|\\s*?!\\s*?[\\\"'`\\w])|\\s*?exec(?:ute)?.*?\\Wxp_cmdshell|\\Wiif\\s*?\\()",
+            "options": {
+              "min_length": 3
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-942-230",
+      "name": "Detects conditional SQL injection attempts",
+      "enabled": false,
+      "tags": {
+        "type": "sql_injection",
+        "crs_id": "942230",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:select.*?having\\s*?[^\\s]+\\s*?[^\\w\\s]|[\\s(?:)]case\\s+when.*?then|\\)\\s*?like\\s*?\\()",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-942-300",
+      "name": "NoSQL Injection: Operator Injection Attack",
+      "enabled": false,
+      "tags": {
+        "type": "nosql_injection",
+        "category": "attack_attempt",
+        "cwe": "943",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "^\\$(eq|ne|(l|g)te?|n?in|not|(n|x|)or|and|regex|where|expr|exists)$"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "keys_only"
+      ]
+    },
+    {
+      "id": "strc-942-320",
+      "name": "Detects MySQL and PostgreSQL stored procedure/function injections",
+      "enabled": false,
+      "tags": {
+        "type": "sql_injection",
+        "crs_id": "942320",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:create\\s+(?:procedure|function)\\s*?\\w+\\s*?\\(\\s*?\\)\\s*?-|;\\s*?(?:declare|open)\\s+[\\w-]+|procedure\\s+analyse\\s*?\\(|declare[^\\w]+[@#]\\s*?\\w+|exec\\s*?\\(\\s*?@)",
+            "options": {
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-942-350",
+      "name": "Detects MySQL UDF injection and other data/structure manipulation attempts",
+      "enabled": false,
+      "tags": {
+        "type": "sql_injection",
+        "crs_id": "942350",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:;\\s*?(?:(?:(?:trunc|cre|upd)at|renam)e|d(?:e(?:lete|sc)|rop)|(?:inser|selec)t|alter|load)\\b\\s*?[\\[(?:]?\\w{2,}|create\\s+function\\s.+\\sreturns)",
+            "options": {
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "strc-944-240",
+      "name": "Remote Command Execution: Java serialization (CVE-2015-4852)",
+      "enabled": false,
+      "tags": {
+        "type": "java_code_injection",
+        "crs_id": "944240",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "regex": "(?:clonetransformer|forclosure|instantiatefactory|instantiatetransformer|invokertransformer|prototypeclonefactory|prototypeserializationfactory|whileclosure|getproperty|filewriter|xmldecoder)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 10
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ]
     }
   ],
   "rules_compat": [
@@ -9314,6 +11331,414 @@
         "attributes": {
           "api.security.mcp.broken_auth": {
             "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-100-001",
+      "name": "Stripe instrumentation: Payment creation",
+      "tags": {
+        "type": "ecommerce.payment.creation",
+        "category": "business_logic",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.creation",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.payments.track": {
+            "value": true
+          },
+          "appsec.events.payments.rule_id": {
+            "value": "api-100-001"
+          },
+          "appsec.events.payments.integration": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "integration"
+            ]
+          },
+          "appsec.events.payments.creation.id": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "id"
+            ]
+          },
+          "appsec.events.payments.creation.amount_total": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "amount_total"
+            ]
+          },
+          "appsec.events.payments.creation.client_reference_id": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "client_reference_id"
+            ]
+          },
+          "appsec.events.payments.creation.currency": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "currency"
+            ]
+          },
+          "appsec.events.payments.creation.discounts.coupon": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "discounts.coupon"
+            ]
+          },
+          "appsec.events.payments.creation.discounts.promotion_code": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "discounts.promotion_code"
+            ]
+          },
+          "appsec.events.payments.creation.livemode": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "livemode"
+            ]
+          },
+          "appsec.events.payments.creation.total_details.amount_discount": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "total_details.amount_discount"
+            ]
+          },
+          "appsec.events.payments.creation.total_details.amount_shipping": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "total_details.amount_shipping"
+            ]
+          },
+          "appsec.events.payments.creation.amount": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "amount"
+            ]
+          },
+          "appsec.events.payments.creation.payment_method": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": [
+              "payment_method"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-100-002",
+      "name": "Stripe instrumentation: Payment success",
+      "tags": {
+        "type": "ecommerce.payment.success",
+        "category": "business_logic",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.success",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.payments.track": {
+            "value": true
+          },
+          "appsec.events.payments.rule_id": {
+            "value": "api-100-002"
+          },
+          "appsec.events.payments.integration": {
+            "address": "server.business_logic.payment.success",
+            "key_path": [
+              "integration"
+            ]
+          },
+          "appsec.events.payments.success.id": {
+            "address": "server.business_logic.payment.success",
+            "key_path": [
+              "id"
+            ]
+          },
+          "appsec.events.payments.success.amount": {
+            "address": "server.business_logic.payment.success",
+            "key_path": [
+              "amount"
+            ]
+          },
+          "appsec.events.payments.success.currency": {
+            "address": "server.business_logic.payment.success",
+            "key_path": [
+              "currency"
+            ]
+          },
+          "appsec.events.payments.success.livemode": {
+            "address": "server.business_logic.payment.success",
+            "key_path": [
+              "livemode"
+            ]
+          },
+          "appsec.events.payments.success.payment_method": {
+            "address": "server.business_logic.payment.success",
+            "key_path": [
+              "payment_method"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-100-003",
+      "name": "Stripe instrumentation: Payment failure",
+      "tags": {
+        "type": "ecommerce.payment.failure",
+        "category": "business_logic",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.failure",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.payments.track": {
+            "value": true
+          },
+          "appsec.events.payments.rule_id": {
+            "value": "api-100-003"
+          },
+          "appsec.events.payments.integration": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "integration"
+            ]
+          },
+          "appsec.events.payments.failure.id": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "id"
+            ]
+          },
+          "appsec.events.payments.failure.amount": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "amount"
+            ]
+          },
+          "appsec.events.payments.failure.currency": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "currency"
+            ]
+          },
+          "appsec.events.payments.failure.last_payment_error.code": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "last_payment_error.code"
+            ]
+          },
+          "appsec.events.payments.failure.last_payment_error.decline_code": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "last_payment_error.decline_code"
+            ]
+          },
+          "appsec.events.payments.failure.last_payment_error.payment_method.id": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "last_payment_error.payment_method.id"
+            ]
+          },
+          "appsec.events.payments.failure.last_payment_error.payment_method.type": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "last_payment_error.payment_method.type"
+            ]
+          },
+          "appsec.events.payments.failure.livemode": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": [
+              "livemode"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-100-004",
+      "name": "Stripe instrumentation: Payment cancellation",
+      "tags": {
+        "type": "ecommerce.payment.cancellation",
+        "category": "business_logic",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.cancellation",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.payments.track": {
+            "value": true
+          },
+          "appsec.events.payments.rule_id": {
+            "value": "api-100-004"
+          },
+          "appsec.events.payments.integration": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": [
+              "integration"
+            ]
+          },
+          "appsec.events.payments.cancellation.id": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": [
+              "id"
+            ]
+          },
+          "appsec.events.payments.cancellation.amount": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": [
+              "amount"
+            ]
+          },
+          "appsec.events.payments.cancellation.cancellation_reason": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": [
+              "cancellation_reason"
+            ]
+          },
+          "appsec.events.payments.cancellation.currency": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": [
+              "currency"
+            ]
+          },
+          "appsec.events.payments.cancellation.livemode": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": [
+              "livemode"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "llm-001-000",
+      "name": "LLM call",
+      "tags": {
+        "type": "llm.event",
+        "category": "business_logic",
+        "module": "business_logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.llm.event",
+                "key_path": [
+                  "provider"
+                ]
+              }
+            ]
+          },
+          "operator": "exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.llm.call.track": {
+            "value": true
+          },
+          "appsec.events.llm.call.rule_id": {
+            "value": "llm-001-000"
+          },
+          "appsec.events.llm.call.provider": {
+            "address": "server.business_logic.llm.event",
+            "key_path": [
+              "provider"
+            ]
+          },
+          "appsec.events.llm.call.model": {
+            "address": "server.business_logic.llm.event",
+            "key_path": [
+              "model"
+            ]
           }
         }
       }

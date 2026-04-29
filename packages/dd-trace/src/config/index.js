@@ -132,7 +132,13 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     }
     changeTracker[source].add(name)
   } else {
-    const copy = typeof value === 'object' && value !== null ? rfdc(value) : value
+    // Programmatic-only options (e.g. logger, lookup, plugins) have no row in
+    // `configurationsTable` and hold opaque user-supplied references that may
+    // carry cycles or non-plain prototypes — for example a winston Logger
+    // extends a Transform stream. Use a reference for these instead of cloning.
+    const copy = typeof value === 'object' && value !== null && name in configurationsTable
+      ? rfdc(value)
+      : value
     changeTracker.baseValuesByPath[name] = { value: copy, source }
   }
   set(config, name, value)
@@ -360,21 +366,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'otelMetricsEnabled', false)
     }
 
-    const otelTracesEnabled = trackedConfigOrigins.has('OTEL_TRACES_EXPORTER') &&
-      this.OTEL_TRACES_EXPORTER === 'otlp'
-    if (this.protocolVersion && this.protocolVersion !== '0.4' && otelTracesEnabled) {
+    if (this.OTEL_TRACES_EXPORTER === 'otlp' && this.protocolVersion && this.protocolVersion !== '0.4') {
       log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'otelTracesEnabled', false)
-    } else {
-      setAndTrack(this, 'otelTracesEnabled', otelTracesEnabled)
-    }
-
-    if (this.otelTracesProtocol && this.otelTracesProtocol !== 'http/json') {
-      log.warn(
-        'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
-        this.otelTracesProtocol
-      )
-      setAndTrack(this, 'otelTracesProtocol', 'http/json')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
 
     if (this.telemetry.heartbeatInterval) {
@@ -443,16 +437,13 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    if (!trackedConfigOrigins.has('sampleRate')) {
-      const effectiveSampler = (trackedConfigOrigins.has('OTEL_TRACES_EXPORTER') &&
-        this.OTEL_TRACES_EXPORTER === 'otlp' &&
-        !trackedConfigOrigins.has('OTEL_TRACES_SAMPLER'))
-        ? 'parentbased_always_on'
-        : this.OTEL_TRACES_SAMPLER
-      if (effectiveSampler && (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          trackedConfigOrigins.has('OTEL_TRACES_EXPORTER'))) {
-        setAndTrack(this, 'sampleRate', getFromOtelSamplerMap(effectiveSampler, this.OTEL_TRACES_SAMPLER_ARG))
-      }
+    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
+    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
+    // that don't set the sampler still get parent-based sampling.
+    if (!trackedConfigOrigins.has('sampleRate') &&
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || this.OTEL_TRACES_EXPORTER === 'otlp')) {
+      setAndTrack(this, 'sampleRate',
+        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -607,19 +598,18 @@ class Config extends ConfigBase {
       }
     }
 
-    const DEFAULT_OTLP_PORT = '4318'
+    // TODO: This could likely be moved to the base class and allow easier GRPC handling
+    // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
+    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
     if (!this.otelLogsUrl) {
-      setAndTrack(this, 'otelLogsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}`)
+      setAndTrack(this, 'otelLogsUrl', `${defaultOtlpBase}/v1/logs`)
     }
     if (!this.otelMetricsUrl) {
-      setAndTrack(this, 'otelMetricsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`)
+      setAndTrack(this, 'otelMetricsUrl', `${defaultOtlpBase}/v1/metrics`)
     }
-    if (!trackedConfigOrigins.has('otelTracesUrl') && this.OTEL_EXPORTER_OTLP_ENDPOINT) {
-      // Generic OTLP endpoint: per spec, append /v1/traces signal-specific subpath
-      setAndTrack(this, 'otelTracesUrl', this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
-    } else if (!this.otelTracesUrl) {
-      const tracesHostname = agentHostname === '127.0.0.1' ? 'localhost' : agentHostname
-      setAndTrack(this, 'otelTracesUrl', `http://${tracesHostname}:${DEFAULT_OTLP_PORT}/v1/traces`)
+    if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
     if (process.platform === 'win32') {

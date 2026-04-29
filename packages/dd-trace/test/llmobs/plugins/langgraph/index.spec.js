@@ -13,6 +13,7 @@ const {
 describe('integrations', () => {
   let StateGraph
   let Annotation
+  let langchainMessages
 
   describe('langgraph', () => {
     const { getEvents } = useLlmObs({ plugin: ['langgraph', 'langchain'] })
@@ -22,6 +23,8 @@ describe('integrations', () => {
         const langgraph = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
         StateGraph = langgraph.StateGraph
         Annotation = langgraph.Annotation
+        langchainMessages = require(`../../../../../../versions/@langchain/langgraph@${version}`)
+          .get('@langchain/core/messages')
       })
 
       describe('Pregel.stream', () => {
@@ -150,6 +153,54 @@ describe('integrations', () => {
             outputValue: MOCK_STRING,
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
+        })
+
+        // Regression for https://github.com/DataDog/dd-trace-js/issues/8096: BaseMessage
+        // instances must render as { content, role } instead of full class dumps.
+        it('renders BaseMessage input/output as clean { content, role }', async () => {
+          const StateAnnotation = Annotation.Root({
+            messages: Annotation({
+              reducer: (x, y) => x.concat(y),
+              default: () => [],
+            }),
+          })
+
+          function chatNode () {
+            return {
+              messages: [new langchainMessages.AIMessage('Pong')],
+            }
+          }
+
+          const workflow = new StateGraph(StateAnnotation)
+            .addNode('chat', chatNode)
+            .addEdge('__start__', 'chat')
+            .addEdge('chat', '__end__')
+
+          const app = workflow.compile({ name: 'basemessage-graph' })
+
+          const chunks = []
+          for await (const chunk of await app.stream({
+            messages: [new langchainMessages.HumanMessage('Ping')],
+          })) {
+            chunks.push(chunk)
+          }
+
+          assert.ok(chunks.length > 0)
+
+          const { llmobsSpans } = await getEvents()
+
+          const workflowSpan = llmobsSpans.find(s => s.name === 'basemessage-graph')
+          assert.ok(workflowSpan, 'expected workflow span named basemessage-graph')
+
+          assert.strictEqual(
+            workflowSpan.meta.input.value,
+            JSON.stringify({ messages: [{ content: 'Ping', role: 'user' }] })
+          )
+
+          const parsedOutput = JSON.parse(workflowSpan.meta.output.value)
+          assert.ok(Array.isArray(parsedOutput.messages))
+          const lastMessage = parsedOutput.messages[parsedOutput.messages.length - 1]
+          assert.deepStrictEqual(lastMessage, { content: 'Pong', role: 'assistant' })
         })
 
         it('does not tag output if streaming encounters an error', async () => {

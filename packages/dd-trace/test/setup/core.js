@@ -1,5 +1,7 @@
 'use strict'
 
+require('./mocha-hooks')
+
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.
@@ -65,7 +67,7 @@ temporaryWarningExceptions.add = (warning) => {
 }
 
 process.on('warning', (warning) => {
-  if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
+  if (warning.name === 'MaxListenersExceededWarning') {
     throw warning
   }
   if (temporaryWarningExceptions.has(warning.message)) {

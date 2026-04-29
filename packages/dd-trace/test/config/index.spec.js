@@ -162,6 +162,33 @@ describe('Config', () => {
     })
   })
 
+  describe('property surface', () => {
+    // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
+    const INTERNAL_RUNTIME_PROPERTIES = [
+      'commitSHA',
+      'debug',
+      'isServiceNameInferred',
+      'repositoryUrl',
+      'sampler',
+      'stableConfig',
+    ]
+
+    it('does not expose own properties beyond supported-configurations.json and index.d.ts', () => {
+      // Top-level segment only: nested defaults (e.g. `foo.bar`) live as `foo` on the instance.
+      const known = new Set(Object.keys(defaults).map(name => name.split('.', 1)[0]))
+      for (const name of INTERNAL_RUNTIME_PROPERTIES) {
+        known.add(name)
+      }
+
+      const config = getConfig()
+      const unknownConfigurations = Object.keys(config).filter(name => !known.has(name))
+
+      assert.deepStrictEqual(unknownConfigurations, [], 'Unknown Config properties detected.\n' +
+        'Add it to supported-configurations.json (or index.d.ts), if it truly is a Config property.\n' +
+        'Otherwise, remove / handle elsewhere. This reports telemetry about unrecognized properties.')
+    })
+  })
+
   it('should initialize its own logging config based off the loggers config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
@@ -173,6 +200,34 @@ describe('Config', () => {
       logger: undefined,
       logLevel: 'error',
     })
+  })
+
+  it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
+    // Shape mirrors winston: log methods, transports with a parent back-reference,
+    // and stream-state self-references (Transform's _readableState.pipes).
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      transports: [],
+    }
+    logger.transports.push({ name: 'console', log: () => {}, parent: logger })
+    logger._readableState = { pipes: logger }
+    logger._writableState = { pipes: logger }
+
+    // Previously this threw `RangeError: Maximum call stack size exceeded`
+    // from the rfdc baseline-clone in setAndTrack.
+    const config = getConfig({ logger, logInjection: true })
+
+    assert.strictEqual(config.logger, logger)
+    assert.strictEqual(config.logInjection, true)
+  })
+
+  it('should hold a custom lookup function by reference', () => {
+    const lookup = (_h, _o, cb) => cb(null, '127.0.0.1', 4)
+    const config = getConfig({ lookup })
+    assert.strictEqual(config.lookup, lookup)
   })
 
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
@@ -320,11 +375,13 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318',
-      otelLogsUrl: 'http://collector:4318',
-      otelMetricsUrl: 'http://collector:4318',
-      otelHeaders: 'x-test=value',
-      otelLogsHeaders: 'x-test=value',
-      otelMetricsHeaders: 'x-test=value',
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/v1/traces',
+      otelLogsUrl: 'http://collector:4318/v1/logs',
+      otelMetricsUrl: 'http://collector:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: { 'x-test': 'value' },
+      OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
       otelProtocol: 'grpc',
       otelLogsProtocol: 'grpc',
       otelMetricsProtocol: 'grpc',
@@ -351,20 +408,32 @@ describe('Config', () => {
   })
 
   // TODO: update default when adding grpc support
-  it('should set default otelTracesUrl to localhost', () => {
+  it('should default OTLP endpoints to the DD agent host with the signal subpath', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
     delete process.env.DD_AGENT_HOST
     const config = getConfig()
-    assert.strictEqual(config.otelTracesUrl, 'http://localhost:4318/v1/traces')
+    // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
+    // so telemetry reports the full URL users will hit.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.otelMetricsUrl, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.otelLogsUrl, 'http://127.0.0.1:4318/v1/logs')
   })
 
-  it('should set otelTracesUrl using DD_AGENT_HOST', () => {
+  it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
     process.env.DD_AGENT_HOST = 'myHostName'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesUrl, `http://${process.env.DD_AGENT_HOST}:4318/v1/traces`)
+    // In the unified-agent model, OTLP lives on the same host as the DD agent (different port),
+    // so DD_AGENT_HOST drives the default OTLP host too.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://myHostName:4318/v1/traces')
+    assert.strictEqual(config.otelMetricsUrl, 'http://myHostName:4318/v1/metrics')
+    assert.strictEqual(config.otelLogsUrl, 'http://myHostName:4318/v1/logs')
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
@@ -437,33 +506,28 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, undefined)
   })
 
-  it('should enable OTLP traces export when OTEL_TRACES_EXPORTER is set to otlp', () => {
+  it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesEnabled, true)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
-  it('should not enable OTLP traces export when OTEL_TRACES_EXPORTER is not set', () => {
+  it('should default OTEL_TRACES_EXPORTER to undefined when not set (opt-in)', () => {
     const config = getConfig()
-    assert.strictEqual(config.otelTracesEnabled, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
 
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesEnabled, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('should warn and fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+  it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesProtocol, 'http/json')
-    sinon.assert.calledWith(
-      log.warn,
-      'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
-      'grpc'
-    )
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
   })
 
   it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {
@@ -3170,6 +3234,14 @@ describe('Config', () => {
         })
       })
     })
+
+    it('should accept all values for DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER', () => {
+      for (const provider of ['github', 'gitlab', 'circleci', 'jenkins']) {
+        process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
+        assert.strictEqual(getConfig(options).DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
+      }
+    })
+
     it('disables telemetry if inside a jest worker', () => {
       process.env.JEST_WORKER_ID = '1'
       const config = getConfig(options)

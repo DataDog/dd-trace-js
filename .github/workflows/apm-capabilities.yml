@@ -46,22 +46,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    strategy:
+      matrix:
+        node-version: [oldest, maintenance, active, latest]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/latest
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: apm-capabilities-tracing-ubuntu
+          flags: apm-capabilities-tracing-ubuntu-${{ matrix.node-version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
