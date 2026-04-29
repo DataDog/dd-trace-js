@@ -38,7 +38,7 @@ jobs:
           - name: yarn-berry
             install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
           - name: bun
-            install: bun add
+            install: bun add --linker=hoisted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -128,7 +128,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -176,8 +175,8 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts express@4 # Use older express to support old Node.js versions
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
