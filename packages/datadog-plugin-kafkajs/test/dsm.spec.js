@@ -49,6 +49,10 @@ describe('Plugin', () => {
       let expectedProducerHash
       let expectedConsumerHash
       let testTopic
+      let topicAIn
+      let topicAOut
+      let topicBIn
+      let topicBOut
 
       describe('data stream monitoring', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
@@ -69,13 +73,17 @@ describe('Plugin', () => {
             logLevel: lib.logLevel.WARN,
           })
           testTopic = `test-topic-${randomUUID()}`
+          topicAIn = `topic-a-in-${randomUUID()}`
+          topicAOut = `topic-a-out-${randomUUID()}`
+          topicBIn = `topic-b-in-${randomUUID()}`
+          topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
-            topics: [{
-              topic: testTopic,
+            topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
+              topic,
               numPartitions: 1,
               replicationFactor: 1,
-            }],
+            })),
           })
           clusterIdAvailable = semver.intersects(version, '>=1.13')
           expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
@@ -182,22 +190,6 @@ describe('Plugin', () => {
           })
 
           it('Should maintain separate DSM context for interleaved consume-produce flows', async () => {
-            // Four topics: A reads aIn → produces aOut, B reads bIn → produces bOut
-            const topicAIn = `topic-a-in-${randomUUID()}`
-            const topicAOut = `topic-a-out-${randomUUID()}`
-            const topicBIn = `topic-b-in-${randomUUID()}`
-            const topicBOut = `topic-b-out-${randomUUID()}`
-
-            await admin.createTopics({
-              waitForLeaders: true,
-              timeout: 30000,
-              topics: [topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
-                topic,
-                numPartitions: 1,
-                replicationFactor: 1,
-              })),
-            })
-
             producer = kafka.producer()
             await producer.connect()
 
