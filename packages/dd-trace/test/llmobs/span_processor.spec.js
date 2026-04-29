@@ -444,5 +444,28 @@ describe('span processor', () => {
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
       sinon.assert.notCalled(writer.append)
     })
+
+    it('does not mark the apm span when writer.append throws', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate writer.append throwing (e.g. JSON.stringify failure in
+      // byte-length probing on an unsanitized payload)
+      writer.append.throws(new Error('boom'))
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
   })
 })
