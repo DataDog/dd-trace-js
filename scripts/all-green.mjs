@@ -147,12 +147,67 @@ async function checkAllGreen () {
   throw new Error('One or more jobs failed.')
 }
 
-async function printSummary () {
-  // The summary is only useful for master pushes / scheduled runs, where it
-  // surfaces in the workflow run page. PRs already have GitHub's own checks
-  // UI, so we skip the paginated check-runs fetch entirely.
-  if (isPullRequest) return
+function formatConclusion (conclusion) {
+  return conclusion ? `${conclusion} ${conclusionEmojis[conclusion]}` : ' '
+}
 
+function bySeverity (a, b) {
+  return (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8)
+}
+
+async function printSummary () {
+  await (isPullRequest ? printWorkflowSummary() : printJobSummary())
+}
+
+async function printWorkflowSummary () {
+  // PRs get a workflow-level summary: one row per workflow run, with a link
+  // back to the run page. This is much smaller than the per-job table and
+  // avoids the paginated check-runs fetch entirely.
+  const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
+    owner,
+    repo,
+    head_sha: ref,
+    per_page: 100,
+  })
+
+  const runs = data.workflow_runs
+    .sort(bySeverity)
+    .map(run => ({
+      name: run.name,
+      status: run.status,
+      conclusion: formatConclusion(run.conclusion),
+      // workflow_run has no completed_at; updated_at reflects the final state
+      // change once status === 'completed', otherwise it's an in-flight tick.
+      started_at: run.run_started_at,
+      completed_at: run.status === 'completed' ? run.updated_at : ' ',
+      url: run.html_url,
+    }))
+
+  console.table(runs)
+
+  const header = [
+    { data: 'workflow', header: true },
+    { data: 'status', header: true },
+    { data: 'conclusion', header: true },
+    { data: 'started_at', header: true },
+    { data: 'completed_at', header: true },
+  ]
+
+  const body = runs.map(run => [
+    `<a href="${run.url}">${run.name}</a>`,
+    run.status,
+    run.conclusion,
+    run.started_at,
+    run.completed_at,
+  ])
+
+  await summary
+    .addHeading('Workflows Summary')
+    .addTable([header, ...body])
+    .write()
+}
+
+async function printJobSummary () {
   const checkRuns = await octokit.paginate(
     'GET /repos/:owner/:repo/commits/:ref/check-runs',
     { ...params, app_id: githubActionsAppId, per_page: 100 }
@@ -169,13 +224,11 @@ async function printSummary () {
   }
 
   const runs = [...latestByName.values()]
-    .sort((a, b) => (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8))
+    .sort(bySeverity)
     .map(run => ({
       name: run.name,
       status: run.status,
-      conclusion: run.conclusion
-        ? `${run.conclusion} ${conclusionEmojis[run.conclusion]}`
-        : ' ',
+      conclusion: formatConclusion(run.conclusion),
       started_at: run.started_at,
       completed_at: run.completed_at ?? ' ',
     }))
