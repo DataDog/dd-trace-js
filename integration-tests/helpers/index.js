@@ -15,6 +15,12 @@ const execAsync = promisify(exec)
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
+const {
+  FLUSH_SIGNAL_KEY,
+  isCoverageActive,
+  resolveCoverageRoot,
+} = require('../coverage/runtime')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
@@ -282,6 +288,12 @@ async function stopProc (proc, options = {}) {
   const signal = options.signal ?? 'SIGTERM'
   const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
 
+  // Windows SIGTERM is forceful; ask the bootstrap to flush via the IPC sentinel instead.
+  if (process.platform === 'win32' && isCoverageActive() && proc.connected) {
+    proc.send({ [FLUSH_SIGNAL_KEY]: true }, () => {})
+    if (await waitForProcExit(proc, timeoutMs)) return
+  }
+
   proc.kill(signal)
 
   const exitedAfterInitialSignal = await waitForProcExit(proc, timeoutMs)
@@ -332,8 +344,12 @@ function waitForProcExit (proc, timeoutMs) {
  * @returns {SpawnedProcess}
  */
 function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
-  // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
-  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
+  // When stdio is 'pipe', stdout/stderr are guaranteed non-null.
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, {
+    ...options,
+    execArgv: options.execArgv,
+    stdio: 'pipe',
+  }))
 
   proc.stdout.on('data', data => {
     if (stdioHandler) {
@@ -417,13 +433,17 @@ async function execHelperAsync (command, options) {
 }
 
 /**
- * Pack dd-trace into a tarball at the specified path.
- *
- * @param {string} tarballPath - The path where the tarball should be created
- * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @param {string} tarballPath
+ * @param {NodeJS.ProcessEnv} env
  * @returns {Promise<void>}
  */
 async function packTarball (tarballPath, env) {
+  if (isCoverageActive()) {
+    const { packInstrumentedTarball } = require('../coverage/pack-instrumented-tarball')
+    await packInstrumentedTarball(tarballPath, env)
+    log('Pre-instrumented tarball packed successfully:', tarballPath)
+    return
+  }
   await execHelperAsync(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
 }
@@ -535,7 +555,11 @@ async function createSandbox (
     execHelper('yarn link')
     execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+    return {
+      coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),
+      folder: path.join(process.cwd(), 'integration-tests'),
+      remove: async () => {},
+    }
   }
   const folder = path.join(sandboxRoot, id().toString())
   const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
@@ -603,8 +627,11 @@ async function createSandbox (
   }
 
   return {
+    coverageRoot: resolveCoverageRoot({ cwd: folder }),
     folder,
-    remove: () => {
+    remove: async () => {
+      await finalizeSandboxCoverage(folder, resolveCoverageRoot({ cwd: folder }))
+
       // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
       // our `integration-guardrails` GitHub Actions workflow
       if (process.platform === 'win32') {
@@ -734,7 +761,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
         if (!data && retries < 10) {
           return tryAgain()
         }
-        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
+        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`, { cause: e })
       }
       msgs.push([telemetryType, parsed])
     }
@@ -861,8 +888,10 @@ function preparePluginIntegrationTestSpawnOptions (
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
+  const scriptPath = path.join(cwd, serverFile)
+
   return {
-    filename: path.join(cwd, serverFile),
+    filename: scriptPath,
     options: {
       cwd,
       env: {
@@ -948,9 +977,7 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
-    const oldSandbox = sandbox
-    sandbox = undefined
-    return oldSandbox?.remove()
+    return sandbox?.remove()
   })
 }
 
