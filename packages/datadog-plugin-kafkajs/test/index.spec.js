@@ -53,6 +53,7 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
+            waitForLeaders: false,
             topics: [{
               topic: testTopic,
               numPartitions: 1,
