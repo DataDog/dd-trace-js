@@ -47,7 +47,7 @@ jobs:
           remove_haskell: true
           remove_tool_cache: false
           remove_swap: true
-          remove_folders: "/usr/share/swift /usr/share/az* /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+          remove_folders: "/usr/share/swift /usr/share/az* /usr/local/share/chromium"
           rm_cmd: "rmz"  # Use 'rmz' for faster deletion (default: 'rm')
           rmz_version: "3.1.1"  # Required when rm_cmd is 'rmz'
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
