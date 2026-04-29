@@ -100,7 +100,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
 const {
-  resolveOriginalSourcePosition,
+  resolveOriginalSourceFile,
   resolveSourceLineForTest,
   shouldTrustInvocationDetailsLine,
 } = require('./source-map-utils')
@@ -518,8 +518,7 @@ class CypressPlugin {
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
     if (testSuiteAbsolutePath) {
-      const resolvedSuitePosition = resolveOriginalSourcePosition(testSuiteAbsolutePath, 1)
-      const resolvedSuiteAbsolutePath = resolvedSuitePosition ? resolvedSuitePosition.sourceFile : testSuiteAbsolutePath
+      const resolvedSuiteAbsolutePath = resolveOriginalSourceFile(testSuiteAbsolutePath) || testSuiteAbsolutePath
       const testSourceFile = getTestSuitePath(resolvedSuiteAbsolutePath, this.repositoryRoot)
       testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
       testSuiteSpanMetadata[TEST_SOURCE_START] = 1
@@ -950,8 +949,9 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        const resolvedSpecPosition = spec.absolute ? resolveOriginalSourcePosition(spec.absolute, 1) : null
-        const resolvedSpecAbsolutePath = resolvedSpecPosition ? resolvedSpecPosition.sourceFile : spec.absolute
+        const resolvedSpecAbsolutePath = spec.absolute
+          ? resolveOriginalSourceFile(spec.absolute) || spec.absolute
+          : spec.absolute
         const testSourceFile = resolvedSpecAbsolutePath && this.repositoryRoot
           ? getTestSuitePath(resolvedSpecAbsolutePath, this.repositoryRoot)
           : spec.relative
