@@ -944,8 +944,7 @@ function useSandbox (...args) {
     this.timeout(30_000)
     const oldSandbox = sandbox
     sandbox = undefined
-    if (!oldSandbox) return
-    return oldSandbox.remove()
+    return oldSandbox?.remove()
   })
 }
 

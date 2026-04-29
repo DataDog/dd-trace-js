@@ -51,7 +51,7 @@ function anyFailed (runnables) {
  * @returns {value is PromiseLike<unknown>}
  */
 function isThenable (value) {
-  return value != null && typeof value === 'object' && 'then' in value && typeof value.then === 'function'
+  return typeof value?.then === 'function'
 }
 
 /**
