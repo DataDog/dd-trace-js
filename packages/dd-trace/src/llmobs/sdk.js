@@ -266,6 +266,7 @@ class LLMObs extends NoopLLMObs {
       if (metrics) {
         this._tagger.tagMetrics(span, metrics)
       }
+      // Apply tags before costTags so costTags can reference tags from the same annotation.
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
       }
