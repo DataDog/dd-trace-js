@@ -14,26 +14,20 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
-      id: yarn-global-dir
-      shell: bash
-      run: |
-        echo "dir=$(yarn global dir)" >> $GITHUB_OUTPUT
-        echo "DATADOG_CI_VERSION=5.15.0" >> $GITHUB_ENV
-        echo "$(yarn global bin)" >> $GITHUB_PATH
-    - if: github.actor != 'dependabot[bot]'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        path: ${{ steps.yarn-global-dir.outputs.dir }}
-        key: datadog-ci-${{ env.DATADOG_CI_VERSION }}
+        path: ${{ github.action_path }}/node_modules
+        key: datadog-ci-${{ hashFiles('.github/actions/push_to_test_optimization/package.json') }}
     - if: github.actor != 'dependabot[bot]'
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
       with:
         node-version: '20'
     - if: github.actor != 'dependabot[bot]'
       shell: bash
-      run: yarn global add @datadog/datadog-ci@${{ env.DATADOG_CI_VERSION }}
+      run: yarn install --no-lockfile
+      working-directory: ${{ github.action_path }}
     - if: github.actor != 'dependabot[bot]'
       shell: bash
-      run: datadog-ci junit upload --service dd-trace-js-tests .
+      run: ${{ github.action_path }}/node_modules/.bin/datadog-ci junit upload --service dd-trace-js-tests .
       env:
         DD_API_KEY: ${{ inputs.dd_api_key }}
