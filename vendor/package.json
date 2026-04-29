@@ -13,7 +13,6 @@
     "crypto-randomuuid": "^1.0.0",
     "escape-string-regexp": "^5.0.0",
     "esquery": "^1.7.0",
-    "ignore": "^7.0.5",
     "istanbul-lib-coverage": "^3.2.2",
     "jest-docblock": "^29.7.0",
     "jsonpath-plus": "^10.4.0",

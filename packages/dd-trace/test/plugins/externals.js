@@ -391,6 +391,12 @@ module.exports = {
       versions: ['>=2'],
     },
   ],
+  'light-my-request': [
+    {
+      name: 'fastify',
+      versions: ['>=3'],
+    },
+  ],
   lodash: [
     {
       name: 'lodash',
@@ -411,6 +417,12 @@ module.exports = {
     {
       name: 'mocha-each',
       versions: ['>=2.0.1'],
+    },
+  ],
+  modelcontextprotocol_sdk: [
+    {
+      name: '@modelcontextprotocol/sdk',
+      versions: ['>=1.27.1'],
     },
   ],
   moleculer: [

@@ -266,6 +266,56 @@ function parseInlineAssignments (prefix) {
 }
 
 /**
+ * Find `**` occurrences in a script string that are NOT inside quotes.
+ *
+ * POSIX sh (which is what `npm run`/`yarn run` invokes) does NOT support globstar, so an
+ * unquoted `**` collapses to `*` (single directory level). For recursive glob matching to
+ * reach mocha/glob intact, the pattern must be quoted so the shell passes it through as a
+ * literal string. This analyzer cannot rely on `globSync` alone for the check because it
+ * expands `**` recursively regardless of quoting — hiding the bug that the shell actually
+ * breaks unquoted patterns.
+ *
+ * @param {string} script
+ * @returns {{ column: number, context: string }[]}
+ */
+function findUnquotedGlobstar (script) {
+  /** @type {{ column: number, context: string }[]} */
+  const out = []
+  /** @type {'"'|"'"|null} */
+  let quote = null
+
+  for (let i = 0; i < script.length; i++) {
+    const ch = script[i]
+
+    if (quote) {
+      // In double-quoted strings, `\` escapes the next character.
+      if (quote === '"' && ch === '\\' && i + 1 < script.length) {
+        i++
+        continue
+      }
+      if (ch === quote) quote = null
+      continue
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+
+    if (ch === '*' && script[i + 1] === '*') {
+      // Capture a short context window so the error message points to the offending token.
+      const start = Math.max(0, i - 20)
+      const end = Math.min(script.length, i + 25)
+      out.push({ column: i, context: script.slice(start, end) })
+      // Skip the second `*` to avoid double-reporting.
+      i++
+    }
+  }
+
+  return out
+}
+
+/**
  * Extract `export NAME=value` assignments from a multi-line `run:` string.
  * @param {string} run
  * @returns {Record<string, string>}
@@ -588,6 +638,43 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 }
 
 /**
+ * Returns all combinations of matrix scalar/array values (ignores include/exclude).
+ * @param {Record<string, unknown>} matrix
+ * @returns {Record<string, string>[]}
+ */
+function getMatrixCombinations (matrix) {
+  const keys = Object.keys(matrix).filter(k => Array.isArray(matrix[k]))
+  if (keys.length === 0) return [{}]
+
+  /** @type {Record<string, string>[]} */
+  let combinations = [{}]
+  for (const key of keys) {
+    const values = /** @type {unknown[]} */ (matrix[key])
+    /** @type {Record<string, string>[]} */
+    const next = []
+    for (const combo of combinations) {
+      for (const val of values) {
+        next.push({ ...combo, [key]: String(val) })
+      }
+    }
+    combinations = next
+  }
+  return combinations
+}
+
+/**
+ * Expands `${{ matrix.X }}` expressions in a string using the given matrix values.
+ * @param {string} s
+ * @param {Record<string, string>} matrixValues
+ * @returns {string}
+ */
+function expandMatrixExpressions (s, matrixValues) {
+  return s.replaceAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_m, name) => {
+    return Object.hasOwn(matrixValues, name) ? matrixValues[name] : _m
+  })
+}
+
+/**
  * @param {string} repoRoot
  * @returns {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]}
  */
@@ -608,6 +695,11 @@ function collectWorkflowRuns (repoRoot) {
       const jobEnv = isPlainObject(job.env) ? job.env : {}
       const steps = Array.isArray(job.steps) ? job.steps : []
 
+      const matrixData = isPlainObject(job.strategy) && isPlainObject(job.strategy.matrix)
+        ? /** @type {Record<string, unknown>} */ (job.strategy.matrix)
+        : {}
+      const matrixCombinations = getMatrixCombinations(matrixData)
+
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
 
@@ -621,20 +713,30 @@ function collectWorkflowRuns (repoRoot) {
         }
 
         if (typeof step.run === 'string') {
-          // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
-          const exports = parseExportAssignments(step.run)
-          for (const [k, v] of Object.entries(exports)) env[k] = v
+          // Expand matrix expressions and emit one entry per combination.
+          const seenRuns = new Set()
+          for (const combo of matrixCombinations) {
+            const run = expandMatrixExpressions(step.run, combo)
+            if (seenRuns.has(run)) continue
+            seenRuns.add(run)
 
-          const idxYarn = step.run.indexOf('yarn ')
-          const idxNpm = step.run.indexOf('npm ')
-          const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-          if (idx > 0) {
-            const prefix = step.run.slice(0, idx)
-            const assigns = parseInlineAssignments(prefix)
-            for (const [k, v] of Object.entries(assigns)) env[k] = v
+            const stepEnv = { ...env }
+
+            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
+            const exports = parseExportAssignments(run)
+            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
+
+            const idxYarn = run.indexOf('yarn ')
+            const idxNpm = run.indexOf('npm ')
+            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+            if (idx > 0) {
+              const prefix = run.slice(0, idx)
+              const assigns = parseInlineAssignments(prefix)
+              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
+            }
+
+            out.push({ workflowFile: wf, jobId, run, env: stepEnv })
           }
-
-          out.push({ workflowFile: wf, jobId, run: step.run, env })
           continue
         }
 
@@ -874,6 +976,31 @@ function main () {
   const scripts = pkg.scripts || {}
   const knownScripts = new Set(Object.keys(scripts))
   const scriptPrefixes = buildScriptPrefixSet(scripts)
+
+  // Detect `**` globs in scripts that are not wrapped in quotes. POSIX sh drops globstar, so
+  // unquoted `**` degrades to `*` and only a single directory level is passed through to
+  // mocha/globSync — silently missing any spec file deeper than one subdirectory.
+  /** @type {string[]} */
+  const unquotedGlobstar = []
+  for (const scriptName of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
+    const cmd = scripts[scriptName]
+    if (typeof cmd !== 'string') continue
+
+    for (const hit of findUnquotedGlobstar(cmd)) {
+      unquotedGlobstar.push(
+        `package.json: script "${scriptName}" contains an unquoted "**" at column ${hit.column} ` +
+        `(near "${hit.context.trim()}"). Wrap the glob in double quotes so POSIX sh passes ` +
+        'it through to mocha/glob as a literal; otherwise `**` collapses to `*` and specs ' +
+        'deeper than one subdirectory are silently skipped.'
+      )
+    }
+  }
+
+  if (unquotedGlobstar.length) {
+    process.stderr.write('Unquoted `**` globs detected in package.json scripts:\n')
+    for (const msg of unquotedGlobstar) process.stderr.write(`- ${msg}\n`)
+    process.exit(1)
+  }
 
   const testFiles = findTestFiles(repoRoot)
   const { globs, matchedFiles } = expandScriptGlobs(repoRoot, scripts)

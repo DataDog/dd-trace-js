@@ -1222,18 +1222,29 @@ describe('sdk', () => {
       assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].categorical_value, 'foo')
     })
 
-    it('defaults to the current time if no timestamp is provided', () => {
-      sinon.stub(Date, 'now').returns(1234)
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        label: 'test',
-        metricType: 'score',
-        value: 0.6,
+    describe('with no timestamp provided', () => {
+      let prevTime
+
+      before(() => {
+        prevTime = clock.now
+        clock.setSystemTime(1234)
       })
 
-      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
-      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
-      Date.now.restore()
+      after(() => {
+        clock.setSystemTime(prevTime)
+      })
+
+      it('defaults to the current time', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+        })
+
+        assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+        assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
+      })
     })
 
     it('submits a boolean evaluation metric', () => {
@@ -1366,16 +1377,24 @@ describe('sdk', () => {
     })
 
     describe('with DD_TRACE_OTEL_ENABLED set', () => {
-      before(() => {
-        process.env.DD_TRACE_OTEL_ENABLED = 'true'
-      })
+      let otelLLMObs
 
-      after(() => {
+      before(() => {
+        // DD_TRACE_OTEL_ENABLED is a launch-time env var captured when `Config` is built.
+        // Build a fresh config with the env set, then wire up a sibling LLMObs SDK that uses it.
+        // The outer `llmobs` is already enabled and its writers are already subscribed to the
+        // channels, so we only need this SDK to hold a config that reports `enabled` and has
+        // `DD_TRACE_OTEL_ENABLED` set - no extra enable()/disable() calls (which would trigger
+        // flush() on the spied writer and pollute unrelated tests).
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
+        const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
         delete process.env.DD_TRACE_OTEL_ENABLED
+        config.llmobs.enabled = true
+        otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
       })
 
       it('adds source:otel tag', () => {
-        llmobs.submitEvaluation(spanCtx, {
+        otelLLMObs.submitEvaluation(spanCtx, {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',

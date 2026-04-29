@@ -54,19 +54,23 @@ describe('RASP metrics', () => {
 
       let appsecTelemetryMetricsReceived = false
 
-      await agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
+      await agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const namespace = payload.payload.namespace
 
-        if (namespace === 'appsec') {
-          appsecTelemetryMetricsReceived = true
-          const series = payload.payload.series
-          const errorSerie = series.find(s => s.metric === 'rasp.error')
+          if (namespace === 'appsec') {
+            appsecTelemetryMetricsReceived = true
+            const series = payload.payload.series
+            const errorSerie = series.find(s => s.metric === 'rasp.error')
 
-          assert.ok(errorSerie)
-          assert.ok(errorSerie.tags.includes('waf_error:-127'))
-          assert.strictEqual(errorSerie.type, 'count')
-        }
-      }, 'generate-metrics', 30_000, 2)
+            assert.ok(errorSerie)
+            assert.ok(errorSerie.tags.includes('waf_error:-127'))
+            assert.strictEqual(errorSerie.type, 'count')
+          }
+        },
+        requestType: 'generate-metrics',
+        expectedMessageCount: 2,
+      })
 
       assert.strictEqual(appsecTelemetryMetricsReceived, true)
     })
@@ -104,20 +108,24 @@ describe('RASP metrics', () => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.rasp.timeout'] > 0, true)
       })
 
-      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
+      const checkTelemetry = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const namespace = payload.payload.namespace
 
-        if (namespace === 'appsec') {
-          appsecTelemetryReceived = true
-          const series = payload.payload.series
-          const timeoutSerie = series.find(s => s.metric === 'rasp.timeout')
+          if (namespace === 'appsec') {
+            appsecTelemetryReceived = true
+            const series = payload.payload.series
+            const timeoutSerie = series.find(s => s.metric === 'rasp.timeout')
 
-          assert.ok(timeoutSerie)
-          assert.ok(timeoutSerie.tags.includes('rule_type:command_injection'))
-          assert.ok(timeoutSerie.tags.includes('rule_variant:shell'))
-          assert.strictEqual(timeoutSerie.type, 'count')
-        }
-      }, 'generate-metrics', 30_000, 2)
+            assert.ok(timeoutSerie)
+            assert.ok(timeoutSerie.tags.includes('rule_type:command_injection'))
+            assert.ok(timeoutSerie.tags.includes('rule_variant:shell'))
+            assert.strictEqual(timeoutSerie.type, 'count')
+          }
+        },
+        requestType: 'generate-metrics',
+        expectedMessageCount: 2,
+      })
 
       await Promise.all([checkMessages, checkTelemetry])
 

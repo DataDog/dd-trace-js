@@ -32,16 +32,14 @@ describe('git_metadata', () => {
   let generatePackFilesForCommitsStub
   let isShallowRepositoryStub
   let unshallowRepositoryStub
+  let fakeConfig
 
   before(() => {
-    process.env.DD_API_KEY = 'api-key'
     fs.writeFileSync(temporaryPackFile, '')
     fs.writeFileSync(secondTemporaryPackFile, '')
   })
 
   after(() => {
-    delete process.env.DD_API_KEY
-    delete process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED
     fs.unlinkSync(temporaryPackFile)
     fs.unlinkSync(secondTemporaryPackFile)
   })
@@ -55,6 +53,8 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
+    fakeConfig = { apiKey: 'api-key', DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true }
+
     gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
       '../../../plugins/util/git': {
         getLatestCommits: getLatestCommitsStub,
@@ -64,6 +64,7 @@ describe('git_metadata', () => {
         isShallowRepository: isShallowRepositoryStub,
         unshallowRepository: unshallowRepositoryStub,
       },
+      '../../../config': () => fakeConfig,
     })
   })
 
@@ -104,7 +105,7 @@ describe('git_metadata', () => {
   })
 
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
-    process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
+    fakeConfig.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))

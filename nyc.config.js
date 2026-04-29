@@ -30,12 +30,14 @@ module.exports = {
   ],
   exclude: [
     '**/.bun/**',
+    '**/*-browser-scripts.js', // Serialized into browsers; coverage counters would ReferenceError.
     '**/*.spec.*',
     '**/fixtures/**',
     '**/integration-tests/**',
     '**/resources/**',
     '**/test/**',
     '**/vendor/**',
+    '**/versions/**',
   ],
   // Avoid collisions when a single CI job runs coverage sequentially across multiple Node.js versions.
   tempDir: `.nyc_output/node-${process.version}${label}`,

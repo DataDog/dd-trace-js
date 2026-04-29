@@ -8,8 +8,8 @@ on:
     - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -54,7 +54,7 @@ jobs:
           echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
           echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -65,7 +65,14 @@ jobs:
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
-    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
+        spec:
+          - playwright-reporting
+          - playwright-efd
+          - playwright-atr
+          - playwright-test-management
+          - playwright-active-test-span
+          - playwright-impacted-tests
+    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -99,14 +106,19 @@ jobs:
           echo "dd-trace major version: $MAJOR"
       - name: Cache Playwright browsers
         if: matrix.playwright-version == 'oldest'
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
+      - name: Configure Git safe directory
+        # The Playwright job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          SPEC: ${{ matrix.spec }}
 
   integration-mocha:
     strategy:
@@ -231,9 +243,26 @@ jobs:
         # 6.7.0 is the minimum version we support in <=5
         # 10.2.0 is the minimum version we support in >=6
         # 14.5.4 is the latest version that supports Node 18
-        # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
+        # The logic to decide whether the tests run lives in the individual spec files
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ["commonJS", "esm"]
+        spec:
+          - cypress-reporting
+          - cypress-itr
+          - cypress-efd
+          - cypress-atr
+          - cypress-test-management
+          - cypress-impacted-tests
+          - cypress-final-status
+        exclude:
+          # eol = Node 16: shouldTestsRun() always returns false for DD_MAJOR >= 6
+          - version: eol
+          # 6.7.0 is only supported for DD_MAJOR <= 5; never runs on this branch
+          - cypress-version: 6.7.0
+          # Node 18 (oldest) only supports 10.2.0 and 14.5.4, not latest
+          - version: oldest
+            cypress-version: latest
+    name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -252,7 +281,7 @@ jobs:
       # as that changes frequently and would have a low cache hit rate
       - name: Cache Cypress binary
         if: matrix.cypress-version != 'latest'
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
@@ -263,6 +292,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:

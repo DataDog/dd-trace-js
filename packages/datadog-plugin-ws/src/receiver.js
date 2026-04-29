@@ -62,6 +62,7 @@ class WSReceiverPlugin extends TracingPlugin {
   }
 
   asyncStart (ctx) {
+    if (!ctx.span) return
     ctx.span.finish()
   }
 

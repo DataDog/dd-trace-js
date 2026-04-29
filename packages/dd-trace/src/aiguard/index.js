@@ -1,14 +1,16 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
 const log = require('../log')
+const { incomingHttpRequestStart, aiguardChannel } = require('./channels')
 const AIGuard = require('./sdk')
-
-const aiguardChannel = channel('dd-trace:ai:aiguard')
 
 let isEnabled = false
 let aiguard
 let block
+
+function onIncomingHttpRequestStart () {
+  // No-op: subscribing ensures the HTTP plugin spreads req onto the store
+}
 
 function enable (tracer, config) {
   if (isEnabled) return
@@ -17,6 +19,7 @@ function enable (tracer, config) {
     aiguard = new AIGuard(tracer, config)
     block = config.experimental?.aiguard?.block !== false
 
+    incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
     aiguardChannel.subscribe(onEvaluate)
 
     isEnabled = true
@@ -29,6 +32,7 @@ function enable (tracer, config) {
 function disable () {
   if (!isEnabled) return
 
+  incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
   aiguardChannel.unsubscribe(onEvaluate)
 
   aiguard = undefined

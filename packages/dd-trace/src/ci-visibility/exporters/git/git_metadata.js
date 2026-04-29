@@ -3,12 +3,11 @@
 const fs = require('fs')
 const path = require('path')
 
+const getConfig = require('../../../config')
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
-const { getValueFromEnvSources } = require('../../../config/helper')
 
 const log = require('../../../log')
-const { isFalse } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
@@ -51,7 +50,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
+      'dd-api-key': getConfig().apiKey,
     },
     timeout: 15_000,
     url,
@@ -288,7 +287,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (!isFalse(getValueFromEnvSources('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
+    if (getConfig().DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
       unshallowRepository(false)
     }
 

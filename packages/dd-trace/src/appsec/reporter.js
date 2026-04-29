@@ -3,11 +3,12 @@
 const zlib = require('zlib')
 const dc = require('dc-polyfill')
 
-const { storage } = require('../../../datadog-core')
+const { NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const { getActiveRequest } = require('./store')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
@@ -302,7 +303,7 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
 
 function reportMetrics (metrics, raspRule, req) {
   if (!req) {
-    req = storage('legacy').getStore()?.req
+    req = getActiveRequest()
   }
   const rootSpan = req && web.root(req)
 
@@ -337,7 +338,7 @@ function reportTruncationMetrics (rootSpan, metrics) {
 
 function reportAttack ({ events: attackData, actions }, req) {
   if (!req) {
-    req = storage('legacy').getStore()?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
@@ -363,7 +364,7 @@ function reportAttack ({ events: attackData, actions }, req) {
     : '{"triggers":' + attackDataStr + '}'
 
   if (req.socket) {
-    newTags['network.client.ip'] = req.socket.remoteAddress
+    newTags[NETWORK_CLIENT_IP] = req.socket.remoteAddress
   }
 
   rootSpan.addTags(newTags)
@@ -481,7 +482,7 @@ function reportAttributes (attributes, req) {
   if (!attributes) return
 
   if (!req) {
-    req = storage('legacy').getStore()?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
