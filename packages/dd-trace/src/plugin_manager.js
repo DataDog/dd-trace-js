@@ -133,11 +133,11 @@ module.exports = class PluginManager {
       captureSender.configure({
         host: config.logCaptureHost,
         port: config.logCapturePort,
-        path: config.logCapturePath ?? '/logs',
-        protocol: config.logCaptureProtocol ?? 'http:',
-        maxBufferSize: config.logCaptureMaxBufferSize ?? 1000,
-        flushIntervalMs: config.logCaptureFlushIntervalMs ?? 5000,
-        timeoutMs: config.logCaptureTimeoutMs ?? 5000,
+        path: config.logCapturePath,
+        protocol: config.logCaptureProtocol,
+        maxBufferSize: config.logCaptureMaxBufferSize,
+        flushIntervalMs: config.logCaptureFlushIntervalMs,
+        timeoutMs: config.logCaptureTimeoutMs,
       })
 
       const handlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
