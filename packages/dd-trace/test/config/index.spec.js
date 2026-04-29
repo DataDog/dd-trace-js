@@ -162,6 +162,33 @@ describe('Config', () => {
     })
   })
 
+  describe('property surface', () => {
+    // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
+    const INTERNAL_RUNTIME_PROPERTIES = [
+      'commitSHA',
+      'debug',
+      'isServiceNameInferred',
+      'repositoryUrl',
+      'sampler',
+      'stableConfig',
+    ]
+
+    it('does not expose own properties beyond supported-configurations.json and index.d.ts', () => {
+      // Top-level segment only: nested defaults (e.g. `foo.bar`) live as `foo` on the instance.
+      const known = new Set(Object.keys(defaults).map(name => name.split('.', 1)[0]))
+      for (const name of INTERNAL_RUNTIME_PROPERTIES) {
+        known.add(name)
+      }
+
+      const config = getConfig()
+      const unknownConfigurations = Object.keys(config).filter(name => !known.has(name))
+
+      assert.deepStrictEqual(unknownConfigurations, [], 'Unknown Config properties detected.\n' +
+        'Add it to supported-configurations.json (or index.d.ts), if it truly is a Config property.\n' +
+        'Otherwise, remove / handle elsewhere. This reports telemetry about unrecognized properties.')
+    })
+  })
+
   it('should initialize its own logging config based off the loggers config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
