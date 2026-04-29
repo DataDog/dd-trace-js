@@ -166,6 +166,9 @@ async function printSummary () {
   })
 
   const runs = data.workflow_runs
+    // Hide the All Green workflow itself: it's always in flight while we're
+    // generating the summary, so the row is noise.
+    .filter(run => run.name !== context.workflow)
     .sort(bySeverity)
     .map(run => ({
       name: run.name,
