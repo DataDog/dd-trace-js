@@ -26,17 +26,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve GHCR target
+        run: |
+          IMAGE_NAME="${{ inputs.image }}"
+          GHCR_TARGET="$(echo "ghcr.io/${{ github.repository }}/${IMAGE_NAME##*/}" | tr '[:upper:]' '[:lower:]')"
+          echo "GHCR_TARGET=${GHCR_TARGET}" >> $GITHUB_ENV
+
       - name: Pull source image
         run: docker pull ${{ inputs.image }}:${{ inputs.tag }}
 
       - name: Tag for GHCR
-        run: |
-          IMAGE_NAME="${{ inputs.image }}"
-          docker tag \
-            ${IMAGE_NAME}:${{ inputs.tag }} \
-            ghcr.io/${{ github.repository }}/${IMAGE_NAME##*/}:${{ inputs.tag }}
+        run: docker tag ${{ inputs.image }}:${{ inputs.tag }} ${{ env.GHCR_TARGET }}:${{ inputs.tag }}
 
       - name: Push to GHCR
-        run: |
-          IMAGE_NAME="${{ inputs.image }}"
-          docker push ghcr.io/${{ github.repository }}/${IMAGE_NAME##*/}:${{ inputs.tag }}
+        run: docker push ${{ env.GHCR_TARGET }}:${{ inputs.tag }}
