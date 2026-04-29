@@ -14,14 +14,11 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: ${{ github.action_path }}/node_modules
-        key: datadog-ci-${{ hashFiles('.github/actions/push_to_test_optimization/package.json') }}
-    - if: github.actor != 'dependabot[bot]'
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
       with:
         node-version: '20'
+        cache: 'yarn'
+        cache-dependency-path: .github/actions/push_to_test_optimization/package.json
     - if: github.actor != 'dependabot[bot]'
       shell: bash
       run: yarn install --no-lockfile
