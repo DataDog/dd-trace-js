@@ -48,7 +48,7 @@ describe('Plugin', () => {
           agent
             .assertFirstTraceSpan({
               resource: 'POST /logstash-?.?.?/_search',
-            })
+            }, { spanResourceMatch: /^POST \/logstash-\?\.\?\.\?\/_search$/ })
             .then(done)
             .catch(done)
 

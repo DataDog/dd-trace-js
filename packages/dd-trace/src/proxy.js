@@ -1,6 +1,5 @@
 'use strict'
 
-const { getValueFromEnvSources } = require('./config/helper')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -213,7 +212,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (getValueFromEnvSources('DD_API_KEY')) {
+        if (config.apiKey) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -279,12 +278,7 @@ class Tracer extends NoopProxy {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        let otlpExporter
-        if (config.otelTracesEnabled) {
-          const { buildResourceAttributes, createOtlpTraceExporter } = require('./opentelemetry/trace')
-          otlpExporter = createOtlpTraceExporter(config, buildResourceAttributes(config))
-        }
-        this._tracer = new DatadogTracer(config, prioritySampler, otlpExporter)
+        this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)

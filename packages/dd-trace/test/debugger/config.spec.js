@@ -19,6 +19,7 @@ describe('getDebuggerConfig', function () {
       'commitSHA',
       'debug',
       'dynamicInstrumentation',
+      'env',
       'hostname',
       'logLevel',
       'port',
@@ -27,11 +28,14 @@ describe('getDebuggerConfig', function () {
       'runtimeId',
       'service',
       'url',
+      'version',
+      'inputPath',
     ])
     assertObjectContains(config, {
       commitSHA: tracerConfig.commitSHA,
       debug: tracerConfig.debug,
       dynamicInstrumentation: tracerConfig.dynamicInstrumentation,
+      env: tracerConfig.env,
       hostname: tracerConfig.hostname,
       logLevel: tracerConfig.logLevel,
       port: tracerConfig.port,
@@ -39,6 +43,7 @@ describe('getDebuggerConfig', function () {
       runtimeId: tracerConfig.tags['runtime-id'],
       service: tracerConfig.service,
       url: tracerConfig.url.toString(),
+      version: tracerConfig.version,
     })
   })
 

@@ -1,8 +1,5 @@
 'use strict'
 
-// Increase max listeners to avoid warnings in tests
-process.setMaxListeners(50)
-
 const assert = require('assert')
 const http = require('http')
 
@@ -13,31 +10,23 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 const { getConfigFresh } = require('../helpers/config')
 const id = require('../../src/id')
+const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
+const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
+
+const OTEL_ENV_KEYS = [
+  'OTEL_TRACES_EXPORTER',
+  'OTEL_EXPORTER_OTLP_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_PROTOCOL',
+  'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL',
+  'OTEL_EXPORTER_OTLP_HEADERS',
+  'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+  'OTEL_EXPORTER_OTLP_TIMEOUT',
+  'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT',
+]
 
 describe('OpenTelemetry Traces', () => {
   let originalEnv
-
-  function setupTracer (enabled = true) {
-    if (enabled) {
-      process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    } else {
-      delete process.env.OTEL_TRACES_EXPORTER
-    }
-
-    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
-      './config': getConfigFresh,
-    })
-    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
-      './proxy': proxy,
-    })
-    const tracer = proxyquire.noPreserveCache()('../../', {
-      './src': TracerProxy,
-    })
-    tracer._initialized = false
-    tracer._tracingInitialized = false
-    tracer.init()
-    return tracer
-  }
 
   /**
    * Creates a mock DD-formatted span (as produced by span_format.js).
@@ -74,7 +63,6 @@ describe('OpenTelemetry Traces', () => {
     let validatorCalled = false
 
     sinon.stub(http, 'request').callsFake((options, callback) => {
-      // Only intercept OTLP traces requests
       if (options.path && options.path.includes('/v1/traces')) {
         capturedHeaders = options.headers
         const mockReq = {
@@ -91,8 +79,6 @@ describe('OpenTelemetry Traces', () => {
         callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
-
-      // For other requests (remote config, DD agent, etc), return a basic mock
       const mockReq = {
         write: () => {},
         end: () => {},
@@ -111,19 +97,23 @@ describe('OpenTelemetry Traces', () => {
     }
   }
 
+  /**
+   * Builds an OtlpHttpTraceExporter from a fresh config derived from the current
+   * process.env. Does NOT initialize the full tracer — this avoids leaking
+   * process-level listeners across tests.
+   *
+   * @param {object} [extraEnv] - Extra environment variables for this one build
+   * @returns {OtlpHttpTraceExporter}
+   */
+  function buildExporter (extraEnv) {
+    if (extraEnv) Object.assign(process.env, extraEnv)
+    return createOtlpTraceExporter(getConfigFresh())
+  }
+
   beforeEach(() => {
     originalEnv = { ...process.env }
-    // Clear OTEL env vars that may be set by the host environment (e.g. Claude Code telemetry)
-    // to prevent test pollution. afterEach restores the original env.
-    delete process.env.OTEL_TRACES_EXPORTER
-    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
-    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-    delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
-    delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
-    delete process.env.OTEL_EXPORTER_OTLP_HEADERS
-    delete process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS
-    delete process.env.OTEL_EXPORTER_OTLP_TIMEOUT
-    delete process.env.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT
+    // Clear OTEL env vars that may be set by the host environment to prevent test pollution.
+    for (const key of OTEL_ENV_KEYS) delete process.env[key]
   })
 
   afterEach(() => {
@@ -247,6 +237,31 @@ describe('OpenTelemetry Traces', () => {
       assert.deepStrictEqual(errDecoded.resourceSpans[0].scopeSpans[0].spans[0].status, {
         code: 2,
         message: 'something broke',
+      })
+    })
+
+    it('combines error.type and error.message in status message', () => {
+      const transformer = new OtlpTraceTransformer({})
+
+      const span = createMockSpan({
+        error: 1,
+        meta: { 'error.type': 'TypeError', 'error.message': 'cannot read properties' },
+      })
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      assert.deepStrictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].status, {
+        code: 2,
+        message: 'TypeError: cannot read properties',
+      })
+    })
+
+    it('falls back to error.type when no error.message is present', () => {
+      const transformer = new OtlpTraceTransformer({})
+
+      const span = createMockSpan({ error: 1, meta: { 'error.type': 'TypeError' } })
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      assert.deepStrictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].status, {
+        code: 2,
+        message: 'TypeError',
       })
     })
 
@@ -456,9 +471,7 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(otlpSpan.name, '/api/test')
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
 
       const span = createMockSpan({ name: 'http.request' })
       exporter.export([span])
@@ -469,69 +482,62 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(headers['Content-Type'], 'application/json')
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
 
       exporter.export([createMockSpan()])
     })
 
     it('includes custom headers from OTEL_EXPORTER_OTLP_TRACES_HEADERS', () => {
-      process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = 'x-api-key=secret123'
-
       mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['x-api-key'], 'secret123')
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({
+        OTEL_TRACES_EXPORTER: 'otlp',
+        OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-api-key=secret123',
+      })
 
       exporter.export([createMockSpan()])
     })
 
     it('includes multiple comma-separated custom headers from OTEL_EXPORTER_OTLP_TRACES_HEADERS', () => {
-      process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = 'x-api-key=secret123,other-config-value=value'
-
       mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['x-api-key'], 'secret123')
         assert.strictEqual(headers['other-config-value'], 'value')
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({
+        OTEL_TRACES_EXPORTER: 'otlp',
+        OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-api-key=secret123,other-config-value=value',
+      })
 
       exporter.export([createMockSpan()])
     })
 
     it('includes custom headers from OTEL_EXPORTER_OTLP_HEADERS when traces-specific header is not set', () => {
-      delete process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS
-      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-generic-key=generic-value'
-
       mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['x-generic-key'], 'generic-value')
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({
+        OTEL_TRACES_EXPORTER: 'otlp',
+        OTEL_EXPORTER_OTLP_HEADERS: 'x-generic-key=generic-value',
+      })
 
       exporter.export([createMockSpan()])
     })
 
     it('uses OTEL_EXPORTER_OTLP_TRACES_HEADERS over OTEL_EXPORTER_OTLP_HEADERS when both are set', () => {
-      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-generic-key=generic-value'
-      process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = 'x-traces-key=traces-value'
-
       mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['x-traces-key'], 'traces-value')
         assert.strictEqual(headers['x-generic-key'], undefined)
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({
+        OTEL_TRACES_EXPORTER: 'otlp',
+        OTEL_EXPORTER_OTLP_HEADERS: 'x-generic-key=generic-value',
+        OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-traces-key=traces-value',
+      })
 
       exporter.export([createMockSpan()])
     })
@@ -543,9 +549,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.export([])
       assert(!exportCalled, 'No HTTP request should be made for empty span arrays')
@@ -558,8 +562,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const tracer = setupTracer()
-      const exporter = tracer._tracer._processor._exporter
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: 0 } })])
       assert(!exportCalled, 'No HTTP request should be made for rejected traces')
@@ -572,22 +575,26 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const tracer = setupTracer()
-      const exporter = tracer._tracer._processor._exporter
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: -1 } })])
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
     })
 
-    it('replaces the original DD Agent exporter', () => {
-      mockOtlpExport(() => {})
+    it('DatadogTracer uses the OTLP exporter when OTEL_TRACES_EXPORTER=otlp', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
+      const tracer = new DatadogTracer(getConfigFresh())
+      assert(tracer._exporter instanceof OtlpHttpTraceExporter,
+        'Exporter should be the OTLP exporter when OTEL_TRACES_EXPORTER=otlp')
+    })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
-
-      const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
-      assert(exporter instanceof OtlpHttpTraceExporter, 'Exporter should be the OTLP exporter, not a wrapper')
+    it('DatadogTracer does not use the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp', () => {
+      delete process.env.OTEL_TRACES_EXPORTER
+      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
+      const tracer = new DatadogTracer(getConfigFresh())
+      assert(!(tracer._exporter instanceof OtlpHttpTraceExporter),
+        'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
     })
   })
 
@@ -595,43 +602,28 @@ describe('OpenTelemetry Traces', () => {
     // Only http/json is currently supported. Other protocols (grpc, http/protobuf)
     // are not yet implemented and will be added in a future release.
     it('uses default http/json protocol', () => {
-      delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
-      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
-
-      const tracer = setupTracer()
-      const config = tracer._tracer._config
-      assert.strictEqual(config.otelTracesProtocol, 'http/json')
+      const config = getConfigFresh()
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
     })
 
     it('uses port 4318 for default OTLP HTTP endpoint', () => {
-      delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
-      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
-
       const config = getConfigFresh()
-      assert(config.otelTracesUrl.includes(':4318'), `expected port 4318 in URL, got: ${config.otelTracesUrl}`)
+      const endpoint = config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      assert(endpoint.includes(':4318'), `expected port 4318 in URL, got: ${endpoint}`)
     })
 
     it('respects explicit traces-specific endpoint as-is', () => {
       process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://custom-collector:9999'
 
       const config = getConfigFresh()
-      assert.strictEqual(config.otelTracesUrl, 'http://custom-collector:9999')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://custom-collector:9999')
     })
 
-    it('appends /v1/traces to generic OTEL_EXPORTER_OTLP_ENDPOINT with no path', () => {
-      delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
-
-      const config = getConfigFresh()
-      assert.strictEqual(config.otelTracesUrl, 'http://collector:4318/v1/traces')
-    })
-
-    it('appends /v1/traces to generic OTEL_EXPORTER_OTLP_ENDPOINT with a custom path', () => {
-      delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    it('appends /v1/traces to the generic OTEL_EXPORTER_OTLP_ENDPOINT base URL', () => {
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318/custom'
 
       const config = getConfigFresh()
-      assert.strictEqual(config.otelTracesUrl, 'http://collector:4318/custom/v1/traces')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://collector:4318/custom/v1/traces')
     })
 
     it('traces-specific endpoint takes precedence over generic endpoint', () => {
@@ -639,22 +631,27 @@ describe('OpenTelemetry Traces', () => {
       process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://traces-specific:9999'
 
       const config = getConfigFresh()
-      assert.strictEqual(config.otelTracesUrl, 'http://traces-specific:9999')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://traces-specific:9999')
     })
 
-    // Note: Configuration env var tests are skipped due to test setup complexity.
-    // The configuration mapping works correctly (verified in config/index.js),
-    // but the test setup doesn't properly reload config between tests.
-    // The implementation correctly reads OTEL_EXPORTER_OTLP_TRACES_* env vars
-    // with fallback to OTEL_EXPORTER_OTLP_* generic vars.
+    it('exporter setUrl preserves a bare URL as-is without adding a signal path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/')
+    })
 
-    it('does not initialize OTLP trace export when disabled', () => {
-      const tracer = setupTracer(false)
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+    it('exporter setUrl preserves an explicit signal-specific path as-is', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/custom', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/custom')
+    })
 
-      // When disabled, the exporter should be the original (not wrapped)
-      assert(!exporter._originalExporter, 'Exporter should not be wrapped when OTLP traces are disabled')
+    it('exporter setUrl preserves a trailing-slash signal-specific path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces/', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/v1/traces/')
+    })
+
+    it('exporter setUrl keeps /v1/traces when already present', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/v1/traces')
     })
 
     it('exports resource with service, version, env, and hostname', () => {
@@ -674,14 +671,14 @@ describe('OpenTelemetry Traces', () => {
           {
             'service.name': resourceAttrs['service.name'],
             'service.version': resourceAttrs['service.version'],
-            'deployment.environment': resourceAttrs['deployment.environment'],
+            'deployment.environment.name': resourceAttrs['deployment.environment.name'],
             'telemetry.sdk.name': resourceAttrs['telemetry.sdk.name'],
             'telemetry.sdk.language': resourceAttrs['telemetry.sdk.language'],
           },
           {
             'service.name': 'my-trace-service',
             'service.version': 'v2.0.0',
-            'deployment.environment': 'staging',
+            'deployment.environment.name': 'staging',
             'telemetry.sdk.name': 'datadog',
             'telemetry.sdk.language': 'nodejs',
           }
@@ -689,9 +686,7 @@ describe('OpenTelemetry Traces', () => {
         assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
       })
 
-      const tracer = setupTracer()
-      const processor = tracer._tracer._processor
-      const exporter = processor._exporter
+      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
 
       exporter.export([createMockSpan()])
     })
@@ -708,10 +703,38 @@ describe('OpenTelemetry Traces', () => {
         }),
       })
 
-      const exporter = new MockedExporter('http://localhost:4318/v1/traces', '', 1000, {})
+      const exporter = new MockedExporter('http://localhost:4318/v1/traces', {}, 1000, {})
       exporter.export([createMockSpan()])
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
+    })
+  })
+
+  describe('setUrl', () => {
+    it('retargets hostname and port and preserves an explicit custom path as-is', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+
+      exporter.setUrl('http://otel-collector:9999/custom/path')
+
+      assert.strictEqual(exporter.options.hostname, 'otel-collector')
+      assert.strictEqual(exporter.options.port, '9999')
+      assert.strictEqual(exporter.options.path, '/custom/path')
+    })
+
+    it('uses a bare URL as-is without adding a signal path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+
+      exporter.setUrl('http://otel-collector:9999')
+
+      assert.strictEqual(exporter.options.path, '/')
+    })
+
+    it('keeps /v1/traces when already present and preserves the query string', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+
+      exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
+
+      assert.strictEqual(exporter.options.path, '/v1/traces?token=abc')
     })
   })
 })

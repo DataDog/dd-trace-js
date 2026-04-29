@@ -1,7 +1,10 @@
 'use strict'
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
+const { getActiveRequest } = require('../appsec/store')
 const log = require('../log')
+const { extractIp } = require('../plugins/util/ip_extractor')
 const telemetryMetrics = require('../telemetry/metrics')
 const tracerVersion = require('../../../../package.json').version
 const { keepTrace } = require('../priority_sampler')
@@ -13,6 +16,7 @@ const {
   AI_GUARD_TARGET_TAG_KEY,
   AI_GUARD_REASON_TAG_KEY,
   AI_GUARD_ACTION_TAG_KEY,
+  AI_GUARD_EVENT_TAG_KEY,
   AI_GUARD_BLOCKED_TAG_KEY,
   AI_GUARD_META_STRUCT_KEY,
   AI_GUARD_TOOL_NAME_TAG_KEY,
@@ -57,6 +61,7 @@ class AIGuard extends NoopAIGuard {
   #maxMessagesLength
   #maxContentSize
   #meta
+  #config
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
@@ -84,6 +89,7 @@ class AIGuard extends NoopAIGuard {
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this.#maxContentSize = config.experimental.aiguard.maxContentSize
     this.#meta = { service: config.service, env: config.env }
+    this.#config = config
     this.#initialized = true
   }
 
@@ -139,6 +145,42 @@ class AIGuard extends NoopAIGuard {
     return null
   }
 
+  #setRootSpanClientIpTags (rootSpan) {
+    if (!rootSpan) return
+
+    const currentTags = rootSpan.context()._tags
+    const needsHttpClientIp = !Object.hasOwn(currentTags, HTTP_CLIENT_IP)
+    const needsNetworkClientIp = !Object.hasOwn(currentTags, NETWORK_CLIENT_IP)
+
+    if (!needsHttpClientIp && !needsNetworkClientIp) return
+
+    const req = getActiveRequest()
+
+    if (!req) return
+
+    const newTags = {}
+
+    if (needsHttpClientIp) {
+      const clientIp = extractIp(this.#config, req)
+
+      if (clientIp) {
+        newTags[HTTP_CLIENT_IP] = clientIp
+      }
+    }
+
+    if (needsNetworkClientIp) {
+      const networkClientIp = req.socket?.remoteAddress
+
+      if (networkClientIp) {
+        newTags[NETWORK_CLIENT_IP] = networkClientIp
+      }
+    }
+
+    if (Object.keys(newTags).length > 0) {
+      rootSpan.addTags(newTags)
+    }
+  }
+
   evaluate (messages, opts) {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
@@ -162,9 +204,11 @@ class AIGuard extends NoopAIGuard {
       }
       const rootSpan = span.context()?._trace?.started?.[0]
       if (rootSpan) {
+        this.#setRootSpanClientIpTags(rootSpan)
         // keepTrace must be called before executeRequest so the sampling decision
         // is propagated correctly to outgoing HTTP client calls.
         keepTrace(rootSpan, AI_GUARD)
+        rootSpan.setTag(AI_GUARD_EVENT_TAG_KEY, 'true')
       }
       let response
       try {

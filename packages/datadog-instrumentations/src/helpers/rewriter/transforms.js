@@ -14,11 +14,13 @@ const transforms = module.exports = {
     if (node.body.some(tracingChannelPredicate)) return
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = sourceType === 'module'
+    const code = isModuleSourceType(sourceType)
       ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
       : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
-    node.body.splice(index + 1, 0, parse(code, { sourceType }).body[0])
+    node.body.splice(index + 1, 0, parse(code, {
+      isModule: isModuleSourceType(sourceType),
+    }).body[0])
   },
 
   tracingChannelDeclaration (state, node) {
@@ -49,6 +51,13 @@ function traceAny (state, node, _parent, ancestry) {
   } else {
     traceFunction(state, node, program)
   }
+}
+
+/**
+ * @param {string} sourceType
+ */
+function isModuleSourceType (sourceType) {
+  return sourceType === 'module' || sourceType === 'esm'
 }
 
 function traceFunction (state, node, program) {
