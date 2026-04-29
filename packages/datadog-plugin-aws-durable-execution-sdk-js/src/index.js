@@ -1,16 +1,18 @@
 'use strict'
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const serverPlugin = require('./server')
+const executePlugin = require('./execute')
 const internalPlugin = require('./internal')
 const clientPlugin = require('./client')
+const checkpointPlugin = require('./checkpoint')
 
 class AwsDurableExecutionSdkJsPlugin extends CompositePlugin {
   static id = 'aws-durable-execution-sdk-js'
   static plugins = {
-    server: serverPlugin,
+    execute: executePlugin,
     ...internalPlugin,
     client: clientPlugin,
+    checkpoint: checkpointPlugin,
   }
 }
 
