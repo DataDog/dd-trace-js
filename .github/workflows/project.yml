@@ -42,11 +42,12 @@ jobs:
       - name: Free Disk Space
         uses: endersonmenezes/free-disk-space@v3
         with:
-          remove_android: false
-          remove_dotnet: true
-          remove_haskell: true
-          remove_tool_cache: false
-          remove_swap: true
+          remove_android: false # Takes a long time to remove even with rmz
+          remove_dotnet: true # Pretty quick and saves a lot
+          remove_haskell: true # Extremely quick and saves a lot
+          remove_tool_cache: false # Decent savings but not fast enough
+          remove_packages: false # By far the slowest option
+          remove_packages_one_command: true
           remove_folders: "/usr/share/swift /usr/share/az* /usr/local/share/chromium"
           rm_cmd: "rmz"  # Use 'rmz' for faster deletion (default: 'rm')
           rmz_version: "3.1.1"  # Required when rm_cmd is 'rmz'
