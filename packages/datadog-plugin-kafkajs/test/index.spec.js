@@ -214,7 +214,10 @@ describe('Plugin', () => {
           beforeEach(async () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            // fromBeginning so messages produced before the consumer fully joins
+            // the group are still consumed — without this, expectSomeSpan would
+            // only ever see the producer's span and fail intermittently in CI.
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
           })
 
           afterEach(async () => {
@@ -472,7 +475,9 @@ describe('Plugin', () => {
 
           it('should propagate context via span links', async () => {
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
+              assert.ok(span, `${expectedSchema.receive.opName} span should exist in trace`)
+
               const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
 
               assertObjectContains(span, {
