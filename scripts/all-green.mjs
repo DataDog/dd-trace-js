@@ -44,6 +44,11 @@ const conclusionSeverity = {
 
 const failureConclusions = new Set(['failure', 'timed_out'])
 
+// GitHub Actions app id. Filtering server-side keeps us to a single page even
+// though the unfiltered endpoint returns ~130 suites for this repo (most are
+// ghost suites from internal apps installed on the org).
+const githubActionsAppId = 15_368
+
 let retries = 0
 let hasRerun = false
 
@@ -56,14 +61,12 @@ async function getActiveSuites () {
   try {
     const { data, headers } = await octokit.rest.checks.listSuitesForRef({
       ...params,
+      app_id: githubActionsAppId,
       per_page: 100,
       headers: suitesCache ? { 'if-none-match': suitesCache.etag } : {},
     })
-    // Drop ghost suites: apps installed on the repo that produced no runs for
-    // this commit. They never reach 'completed' and would hang the loop.
-    const suites = data.check_suites.filter(s => s.latest_check_runs_count > 0)
-    suitesCache = { etag: headers.etag, suites }
-    return suites
+    suitesCache = { etag: headers.etag, suites: data.check_suites }
+    return data.check_suites
   } catch (err) {
     if (err.status === 304 && suitesCache) return suitesCache.suites
     throw err
