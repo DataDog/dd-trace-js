@@ -131,7 +131,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const rootCtx = {
       // Raw document source text, used by:
       //  (a) the graphql.source span tag on resolve spans (when this.config.source
-      //      is enabled — gated when the span is materialized, not here), and
+      //      is enabled), and
       //  (b) the IAST taint-tracking subscriber, which looks up tainted ranges
       //      against this source string to detect hardcoded-literal injection.
       source: docSource,
@@ -139,6 +139,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       fields: Object.create(null),
       abortController: new AbortController(),
       executeSpan: span,
+      plugin: this,
     }
     contexts.set(cv, rootCtx)
     ctx._ddRootCtx = rootCtx
@@ -200,40 +201,24 @@ class GraphQLExecutePlugin extends TracingPlugin {
     this._drain(ctx, span)
   }
 
-  // Materialize all tracked resolve spans from recorded per-field data, finish
-  // them, then finish the execute span, then clear the contexts entry.
+  // Finish the execute span and clear the contexts entry. Resolve spans are
+  // created and finished inline during resolver execution (see resolveAsync),
+  // so no batch-materialize pass is needed here.
   _drain (ctx, span) {
-    const rootCtx = ctx._ddRootCtx
-    if (rootCtx) {
-      this._materializeResolveSpans(rootCtx, span)
-    }
     span.finish()
     if (ctx._ddContextValue) {
       contexts.delete(ctx._ddContextValue)
     }
   }
 
-  // Loop recorded field data and create one graphql.resolve span per entry.
-  // Iteration order = insertion order: parents always recorded before children
-  // (graphql resolves a parent fully before calling its children), so when a
-  // child calls getParentField it always finds the parent's span.
-  _materializeResolveSpans (rootCtx, executeSpan) {
-    const fields = rootCtx.fields
-    const keys = Object.keys(fields)
-    // Iteration order is insertion order: parents recorded before children, so
-    // getParentField always finds a parent's span that was created earlier in
-    // this loop.
-    for (const key of keys) {
-      const field = fields[key]
-      // Collapsed duplicates have no timing — the first matching path recorded
-      // the startTime/endTime; subsequent invocations ran through untraced.
-      if (field.ctx.startTime === undefined) continue
-      this._createResolveSpan(field, rootCtx, executeSpan)
-    }
-  }
-
-  _createResolveSpan (field, rootCtx, executeSpan) {
-    const { info, pathString, collapsedKey, startTime, endTime, error, result } = field.ctx
+  // Synchronous span creation at first-encounter. Builds the span with its
+  // start time + meta tags and returns it; finishing happens later from the
+  // resolver's then-callback via _finishResolveSpan. Inlining span creation
+  // (vs deferring all spans to a post-execute batch) keeps encoder buffers
+  // hot when each span finishes — in benchmarks the batch pattern produced a
+  // bursty encoding stall on collapse-off.
+  _startResolveSpan (field, rootCtx, executeSpan, startTime) {
+    const { info, collapsedKey } = field
 
     const parent = getParentField(rootCtx, collapsedKey)
     const childOf = parent?.span || executeSpan
@@ -267,17 +252,24 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
+    return span
+  }
+
+  // Apply error/hook tags and finish the span. Called from the resolver's
+  // then-callback, so endTime reflects when the resolver actually completed.
+  _finishResolveSpan (span, field, error, result, endTime) {
     if (error) span.setTag('error', error)
 
-    this.config.hooks.resolve(span, {
-      fieldName: info.fieldName,
-      path: pathString,
-      error: error || null,
-      result: result instanceof Promise ? undefined : result,
-    })
+    if (this.config.hooks.resolve) {
+      this.config.hooks.resolve(span, {
+        fieldName: field.info.fieldName,
+        path: field.pathString,
+        error: error || null,
+        result: result instanceof Promise ? undefined : result,
+      })
+    }
 
-    span.finish(endTime || startTime)
-    field.span = span
+    span.finish(endTime)
   }
 }
 
@@ -308,8 +300,7 @@ function wrapResolve (resolve) {
     const isFirst = !field
     if (isFirst) {
       field = rootCtx.fields[collapsedKey] = {
-        error: null,
-        ctx: { info, args, path, pathString, collapsedKey },
+        info, args, path, pathString, collapsedKey, span: null,
       }
     }
 
@@ -334,11 +325,16 @@ function wrapResolve (resolve) {
     // with the trace's reference; performance.now() alone would be ~0 since
     // process start and produce malformed span timestamps.
     const executeSpan = rootCtx.executeSpan
-    field.ctx.startTime = executeSpan._getTime ? executeSpan._getTime() : undefined
+    const startTime = executeSpan._getTime ? executeSpan._getTime() : undefined
+    // Inline span creation: parents are recorded before children (graphql
+    // resolves a parent fully before its children), so getParentField finds
+    // the parent's span here.
+    const span = rootCtx.plugin._startResolveSpan(field, rootCtx, executeSpan, startTime)
+    field.span = span
+
     return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err, res) => {
-      field.ctx.endTime = executeSpan._getTime ? executeSpan._getTime() : undefined
-      field.ctx.error = err
-      field.ctx.result = res
+      const endTime = executeSpan._getTime ? executeSpan._getTime() : undefined
+      rootCtx.plugin._finishResolveSpan(span, field, err, res, endTime || startTime)
     })
   }
 

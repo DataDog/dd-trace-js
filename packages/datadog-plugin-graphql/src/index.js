@@ -66,7 +66,7 @@ function getHooks ({ hooks }) {
   const execute = hooks?.execute ?? noop
   const parse = hooks?.parse ?? noop
   const validate = hooks?.validate ?? noop
-  const resolve = hooks?.resolve ?? noop
+  const resolve = hooks?.resolve
 
   return { execute, parse, validate, resolve }
 }
