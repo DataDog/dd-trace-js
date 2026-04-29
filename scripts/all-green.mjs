@@ -116,7 +116,9 @@ async function checkAllGreen () {
     suites = await pollUntilDone()
   } catch (err) {
     await printSummary()
-    throw err
+    console.log(err)
+    process.exitCode = 1
+    return
   }
 
   const anyFailed = suites.some(s => failureConclusions.has(s.conclusion))
@@ -143,7 +145,8 @@ async function checkAllGreen () {
   }
 
   await printSummary()
-  throw new Error('One or more jobs failed.')
+  console.log('One or more jobs failed.')
+  process.exitCode = 1
 }
 
 function formatConclusion (conclusion) {
