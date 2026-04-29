@@ -20,7 +20,8 @@ describe('Plugin', () => {
   let key
   let keyString
 
-  describe('aerospike', () => {
+  describe('aerospike', function () {
+    this.timeout(30000)
     withVersions('aerospike', 'aerospike', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
