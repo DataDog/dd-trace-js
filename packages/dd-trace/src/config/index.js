@@ -610,6 +610,20 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
+    // Compute traceMetrics config: client-side span stats exported as OTLP metrics.
+    // Auto-enabled when both OTEL trace and metrics exporters are configured.
+    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.OTEL_METRICS_EXPORTER === 'otlp'
+    const traceMetricsEnabled = this.traceMetricsEnabled ?? autoTraceMetrics
+    // Derive URL from the traces endpoint base, replacing the signal path.
+    const tracesEndpoint = this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    const parsedTracesUrl = new URL(tracesEndpoint)
+    parsedTracesUrl.pathname = '/v1/metrics'
+    this.traceMetrics = {
+      enabled: traceMetricsEnabled,
+      url: parsedTracesUrl.toString(),
+      protocol: this.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || this.otelProtocol || 'http/protobuf',
+    }
+
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED')

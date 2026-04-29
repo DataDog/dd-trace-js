@@ -17,7 +17,7 @@ class SpanProcessor {
     this._killAll = false
 
     // TODO: This should already have been calculated in `config.js`.
-    if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
+    if ((config.stats?.enabled || config.traceMetrics?.enabled) && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config)
     }

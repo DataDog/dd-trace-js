@@ -29,6 +29,7 @@ class SpanAggStats {
     this.topLevelHits = 0
     this.errors = 0
     this.duration = 0
+    this.errorDuration = 0
     this.okDistribution = new LogCollapsingLowestDenseDDSketch()
     this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
   }
@@ -44,6 +45,7 @@ class SpanAggStats {
 
     if (span.error) {
       this.errors++
+      this.errorDuration += durationNs
       this.errorDistribution.accept(durationNs)
     } else {
       this.okDistribution.accept(durationNs)
@@ -139,13 +141,15 @@ class SpanStatsProcessor {
     stats: {
       enabled = false,
       interval = 10,
-    },
+    } = {},
     hostname,
     port,
     url,
     env,
+    service,
     tags,
-    version,
+    version: appVersion,
+    traceMetrics,
   } = {}) {
     this.exporter = new SpanStatsExporter({
       hostname,
@@ -161,33 +165,44 @@ class SpanStatsProcessor {
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
-    this.version = version
+    this.version = appVersion
 
-    if (this.enabled) {
+    if (traceMetrics?.enabled) {
+      const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
+      const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags)
+      this.otlpExporter = new OtlpStatsExporter(traceMetrics.url, traceMetrics.protocol, resourceAttributes)
+    }
+
+    if (this.enabled || this.otlpExporter) {
       this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
       this.timer.unref()
     }
   }
 
   onInterval () {
-    const serialized = this._serializeBuckets()
-    if (!serialized) return
+    const drained = this._drainBuckets()
 
-    this.exporter.export({
-      Hostname: this.hostname,
-      Env: this.env,
-      Version: this.version || version,
-      Stats: serialized,
-      Lang: 'javascript',
-      TracerVersion: pkg.version,
-      RuntimeID: this.tags['runtime-id'],
-      Sequence: ++this.sequence,
-      ProcessTags: processTags.serialized,
-    })
+    if (this.enabled) {
+      this.exporter.export({
+        Hostname: this.hostname,
+        Env: this.env,
+        Version: this.version || version,
+        Stats: this._toLegacyPayload(drained),
+        Lang: 'javascript',
+        TracerVersion: pkg.version,
+        RuntimeID: this.tags['runtime-id'],
+        Sequence: ++this.sequence,
+        ProcessTags: processTags.serialized,
+      })
+    }
+
+    if (this.otlpExporter && drained.length > 0) {
+      this.otlpExporter.export(drained, this.bucketSizeNs)
+    }
   }
 
   onSpanFinished (span) {
-    if (!this.enabled) return
+    if (!this.enabled && !this.otlpExporter) return
     if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
     const spanEndNs = span.startTime + span.duration
@@ -198,28 +213,50 @@ class SpanStatsProcessor {
       .record(span)
   }
 
-  _serializeBuckets () {
-    const { bucketSizeNs } = this
-    const serializedBuckets = []
-
+  /**
+   * Drains all time buckets and returns the raw data for export.
+   * @returns {Array<{timeNs: number, bucket: SpanBuckets}>}
+   */
+  _drainBuckets () {
+    const drained = []
     for (const [timeNs, bucket] of this.buckets.entries()) {
-      const bucketAggStats = []
-
-      for (const stats of bucket.values()) {
-        bucketAggStats.push(stats.toJSON())
-      }
-
-      serializedBuckets.push({
-        Start: timeNs,
-        Duration: bucketSizeNs,
-        Stats: bucketAggStats,
-      })
+      drained.push({ timeNs, bucket })
     }
-
     this.buckets.clear()
-
-    return serializedBuckets
+    return drained
   }
+
+  /**
+   * Converts drained buckets to the Datadog /v0.6/stats wire format.
+   * @param {Array<{timeNs: number, bucket: SpanBuckets}>} drained
+   * @returns {Array}
+   */
+  _toLegacyPayload (drained) {
+    const { bucketSizeNs } = this
+    return drained.map(({ timeNs, bucket }) => ({
+      Start: timeNs,
+      Duration: bucketSizeNs,
+      Stats: [...bucket.values()].map(stats => stats.toJSON()),
+    }))
+  }
+}
+
+/**
+ * @param {string|undefined} service
+ * @param {string|undefined} env
+ * @param {string|undefined} appVersion
+ * @param {object} tags
+ * @returns {import('@opentelemetry/api').Attributes}
+ */
+function buildResourceAttributes (service, env, appVersion, tags) {
+  const attrs = {
+    'host.name': os.hostname(),
+  }
+  if (service) attrs['service.name'] = service
+  if (env) attrs['deployment.environment.name'] = env
+  if (appVersion) attrs['service.version'] = appVersion
+  if (tags?.['runtime-id']) attrs['dd.runtime_id'] = tags['runtime-id']
+  return attrs
 }
 
 module.exports = {
