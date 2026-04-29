@@ -44,6 +44,7 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let logCapture
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -204,6 +205,10 @@ describe('TracerProxy', () => {
 
     OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
 
+    logCapture = {
+      initializeLogCapture: sinon.spy(),
+    }
+
     flare = {
       enable: sinon.spy(),
       disable: sinon.spy(),
@@ -255,6 +260,7 @@ describe('TracerProxy', () => {
       './flare': flare,
       './openfeature': openfeature,
       './openfeature/flagging_provider': OpenFeatureProvider,
+      './log-capture': logCapture,
     })
 
     proxy = new Proxy()
@@ -611,6 +617,22 @@ describe('TracerProxy', () => {
 
         const config = AppsecSdk.firstCall.args[1]
         sinon.assert.calledOnceWithExactly(standalone.configure, config)
+      })
+
+      it('should initialize log capture when logCaptureEnabled is true', () => {
+        config.logCaptureEnabled = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(logCapture.initializeLogCapture, config)
+      })
+
+      it('should not initialize log capture when logCaptureEnabled is false', () => {
+        config.logCaptureEnabled = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(logCapture.initializeLogCapture)
       })
     })
 

@@ -396,69 +396,6 @@ describe('Plugin Manager', () => {
       })
     })
 
-    describe('log capture sender', () => {
-      let captureSender
-
-      beforeEach(() => {
-        captureSender = require('../src/log-capture/sender')
-        captureSender.stop()
-      })
-
-      afterEach(() => {
-        globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers?.delete(captureSender.flush)
-        captureSender.stop()
-      })
-
-      it('configures the sender when logCaptureEnabled is true', () => {
-        pm.configure({
-          logCaptureEnabled: true,
-          logCaptureHost: 'localhost',
-          logCapturePort: 9999,
-          logCaptureProtocol: 'http:',
-          logCapturePath: '/logs',
-          logCaptureFlushIntervalMs: 5000,
-          logCaptureMaxBufferSize: 1000,
-          logCaptureTimeoutMs: 5000,
-        })
-
-        captureSender.add('{"level":30,"msg":"test"}')
-        assert.strictEqual(captureSender.bufferSize(), 1)
-      })
-
-      it('does not configure the sender when logCaptureEnabled is false', () => {
-        pm.configure(makeTracerConfig({ logCaptureEnabled: false }))
-
-        captureSender.add('{"level":30,"msg":"test"}')
-        assert.strictEqual(captureSender.bufferSize(), 0)
-      })
-
-      it('registers flush in beforeExitHandlers when logCaptureEnabled is true', () => {
-        pm.configure(makeTracerConfig({
-          logCaptureEnabled: true,
-          logCaptureHost: 'localhost',
-          logCapturePort: 9999,
-        }))
-
-        assert.ok(
-          globalThis[Symbol.for('dd-trace')].beforeExitHandlers.has(captureSender.flush),
-          'flush should be registered in beforeExitHandlers'
-        )
-      })
-
-      it('does not register flush twice on repeated configure calls', () => {
-        const config = makeTracerConfig({
-          logCaptureEnabled: true,
-          logCaptureHost: 'localhost',
-          logCapturePort: 9999,
-        })
-        pm.configure(config)
-        pm.configure(config)
-
-        const handlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
-        assert.ok(handlers.has(captureSender.flush))
-        assert.strictEqual([...handlers].filter(h => h === captureSender.flush).length, 1)
-      })
-    })
   })
 
   describe('destroy', () => {

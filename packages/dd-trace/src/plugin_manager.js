@@ -3,7 +3,6 @@
 const { channel } = require('dc-polyfill')
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
-const captureSender = require('./log-capture/sender')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
@@ -128,23 +127,6 @@ module.exports = class PluginManager {
   configure (config) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
-
-    if (config.logCaptureEnabled) {
-      captureSender.configure({
-        host: config.logCaptureHost,
-        port: config.logCapturePort,
-        path: config.logCapturePath,
-        protocol: config.logCaptureProtocol,
-        maxBufferSize: config.logCaptureMaxBufferSize,
-        flushIntervalMs: config.logCaptureFlushIntervalMs,
-        timeoutMs: config.logCaptureTimeoutMs,
-      })
-
-      const handlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
-      if (handlers && !handlers.has(captureSender.flush)) {
-        handlers.add(captureSender.flush)
-      }
-    }
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
