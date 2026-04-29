@@ -57,11 +57,8 @@ class NoopProxy {
     if (typeof fn !== 'function') return
 
     options = options || {}
-    if (options.service || options?.tags?.service || options?.tags?.['service.name']) {
-      options.tags = {
-        ...options.tags,
-        [SVC_SRC_KEY]: 'm',
-      }
+    if (options.service || options.tags?.service || options.tags?.['service.name']) {
+      options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
     }
 
     return this._tracer.trace(name, options, fn)
@@ -76,11 +73,8 @@ class NoopProxy {
     if (typeof fn !== 'function') return fn
 
     options = options || {}
-    if (options.service || options?.tags?.service || options?.tags?.['service.name']) {
-      options.tags = {
-        ...options.tags,
-        [SVC_SRC_KEY]: 'm',
-      }
+    if (options.service || options.tags?.service || options.tags?.['service.name']) {
+      options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
     }
     return this._tracer.wrap(name, options, fn)
   }
@@ -92,17 +86,14 @@ class NoopProxy {
 
   startSpan (name, options) {
     if (options?.tags?.service || options?.tags?.['service.name']) {
-      options.tags = {
-        ...options.tags,
-        [SVC_SRC_KEY]: 'm',
-      }
+      options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
     }
 
     if (options?.childOf instanceof PublicSpan) {
-      options.childOf = options.childOf._span
+      options = { ...options, childOf: options.childOf._span }
     }
 
-    return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
+    return new PublicSpan(this._tracer.startSpan(name, options))
   }
 
   inject (context, format, carrier) {

@@ -680,7 +680,7 @@ describe('TracerProxy', () => {
       it('should call the underlying NoopTracer', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
-        sinon.assert.calledWith(noop.startSpan, 'a', 'b', 'c')
+        sinon.assert.calledWith(noop.startSpan, 'a', 'b')
         assert.deepEqual(returnValue._span, { id: 'span' })
       })
 
@@ -959,7 +959,7 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
-        sinon.assert.calledWith(tracer.startSpan, 'a', 'b', 'c')
+        sinon.assert.calledWith(tracer.startSpan, 'a', 'b')
         assert.deepEqual(returnValue._span, { id: 'span' })
       })
 
