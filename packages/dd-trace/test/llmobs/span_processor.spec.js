@@ -251,6 +251,38 @@ describe('span processor', () => {
       })
     })
 
+    it('replaces invalid span event metadata _dd fields when setting cost tags', () => {
+      span = {
+        _name: 'test',
+        _startTime: 0,
+        _duration: 1,
+        context () {
+          return {
+            _tags: {},
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.metadata': {
+          _dd: ['invalid'],
+        },
+        '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assert.deepStrictEqual(payload.meta.metadata, {
+        _dd: {
+          cost_tags: ['team', 'feature'],
+        },
+      })
+    })
+
     it('tags output documents for a retrieval span', () => {
       span = {
         context () {

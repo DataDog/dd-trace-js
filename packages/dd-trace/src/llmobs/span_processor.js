@@ -253,13 +253,10 @@ class LLMObsSpanProcessor {
   }
 
   #getDdMetadata (metadata) {
-    const ddMetadata = {}
-    const currentDdMetadata = metadata._dd
-    if (currentDdMetadata && typeof currentDdMetadata === 'object' && !Array.isArray(currentDdMetadata)) {
-      this.#addObject(currentDdMetadata, ddMetadata)
+    if (!metadata._dd || typeof metadata._dd !== 'object' || Array.isArray(metadata._dd)) {
+      metadata._dd = {}
     }
-    metadata._dd = ddMetadata
-    return ddMetadata
+    return metadata._dd
   }
 
   #getTags (span, mlApp, sessionId, error) {
