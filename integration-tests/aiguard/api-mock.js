@@ -33,6 +33,15 @@ function startApiMock () {
         // Extract text content from the last message regardless of type
         const content = extractContent(lastMessage)
 
+        // Synthetic marker used by the never-break-clients integration test:
+        // returning a 503 simulates an unhealthy AI Guard service so we can verify
+        // the host OpenAI call still succeeds.
+        if (messages.some(msg => extractContent(msg).includes('[aiguard_unhealthy]'))) {
+          return res.status(503).type('application/json').json({
+            errors: [{ status: '503', title: 'Service Unavailable' }],
+          })
+        }
+
         if (content.startsWith('You should not trust me')) {
           action = 'DENY'
           reason = 'I am feeling suspicious today'
@@ -76,9 +85,15 @@ function startApiMock () {
 
 function extractContent (message) {
   if (typeof message.content === 'string') return message.content
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map(part => (typeof part === 'string' ? part : part?.text ?? ''))
+      .join(' ')
+  }
   if (message.tool_calls) {
     return message.tool_calls.map(tc => tc.function?.arguments || '').join(' ')
   }
+  if (message.refusal) return message.refusal
   return ''
 }
 

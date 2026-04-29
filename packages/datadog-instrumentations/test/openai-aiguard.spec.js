@@ -157,7 +157,8 @@ describe('openai AI Guard instrumentation', () => {
       const messages = [{ role: 'user', content: 'Hi' }]
       return completions.create({ messages }).parse()
         .then(() => {
-          assert.ok(calls.length >= 1)
+          // Before Model + After Model (assistant responded)
+          assert.strictEqual(calls.length, 2)
           assert.deepStrictEqual(calls[0].messages, messages)
         })
         .finally(unsubscribe)
@@ -334,6 +335,199 @@ describe('openai AI Guard instrumentation', () => {
       return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
         .then(resp => assert.strictEqual(resp, apiProm._rawResponse))
         .finally(unsubscribe)
+    })
+
+    it('passes a multi-turn system + user + assistant + tool conversation verbatim', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({
+        choices: [{ message: { role: 'assistant', content: 'sure' } }],
+      })
+
+      const messages = [
+        { role: 'system', content: 'You are a helpful assistant' },
+        { role: 'user', content: 'Look up the weather' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'lookupWeather', arguments: '{"city":"NY"}' },
+          }],
+        },
+        { role: 'tool', tool_call_id: 'call_1', content: 'Sunny, 25C' },
+        { role: 'user', content: 'Thanks' },
+      ]
+      return completions.create({ messages }).parse()
+        .then(() => {
+          assert.deepStrictEqual(calls[0].messages, messages)
+          // After Model adds the assistant response
+          assert.deepStrictEqual(calls[1].messages.at(-1), { role: 'assistant', content: 'sure' })
+        })
+        .finally(unsubscribe)
+    })
+
+    it('passes multimodal user content (text + image_url) through verbatim', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({
+        choices: [{ message: { role: 'assistant', content: 'a cat' } }],
+      })
+
+      const messages = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is this?' },
+          { type: 'image_url', image_url: { url: 'https://example.com/cat.png' } },
+        ],
+      }]
+      return completions.create({ messages, model: 'gpt-4o-mini' }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, messages))
+        .finally(unsubscribe)
+    })
+
+    it('skips Before Model when messages is an empty array', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [] })
+
+      return completions.create({ messages: [] }).parse()
+        .then(() => assert.strictEqual(calls.length, 0))
+        .finally(unsubscribe)
+    })
+
+    it('After Model includes the assistant message when only `refusal` is set', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const refusalMessage = { role: 'assistant', content: null, refusal: 'I cannot help with that' }
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: refusalMessage }] })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+        .then(() => {
+          assert.strictEqual(calls.length, 2)
+          assert.deepStrictEqual(calls[1].messages.at(-1), refusalMessage)
+        })
+        .finally(unsubscribe)
+    })
+
+    it('After Model includes the assistant message when content is the empty string', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const emptyMessage = { role: 'assistant', content: '' }
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: emptyMessage }] })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+        .then(() => {
+          assert.strictEqual(calls.length, 2)
+          assert.deepStrictEqual(calls[1].messages.at(-1), emptyMessage)
+        })
+        .finally(unsubscribe)
+    })
+
+    it('skips After Model when assistant message has no content, tool_calls, or refusal', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({
+        choices: [{ message: { role: 'assistant', content: null, tool_calls: [] } }],
+      })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+        .then(() => assert.strictEqual(calls.length, 1))
+        .finally(unsubscribe)
+    })
+
+    it('does not start Before Model evaluation until APIPromise is consumed', async () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({
+        choices: [{ message: { role: 'assistant', content: 'x' } }],
+      })
+
+      try {
+        const apiProm = completions.create({ messages: [{ role: 'user', content: 'Hi' }] })
+
+        // Let microtasks drain. Lazy memoization means no publish without a consumer.
+        await new Promise(resolve => setImmediate(resolve))
+        assert.strictEqual(calls.length, 0, 'Before Model must not start until apiProm is awaited')
+
+        await apiProm.parse()
+        assert.strictEqual(calls.length, 2, 'Before + After Model must have run after parse()')
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('does not emit unhandled rejection when apiProm is discarded and Before Model would deny', async () => {
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+
+      const observed = []
+      const onUnhandled = reason => observed.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+
+      try {
+        const completions = new Completions()
+        completions._nextApiPromise = new FakeAPIPromise({
+          choices: [{ message: { role: 'assistant', content: 'x' } }],
+        })
+
+        // Discard the apiProm without awaiting parse() or asResponse().
+        completions.create({ messages: [{ role: 'user', content: 'Hi' }] })
+
+        // Drain enough microtasks for Node to surface unhandled rejections, if any.
+        await new Promise(resolve => setImmediate(resolve))
+        await new Promise(resolve => setImmediate(resolve))
+
+        assert.deepStrictEqual(observed, [])
+      } finally {
+        process.removeListener('unhandledRejection', onUnhandled)
+        unsubscribe()
+      }
+    })
+
+    it('rejects with the OpenAI error when the SDK call rejects', () => {
+      const { unsubscribe } = subscribeAutoResolve()
+      const sdkErr = new Error('upstream HTTP failure')
+      class RejectingCompletions {
+        create () {
+          return {
+            parse () { return Promise.reject(sdkErr) },
+            asResponse () { return Promise.reject(sdkErr) },
+            then (onF, onR) { return this.parse().then(onF, onR) },
+            responsePromise: Promise.reject(sdkErr),
+          }
+        }
+      }
+      RejectingCompletions.prototype._client = { baseURL: 'https://api.openai.com' }
+      applyShim(hookCallbacks, 'resources/chat/completions', 'Completions', RejectingCompletions)
+
+      return assert.rejects(
+        () => new RejectingCompletions().create({ messages: [{ role: 'user', content: 'Hi' }] }).parse(),
+        e => e === sdkErr
+      ).finally(unsubscribe)
+    })
+
+    it('publishes independent evaluations for two concurrent calls', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completionsA = new Completions()
+      const completionsB = new Completions()
+      completionsA._nextApiPromise = new FakeAPIPromise({
+        choices: [{ message: { role: 'assistant', content: 'A out' } }],
+      })
+      completionsB._nextApiPromise = new FakeAPIPromise({
+        choices: [{ message: { role: 'assistant', content: 'B out' } }],
+      })
+
+      return Promise.all([
+        completionsA.create({ messages: [{ role: 'user', content: 'A in' }] }).parse(),
+        completionsB.create({ messages: [{ role: 'user', content: 'B in' }] }).parse(),
+      ]).then(() => {
+        // 2 calls × (Before + After) = 4 evaluations
+        assert.strictEqual(calls.length, 4)
+        const inputs = calls.filter(c => c.messages.length === 1).map(c => c.messages[0].content)
+        assert.deepStrictEqual(inputs.sort(), ['A in', 'B in'])
+      }).finally(unsubscribe)
     })
   })
 
@@ -535,6 +729,56 @@ describe('openai AI Guard instrumentation', () => {
 
       return responses.create({ input: 'hi' }).parse()
         .then(() => assert.strictEqual(calls.length, 1))
+        .finally(unsubscribe)
+    })
+
+    it('converts a multi-item input (function_call + function_call_output + message)', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({
+        input: [
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Look up the weather' }] },
+          { type: 'function_call', call_id: 'c1', name: 'lookupWeather', arguments: '{"city":"NY"}' },
+          { type: 'function_call_output', call_id: 'c1', output: 'Sunny, 25C' },
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Thanks' }] },
+        ],
+      }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, [
+          { role: 'user', content: 'Look up the weather' },
+          {
+            role: 'assistant',
+            tool_calls: [{ id: 'c1', function: { name: 'lookupWeather', arguments: '{"city":"NY"}' } }],
+          },
+          { role: 'tool', tool_call_id: 'c1', content: 'Sunny, 25C' },
+          { role: 'user', content: 'Thanks' },
+        ]))
+        .finally(unsubscribe)
+    })
+
+    it('handles input_image as object {image_url: {url: ...}}', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({
+        input: [{
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'describe' },
+            { type: 'input_image', image_url: { url: 'https://example.com/cat.png' } },
+          ],
+        }],
+      }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'describe' },
+            { type: 'image_url', image_url: { url: 'https://example.com/cat.png' } },
+          ],
+        }]))
         .finally(unsubscribe)
     })
   })

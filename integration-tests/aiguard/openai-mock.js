@@ -17,6 +17,36 @@ function startOpenAIMock () {
       const model = req.body?.model ?? 'gpt-4o-mini'
       const wantsToolCall = req.body?.messages?.some(m => m.content?.includes?.('use tool'))
       const denyResponse = req.body?.metadata?.mock_response === 'deny'
+
+      // Streaming branch: respond with a minimal SSE stream of two text deltas
+      // followed by [DONE]. This is enough for the openai SDK's stream consumer.
+      if (req.body?.stream) {
+        res.status(200)
+          .set({
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          })
+        const id = 'chatcmpl-mock'
+        const created = Math.floor(Date.now() / 1000)
+        const send = chunk => res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+        const chunkBase = { id, object: 'chat.completion.chunk', created, model }
+        send({
+          ...chunkBase,
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'Hello' }, finish_reason: null }],
+        })
+        send({
+          ...chunkBase,
+          choices: [{ index: 0, delta: { content: ' world' }, finish_reason: null }],
+        })
+        send({
+          ...chunkBase,
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        })
+        res.write('data: [DONE]\n\n')
+        return res.end()
+      }
+
       const message = wantsToolCall
         ? {
             role: 'assistant',

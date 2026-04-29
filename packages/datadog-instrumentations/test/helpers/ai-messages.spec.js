@@ -601,6 +601,40 @@ describe('ai-messages', () => {
         content: '{"result":"ok"}',
       }])
     })
+
+    it('should JSON-stringify function_call arguments when given as an object', () => {
+      const items = [{
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'lookup',
+        arguments: { query: 'test', limit: 5 },
+      }]
+
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'assistant'), [{
+        role: 'assistant',
+        tool_calls: [{
+          id: 'call_1',
+          function: { name: 'lookup', arguments: '{"query":"test","limit":5}' },
+        }],
+      }])
+    })
+
+    it('should treat a message item with no `type` as a regular message', () => {
+      const items = [{ role: 'user', content: [{ type: 'input_text', text: 'Hi' }] }]
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'user'), [
+        { role: 'user', content: 'Hi' },
+      ])
+    })
+
+    it('should drop unknown item types without throwing', () => {
+      const items = [
+        { type: 'reasoning', summary: 'thinking' },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hi' }] },
+      ]
+      assert.deepStrictEqual(convertOpenAIResponseItemsToMessages(items, 'user'), [
+        { role: 'user', content: 'Hi' },
+      ])
+    })
   })
 
   describe('openAIResponseContentToMessageContent', () => {
@@ -632,6 +666,42 @@ describe('ai-messages', () => {
     it('should return undefined for unsupported content', () => {
       assert.strictEqual(openAIResponseContentToMessageContent(undefined), undefined)
       assert.strictEqual(openAIResponseContentToMessageContent([{ type: 'refusal', text: 'No' }]), undefined)
+    })
+
+    it('should drop image parts with an empty-string url', () => {
+      // Regression for the `??` fix at openAIResponseContentToMessageContent: with `||`, an
+      // empty-string `image_url.url` would have wrongly fallen through to `part.url`.
+      const content = [
+        { type: 'input_text', text: 'Hi' },
+        { type: 'input_image', image_url: { url: '' }, url: 'https://wrong-fallback.test' },
+      ]
+      assert.strictEqual(openAIResponseContentToMessageContent(content), 'Hi')
+    })
+
+    it('should keep known parts and drop unknown parts in mixed content', () => {
+      const content = [
+        { type: 'input_text', text: 'Look at this' },
+        { type: 'unknown_future_part', payload: 'ignored' },
+        { type: 'image_url', image_url: { url: 'https://example.com/x.png' } },
+      ]
+      assert.deepStrictEqual(openAIResponseContentToMessageContent(content), [
+        { type: 'text', text: 'Look at this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/x.png' } },
+      ])
+    })
+
+    it('should return undefined for content with only refusal-like parts (documents v1 limitation)', () => {
+      // v1 of the converter does not lift `refusal` parts into AI Guard content.
+      // This is acceptable for chat.completions because refusal is at the message
+      // level (handled by getOutputMessages); for responses, refusal-only output
+      // items currently surface no AI Guard input.
+      const content = [{ type: 'refusal', refusal: 'I cannot help with that' }]
+      assert.strictEqual(openAIResponseContentToMessageContent(content), undefined)
+    })
+
+    it('should drop null entries in the content array without throwing', () => {
+      const content = [null, { type: 'input_text', text: 'Hi' }, undefined]
+      assert.strictEqual(openAIResponseContentToMessageContent(content), 'Hi')
     })
   })
 })
