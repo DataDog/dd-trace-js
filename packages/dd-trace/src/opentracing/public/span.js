@@ -2,7 +2,6 @@
 
 const { SVC_SRC_KEY } = require('../../constants')
 const { createPrivateMap } = require('../../util')
-const DatadogSpan = require('../span')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
@@ -22,6 +21,28 @@ class PublicSpan {
     cache.set(span, this)
   }
 
+  context () {
+    return this._span.context.apply(this._span, arguments)
+  }
+
+  tracer () {
+    return this._span.tracer.apply(this._span, arguments)
+  }
+
+  setOperationName () {
+    this._span.setOperationName.apply(this._span, arguments)
+    return this
+  }
+
+  setBaggageItem () {
+    this._span.setBaggageItem.apply(this._span, arguments)
+    return this
+  }
+
+  getBaggageItem () {
+    return this._span.getBaggageItem.apply(this._span, arguments)
+  }
+
   setTag (key, value) {
     if (key === SERVICE_KEY || key === SERVICE_NAME_KEY) {
       this._span.setTag(SVC_SRC_KEY, 'm')
@@ -37,18 +58,26 @@ class PublicSpan {
     this._span.addTags(tags)
     return this
   }
-}
 
-// Whenever a method needs to be modified to have a unique public behavior, it
-// should be implemented on `PublicSpan` directly so it is skipped here.
-for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
-  if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
-    continue
+  addLink () {
+    return this._span.addLink.apply(this._span, arguments)
   }
-  PublicSpan.prototype[method] = function (...args) {
-    const result = this._span[method].apply(this._span, arguments)
-    // always return wrapper span when the result is the span itself
-    return result === this._span ? this : result
+
+  addLinks () {
+    return this._span.addLinks.apply(this._span, arguments)
+  }
+
+  log () {
+    this._span.log.apply(this._span, arguments)
+    return this
+  }
+
+  logEvent () {
+    return this._span.logEvent.apply(this._span, arguments)
+  }
+
+  finish () {
+    return this._span.finish.apply(this._span, arguments)
   }
 }
 
