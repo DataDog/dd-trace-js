@@ -12,6 +12,26 @@ const mochaBin = path.join(__dirname, '../../../node_modules/mocha/bin/mocha.js'
 const coreSetupPath = path.join(__dirname, 'setup/core.js')
 
 describe('mocha hooks setup', () => {
+  it('suppresses after all errors when a before all in the same suite already failed', async () => {
+    const result = await runFixture(`
+      describe('suite', () => {
+        let resource
+
+        before(() => {
+          throw new Error('setup failed')
+        })
+
+        after(() => {
+          resource.close()
+        })
+
+        it('does something', () => {})
+      })
+    `)
+
+    assert.deepStrictEqual(getFailureMessages(result), ['setup failed'])
+  })
+
   it('suppresses after all errors when a test in the same suite already failed', async () => {
     const result = await runFixture(`
       describe('suite', () => {
@@ -42,6 +62,27 @@ describe('mocha hooks setup', () => {
     `)
 
     assert.deepStrictEqual(getFailureMessages(result), ['test failed'])
+  })
+
+  it('continues running tests after suppressing an after each error', async () => {
+    const result = await runFixture(`
+      describe('suite', () => {
+        afterEach(function () {
+          if (this.currentTest.title === 'fails for the real reason') {
+            throw new Error('cleanup failed')
+          }
+        })
+
+        it('fails for the real reason', () => {
+          throw new Error('test failed')
+        })
+
+        it('still runs', () => {})
+      })
+    `)
+
+    assert.deepStrictEqual(getFailureMessages(result), ['test failed'])
+    assert.deepStrictEqual(getPassTitles(result), ['still runs'])
   })
 
   it('suppresses after each errors when a before each in the same suite already failed', async () => {
@@ -162,4 +203,8 @@ async function execFileMocha (fixture) {
  */
 function getFailureMessages (result) {
   return result.failures.map(failure => failure.err.message)
+}
+
+function getPassTitles (result) {
+  return result.passes.map(pass => pass.title)
 }

@@ -5,7 +5,7 @@
 
 /** @typedef {import('mocha')} Mocha */
 
-const { Runner } = require('mocha')
+const { Hook, Runner } = require('mocha')
 
 const patched = new WeakSet()
 const failedSuites = new WeakSet()
@@ -15,6 +15,7 @@ if (!patched.has(Runner.prototype)) {
   patched.add(Runner.prototype)
 
   const fail = Runner.prototype.fail
+  const runHook = Hook.prototype.run
 
   /**
    * @this {Mocha.Runner}
@@ -27,6 +28,21 @@ if (!patched.has(Runner.prototype)) {
 
     fail.call(this, runnable, err, force)
     markFailed(runnable)
+  }
+
+  /**
+   * @this {Mocha.Hook}
+   * @param {(err?: Error) => void} fn
+   */
+  Hook.prototype.run = function patchedRunHook (fn) {
+    try {
+      return runHook.call(this, (err) => {
+        return fn(err && shouldSuppress(this) ? undefined : err)
+      })
+    } catch (err) {
+      if (shouldSuppress(this)) return fn()
+      throw err
+    }
   }
 }
 
