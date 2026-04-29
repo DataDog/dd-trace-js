@@ -12,6 +12,7 @@ module.exports = {
   net: () => require('../net'),
   url: () => require('../url'),
   vm: () => require('../vm'),
+  zlib: () => require('../zlib'),
   // Non Node.js modules
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
