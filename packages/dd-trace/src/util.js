@@ -2,7 +2,7 @@
 
 const path = require('path')
 
-const createPrivateSymbol = probeCreatePrivateSymbol()
+let createPrivateSymbol = probeCreatePrivateSymbol()
 
 // Attempts to obtain a factory for V8's %CreatePrivateSymbol, a native runtime function that
 // produces a property key invisible to all reflection APIs (Object.getOwnPropertySymbols, Proxy, etc.).
@@ -30,8 +30,17 @@ function probeCreatePrivateSymbol () {
 }
 
 function createPrivateMap (name) {
-  const sym = createPrivateSymbol?.(name)
-  // if craeting a private symbol was uncessful we fallback to a WeakMap
+  let sym
+
+  if (createPrivateSymbol) {
+    try {
+      sym = createPrivateSymbol(name)
+    } catch {
+      createPrivateSymbol = null
+    }
+  }
+
+  // if creating a private symbol was unsuccessful we fallback to a WeakMap
   if (!sym) return new WeakMap()
 
   return {
