@@ -260,6 +260,7 @@
 /packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/log.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/msgpack/ @DataDog/lang-platform-js
+/packages/dd-trace/test/mocha-hooks.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/noop.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/pkg.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/plugin_manager.spec.js @DataDog/lang-platform-js
