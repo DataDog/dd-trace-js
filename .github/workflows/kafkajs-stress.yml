@@ -1,6 +1,7 @@
 name: "[Stress] kafkajs"
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       iterations:
@@ -52,11 +53,11 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
-          version: ${{ inputs.node-version }}
+          version: ${{ inputs.node-version || 'latest' }}
       - uses: ./.github/actions/install
-      - name: Run kafkajs suite ${{ inputs.iterations }} times
+      - name: Run kafkajs suite ${{ inputs.iterations || 100 }} times
         run: |
-          PASS=0; FAIL=0; ITER=${{ inputs.iterations }}
+          PASS=0; FAIL=0; ITER=${{ inputs.iterations || 100 }}
           for i in $(seq 1 "$ITER"); do
             echo "::group::Run $i / $ITER"
             if yarn test:plugins:ci; then
