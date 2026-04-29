@@ -34,6 +34,6 @@ runs:
       run: yarn global add @datadog/datadog-ci@${{ env.DATADOG_CI_VERSION }}
     - if: github.actor != 'dependabot[bot]'
       shell: bash
-      run: datadog-ci junit upload --service dd-trace-js-tests "*.xml"
+      run: datadog-ci junit upload --service dd-trace-js-tests .
       env:
         DD_API_KEY: ${{ inputs.dd_api_key }}
