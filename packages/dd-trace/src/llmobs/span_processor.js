@@ -88,16 +88,19 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
-      this.#writer.append(formattedEvent, routing)
+      const enqueued = this.#writer.append(formattedEvent, routing)
 
       // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
       // gen_ai.* spans, the parent-chain walk stops at any span carrying this
       // tag, preserving this span as the immediate LLMObs parent. Set only
-      // after the writer accepts the event — if format dropped the event,
-      // threw, or the writer threw during JSON.stringify byte-length probing,
-      // leaving this tag off avoids dd-go reparenting OTel children under a
-      // span that has no corresponding LLMObs event.
-      span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
+      // when the writer actually buffered the event — format may have dropped
+      // it (user processor returned null), thrown, or the writer may have
+      // dropped it silently when its buffer is full. Leaving this tag off in
+      // those cases avoids dd-go reparenting OTel children under a span that
+      // has no corresponding LLMObs event.
+      if (enqueued) {
+        span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
+      }
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in

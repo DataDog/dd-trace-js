@@ -373,6 +373,7 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'llm',
       })
 
+      writer.append.returns(true)
       processor.process(span)
 
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
@@ -462,6 +463,29 @@ describe('span processor', () => {
       // simulate writer.append throwing (e.g. JSON.stringify failure in
       // byte-length probing on an unsanitized payload)
       writer.append.throws(new Error('boom'))
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+
+    it('does not mark the apm span when writer.append silently drops (buffer full)', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate writer.append returning false to signal the event was
+      // dropped (e.g. per-routing buffer is full)
+      writer.append.returns(false)
 
       processor.process(span)
 
