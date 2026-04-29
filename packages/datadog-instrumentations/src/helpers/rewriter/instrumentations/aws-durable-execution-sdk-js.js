@@ -130,6 +130,19 @@ const esmEntries = [
     },
     channelName: 'DurableContextImpl_parallel',
   },
+  {
+    module: {
+      name: '@aws/durable-execution-sdk-js',
+      versionRange: '>=1.1.0',
+      filePath: 'dist/index.mjs',
+    },
+    functionQuery: {
+      methodName: 'checkpoint',
+      className: 'CheckpointManager',
+      kind: 'Async',
+    },
+    channelName: 'CheckpointManager_checkpoint',
+  },
 ]
 
 const cjsEntries = esmEntries.map(entry => ({

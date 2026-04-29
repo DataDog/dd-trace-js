@@ -106,9 +106,10 @@ function createMockLambdaContext () {
  * Creates a mock DurableExecutionInvocationInputWithClient event.
  * @param {object} mod - The SDK module
  * @param {MockDurableExecutionClient} mockClient - Mock client instance
+ * @param {Array<object>} [extraOps] - Additional Operations entries (e.g., for replay scenarios)
  * @returns {object} Mock event
  */
-function createMockEvent (mod, mockClient) {
+function createMockEvent (mod, mockClient, extraOps = []) {
   return new mod.DurableExecutionInvocationInputWithClient({
     DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
     CheckpointToken: 'initial-test-token',
@@ -120,7 +121,7 @@ function createMockEvent (mod, mockClient) {
         ExecutionDetails: {
           InputPayload: JSON.stringify({ testInput: true }),
         },
-      }],
+      }, ...extraOps],
     },
   }, mockClient)
 }
@@ -140,11 +141,12 @@ class AwsDurableExecutionSdkJsTestSetup {
    * Invokes the full withDurableExecution flow with a given handler.
    * @param {Function} handlerFn - The durable handler to execute
    * @param {object} [client] - Optional mock client override (defaults to this.mockClient)
+   * @param {Array<object>} [extraOps] - Additional event Operations (for replay)
    * @returns {Promise<object>} The invocation output
    */
-  async _invokeHandler (handlerFn, client) {
+  async _invokeHandler (handlerFn, client, extraOps) {
     const handler = this.mod.withDurableExecution(handlerFn)
-    const event = createMockEvent(this.mod, client || this.mockClient)
+    const event = createMockEvent(this.mod, client || this.mockClient, extraOps)
     const context = createMockLambdaContext()
     return handler(event, context)
   }
@@ -171,6 +173,21 @@ class AwsDurableExecutionSdkJsTestSetup {
     }, client)
   }
 
+  async withDurableExecutionReplay () {
+    // Synthesize a replay invocation by passing >1 Operations entries on the event,
+    // which is the SDK's signal for ReplayMode.
+    const client = new ImmediateCompletionMockClient()
+    const extraOps = [{
+      Id: crypto.createHash('md5').update('1').digest('hex').substring(0, 16),
+      Type: 'STEP',
+      SubType: 'STEP',
+      Status: 'SUCCEEDED',
+      Name: 'prior-step',
+      StepDetails: { Result: JSON.stringify('cached') },
+    }]
+    return this._invokeHandler(async () => ({ status: 'replayed' }), client, extraOps)
+  }
+
   // --- DurableContextImpl.step() operations ---
 
   async durableContextImplStep () {
@@ -189,6 +206,34 @@ class AwsDurableExecutionSdkJsTestSetup {
       }, { retryStrategy: () => ({ shouldRetry: false }) })
       return result
     })
+  }
+
+  async durableContextImplStepWithRetry () {
+    // Step throws an error, retry strategy says retry. The SDK queues a checkpoint
+    // with Action=RETRY carrying the user's error and awaits a retry timer.
+    // The mock keeps the operation PENDING so the SDK suspends (terminationManager
+    // wins the race) instead of looping. The integration's checkpoint plugin sees
+    // the RETRY checkpoint and stamps the user error onto the active step span.
+    const client = {
+      _tokenCounter: 0,
+      async getExecutionState () { return { Operations: [] } },
+      async checkpoint (params) {
+        this._tokenCounter++
+        const ops = (params.Updates || []).map(u => ({
+          Id: u.Id,
+          Type: u.Type || 'STEP',
+          // Keep retry pending so the SDK awaits its timer and suspends.
+          Status: u.Action === 'RETRY' ? 'PENDING' : (u.Action === 'START' ? 'STARTED' : 'SUCCEEDED'),
+          StepDetails: u.Action === 'RETRY' ? { Error: u.Error, NextAttemptTimestamp: Date.now() + 60_000 } : {},
+        }))
+        return { CheckpointToken: `tok-${this._tokenCounter}`, NewExecutionState: { Operations: ops } }
+      },
+    }
+    return this._invokeHandler(async (event, ctx) => {
+      return ctx.step('retry-step', async () => {
+        throw new Error('transient failure')
+      }, { retryStrategy: () => ({ shouldRetry: true, delay: { seconds: 60 } }) })
+    }, client)
   }
 
   // --- DurableContextImpl.invoke() operations ---
@@ -337,6 +382,15 @@ class AwsDurableExecutionSdkJsTestSetup {
     })
   }
 
+  async durableContextImplMapWithSteps () {
+    const client = new ImmediateCompletionMockClient()
+    return this._invokeHandler(async (event, ctx) => {
+      return ctx.map('items', [1, 2], async (mapCtx, item) => {
+        return mapCtx.step(`work-${item}`, async () => item * 2)
+      })
+    }, client)
+  }
+
   // --- DurableContextImpl.parallel() operations ---
 
   async durableContextImplParallel () {
@@ -347,6 +401,16 @@ class AwsDurableExecutionSdkJsTestSetup {
       ])
       return result
     })
+  }
+
+  async durableContextImplParallelWithSteps () {
+    const client = new ImmediateCompletionMockClient()
+    return this._invokeHandler(async (event, ctx) => {
+      return ctx.parallel('fan-out', [
+        async (pCtx) => pCtx.step('a', async () => 'a-result'),
+        async (pCtx) => pCtx.step('b', async () => 'b-result'),
+      ])
+    }, client)
   }
 
   async durableContextImplParallelError () {
