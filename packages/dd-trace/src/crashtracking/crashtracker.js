@@ -70,7 +70,7 @@ class Crashtracker {
   #getConfig (config) {
     const url = getAgentUrl(config)
 
-    // Out-of-process symbolication currently (crashtracker 27.0.0) works on
+    // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
     const resolveMode = require('os').platform === 'linux'
       ? 'EnabledWithSymbolsInReceiver'
