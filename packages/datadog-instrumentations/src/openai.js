@@ -29,13 +29,13 @@ function publishEvaluation (messages) {
  * path because the response body has not been parsed.
  *
  * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
- * @param {Promise<void>} inputEval - Promise for the Before Model evaluation
+ * @param {() => Promise<void>} getInputEval - Lazy starter for the Before Model evaluation
  */
-function wrapAsResponseForAIGuard (apiProm, inputEval) {
+function wrapAsResponseForAIGuard (apiProm, getInputEval) {
   if (typeof apiProm.asResponse === 'function') {
     shimmer.wrap(apiProm, 'asResponse', origAsResponse => function () {
       const responsePromise = origAsResponse.apply(this, arguments)
-      return Promise.all([inputEval, responsePromise]).then(([, response]) => response)
+      return Promise.all([getInputEval(), responsePromise]).then(([, response]) => response)
     })
   }
 }
@@ -53,7 +53,10 @@ function getOutputMessages (baseResource, body) {
     const choices = Array.isArray(body?.choices) ? body.choices : []
     for (const choice of choices) {
       const message = choice?.message
-      if (message?.content != null || message?.tool_calls?.length) {
+      // Include the message when it has content (including empty string), tool_calls,
+      // or a `refusal` field — GPT-4o emits `{content: null, refusal: "..."}` on policy
+      // refusals and AI Guard should still see those.
+      if (message?.content != null || message?.tool_calls?.length || message?.refusal != null) {
         messages.push(message)
       }
     }
@@ -321,7 +324,7 @@ for (const extension of extensions) {
           }
 
           // Compute AI Guard input messages before we start the LLM call so Before Model
-          // evaluation can run in parallel with it.
+          // evaluation can run in parallel with it once the caller awaits the APIPromise.
           let aiguardInputMessages
           if (aiguardApplicable) {
             const callArgs = arguments[0]
@@ -334,19 +337,18 @@ for (const extension of extensions) {
           return ch.start.runStores(ctx, () => {
             const apiProm = methodFn.apply(this, arguments)
 
-            // Kick off AI Guard Before Model evaluation in parallel with the LLM call.
-            // The LLM has no side effects, so it is safe to discard its response if AI Guard blocks.
-            let aiguardInputEval
-            if (aiguardInputMessages) {
-              aiguardInputEval = publishEvaluation(aiguardInputMessages)
-              // Silence the unhandled rejection in the edge case where `.parse()` is never
-              // called; `handleUnwrappedAPIPromise` re-awaits the same promise and propagates
-              // the rejection to the caller when it is.
-              aiguardInputEval.catch(() => {})
-            }
+            // Lazy, memoized Before Model evaluation. The promise is started the first time
+            // any of the wrapped APIPromise methods (`parse`, `_thenUnwrap.parse`, `asResponse`)
+            // is invoked, and re-used by all subsequent observers. This mirrors the Vercel AI
+            // pattern: the input-eval promise is always part of the chain that the caller
+            // awaits, so there is no fire-and-forget rejection to silence.
+            let inputEvalPromise
+            const getInputEval = aiguardInputMessages
+              ? () => (inputEvalPromise ??= publishEvaluation(aiguardInputMessages))
+              : null
 
-            const aiguard = aiguardInputEval
-              ? { baseResource, inputMessages: aiguardInputMessages, inputEval: aiguardInputEval }
+            const aiguard = getInputEval
+              ? { baseResource, inputMessages: aiguardInputMessages, getInputEval }
               : undefined
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
@@ -378,8 +380,8 @@ for (const extension of extensions) {
               return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)
             })
 
-            if (aiguardInputEval) {
-              wrapAsResponseForAIGuard(apiProm, aiguardInputEval)
+            if (getInputEval) {
+              wrapAsResponseForAIGuard(apiProm, getInputEval)
             }
 
             ch.end.publish(ctx)
@@ -417,7 +419,7 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream, aiguard) {
       })
 
       if (!aiguard) return body
-      return aiguard.inputEval
+      return aiguard.getInputEval()
         .then(() => getOutputMessages(aiguard.baseResource, body))
         .then(outputMessages => publishOutputEvaluation(aiguard.baseResource, aiguard.inputMessages, outputMessages))
         .then(() => body)
