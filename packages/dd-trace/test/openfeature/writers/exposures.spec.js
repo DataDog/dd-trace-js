@@ -56,6 +56,7 @@ describe('OpenFeature Exposures Writer', () => {
     clock = sinon.useFakeTimers()
 
     ExposuresWriter = proxyquire('../../../src/openfeature/writers/exposures', {
+      '../../log': log,
       './base': proxyquire('../../../src/openfeature/writers/base', {
         '../../exporters/common/request': request,
         '../../log': log,
@@ -159,14 +160,68 @@ describe('OpenFeature Exposures Writer', () => {
         'Buffer should contain 1 event after flush was triggered by 6th event')
     })
 
-    it('should buffer events when disabled', () => {
-      writer.setEnabled(false) // Disable writer
-
+    it('should buffer events while disabled and drain on enable', () => {
+      writer.setEnabled(false)
       writer.append(exposureEvent)
 
-      assert.strictEqual(writer._buffer?.length, 0) // Event should not be in main buffer
-      assert.strictEqual(writer._pendingEvents?.length, 1) // Should be in pending events
-      assert.strictEqual(writer._pendingEvents[0], exposureEvent)
+      // Pending events stay out of the main buffer until enable.
+      assert.strictEqual(writer._buffer.length, 0)
+
+      writer.setEnabled(true)
+
+      assert.strictEqual(writer._buffer.length, 1)
+      assert.strictEqual(writer._buffer[0], exposureEvent)
+    })
+
+    it('should keep every pending event when count equals the cap', () => {
+      writer.setEnabled(false)
+
+      const cap = 1000
+      const events = []
+      for (let i = 0; i < cap; i++) {
+        events.push({ ...exposureEvent, seq: i })
+      }
+      writer.append(events)
+      writer.setEnabled(true)
+
+      assert.strictEqual(writer._buffer.length, cap)
+      assert.strictEqual(writer.droppedEventCount, 0)
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should drop oldest pending events one past the cap', () => {
+      writer.setEnabled(false)
+
+      const cap = 1000
+      const events = []
+      for (let i = 0; i < cap + 1; i++) {
+        events.push({ ...exposureEvent, seq: i })
+      }
+      writer.append(events)
+      writer.setEnabled(true)
+
+      assert.strictEqual(writer._buffer.length, cap)
+      assert.strictEqual(writer._buffer[0].seq, 1)
+      assert.strictEqual(writer._buffer.at(-1).seq, cap)
+      assert.strictEqual(writer.droppedEventCount, 1)
+      sinon.assert.calledOnce(log.warn)
+      assert.match(format(...log.warn.firstCall.args), /dropped 1 exposure event\(s\) at cap 1000/)
+    })
+
+    it('should throttle the drop warning while still counting every dropped event', () => {
+      writer.setEnabled(false)
+
+      const cap = 1000
+      const events = []
+      for (let i = 0; i < cap + 1; i++) {
+        events.push({ ...exposureEvent, seq: i })
+      }
+      writer.append(events)
+      writer.append({ ...exposureEvent, seq: cap + 1 })
+      writer.append({ ...exposureEvent, seq: cap + 2 })
+
+      assert.strictEqual(writer.droppedEventCount, 3)
+      sinon.assert.calledOnce(log.warn)
     })
   })
 
