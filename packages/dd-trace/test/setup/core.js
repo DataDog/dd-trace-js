@@ -1,5 +1,7 @@
 'use strict'
 
+require('./mocha-hooks')
+
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.
