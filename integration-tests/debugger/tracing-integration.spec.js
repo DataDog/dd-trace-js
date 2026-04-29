@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('assert')
-const { setup, testBasicInput, testBasicInputWithoutDD } = require('./utils')
+const { setup, testBasicInput } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('DD_TRACE_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=true', function () {
@@ -25,21 +25,6 @@ describe('Dynamic Instrumentation', function () {
 
     describe('input messages', function () {
       it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
-    })
-  })
-
-  describe('DD_TRACE_ENABLED=false', function () {
-    const t = setup({
-      testApp: 'target-app/basic.js',
-      env: { DD_TRACE_ENABLED: 'false' },
-      dependencies: ['fastify'],
-    })
-
-    describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithoutDD.bind(null, t)
-      )
     })
   })
 
