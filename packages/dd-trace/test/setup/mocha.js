@@ -15,7 +15,6 @@ require('./core')
 
 const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
-const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
@@ -35,7 +34,11 @@ exports.withNamingSchema = withNamingSchema
 exports.withPeerService = withPeerService
 exports.insertVersionDep = insertVersionDep
 
-const testedPlugins = agent.testedPlugins
+// Lazily load the fake agent. It pre-warms the tracer module graph on require,
+// which would leak global state (instrumentation hooks, URL shims, etc.) into
+// specs that never use it (e.g. packages/dd-trace/test/ritm.spec.js).
+let _agent
+const getAgent = () => (_agent ??= require('../plugins/agent'))
 
 function withNamingSchema (
   spanProducerFn,
@@ -76,7 +79,7 @@ function withNamingSchema (
           this.timeout(25000)
 
           return new Promise((resolve, reject) => {
-            const agentPromise = agent
+            const agentPromise = getAgent()
               .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
@@ -137,7 +140,7 @@ function withNamingSchema (
         this.timeout(15000)
 
         return new Promise((resolve, reject) => {
-          const agentPromise = agent
+          const agentPromise = getAgent()
             .assertSomeTraces(traces => {
               const span = traces[0][0]
               const expectedServiceName = typeof serviceName === 'function'
@@ -204,7 +207,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       )
 
       await Promise.all([
-        agent.assertSomeTraces(traces => {
+        getAgent().assertSomeTraces(traces => {
           const span = traces[0][0]
           assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
           assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
@@ -303,6 +306,7 @@ function withVersions (plugin, modules, range, cb) {
         before(() => {
           // set plugin name and version to later report to test agent regarding tested integrations and their tested
           // range of versions
+          const testedPlugins = getAgent().testedPlugins
           const lastPlugin = testedPlugins.at(-1)
           if (
             !lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== testCase.resolvedVersion
@@ -413,7 +417,7 @@ exports.mochaHooks = {
     process.exit = ORIGINAL_PROCESS_EXIT
   },
   afterEach () {
-    agent.reset()
+    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)

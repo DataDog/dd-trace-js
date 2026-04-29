@@ -13,6 +13,8 @@
     "dependencies:dedupe": "yarn-deduplicate yarn.lock",
     "generate:config:types": "node scripts/generate-config-types.js",
     "verify:config:types": "node scripts/generate-config-types.js --check",
+    "generate:supported-integrations": "node scripts/generate-supported-integrations.js",
+    "verify:supported-integrations": "node scripts/generate-supported-integrations.js --check",
     "type:check": "tsc --noEmit -p tsconfig.dev.json",
     "type:doc:build": "cd docs && yarn && yarn build",
     "type:doc:test": "cd docs && yarn && yarn test",
@@ -108,7 +110,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=18 <27"
+    "node": ">=18 <26"
   },
   "files": [
     "/package.json",
@@ -153,25 +155,25 @@
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
-    "oxc-parser": "^0.126.0"
+    "oxc-parser": "^0.127.0"
   },
   "devDependencies": {
-    "@actions/core": "^3.0.0",
-    "@actions/github": "^9.1.0",
+    "@actions/core": "^3.0.1",
+    "@actions/github": "^9.1.1",
     "@babel/helpers": "^7.29.2",
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^9.39.2",
     "@msgpack/msgpack": "^3.1.3",
-    "@openfeature/core": "^1.8.1",
-    "@openfeature/server-sdk": "~1.20.0",
+    "@openfeature/core": "^1.10.0",
+    "@openfeature/server-sdk": "~1.21.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.106",
     "@types/sinon": "^21.0.1",
-    "axios": "^1.15.0",
+    "axios": "^1.15.2",
     "benchmark": "^2.1.4",
     "body-parser": "^2.2.2",
-    "bun": "1.3.12",
+    "bun": "1.3.13",
     "codeowners-audit": "^2.9.0",
     "eslint": "^9.39.2",
     "eslint-plugin-cypress": "^6.3.1",

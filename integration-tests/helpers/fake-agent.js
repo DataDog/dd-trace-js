@@ -507,6 +507,14 @@ function buildExpressServer (agent) {
     })
   })
 
+  app.post('/v1/logs', (req, res) => {
+    res.status(200).send()
+    agent.emit('otlp-logs', {
+      headers: req.headers,
+      payload: req.body,
+    })
+  })
+
   app.post('/evp_proxy/v2/api/v2/exposures', (req, res) => {
     res.status(200).send()
     agent.emit('exposures', {
