@@ -347,7 +347,6 @@ function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
   // When stdio is 'pipe', stdout/stderr are guaranteed non-null.
   const proc = /** @type {SpawnedProcess} */ (fork(filename, {
     ...options,
-    execArgv: options.execArgv,
     stdio: 'pipe',
   }))
 
@@ -858,6 +857,34 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
+ * Exercise the full `cypress run` pipeline (config loader + setupNodeEvents +
+ * spec resolution) once per matrix job so the first real test doesn't pay an
+ * electron + NYC require-hook cold-start that exceeds the per-test gather window.
+ * `cypress verify` only warms the binary; it leaves the run pipeline cold.
+ *
+ * The non-existent spec pattern makes cypress exit with "No specs found" *after*
+ * loading config and plugins — that's the side-effect we want. The non-zero exit
+ * code is intentionally ignored.
+ *
+ * `NODE_OPTIONS` is cleared because the workflow-level `-r ./ci/init` is relative
+ * to the dd-trace repo root and won't resolve from inside the sandbox. The
+ * coverage harness still prepends its NYC bootstrap via `patchExecOptions`, so
+ * the require-hook cold-start is absorbed here too.
+ *
+ * @param {string} cwd - Sandbox folder where cypress is installed.
+ * @returns {Promise<void>}
+ */
+function warmCypressBinary (cwd) {
+  return new Promise(resolve => {
+    childProcess.exec('./node_modules/.bin/cypress run --spec __ddwarmup_no_match__.cy.js', {
+      cwd,
+      timeout: 80_000,
+      env: { ...process.env, NODE_OPTIONS: '' },
+    }, () => resolve())
+  })
+}
+
+/**
  * @typedef {Record<string, string|undefined>} AdditionalEnvArgs
  */
 
@@ -1111,4 +1138,5 @@ module.exports = {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  warmCypressBinary,
 }

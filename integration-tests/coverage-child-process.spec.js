@@ -152,10 +152,6 @@ process.send('ready')
     assert.match(lcov, /SF:packages\/dd-trace\/src\/id\.js/)
   })
 
-  // Regression: `fork(modulePath, undefined, options)` and `fork(modulePath, options)` must
-  // both preserve the caller's `options.env`. An earlier normalization bug silently dropped
-  // the options when the 2nd positional was nullish, stripping `env` (and everything else)
-  // so callers using that overload shape saw an empty environment in the child.
   it('preserves options.env across both fork overloads', async () => {
     const fixtureDir = path.join(appRoot, 'fork-overload-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -167,9 +163,6 @@ require('node:fs').writeFileSync(${JSON.stringify(outputPath)}, JSON.stringify({
   marker: process.env.FORK_MARKER || null,
   bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
 }))
-// Close the IPC channel so the child exits naturally once its top-level script is done.
-// The bootstrap intentionally no longer \`unref()\`s the channel — doing so broke fork-based
-// worker pools (mocha \`--parallel\`) by letting idle workers die mid-run.
 process.disconnect()
 `)
 
@@ -192,11 +185,6 @@ process.disconnect()
     )
   })
 
-  // Regression: `exec`/`execSync` run the command through `/bin/sh -c`, so our `argv[0] === node`
-  // detection in `patchSpawnOptions` misses them entirely. The mocha integration suite relies on
-  // this path (every `node node_modules/mocha/bin/mocha …` spawn goes through `exec`), so we
-  // overlay `NODE_OPTIONS` unconditionally and rely on the fact that only Node descendants
-  // consume it. Without the patch, the asserts below fail with `bootstrap: false`.
   it('propagates the bootstrap through exec/execSync shell commands', async () => {
     const fixtureDir = path.join(appRoot, 'exec-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -234,11 +222,6 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     )
   })
 
-  // Regression: during sandbox bring-up we patch `execSync` (used by `bun add`, `cp`, etc.), so
-  // `resolveCoverageRoot` gets called with the sandbox folder _before_ dd-trace has been
-  // installed into it. We must NOT cache that miss — otherwise every later lookup (including
-  // the teardown one that locates the sandbox's NYC output) returns the cached miss and falls
-  // back to the repo root, and the sandbox's coverage JSON files are silently orphaned.
   it('probes fresh when a sandbox path has no dd-trace yet', async () => {
     const sandbox = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-late-install-'))
     try {
@@ -261,9 +244,6 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     }
   })
 
-  // Regression: the bootstrap must not force fork'd children to exit early. An earlier
-  // attempt called `process.channel?.unref()` + `process.once('disconnect', process.exit)`,
-  // which yanked idle workers out of mocha's `--parallel` pool mid-run.
   it('keeps fork children alive while the parent holds the IPC channel', async () => {
     const fixtureDir = path.join(appRoot, 'idle-fork-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -287,10 +267,6 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     }
   })
 
-  // Windows `proc.kill('SIGTERM')` is forceful and skips nyc's exit hook, so the bootstrap
-  // listens for an IPC sentinel from `helpers#stopProc` to flush coverage gracefully. On
-  // POSIX the listener is intentionally absent (any `message` listener refs the IPC channel
-  // and keeps mocha `--parallel` workers alive after their pool is drained).
   const ifWin32 = process.platform === 'win32' ? it : it.skip
   ifWin32('flushes coverage when the parent sends FLUSH_SIGNAL_KEY (Windows only)', async () => {
     const fixtureDir = path.join(appRoot, 'flush-fixtures')
@@ -310,9 +286,6 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     }
   })
 
-  // Regression: the Windows flush listener must not keep short-lived fork'd fixtures alive.
-  // `unrefCounted` is what allows the bootstrap to register a `message` handler without
-  // blocking natural exit; dropping it stranded every profiler/SSI fixture on Windows.
   ifWin32('does not keep listener-free fork children alive (Windows only)', async () => {
     const fixtureDir = path.join(appRoot, 'short-lived-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -332,8 +305,6 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     }
   })
 
-  // Debugger-worker style: caller strips NODE_OPTIONS to block foreign `-r` hooks. The bootstrap
-  // re-adds only its own `-r`, so NYC reaches the worker without leaking customer preloads.
   it('injects only the coverage bootstrap into Worker NODE_OPTIONS, not customer `-r`', async () => {
     const fixtureDir = path.join(appRoot, 'worker-env-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -381,10 +352,6 @@ w.once('exit', code => process.exit(code))
     )
   })
 
-  // Jest-worker style: caller creates `new Worker(..., { workerData, ... })` with no `env`
-  // option. Node inherits the parent's `process.env` automatically — the patch must NOT step
-  // in and replace it with a stripped `{ NODE_OPTIONS: bootstrap }` (which would lose
-  // `-r dd-trace/ci/init` and any other parent env variables the worker needs).
   it('leaves Worker env untouched when the caller did not set options.env', async () => {
     const fixtureDir = path.join(appRoot, 'worker-inherit-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -423,11 +390,6 @@ w.once('exit', code => process.exit(code))
       `worker must inherit full parent NODE_OPTIONS (got: ${workerEnv.nodeOptions})`)
   })
 
-  // Regression: the bootstrap used to assign `process.env.NYC_CWD = coverageRoot`. nyc's
-  // `register-env.js` propagates `NYC_CWD` to every grandchild, so this leaked into any
-  // nested `nyc` CLI in a fixture (e.g. mocha fixtures calling `nyc --all`). Those nested
-  // instances then `guessCWD()`'d our sandbox root and globbed for sources in the wrong
-  // place, reporting zero coverage and breaking `nyc --all` fixture tests.
   it('does not inject NYC_CWD — nested nyc CLIs would misuse it', async () => {
     const fixtureDir = path.join(appRoot, 'nyc-cwd-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -456,10 +418,6 @@ w.once('exit', code => process.exit(code))
     )
   })
 
-  // Regression: tests whose semantics depend on child startup latency (e.g. DI's Inspector
-  // breakpoint race) must be able to opt their children out. Setting `DISABLE_ENV` on the
-  // child env must strip `NODE_OPTIONS=-r child-bootstrap.js` and any inherited ROOT_ENV so
-  // the child runs without nyc instrumentation.
   it('honors the per-spawn opt-out env var', async () => {
     const fixtureDir = path.join(appRoot, 'disable-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
@@ -488,10 +446,6 @@ w.once('exit', code => process.exit(code))
     )
   })
 
-  // Matrix combinations can legitimately filter every spec at runtime (e.g. cucumber's
-  // `NODE_MAJOR`/`version` guard). `merge-lcov.js` drops a `.skipped` sentinel when it
-  // finds no sandboxes, and `verify-coverage.js` honors it so CI jobs with 0 specs don't
-  // fail on "non-empty lcov required".
   it('treats a .skipped sentinel as a no-op coverage report', async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-skip-'))
     try {
@@ -512,9 +466,6 @@ w.once('exit', code => process.exit(code))
     }
   })
 
-  // Two `*:coverage` runs in the same checkout must not clobber each other's scratch dirs
-  // or final reports. Everything per-run is keyed on `npm_lifecycle_event` (both the
-  // collector root and the merged report dir) so a single env var change isolates them.
   it('isolates collector and report paths per npm_lifecycle_event', () => {
     const originalEvent = process.env.npm_lifecycle_event
     const originalCollector = process.env._DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR
@@ -543,8 +494,6 @@ w.once('exit', code => process.exit(code))
 })
 
 describe('integration coverage last-exit handler', () => {
-  // Patches `process.on`/`addListener`/`prependListener` globally; restore them around the
-  // test to keep the rest of the suite unaffected.
   let originals
 
   beforeEach(() => {
