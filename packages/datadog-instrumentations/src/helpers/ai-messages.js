@@ -247,7 +247,7 @@ function openAIResponseContentToMessageContent (content) {
       typeof part.text === 'string') {
       parts.push({ type: 'text', text: part.text })
     } else if (part.type === 'input_image' || part.type === 'image_url') {
-      const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url || part.url
+      const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url ?? part.url
       if (url) {
         hasImages = true
         parts.push({ type: 'image_url', image_url: { url } })
