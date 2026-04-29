@@ -73,11 +73,7 @@ temporaryWarningExceptions.add = (warning) => {
 // `'warning'` event sees it, so real leaks still throw below.
 const originalEmitWarning = process.emitWarning
 process.emitWarning = function patchedEmitWarning (warning, ...args) {
-  if (
-    typeof warning === 'object' &&
-    warning?.name === 'MaxListenersExceededWarning' &&
-    isNodeHttpSocketLeak(warning)
-  ) {
+  if (warning?.name === 'MaxListenersExceededWarning' && isNodeHttpSocketLeak(warning)) {
     warning.emitter.setMaxListeners(0)
     return
   }
