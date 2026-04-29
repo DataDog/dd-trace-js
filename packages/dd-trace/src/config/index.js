@@ -131,7 +131,13 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     }
     changeTracker[source].add(name)
   } else {
-    const copy = typeof value === 'object' && value !== null ? rfdc(value) : value
+    // Programmatic-only options (e.g. logger, lookup, plugins) have no row in
+    // `configurationsTable` and hold opaque user-supplied references that may
+    // carry cycles or non-plain prototypes — for example a winston Logger
+    // extends a Transform stream. Use a reference for these instead of cloning.
+    const copy = typeof value === 'object' && value !== null && name in configurationsTable
+      ? rfdc(value)
+      : value
     changeTracker.baseValuesByPath[name] = { value: copy, source }
   }
   set(config, name, value)
