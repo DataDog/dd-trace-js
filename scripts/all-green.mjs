@@ -45,25 +45,35 @@ const conclusionSeverity = {
 let retries = 0
 let hasRerun = false
 
-async function hasCompleted () {
-  const { data: inProgressRuns } = await octokit.rest.checks.listForRef({
-    ...params,
-    per_page: 1, // Minimum is 1 but we don't need any pages.
-    status: 'in_progress',
-  })
+// Cache of {etag, totalCount} per check status. GitHub returns 304 Not Modified
+// for unchanged responses when If-None-Match matches, and those don't count
+// against the rate limit.
+const checkCountCache = new Map()
 
+async function getCheckCount (status) {
+  const cached = checkCountCache.get(status)
+  try {
+    const { data, headers } = await octokit.rest.checks.listForRef({
+      ...params,
+      per_page: 1, // Minimum is 1 but we don't need any pages.
+      status,
+      headers: cached ? { 'if-none-match': cached.etag } : {},
+    })
+    checkCountCache.set(status, { etag: headers.etag, totalCount: data.total_count })
+    return data.total_count
+  } catch (err) {
+    if (err.status === 304 && cached) return cached.totalCount
+    throw err
+  }
+}
+
+async function hasCompleted () {
   // If there are any in progress runs it means we're not ready to check
   // statuses. We will always have minimum 1 for the All Green job.
-  if (inProgressRuns.total_count > 1) return false
-
-  const { data: queuedRuns } = await octokit.rest.checks.listForRef({
-    ...params,
-    per_page: 1, // Minimum is 1 but we don't need any pages.
-    status: 'queued',
-  })
+  if (await getCheckCount('in_progress') > 1) return false
 
   // Same as above, but jobs that are queued are not even in progress yet.
-  if (queuedRuns.total_count > 0) return false
+  if (await getCheckCount('queued') > 0) return false
 
   return true
 }
