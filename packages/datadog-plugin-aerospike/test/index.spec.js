@@ -51,7 +51,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          aerospike?.releaseEventLoop()
+          aerospike.releaseEventLoop()
         })
 
         describe('client', () => {
@@ -306,7 +306,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          aerospike?.releaseEventLoop()
+          aerospike.releaseEventLoop()
         })
 
         it('should be configured with the correct values', done => {
