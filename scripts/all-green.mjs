@@ -18,7 +18,6 @@ const owner = 'DataDog'
 const repo = 'dd-trace-js'
 const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
 const params = { owner, repo, ref }
-const isPullRequest = Boolean(context.payload.pull_request)
 
 const conclusionEmojis = {
   action_required: '🔶',
@@ -156,13 +155,6 @@ function bySeverity (a, b) {
 }
 
 async function printSummary () {
-  await (isPullRequest ? printWorkflowSummary() : printJobSummary())
-}
-
-async function printWorkflowSummary () {
-  // PRs get a workflow-level summary: one row per workflow run, with a link
-  // back to the run page. This is much smaller than the per-job table and
-  // avoids the paginated check-runs fetch entirely.
   const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
     owner,
     repo,
@@ -183,6 +175,8 @@ async function printWorkflowSummary () {
       url: run.html_url,
     }))
 
+  // console.table can't render HTML, so the raw URL goes here as its own
+  // column. The GitHub Actions summary below renders the name as a link.
   console.table(runs)
 
   const header = [
@@ -203,56 +197,6 @@ async function printWorkflowSummary () {
 
   await summary
     .addHeading('Workflows Summary')
-    .addTable([header, ...body])
-    .write()
-}
-
-async function printJobSummary () {
-  const checkRuns = await octokit.paginate(
-    'GET /repos/:owner/:repo/commits/:ref/check-runs',
-    { ...params, app_id: githubActionsAppId, per_page: 100 }
-  )
-
-  // When a check is re-run, older runs remain with their original conclusions.
-  // Deduplicate by name and evaluate only the latest run for each check.
-  const latestByName = new Map()
-  for (const run of checkRuns) {
-    const existing = latestByName.get(run.name)
-    if (!existing || new Date(run.started_at) >= new Date(existing.started_at)) {
-      latestByName.set(run.name, run)
-    }
-  }
-
-  const runs = [...latestByName.values()]
-    .sort(bySeverity)
-    .map(run => ({
-      name: run.name,
-      status: run.status,
-      conclusion: formatConclusion(run.conclusion),
-      started_at: run.started_at,
-      completed_at: run.completed_at ?? ' ',
-    }))
-
-  console.table(runs)
-
-  const header = [
-    { data: 'name', header: true },
-    { data: 'status', header: true },
-    { data: 'conclusion', header: true },
-    { data: 'started_at', header: true },
-    { data: 'completed_at', header: true },
-  ]
-
-  const body = runs.map(run => [
-    run.name,
-    run.status,
-    run.conclusion,
-    run.started_at,
-    run.completed_at,
-  ])
-
-  await summary
-    .addHeading('Checks Summary')
     .addTable([header, ...body])
     .write()
 }
