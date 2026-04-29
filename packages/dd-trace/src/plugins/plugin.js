@@ -33,21 +33,16 @@ class Subscription {
         handler(message, name)
       }
     }
-    this._enabled = false
   }
 
   enable () {
-    if (this._enabled) return
     // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.subscribe(event, handler)` instead
     this._channel.subscribe(this._handler)
-    this._enabled = true
   }
 
   disable () {
-    if (!this._enabled) return
     // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.unsubscribe(event, handler)` instead
     this._channel.unsubscribe(this._handler)
-    this._enabled = false
   }
 }
 
@@ -72,7 +67,7 @@ class StoreBinding {
   }
 }
 
-class Plugin {
+module.exports = class Plugin {
   /**
    * Create a new plugin instance.
    *
@@ -131,9 +126,7 @@ class Plugin {
         this.configure(false)
       }
     }
-    const sub = new Subscription(channelName, wrappedHandler)
-    this._subscriptions.push(sub)
-    return sub
+    this._subscriptions.push(new Subscription(channelName, wrappedHandler))
   }
 
   /**
@@ -198,5 +191,3 @@ class Plugin {
     }
   }
 }
-
-module.exports = Plugin
