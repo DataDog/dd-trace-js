@@ -19,7 +19,7 @@ describe('Plugin', () => {
 
   describe('rhea', function () {
     before(() => {
-      agent.load('rhea')
+      return agent.load('rhea')
     })
 
     after(() => agent.close({ ritmReset: false }))

@@ -201,6 +201,9 @@
 /packages/dd-trace/test/tracer.spec.js @DataDog/apm-sdk-capabilities-js
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
+/scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities-js
+/supported_versions_output.json @DataDog/apm-sdk-capabilities-js
+/supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
 /integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
@@ -210,6 +213,7 @@
 # CI
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
+/.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
 /.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js

@@ -78,7 +78,6 @@ module.exports = {
   setup,
   setupAssertionListeners,
   testBasicInput,
-  testBasicInputWithoutDD,
   testBasicInputWithoutRC,
 }
 
@@ -340,24 +339,6 @@ function setupAssertionListeners (t, done, probe) {
     t.agent.removeListener('message', messageListener)
     done()
   }
-}
-
-/**
- * Test helper for basic input messages without DD tracing integration.
- *
- * @param {DebuggerTestEnvironment} t - The test environment.
- * @param {Function} done - The mocha done callback.
- */
-function testBasicInputWithoutDD (t, done) {
-  t.triggerBreakpoint()
-
-  t.agent.on('debugger-input', ({ payload }) => {
-    assertBasicInputPayload(t, payload)
-    assert.ok(!('dd' in payload[0]))
-    done()
-  })
-
-  t.agent.addRemoteConfig(t.rcConfig)
 }
 
 /**
