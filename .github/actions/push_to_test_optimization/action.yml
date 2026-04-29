@@ -14,17 +14,22 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ github.action_path }}/node_modules
+        key: push-to-test-optimization-${{ hashFiles('.github/actions/push_to_test_optimization/package.json') }}
+    - if: github.actor != 'dependabot[bot]'
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
       with:
         node-version: '20'
-        cache: 'yarn'
-        cache-dependency-path: .github/actions/push_to_test_optimization/package.json
     - if: github.actor != 'dependabot[bot]'
       shell: bash
-      run: yarn install --no-lockfile
+      run: |
+        yarn install --no-lockfile
+        echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
       working-directory: ${{ github.action_path }}
     - if: github.actor != 'dependabot[bot]'
       shell: bash
-      run: ${{ github.action_path }}/node_modules/.bin/datadog-ci junit upload --service dd-trace-js-tests .
+      run: datadog-ci junit upload --service dd-trace-js-tests .
       env:
         DD_API_KEY: ${{ inputs.dd_api_key }}
