@@ -252,6 +252,11 @@ class LLMObsSpanProcessor {
     add(obj, carrier)
   }
 
+  /**
+   * Gets a normalized Datadog metadata object for storing internal metadata.
+   * @param {Record<string, unknown>} metadata
+   * @returns {Record<string, unknown>} normalized `metadata._dd` object
+   */
   #getDdMetadata (metadata) {
     if (!metadata._dd || typeof metadata._dd !== 'object' || Array.isArray(metadata._dd)) {
       metadata._dd = {}
