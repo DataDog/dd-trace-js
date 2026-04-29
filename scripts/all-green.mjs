@@ -155,7 +155,7 @@ async function printSummary () {
 
   const checkRuns = await octokit.paginate(
     'GET /repos/:owner/:repo/commits/:ref/check-runs',
-    { ...params, per_page: 100 }
+    { ...params, app_id: githubActionsAppId, per_page: 100 }
   )
 
   // When a check is re-run, older runs remain with their original conclusions.
