@@ -189,6 +189,8 @@ describe('Plugin', () => {
             const topicBOut = `topic-b-out-${randomUUID()}`
 
             await admin.createTopics({
+              waitForLeaders: true,
+              timeout: 30000,
               topics: [topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
                 topic,
                 numPartitions: 1,
