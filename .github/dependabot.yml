@@ -127,6 +127,9 @@ updates:
       - dependency-name: "meriyah"
         # 7.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "@rspack/*"
+        # 2.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
     groups:
       vendor-minor-and-patch-dependencies:
         dependency-type: "production"

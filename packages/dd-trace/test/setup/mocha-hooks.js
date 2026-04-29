@@ -1,128 +1,96 @@
 'use strict'
 
-// Drop afterAll/afterEach errors when an earlier runnable in the same suite already
-// failed, so mocha reports the original cause instead of a teardown error masking it.
+// Drop afterAll/afterEach errors when an earlier runnable in the same test or suite already failed,
+// so mocha reports the original cause instead of a teardown error masking it.
 
 /** @typedef {import('mocha')} Mocha */
-/**
- * Structural view of `Mocha.Suite` exposing the private hook arrays we need to
- * inspect; the runtime object is still a real `Mocha.Suite`.
- *
- * @typedef {object} Suite
- * @property {Mocha.Hook[]} [_beforeAll]
- * @property {Mocha.Hook[]} [_beforeEach]
- * @property {Mocha.Hook[]} [_afterEach]
- * @property {Mocha.Test[]} [tests]
- */
-/** @typedef {(suite: Suite, ctx: Mocha.Context) => boolean} ShouldSuppress */
-/** @typedef {Mocha.Func | Mocha.AsyncFunc} HookFn */
 
-const { Suite: MochaSuite } = require('mocha')
+const { Hook, Runner } = require('mocha')
 
 const patched = new WeakSet()
-if (!patched.has(MochaSuite.prototype)) {
-  patched.add(MochaSuite.prototype)
-  patchAfter('afterAll', shouldSuppressAfterAll)
-  patchAfter('afterEach', shouldSuppressAfterEach)
-}
+const failedSuites = new WeakSet()
+const failedTests = new WeakSet()
 
-/** @type {ShouldSuppress} */
-function shouldSuppressAfterAll (suite) {
-  return anyFailed(suite._beforeAll) ||
-    anyFailed(suite._beforeEach) ||
-    anyFailed(suite._afterEach) ||
-    anyFailed(suite.tests)
-}
+if (!patched.has(Runner.prototype)) {
+  patched.add(Runner.prototype)
 
-/** @type {ShouldSuppress} */
-function shouldSuppressAfterEach (suite, ctx) {
-  return ctx.currentTest?.isFailed() === true || anyFailed(suite._beforeEach)
-}
+  const fail = Runner.prototype.fail
+  const runHook = Hook.prototype.run
 
-/** @param {Mocha.Runnable[] | undefined} runnables */
-function anyFailed (runnables) {
-  if (!Array.isArray(runnables)) return false
-  for (const r of runnables) if (r?.isFailed?.()) return true
-  return false
-}
-
-/**
- * @param {unknown} value
- * @returns {value is PromiseLike<unknown>}
- */
-function isThenable (value) {
-  return typeof value?.then === 'function'
-}
-
-/**
- * @param {'afterAll'|'afterEach'} method
- * @param {ShouldSuppress} shouldSuppress
- */
-function patchAfter (method, shouldSuppress) {
-  const proto = /** @type {Record<string, (title: string | HookFn, fn?: HookFn) => Mocha.Suite>} */ (
-    /** @type {unknown} */ (MochaSuite.prototype)
-  )
-  const original = proto[method]
   /**
-   * @this {Mocha.Suite}
-   * @param {string | HookFn} title
-   * @param {HookFn} [fn]
+   * @this {Mocha.Runner}
+   * @param {Mocha.Runnable} runnable
+   * @param {Error} err
+   * @param {boolean} [force]
    */
-  proto[method] = function patchedAfter (title, fn) {
-    if (typeof title === 'function') {
-      fn = title
-      title = title.name
-    }
-    const suite = /** @type {Suite} */ (/** @type {unknown} */ (this))
-    if (typeof fn !== 'function') return original.call(this, title, fn)
-    return original.call(this, title, wrapAfter(fn, suite, shouldSuppress))
-  }
-}
+  Runner.prototype.fail = function patchedFail (runnable, err, force) {
+    if (shouldSuppress(runnable)) return
 
-/**
- * @param {HookFn} fn
- * @param {Suite} suite
- * @param {ShouldSuppress} shouldSuppress
- * @returns {HookFn}
- */
-function wrapAfter (fn, suite, shouldSuppress) {
-  // Preserve `fn.length` so mocha picks the right execution path (`this.async = fn && fn.length`).
-  if (fn.length === 0) {
-    /** @this {Mocha.Context} */
-    return function wrappedAfter () {
-      let result
-      try {
-        result = (/** @type {Mocha.AsyncFunc} */ (fn)).call(this)
-      } catch (err) {
-        if (shouldSuppress(suite, this)) return
-        throw err
-      }
-      if (isThenable(result)) {
-        return Promise.resolve(result).then(undefined, (err) => {
-          if (shouldSuppress(suite, this)) return
-          throw err
-        })
-      }
-      return result
-    }
+    fail.call(this, runnable, err, force)
+    markFailed(runnable)
   }
 
   /**
-   * @this {Mocha.Context}
-   * @param {Mocha.Done} done
+   * @this {Mocha.Hook}
+   * @param {(err?: Error) => void} fn
    */
-  return function wrappedAfter (done) {
-    let result
+  Hook.prototype.run = function patchedRunHook (fn) {
     try {
-      result = (/** @type {Mocha.Func} */ (fn)).call(this, (err) => {
-        if (err && shouldSuppress(suite, this)) return done()
-        return done(err)
+      return runHook.call(this, (err) => {
+        return fn(err && shouldSuppress(this) ? undefined : err)
       })
     } catch (err) {
-      if (shouldSuppress(suite, this)) return done()
+      if (shouldSuppress(this)) return fn()
       throw err
     }
-    // Returned for mocha's overspecification detection (callback + Promise return).
-    return result
   }
+}
+
+/** @param {Mocha.Runnable} runnable */
+function markFailed (runnable) {
+  const test = currentTest(runnable)
+  if (test) failedTests.add(test)
+
+  let suite = runnable.parent
+  while (suite) {
+    failedSuites.add(suite)
+    suite = suite.parent
+  }
+}
+
+/**
+ * @param {Mocha.Runnable} runnable
+ * @returns {boolean}
+ */
+function shouldSuppress (runnable) {
+  if (isAfterEach(runnable)) {
+    const test = currentTest(runnable)
+    return test ? failedTests.has(test) : false
+  }
+
+  return isAfterAll(runnable) && failedSuites.has(runnable.parent)
+}
+
+/**
+ * @param {Mocha.Runnable} runnable
+ * @returns {Mocha.Test | undefined}
+ */
+function currentTest (runnable) {
+  return runnable.type === 'test' ? runnable : runnable.ctx?.currentTest
+}
+
+/**
+ * @param {Mocha.Runnable} runnable
+ * @returns {boolean}
+ */
+function isAfterAll (runnable) {
+  return runnable.type === 'hook' && runnable.title.startsWith('"after all" hook')
+}
+
+/**
+ * @param {Mocha.Runnable} runnable
+ * @returns {boolean}
+ */
+function isAfterEach (runnable) {
+  return runnable.type === 'hook' && runnable.title.startsWith('"after each" hook')
 }
