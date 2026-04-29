@@ -14,6 +14,7 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   METADATA,
+  COST_TAGS,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -117,8 +118,13 @@ class LLMObsSpanProcessor {
       meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
     }
 
-    if (mlObsTags[METADATA]) {
-      this.#addObject(mlObsTags[METADATA], meta.metadata = {})
+    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS]) {
+      const metadata = {}
+      if (mlObsTags[METADATA]) this.#addObject(mlObsTags[METADATA], metadata)
+      if (mlObsTags[COST_TAGS]) {
+        this.#getDdMetadata(metadata).cost_tags = [...mlObsTags[COST_TAGS]]
+      }
+      meta.metadata = metadata
     }
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
@@ -244,6 +250,16 @@ class LLMObsSpanProcessor {
     }
 
     add(obj, carrier)
+  }
+
+  #getDdMetadata (metadata) {
+    const ddMetadata = {}
+    const currentDdMetadata = metadata._dd
+    if (currentDdMetadata && typeof currentDdMetadata === 'object' && !Array.isArray(currentDdMetadata)) {
+      this.#addObject(currentDdMetadata, ddMetadata)
+    }
+    metadata._dd = ddMetadata
+    return ddMetadata
   }
 
   #getTags (span, mlApp, sessionId, error) {

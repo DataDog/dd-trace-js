@@ -7,9 +7,10 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE, TAGS } = require('./constants/tags')
 const {
   getFunctionArguments,
+  validateCostTags,
   validateKind,
 } = require('./util')
 const { storage } = require('./storage')
@@ -245,7 +246,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -267,6 +268,11 @@ class LLMObs extends NoopLLMObs {
       }
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
+      }
+      if (costTags != null) {
+        const spanTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
+        const validatedCostTags = validateCostTags(span, costTags, 'annotate', spanTags)
+        if (validatedCostTags.length) this._tagger.tagCostTags(span, validatedCostTags)
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)

@@ -6,6 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
+const { storage } = require('../../src/llmobs/storage')
 
 function unserializableObject () {
   const obj = {}
@@ -19,7 +20,7 @@ describe('tagger', () => {
   let Tagger
   let tagger
   let logger
-  let util
+  let validateCostTags
 
   beforeEach(() => {
     spanContext = {
@@ -34,17 +35,15 @@ describe('tagger', () => {
       },
     }
 
-    util = {
-      generateTraceId: sinon.stub().returns('0123'),
-    }
-
     logger = {
       warn: sinon.stub(),
     }
 
+    validateCostTags = sinon.stub().returns([])
+
     Tagger = proxyquire('../../src/llmobs/tagger', {
       '../log': logger,
-      './util': util,
+      './util': { validateCostTags },
     })
   })
 
@@ -172,6 +171,55 @@ describe('tagger', () => {
         assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-propagated-ml-app')
       })
 
+      it('applies annotation context cost tags at span start', () => {
+        validateCostTags.returns(['team', 'feature'])
+
+        storage.run({
+          annotationContext: {
+            tags: { team: 'ml', feature: 'chatbot' },
+            costTags: ['team', 'feature'],
+          },
+        }, () => {
+          tagger.registerLLMObsSpan(span, { kind: 'llm', modelProvider: 'openai' })
+        })
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'my-default-ml-app',
+          '_ml_obs.meta.model_provider': 'openai',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml', feature: 'chatbot' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+        })
+        sinon.assert.calledOnceWithExactly(
+          validateCostTags,
+          span,
+          ['team', 'feature'],
+          'annotation_context',
+          { team: 'ml', feature: 'chatbot' }
+        )
+      })
+
+      it('ignores null annotation context cost tags', () => {
+        storage.run({
+          annotationContext: {
+            tags: { team: 'ml' },
+            costTags: null,
+          },
+        }, () => {
+          tagger.registerLLMObsSpan(span, { kind: 'llm', modelProvider: 'openai' })
+        })
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'my-default-ml-app',
+          '_ml_obs.meta.model_provider': 'openai',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+        sinon.assert.notCalled(validateCostTags)
+      })
+
       describe('with no global mlApp configured', () => {
         beforeEach(() => {
           tagger = new Tagger({ llmobs: { enabled: true } })
@@ -277,6 +325,41 @@ describe('tagger', () => {
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.tags': { a: 2, b: 1 },
         })
+      })
+    })
+
+    describe('tagCostTags', () => {
+      it('sets validated cost tags', () => {
+        tagger._register(span)
+
+        tagger.tagCostTags(span, ['team', 'feature'])
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+        })
+      })
+
+      it('dedupes cost tags across annotations', () => {
+        Tagger.tagMap.set(span, {
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+        })
+
+        tagger.tagCostTags(span, ['team', 'feature', 'team'])
+        tagger.tagCostTags(span, ['feature', 'project'])
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], [
+          'team',
+          'feature',
+          'project',
+        ])
+      })
+
+      it('does not set cost tags for an empty list', () => {
+        tagger._register(span)
+
+        tagger.tagCostTags(span, [])
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], undefined)
       })
     })
 

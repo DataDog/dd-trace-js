@@ -12,6 +12,7 @@ const {
   INPUT_DOCUMENTS,
   OUTPUT_VALUE,
   METADATA,
+  COST_TAGS,
   METRICS,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
@@ -41,6 +42,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { validateCostTags } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -119,6 +121,14 @@ class LLMObsTagger {
     // apply annotation context tags
     const tags = annotationContext?.tags
     if (tags) this.tagSpanTags(span, tags)
+
+    // apply after tags so only keys present at span start are accepted.
+    const costTags = annotationContext?.costTags
+    if (costTags != null) {
+      const spanTags = registry.get(span)?.[TAGS] || {}
+      const validatedCostTags = validateCostTags(span, costTags, 'annotation_context', spanTags)
+      if (validatedCostTags.length) this.tagCostTags(span, validatedCostTags)
+    }
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
@@ -222,6 +232,26 @@ class LLMObsTagger {
       Object.assign(currentTags, tags)
     } else {
       this._setTag(span, TAGS, tags)
+    }
+  }
+
+  /**
+   * Tags pre-validated cost tag keys on an LLMObs span.
+   * @param {import('../opentracing/span')} span
+   * @param {string[]} costTags
+   */
+  tagCostTags (span, costTags) {
+    if (!costTags.length) return
+
+    const currentCostTags = registry.get(span)?.[COST_TAGS]
+    if (currentCostTags) {
+      for (const costTag of costTags) {
+        if (!currentCostTags.includes(costTag)) {
+          currentCostTags.push(costTag)
+        }
+      }
+    } else {
+      this._setTag(span, COST_TAGS, [...costTags])
     }
   }
 

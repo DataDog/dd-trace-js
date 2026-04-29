@@ -7,6 +7,7 @@ module.exports = {
   DECORATOR: '_ml_obs.decorator',
   INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
+  COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
   METRICS: '_ml_obs.metrics',
   ML_APP: '_ml_obs.meta.ml_app',
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
