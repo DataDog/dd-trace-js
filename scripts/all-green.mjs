@@ -13,13 +13,13 @@ const {
   RETRIES,
 } = process.env
 
-const maxRerunFailedJobs = 3
-
 const octokit = new Octokit({ auth: GITHUB_TOKEN })
 const owner = 'DataDog'
 const repo = 'dd-trace-js'
 const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
 const params = { owner, repo, ref }
+const isPullRequest = Boolean(context.payload.pull_request)
+
 const conclusionEmojis = {
   action_required: '🔶',
   cancelled: '🚫',
@@ -42,64 +42,117 @@ const conclusionSeverity = {
   success: 7,
 }
 
+const failureConclusions = new Set(['failure', 'timed_out'])
+
 let retries = 0
 let hasRerun = false
 
-// Cache of {etag, totalCount} per check status. GitHub returns 304 Not Modified
-// for unchanged responses when If-None-Match matches, and those don't count
-// against the rate limit.
-const checkCountCache = new Map()
+// ETag cache for the check-suite poll. GitHub returns 304 Not Modified when
+// the response is unchanged, and 304 responses don't count against the rate
+// limit.
+let suitesCache
 
-async function getCheckCount (status) {
-  const cached = checkCountCache.get(status)
+async function getActiveSuites () {
   try {
-    const { data, headers } = await octokit.rest.checks.listForRef({
+    const { data, headers } = await octokit.rest.checks.listSuitesForRef({
       ...params,
-      per_page: 1, // Minimum is 1 but we don't need any pages.
-      status,
-      headers: cached ? { 'if-none-match': cached.etag } : {},
+      per_page: 100,
+      headers: suitesCache ? { 'if-none-match': suitesCache.etag } : {},
     })
-    checkCountCache.set(status, { etag: headers.etag, totalCount: data.total_count })
-    return data.total_count
+    // Drop ghost suites: apps installed on the repo that produced no runs for
+    // this commit. They never reach 'completed' and would hang the loop.
+    const suites = data.check_suites.filter(s => s.latest_check_runs_count > 0)
+    suitesCache = { etag: headers.etag, suites }
+    return suites
   } catch (err) {
-    if (err.status === 304 && cached) return cached.totalCount
+    if (err.status === 304 && suitesCache) return suitesCache.suites
     throw err
   }
 }
 
-async function hasCompleted () {
-  // If there are any in progress runs it means we're not ready to check
-  // statuses. We will always have minimum 1 for the All Green job.
-  if (await getCheckCount('in_progress') > 1) return false
+async function pollUntilDone () {
+  const suites = await getActiveSuites()
+  // The All Green workflow is itself a suite that stays non-completed while
+  // this script runs, so we treat completion as "at most one pending suite".
+  const pending = suites.filter(s => s.status !== 'completed').length
+  if (pending <= 1) return suites
 
-  // Same as above, but jobs that are queued are not even in progress yet.
-  if (await getCheckCount('queued') > 0) return false
+  retries++
 
-  return true
-}
-
-async function checkCompleted () {
-  if (!await hasCompleted()) {
-    retries++
-
-    if (RETRIES && retries > RETRIES) {
-      throw new Error(`State is still pending after ${RETRIES} retries.`)
-    }
-
-    console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
-    await setTimeout(POLLING_INTERVAL * 60_000)
-    console.log('Retrying.')
-    await checkCompleted()
+  if (RETRIES && retries > RETRIES) {
+    throw new Error(`State is still pending after ${RETRIES} retries.`)
   }
+
+  console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
+  await setTimeout(POLLING_INTERVAL * 60_000)
+  console.log('Retrying.')
+  return pollUntilDone()
 }
 
-async function getLatestRuns () {
+async function getFailedWorkflowRuns () {
+  const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
+    owner,
+    repo,
+    head_sha: ref,
+    per_page: 100,
+  })
+  return data.workflow_runs.filter(r => failureConclusions.has(r.conclusion))
+}
+
+async function rerunFailedWorkflows (workflowRuns) {
+  await Promise.all(
+    workflowRuns.map(workflowRun => {
+      console.log(`Rerunning failed jobs for workflow run ${workflowRun.id} (${workflowRun.name}).`)
+      return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
+    })
+  )
+}
+
+async function checkAllGreen () {
+  let suites
+  try {
+    suites = await pollUntilDone()
+  } catch (err) {
+    await printSummary()
+    throw err
+  }
+
+  const anyFailed = suites.some(s => failureConclusions.has(s.conclusion))
+
+  if (!anyFailed) {
+    await printSummary()
+    console.log('All jobs were successful.')
+    return
+  }
+
+  if (!hasRerun) {
+    hasRerun = true
+    const failedRuns = await getFailedWorkflowRuns()
+    if (failedRuns.length > 0) {
+      console.log(`${failedRuns.length} workflow run(s) failed. Rerunning failed jobs...`)
+      await rerunFailedWorkflows(failedRuns)
+      retries = 0
+      suitesCache = undefined
+      console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling for rerun results.`)
+      await setTimeout(POLLING_INTERVAL * 60_000)
+      await checkAllGreen()
+      return
+    }
+  }
+
+  await printSummary()
+  throw new Error('One or more jobs failed.')
+}
+
+async function printSummary () {
+  // The summary is only useful for master pushes / scheduled runs, where it
+  // surfaces in the workflow run page. PRs already have GitHub's own checks
+  // UI, so we skip the paginated check-runs fetch entirely.
+  if (isPullRequest) return
+
   const checkRuns = await octokit.paginate(
     'GET /repos/:owner/:repo/commits/:ref/check-runs',
-    {
-      ...params,
-      per_page: 100,
-    }
+    { ...params, per_page: 100 }
   )
 
   // When a check is re-run, older runs remain with their original conclusions.
@@ -112,88 +165,7 @@ async function getLatestRuns () {
     }
   }
 
-  return [...latestByName.values()]
-}
-
-async function rerunFailedWorkflows (failedRuns) {
-  const failedCountByCheckSuiteId = new Map()
-  for (const run of failedRuns) {
-    const id = run.check_suite?.id
-    if (id !== undefined) {
-      failedCountByCheckSuiteId.set(id, (failedCountByCheckSuiteId.get(id) ?? 0) + 1)
-    }
-  }
-
-  const eligibleSuiteIds = [...failedCountByCheckSuiteId.entries()]
-    .filter(([, count]) => count <= maxRerunFailedJobs)
-    .map(([id]) => id)
-
-  // If a workflow has many jobs failed, it's unlikely to be flakiness to no
-  // point in re-running.
-  if (eligibleSuiteIds.length < failedCountByCheckSuiteId.size) {
-    console.log(
-      `Skipping rerun for ${failedCountByCheckSuiteId.size - eligibleSuiteIds.length} workflow(s) ` +
-      `with more than ${maxRerunFailedJobs} failed job(s).`
-    )
-  }
-
-  const workflowRunsPerSuite = await Promise.all(
-    eligibleSuiteIds.map(checkSuiteId =>
-      octokit.rest.actions.listWorkflowRunsForRepo({ owner, repo, check_suite_id: checkSuiteId })
-        .then(({ data }) => data.workflow_runs)
-    )
-  )
-
-  const workflowRuns = workflowRunsPerSuite.flat()
-
-  await Promise.all(
-    workflowRuns.map(workflowRun => {
-      console.log(`Rerunning failed jobs for workflow run ${workflowRun.id} (${workflowRun.name}).`)
-      return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
-    })
-  )
-
-  return workflowRuns.length > 0
-}
-
-async function checkAllGreen () {
-  let latestRuns
-
-  try {
-    await checkCompleted()
-  } finally {
-    latestRuns = await getLatestRuns()
-  }
-
-  const failedRuns = latestRuns.filter(run =>
-    run.conclusion === 'failure' || run.conclusion === 'timed_out'
-  )
-
-  if (failedRuns.length === 0) {
-    await printSummary(latestRuns)
-    console.log('All jobs were successful.')
-    return
-  }
-
-  if (!hasRerun) {
-    hasRerun = true
-    console.log(`${failedRuns.length} job(s) failed. Rerunning failed workflows...`)
-    const didRerun = await rerunFailedWorkflows(failedRuns)
-    if (didRerun) {
-      retries = 0
-      console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling for rerun results.`)
-      await setTimeout(POLLING_INTERVAL * 60_000)
-      await checkAllGreen()
-      return
-    }
-  }
-
-  await printSummary(latestRuns)
-  throw new Error('One or more jobs failed.')
-}
-
-async function printSummary (checkRuns) {
-  const runs = [...checkRuns]
+  const runs = [...latestByName.values()]
     .sort((a, b) => (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8))
     .map(run => ({
       name: run.name,
