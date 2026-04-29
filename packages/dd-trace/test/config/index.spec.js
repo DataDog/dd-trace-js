@@ -310,13 +310,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should use proxy when dynamic instrumentation is enabled with DD_TRACE_ENABLED=false', () => {
-    process.env.DD_TRACE_ENABLED = 'false'
+  it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
+    assert.strictEqual(config.apmTracingEnabled, false)
     assert.strictEqual(config.dynamicInstrumentation.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
@@ -325,13 +325,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  it('should use proxy when dynamic instrumentation is enabled with DD_TRACING_ENABLED=false', () => {
+  it('should keep the real proxy when dynamic instrumentation is enabled with DD_TRACING_ENABLED=false', () => {
     process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
+    assert.strictEqual(config.apmTracingEnabled, false)
     assert.strictEqual(config.dynamicInstrumentation.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
@@ -340,19 +340,28 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  it('should use proxy when appsec standalone is enabled with DD_TRACE_ENABLED=false', () => {
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+  it('should keep the real proxy when appsec is enabled with DD_APM_TRACING_ENABLED=false', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'false'
+    process.env.DD_APPSEC_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
     assert.strictEqual(config.apmTracingEnabled, false)
+    assert.strictEqual(config.appsec.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should prefer DD_APM_TRACING_ENABLED over DD_TRACING_ENABLED alias', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'true'
+    process.env.DD_TRACING_ENABLED = 'false'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.apmTracingEnabled, true)
   })
 
   it('should prefer DD propagation style over OTEL propagators', () => {
@@ -1356,7 +1365,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config, {
-      tracing: false,
+      apmTracingEnabled: false,
       tracePropagationExtractFirst: true,
       runtimeMetrics: {
         enabled: false,
