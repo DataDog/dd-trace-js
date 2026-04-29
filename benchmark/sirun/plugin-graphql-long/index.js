@@ -22,7 +22,7 @@ if (process.env.WITH_ASYNC_HOOKS) {
 }
 
 const graphql = require('../../../versions/graphql').get()
-const schema = require('../plugin-graphql/schema')
+const schema = require('./schema')
 
 const source = `
 {
