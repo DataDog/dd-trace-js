@@ -214,7 +214,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
           })
 
           afterEach(async () => {
@@ -300,7 +300,6 @@ describe('Plugin', () => {
 
             })
 
-            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {
                 throw fakeError
