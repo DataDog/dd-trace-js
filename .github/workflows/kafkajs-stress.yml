@@ -1,0 +1,71 @@
+name: "[Stress] kafkajs"
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Number of times to run the full kafkajs test suite"
+        required: false
+        default: "100"
+        type: string
+      node-version:
+        description: "Node.js version (oldest, latest, or a specific version)"
+        required: false
+        default: "latest"
+        type: string
+
+jobs:
+  kafkajs-stress:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      kafka:
+        image: apache/kafka:3.9.1
+        env:
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_NODE_ID: "1"
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_CLUSTER_ID: r4zt_wrqTRuT7W2NJsB_GA
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+        ports:
+          - 9092:9092
+          - 9093:9093
+        options: >-
+          --health-cmd "nc -z localhost 9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PLUGINS: kafkajs
+      SERVICES: kafka
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ inputs.node-version }}
+      - uses: ./.github/actions/install
+      - name: Run kafkajs suite ${{ inputs.iterations }} times
+        run: |
+          PASS=0; FAIL=0; ITER=${{ inputs.iterations }}
+          for i in $(seq 1 "$ITER"); do
+            echo "::group::Run $i / $ITER"
+            if yarn test:plugins:ci; then
+              PASS=$((PASS + 1))
+            else
+              FAIL=$((FAIL + 1))
+            fi
+            echo "::endgroup::"
+            echo "After run $i: passed=$PASS failed=$FAIL"
+          done
+          echo "## kafkajs stress results: $PASS/$ITER passed, $FAIL failed" >> "$GITHUB_STEP_SUMMARY"
+          [ "$FAIL" -eq 0 ]
