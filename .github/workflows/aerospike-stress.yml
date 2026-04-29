@@ -1,0 +1,60 @@
+name: "[Stress] aerospike"
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      iterations-per-shard:
+        description: "Suite runs per shard (20 shards run in parallel, total = 20 × this)"
+        required: false
+        default: "5"
+        type: string
+
+jobs:
+  aerospike-stress:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        include:
+          - node-version: eol
+            aerospike-image: ce-5.7.0.15
+            range: ">=4.0.0 <5.2.0"
+            test-image: ubuntu-22.04
+    runs-on: ${{ matrix.test-image }}
+    permissions:
+      id-token: write
+    services:
+      aerospike:
+        image: aerospike:${{ matrix.aerospike-image }}
+        ports:
+          - "127.0.0.1:3000-3002:3000-3002"
+    env:
+      PLUGINS: aerospike
+      SERVICES: aerospike
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - run: yarn config set ignore-engines true
+      - uses: ./.github/actions/install
+      - name: "Shard ${{ matrix.shard }}: run aerospike suite ${{ inputs.iterations-per-shard || 5 }} times"
+        run: |
+          PASS=0; FAIL=0; ITER=${{ inputs.iterations-per-shard || 5 }}
+          for i in $(seq 1 "$ITER"); do
+            echo "::group::Shard ${{ matrix.shard }} run $i / $ITER"
+            if yarn test:plugins:ci; then
+              PASS=$((PASS + 1))
+            else
+              FAIL=$((FAIL + 1))
+            fi
+            echo "::endgroup::"
+            echo "After run $i: passed=$PASS failed=$FAIL"
+          done
+          echo "## Shard ${{ matrix.shard }}: $PASS/$ITER passed, $FAIL failed" >> "$GITHUB_STEP_SUMMARY"
+          [ "$FAIL" -eq 0 ]
