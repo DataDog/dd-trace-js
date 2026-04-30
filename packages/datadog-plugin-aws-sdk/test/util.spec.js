@@ -5,7 +5,14 @@ const { Buffer } = require('node:buffer')
 
 const { describe, it } = require('mocha')
 
-const { generatePointerHash, encodeValue, extractPrimaryKeys, extractQueueMetadata } = require('../src/util')
+const {
+  encodeValue,
+  extractPrimaryKeys,
+  extractQueueMetadata,
+  generatePointerHash,
+  hasAtLeast,
+  isEmpty,
+} = require('../src/util')
 
 describe('generatePointerHash', () => {
   describe('should generate a valid hash for S3 object with', () => {
@@ -349,5 +356,52 @@ describe('extractQueueMetadata', () => {
         arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue',
       })
     })
+  })
+})
+
+describe('isEmpty', () => {
+  it('returns true for an empty plain object', () => {
+    assert.strictEqual(isEmpty({}), true)
+  })
+
+  it('returns false when an own key exists', () => {
+    assert.strictEqual(isEmpty({ a: 1 }), false)
+  })
+
+  it('returns true for an empty null-prototype object', () => {
+    assert.strictEqual(isEmpty(Object.create(null)), true)
+  })
+
+  it('returns false when an own key sits on top of a non-empty prototype chain', () => {
+    assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
+  })
+
+  it('returns false when only inherited enumerable keys exist', () => {
+    // `for-in` walks the prototype chain, so inherited enumerable string keys make this return
+    // `false` even with no own keys. AWS SDK callers feed in plain `params` objects, so this
+    // never bites in practice; pinning current behaviour to keep the contract explicit.
+    assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+  })
+})
+
+describe('hasAtLeast', () => {
+  it('returns false for an empty object', () => {
+    assert.strictEqual(hasAtLeast({}, 1), false)
+  })
+
+  it('returns true when a single own key meets n=1', () => {
+    assert.strictEqual(hasAtLeast({ a: 1 }, 1), true)
+  })
+
+  it('returns false when n exceeds the own-key count', () => {
+    assert.strictEqual(hasAtLeast({ a: 1 }, 2), false)
+  })
+
+  it('returns true when the own-key count exactly matches n', () => {
+    assert.strictEqual(hasAtLeast({ a: 1, b: 2, c: 3, d: 4 }, 4), true)
+  })
+
+  it('returns false when the own-key count is one short of n', () => {
+    assert.strictEqual(hasAtLeast({ a: 1, b: 2, c: 3 }, 4), false)
   })
 })

@@ -8,9 +8,50 @@ const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payloa
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
+const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
+
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'
   static isPayloadReporter = false
+
+  /**
+   * Append `"<key>": <JSON.stringify(value)>` to a JSON-encoded object
+   * payload without re-parsing when possible.
+   *
+   * Fast path: `payload` is `{}` (returns `{"<key>":<json>}`) or ends with
+   * `}` preceded by a non-whitespace, non-`{` byte and does not contain
+   * `"<key>"` anywhere. The new field is spliced in before the trailing
+   * brace.
+   *
+   * Slow path falls back to `JSON.parse` + assign + `JSON.stringify` so the
+   * result still matches the previous round-trip when the payload has
+   * whitespace before the trailing `}`, is not a JSON object, or already
+   * contains `key`. The slow path replaces an existing `key` rather than
+   * merging — callers that need to preserve nested fields under `key` must
+   * read and merge before calling.
+   *
+   * @param {string} payload
+   * @param {string} key   Top-level key to insert. Must be a simple
+   *   identifier that does not need JSON escaping.
+   * @param {object} value Value to inject; will be `JSON.stringify`'d.
+   * @returns {string}
+   */
+  static injectFieldIntoJsonObject (payload, key, value) {
+    const last = payload.length - 1
+    if (last >= 1 && payload[last] === '}') {
+      if (last === 1) {
+        return `{"${key}":${JSON.stringify(value)}}`
+      }
+      const before = payload.charCodeAt(last - 1)
+      const isWhitespace = before === 0x20 || before === 0x09 || before === 0x0A || before === 0x0D
+      if (!isWhitespace && before !== 0x7B /* { */ && !payload.includes(`"${key}"`)) {
+        return `${payload.slice(0, last)},"${key}":${JSON.stringify(value)}}`
+      }
+    }
+    const obj = JSON.parse(payload)
+    obj[key] = value
+    return JSON.stringify(obj)
+  }
 
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()
@@ -224,12 +265,14 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   }
 
   extractResponseBody (response) {
-    if (response.hasOwnProperty('data')) {
+    if (Object.hasOwn(response, 'data')) {
       return response.data
     }
-    return Object.fromEntries(
-      Object.entries(response).filter(([key]) => !['request', 'requestId', 'error', '$metadata'].includes(key))
-    )
+    const body = { ...response }
+    for (const key of RESPONSE_SKIP_KEYS) {
+      delete body[key]
+    }
+    return body
   }
 
   generateTags () {
