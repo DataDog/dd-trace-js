@@ -1136,6 +1136,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
+        const activeSpanTags = this.activeTestSpan.context()._tags
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
@@ -1216,8 +1217,8 @@ class CypressPlugin {
             testName,
             status: testStatus,
             error,
-            isDisabled: isDisabledFromSupport,
-            isQuarantined: isQuarantinedFromSupport,
+            isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+            isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
@@ -1250,13 +1251,12 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
-        const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
-          isQuarantined: isQuarantinedFromSupport,
+          isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           isModified,
           isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })

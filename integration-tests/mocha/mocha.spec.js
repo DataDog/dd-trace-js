@@ -4396,6 +4396,77 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         })
 
+      onlyLatestIt('omits final status on intermediate attempt to fix hook failures', async () => {
+        const NUM_RETRIES = 3
+        const testName = 'attempt to fix tests with failing afterEach ' +
+          'can attempt to fix a test whose afterEach fails before the last attempt'
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-with-failing-after-each.js': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const retriedTests = events.filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.strictEqual(retriedTests.length, 2)
+
+            const finalStatusTests = retriedTests.filter(test => TEST_FINAL_STATUS in test.meta)
+            assert.strictEqual(finalStatusTests.length, 0)
+
+            retriedTests.forEach((test, index) => {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+              if (index === 1) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              }
+
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+            })
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './test-management/test-attempt-to-fix-with-failing-after-each.js',
+              ]),
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 1)
+      })
+
       onlyLatestIt('ignores disabled when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({

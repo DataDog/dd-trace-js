@@ -458,7 +458,7 @@ function getOnHookEndHandler () {
   }
 }
 
-function getOnFailHandler (isMain) {
+function getOnFailHandler (isMain, config) {
   return function (testOrHook, err) {
     const testFile = testOrHook.file
     let test = testOrHook
@@ -475,7 +475,21 @@ function getOnFailHandler (isMain) {
         err.message = `${testOrHook.fullTitle()}: ${err.message}`
         testContext.err = err
         errorCh.runStores(testContext, () => {})
+        let hasFailedAllRetries = false
+        let attemptToFixFailed = false
+        let isAttemptToFixRetry = false
+        // if it's a hook and it has failed, 'test end' will not be called
+        const isSkippedByManagement = !test._ddIsAttemptToFix && (test._ddIsQuarantined || test._ddIsDisabled)
+        let finalStatus = isSkippedByManagement ? 'skip' : 'fail'
         if (test?._ddIsAttemptToFix) {
+          const testName = getTestFullName(test)
+          let testStatuses = testsStatuses.get(testName)
+          if (testStatuses) {
+            testStatuses.push('fail')
+          } else {
+            testStatuses = ['fail']
+            testsStatuses.set(testName, testStatuses)
+          }
           recordAttemptToFixExecution(attemptToFixExecutions, {
             testSuite: getTestSuitePath(test.file, process.cwd()),
             testName: test.fullTitle(),
@@ -484,14 +498,34 @@ function getOnFailHandler (isMain) {
             isDisabled: test._ddIsDisabled,
             isQuarantined: test._ddIsQuarantined,
           })
+
+          const isLastAttemptToFix = testStatuses.length === config.testManagementAttemptToFixRetries + 1
+          hasFailedAllRetries = isLastAttemptToFix && testStatuses.every(status => status === 'fail')
+          attemptToFixFailed = isLastAttemptToFix && testStatuses.includes('fail')
+          isAttemptToFixRetry = testStatuses.length > 1
+          finalStatus = getFinalStatus({
+            status: 'fail',
+            hasFailedAllRetries,
+            isFlakyTestRetriesEnabled: config.isFlakyTestRetriesEnabled,
+            isLastAtrAttempt: false,
+            isEfdRetry: false,
+            isLastEfdRetry: false,
+            isAttemptToFix: true,
+            isLastAttemptToFix,
+            attemptToFixPassed: false,
+            isQuarantined: test._ddIsQuarantined,
+            isDisabled: test._ddIsDisabled,
+          })
         }
-        // if it's a hook and it has failed, 'test end' will not be called
-        const isSkippedByManagement = !test._ddIsAttemptToFix && (test._ddIsQuarantined || test._ddIsDisabled)
         testFinishCh.publish({
           status: 'fail',
           hasBeenRetried: isMochaRetry(test),
+          hasFailedAllRetries,
+          attemptToFixPassed: false,
+          attemptToFixFailed,
+          isAttemptToFixRetry,
           ...testContext.currentStore,
-          finalStatus: isSkippedByManagement ? 'skip' : 'fail',
+          finalStatus,
         })
       } else {
         testContext.err = err

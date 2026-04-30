@@ -493,6 +493,18 @@ moduleTypes.forEach(({
             if (isQuarantined || isDisabled) {
               assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
             }
+            if (isQuarantined) {
+              assert.match(
+                stdout,
+                /Test was marked as quarantined but was not quarantined because it is attempt to fix\./
+              )
+            }
+            if (isDisabled) {
+              assert.match(
+                stdout,
+                /Test was marked as disabled but was run because it is attempt to fix\./
+              )
+            }
           }
 
           if (shouldAlwaysPass) {

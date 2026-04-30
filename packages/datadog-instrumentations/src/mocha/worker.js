@@ -86,7 +86,7 @@ addHook({
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())
 
-    this.on('fail', getOnFailHandler(false))
+    this.on('fail', getOnFailHandler(false, config))
 
     this.on('pending', getOnPendingHandler())
 
