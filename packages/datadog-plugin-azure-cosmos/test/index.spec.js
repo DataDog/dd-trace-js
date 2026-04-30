@@ -111,7 +111,6 @@ describe('Plugin', () => {
         const expectedSpanPromise = agent.assertSomeTraces(
           traces => {
             const allSpans = traces.filter(Array.isArray).flat()
-
             const conflictCreate = allSpans.find(
               s =>
                 s?.resource === 'create /dbs/testDatabase/colls/testContainer/docs' &&

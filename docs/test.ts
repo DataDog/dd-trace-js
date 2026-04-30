@@ -654,8 +654,8 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
 })
 
 // wrap a function
-llmobs.wrap({ kind: 'llm' }, function myLLM() {})()
-llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() {})()
+llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
 // export a span
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })

@@ -33,9 +33,12 @@ class AzureCosmosPlugin extends DatabasePlugin {
   error (ctx) {
     if (!ctx.span) return
     const span = ctx.currentStore?.span
-    const error = ctx.error
-    if (error?.code) span.setTag('http.status_code', error.code)
-    if (error?.substatus) span.setTag('http.status_subcode', error.substatus)
+    if (span) {
+      const error = ctx.error
+      this.addError(error, span)
+      if (error?.code) span.setTag('http.status_code', error.code)
+      if (error?.substatus) span.setTag('http.status_subcode', error.substatus)
+    }
   }
 
   bindStart (ctx) {
