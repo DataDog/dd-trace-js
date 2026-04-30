@@ -366,6 +366,46 @@ describe('Plugin', () => {
         })
       })
 
+      // Regression for APMS-19318: DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+      // must strip the `-pubsub` suffix from consumer-side spans. The pull-consumer
+      // and push-subscription plugins formerly hardcoded the suffix and ignored the
+      // flag; this asserts the plugin-level branch on shouldUseConsistentServiceNaming.
+      describe('with DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', () => {
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', { dsmEnabled: false }, {
+            spanRemoveIntegrationFromService: true,
+            flushMinSpans: 1,
+          })
+        })
+
+        beforeEach(() => {
+          tracer = require('../../dd-trace')
+          const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          topicName = getTopic()
+          resource = `projects/${project}/topics/${topicName}`
+          pubsub = new lib.PubSub({ projectId: project })
+        })
+
+        it('uses the host service name (no -pubsub suffix) on consumer spans', async () => {
+          const expectedSpanPromise = expectSpanWithDefaults({
+            name: expectedSchema.receive.opName,
+            service: 'test',
+            type: 'worker',
+            meta: {
+              component: 'google-cloud-pubsub',
+              'span.kind': 'consumer',
+              'pubsub.topic': resource,
+            },
+          })
+          const [topic] = await pubsub.createTopic(topicName)
+          const [sub] = await topic.createSubscription('foo')
+          sub.on('message', msg => msg.ack())
+          await publish(topic, { data: Buffer.from('hello') })
+          return expectedSpanPromise
+        })
+      })
+
       describe('data stream monitoring', () => {
         let dsmTopic
         let sub
