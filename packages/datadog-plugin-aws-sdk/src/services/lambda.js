@@ -18,32 +18,40 @@ class Lambda extends BaseAwsSdkPlugin {
 
   requestInject (span, request) {
     const operation = request.operation
-    if (operation === 'invoke') {
-      if (!request.params) {
-        request.params = {}
-      }
+    if (operation !== 'invoke') return
 
-      const isSyncInvocation = !request.params.InvocationType ||
-        request.params.InvocationType === 'RequestResponse'
+    if (!request.params) {
+      request.params = {}
+    }
 
-      if (isSyncInvocation) {
-        try {
-          // Check to see if there's already a config on the request
-          let clientContext = {}
-          if (request.params.ClientContext) {
-            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
-            clientContext = JSON.parse(clientContextJson)
-          }
-          if (!clientContext.custom) {
-            clientContext.custom = {}
-          }
-          this.tracer.inject(span, 'text_map', clientContext.custom)
-          const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
-          request.params.ClientContext = newContextBase64
-        } catch (err) {
-          log.error('Lambda error injecting request', err)
+    const isSyncInvocation = !request.params.InvocationType ||
+      request.params.InvocationType === 'RequestResponse'
+    if (!isSyncInvocation) return
+
+    try {
+      const injected = {}
+      this.tracer.inject(span, 'text_map', injected)
+
+      let newContextJson
+      if (request.params.ClientContext) {
+        const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
+        // When no `custom` field is present we can splice via the shared
+        // helper. Otherwise parse and merge so existing customer keys
+        // under `custom` survive the round-trip.
+        if (clientContextJson.includes('"custom"')) {
+          const clientContext = JSON.parse(clientContextJson)
+          if (!clientContext.custom) clientContext.custom = {}
+          Object.assign(clientContext.custom, injected)
+          newContextJson = JSON.stringify(clientContext)
+        } else {
+          newContextJson = BaseAwsSdkPlugin.injectFieldIntoJsonObject(clientContextJson, 'custom', injected)
         }
+      } else {
+        newContextJson = `{"custom":${JSON.stringify(injected)}}`
       }
+      request.params.ClientContext = Buffer.from(newContextJson).toString('base64')
+    } catch (error) {
+      log.error('Lambda error injecting request', error)
     }
   }
 

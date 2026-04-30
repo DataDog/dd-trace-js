@@ -2,6 +2,7 @@
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+const { hasAtLeast, isEmpty } = require('../util')
 
 class Sns extends BaseAwsSdkPlugin {
   static id = 'sns'
@@ -14,12 +15,10 @@ class Sns extends BaseAwsSdkPlugin {
     if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
     const TopicArn = params.TopicArn || response.data.TopicArn
 
-    // Split the ARN into its parts
-    // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
-    const arnParts = TopicArn.split(':')
-
-    // Get the topic name from the last part of the ARN
-    const topicName = arnParts.at(-1)
+    // Get the topic name from the last `:`-delimited segment of the ARN
+    // (e.g. 'my-topic' in 'arn:aws:sns:us-east-1:123456789012:my-topic')
+    // without allocating an intermediate parts array.
+    const topicName = TopicArn.slice(TopicArn.lastIndexOf(':') + 1)
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
@@ -75,7 +74,7 @@ class Sns extends BaseAwsSdkPlugin {
   injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
-    } else if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
+    } else if (hasAtLeast(params.MessageAttributes, 10)) { // SNS quota
       log.info('Message attributes full, skipping trace context injection')
       return
     }
@@ -103,12 +102,14 @@ class Sns extends BaseAwsSdkPlugin {
       DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
     }
 
-    if (Object.keys(ddInfo).length !== 0) {
+    if (isEmpty(ddInfo)) {
+      if (params.MessageAttributes._datadog) {
+        // let's avoid adding any additional information to payload if we failed to inject
+        delete params.MessageAttributes._datadog
+      }
+    } else {
       // BINARY types are automatically base64 encoded
       params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
-    } else if (params.MessageAttributes._datadog) {
-      // let's avoid adding any additional information to payload if we failed to inject
-      delete params.MessageAttributes._datadog
     }
   }
 
