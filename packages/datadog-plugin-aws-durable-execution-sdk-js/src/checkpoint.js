@@ -16,6 +16,13 @@ const { storage } = require('../../datadog-core')
  *
  * The seam is `checkpoint(...)` itself: at call time the active span (set by
  * the step plugin's bindStart) is the step we want to annotate.
+ *
+ * The span is finished on `:asyncEnd` rather than `:start` so that the AWS SDK
+ * call made inside `checkpoint(...)` is fully contained within the step span;
+ * finishing on `:start` would close the step span before its child
+ * `aws.request` (`checkpointDurableExecution`) span has even begun. asyncEnd
+ * still fires before the SDK's subsequent `await waitForRetryTimer`, so it
+ * runs ahead of the suspension race the original eager-finish was guarding.
  */
 class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -25,15 +32,16 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
 
     this.addSub(
       'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint:start',
-      (ctx) => this._onCheckpointStart(ctx?.arguments)
+      (ctx) => this._onCheckpointStart(ctx)
+    )
+    this.addSub(
+      'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint:asyncEnd',
+      (ctx) => this._onCheckpointAsyncEnd(ctx)
     )
   }
 
-  /**
-   * @param {ArrayLike<unknown>} args - the call arguments to CheckpointManager.checkpoint
-   */
-  _onCheckpointStart (args) {
-    const data = args?.[1]
+  _onCheckpointStart (ctx) {
+    const data = ctx?.arguments?.[1]
     if (!data || data.Action !== 'RETRY' || !data.Error) return
 
     const span = storage('legacy').getStore()?.span
@@ -51,11 +59,13 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
     if (type) span.setTag('error.type', type)
     if (stack) span.setTag('error.stack', stack)
 
-    // The step's DurablePromise will not settle if the workflow suspends after this
-    // retry checkpoint (terminationManager wins the race against waitForRetryTimer),
-    // so the step plugin's asyncEnd never fires. Finish the span here to avoid a
-    // dangling op span. If the retry resolves in-process and asyncEnd later finishes
-    // the span again, dd-trace tolerates the double-finish.
+    ctx._ddRetryStepSpan = span
+  }
+
+  _onCheckpointAsyncEnd (ctx) {
+    const span = ctx?._ddRetryStepSpan
+    if (!span) return
+    ctx._ddRetryStepSpan = undefined
     span.finish()
   }
 }
