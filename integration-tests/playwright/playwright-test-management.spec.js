@@ -15,6 +15,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -287,6 +288,34 @@ versions.forEach((version) => {
                   assert.strictEqual(testsMarkedAsFailedAllRetries, 1)
                   assert.strictEqual(testsMarkedAsFailed, 1)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
+                }
+
+                // Exactly one ATF run must have TEST_FINAL_STATUS (whichever worker finishes last);
+                // all others must not. We avoid sorting by start time because parallel workers make
+                // wall-clock order non-deterministic.
+                for (const testName of [
+                  'attempt to fix should attempt to fix failed test',
+                  'attempt to fix should attempt to fix passed test',
+                ]) {
+                  let expectedFinalStatus
+                  if (isDisabled || isQuarantined) {
+                    expectedFinalStatus = 'skip'
+                  } else if (shouldAlwaysPass ||
+                    testName === 'attempt to fix should attempt to fix passed test') {
+                    expectedFinalStatus = 'pass'
+                  } else {
+                    expectedFinalStatus = 'fail'
+                  }
+
+                  const group = attemptedToFixTests.filter(t => t.meta[TEST_NAME] === testName)
+                  const finalRuns = group.filter(t => TEST_FINAL_STATUS in t.meta)
+                  assert.strictEqual(finalRuns.length, 1,
+                    `Exactly one ATF run of "${testName}" should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+                  assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], expectedFinalStatus,
+                    `Expected TEST_FINAL_STATUS="${expectedFinalStatus}" for ATF run of "${testName}"`)
+                  const nonFinalRuns = group.filter(t => !(TEST_FINAL_STATUS in t.meta))
+                  assert.strictEqual(nonFinalRuns.length, group.length - 1,
+                    `All other ATF runs of "${testName}" should not have TEST_FINAL_STATUS`)
                 }
               } else {
                 assert.strictEqual(countAttemptToFixTests, 0)

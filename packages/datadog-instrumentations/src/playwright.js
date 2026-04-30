@@ -121,11 +121,11 @@ function getSuiteType (test, type) {
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
-function deepCloneSuite (suite, filterTest, tags = []) {
+function deepCloneSuite (suite, filterTest, tags = [], isLastRetry = false) {
   const copy = suite._clone()
   for (const entry of suite._entries) {
     if (entry.constructor.name === 'Suite') {
-      copy._addSuite(deepCloneSuite(entry, filterTest, tags))
+      copy._addSuite(deepCloneSuite(entry, filterTest, tags, isLastRetry))
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
@@ -135,6 +135,9 @@ function deepCloneSuite (suite, filterTest, tags = []) {
           if (resolvedTag) {
             copiedTest[resolvedTag] = true
           }
+        }
+        if (isLastRetry) {
+          copiedTest._ddIsLastEfdRetry = true
         }
         copy._addTest(copiedTest)
       }
@@ -290,6 +293,32 @@ function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
 
+function computeFinalStatus ({
+  isFinalExecution,
+  isDisabled,
+  isQuarantined,
+  isAtrRetry,
+  isEfdRetry,
+  isAttemptToFix,
+  hasFailedAllRetries,
+  hasFailedAttemptToFixRetries,
+  testStatus,
+}) {
+  if (!isFinalExecution) {
+    return undefined
+  }
+  if (isDisabled || isQuarantined) {
+    return 'skip'
+  }
+  if (isAtrRetry || isEfdRetry) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isAttemptToFix) {
+    return hasFailedAttemptToFixRetries ? 'fail' : 'pass'
+  }
+  return testStatus
+}
+
 function getTestFullname (test) {
   let parent = test.parent
   const names = [test.title]
@@ -435,6 +464,19 @@ function testEndHandler ({
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
+
+    const finalStatus = computeFinalStatus({
+      isFinalExecution: !testWillRetry(test, testStatus),
+      isDisabled: test._ddIsDisabled,
+      isQuarantined: test._ddIsQuarantined,
+      isAtrRetry,
+      isEfdRetry: test._ddIsEfdRetry,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      testStatus,
+    })
+
     // if there is no testCtx, the skipped test will be created later
     if (testCtx) {
       testFinishCh.publish({
@@ -454,6 +496,7 @@ function testEndHandler ({
         hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
         isAtrRetry,
         isModified: test._ddIsModified,
+        finalStatus,
         ...testCtx.currentStore,
       })
     }
@@ -597,11 +640,12 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+      const testStatus = STATUS_TO_TEST_STATUS[status]
       testEndHandler(
         {
           test,
           annotations,
-          testStatus: STATUS_TO_TEST_STATUS[status],
+          testStatus,
           error: errors && errors[0],
           isTimeout,
           shouldCreateTestSpan,
@@ -613,6 +657,25 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
         isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
+
+      // EFD/ATF retries are implemented as test clones with retries=0, so testWillRetry
+      // always returns false for them. We use _ddIsLastEfdRetry (set at clone-creation time)
+      // to identify the final EFD run deterministically, avoiding race conditions when
+      // multiple clones run in parallel across workers.
+      // The original run of a new EFD test (not _ddIsEfdRetry) is never the final execution
+      // when retries are configured, since a later clone always represents the final result.
+      let isFinalExecution
+      if (test._ddIsEfdRetry) {
+        isFinalExecution = !!test._ddIsLastEfdRetry
+      } else if (test._ddIsNew && !test._ddIsModified && isEarlyFlakeDetectionEnabled) {
+        // Original run of a new EFD test: only final when no retries are configured
+        isFinalExecution = earlyFlakeDetectionNumRetries === 0
+      } else if (test._ddIsAttemptToFix) {
+        isFinalExecution = !!(test._ddHasPassedAttemptToFixRetries || test._ddHasFailedAttemptToFixRetries)
+      } else {
+        isFinalExecution = !testWillRetry(test, testStatus)
+      }
+
       // We want to send the ddProperties to the worker
       worker.process.send({
         type: 'ddProperties',
@@ -629,6 +692,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
           _ddIsAtrRetry: isAtrRetry,
           _ddIsModified: test._ddIsModified,
+          _ddIsFinalExecution: isFinalExecution,
         },
       })
     })
@@ -918,7 +982,8 @@ addHook({
 function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToApply, numRetries) {
   for (const [fileSuite, projectSuite] of fileSuitesWithTestsToRetry.entries()) {
     for (let repeatEachIndex = 1; repeatEachIndex <= numRetries; repeatEachIndex++) {
-      const copyFileSuite = deepCloneSuite(fileSuite, filterTest, tagsToApply)
+      const isLastRetry = repeatEachIndex === numRetries
+      const copyFileSuite = deepCloneSuite(fileSuite, filterTest, tagsToApply, isLastRetry)
       applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
       projectSuite._addSuite(copyFileSuite)
     }
@@ -1275,6 +1340,18 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
+    const finalStatus = computeFinalStatus({
+      isFinalExecution: test._ddIsFinalExecution,
+      isDisabled: test._ddIsDisabled,
+      isQuarantined: test._ddIsQuarantined,
+      isAtrRetry: test._ddIsAtrRetry,
+      isEfdRetry: test._ddIsEfdRetry,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      testStatus: STATUS_TO_TEST_STATUS[status],
+    })
+
     testFinishCh.publish({
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
@@ -1294,6 +1371,7 @@ addHook({
       isAtrRetry: test._ddIsAtrRetry,
       isModified: test._ddIsModified,
       onDone,
+      finalStatus,
       ...testCtx.currentStore,
     })
 
