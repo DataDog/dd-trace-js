@@ -130,6 +130,28 @@ describe('spanFormat', () => {
       })
     })
 
+    it('should truncate too long meta keys, meta values, and metric keys', () => {
+      const {
+        MAX_META_KEY_LENGTH,
+        MAX_META_VALUE_LENGTH,
+        MAX_METRIC_KEY_LENGTH,
+      } = require('../src/encode/tags-processors')
+
+      const tooLongKey = 'a'.repeat(300)
+      const tooLongValue = 'a'.repeat(26_000)
+      span.context()._tags[tooLongKey] = tooLongValue
+      span.context()._tags['too.long.metric.key.numeric'] = 15
+      span.context()._tags['x'.repeat(300)] = 42
+
+      trace = spanFormat(span)
+
+      const truncatedKey = `${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`
+      const truncatedValue = `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+      const truncatedMetricKey = `${'x'.repeat(MAX_METRIC_KEY_LENGTH)}...`
+      assert.strictEqual(trace.meta[truncatedKey], truncatedValue)
+      assert.strictEqual(trace.metrics[truncatedMetricKey], 42)
+    })
+
     it('should always set a parent ID', () => {
       span.context()._parentId = null
 

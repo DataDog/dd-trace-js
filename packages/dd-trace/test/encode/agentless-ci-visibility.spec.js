@@ -12,9 +12,6 @@ require('../setup/core')
 const id = require('../../src/id')
 
 const {
-  MAX_META_KEY_LENGTH,
-  MAX_META_VALUE_LENGTH,
-  MAX_METRIC_KEY_LENGTH,
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_RESOURCE_NAME_LENGTH,
@@ -190,39 +187,8 @@ describe('agentless-ci-visibility-encode', () => {
     assert.strictEqual(spanEvent.content.name, DEFAULT_SPAN_NAME)
   })
 
-  it('should cut too long meta and metrics keys and meta values', () => {
-    const tooLongKey = new Array(300).fill('a').join('')
-    const tooLongValue = new Array(26000).fill('a').join('')
-    const traceToTruncate = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
-      error: 0,
-      meta: {
-        [tooLongKey]: tooLongValue,
-      },
-      metrics: {
-        [tooLongKey]: 15,
-      },
-      start: 123,
-      duration: 456,
-      type: 'foo',
-      name: '',
-      resource: '',
-      service: '',
-    }]
-    encoder.encode(traceToTruncate)
-
-    const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
-    const spanEvent = decodedTrace.events[0]
-    assert.deepStrictEqual(spanEvent.content.meta, {
-      [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`,
-    })
-    assert.deepStrictEqual(spanEvent.content.metrics, {
-      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15,
-    })
-  })
+  // Meta/metrics truncation happens upstream in `span_format.js#addTag`
+  // (covered by `span_format.spec.js`); the encoder still truncates resource.
 
   it('should encode all events including non-test spans alongside test sessions', () => {
     const traceWithMixedSpans = [

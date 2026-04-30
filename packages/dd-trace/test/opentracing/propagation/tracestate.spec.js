@@ -15,9 +15,9 @@ describe('TraceState', () => {
 
   it('should convert from header', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo;t.dm:-4')
-    assert.ok(ts instanceof Map)
     assert.strictEqual(ts.get('other'), 'bleh')
     assert.strictEqual(ts.get('dd'), 's:2;o:foo;t.dm:-4')
+    assert.strictEqual(ts.size, 2)
   })
 
   it('should convert to header', () => {
@@ -38,10 +38,10 @@ describe('TraceState', () => {
     ts.forVendor('dd', (state) => {
       called = true
 
-      assert.ok(state instanceof Map)
       assert.strictEqual(state.get('s'), '2')
       assert.strictEqual(state.get('o'), 'foo:bar')
       assert.strictEqual(state.get('t.dm'), '-4')
+      assert.strictEqual(state.size, 3)
     })
     assert.strictEqual(called, true)
   })
