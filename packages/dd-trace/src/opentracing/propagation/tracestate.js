@@ -24,8 +24,7 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueWhitespa
     const key = segment.slice(0, splitIndex).trim()
     if (!key || WHITESPACE.test(key)) continue
     const entryValue = segment.slice(splitIndex + 1).trim()
-    if (!entryValue) continue
-    if (rejectValueWhitespace && WHITESPACE.test(entryValue)) continue
+    if (!entryValue || rejectValueWhitespace && WHITESPACE.test(entryValue)) continue
     entries.push([key, entryValue])
   }
   // Reverse so the Map's insertion order is reverse of wire order. `toString`
