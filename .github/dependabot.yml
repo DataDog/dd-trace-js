@@ -34,6 +34,7 @@ updates:
     directories:
       - "/"
       - "/docs"
+      - "/.github/actions/push_to_test_optimization"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
@@ -125,6 +126,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "meriyah"
         # 7.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@rspack/*"
+        # 2.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
     groups:
       vendor-minor-and-patch-dependencies:

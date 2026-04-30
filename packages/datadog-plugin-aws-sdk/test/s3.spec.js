@@ -83,7 +83,8 @@ describe('Plugin', () => {
           it('should add span pointer for putObject operation', (done) => {
             agent.assertSomeTraces(traces => {
               try {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.meta?.['aws.operation'] === 'putObject')
+                assert.ok(span)
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
                 assert.strictEqual(links.length, 1)
@@ -113,7 +114,8 @@ describe('Plugin', () => {
           it('should add span pointer for copyObject operation', (done) => {
             agent.assertSomeTraces(traces => {
               try {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.meta?.['aws.operation'] === 'copyObject')
+                assert.ok(span)
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
                 assert.strictEqual(links.length, 1)
@@ -187,9 +189,8 @@ describe('Plugin', () => {
                 s3.completeMultipartUpload(completeParams, (err) => {
                   if (err) done(err)
                   agent.assertSomeTraces(traces => {
-                    const span = traces[0][0]
-                    const operation = span.meta?.['aws.operation']
-                    if (operation === 'completeMultipartUpload') {
+                    const span = traces[0].find(s => s.meta?.['aws.operation'] === 'completeMultipartUpload')
+                    if (span) {
                       try {
                         const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
                         assert.strictEqual(links.length, 1)

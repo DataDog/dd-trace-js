@@ -1,11 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const semver = require('semver')
+const { inspect } = require('node:util')
 const { NODE_MAJOR } = require('../../version')
 const { setup } = require('./utils')
 
-const NODE_24_11_1_OR_LATER = semver.gte(process.version, '24.11.1')
+// Backported across LTS lines, so detect at runtime instead of version-gating.
+const HAS_BRACKETED_BYTELENGTH = inspect(new ArrayBuffer(0)).includes('[byteLength]')
 
 describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
@@ -100,7 +101,7 @@ describe('Dynamic Instrumentation', function () {
           messages.shift(),
           'ArrayBuffer { ' +
             '[Uint8Contents]: <00 00 00 ... 7 more bytes>, ' +
-            (NODE_24_11_1_OR_LATER ? '[byteLength]' : 'byteLength') +
+            (HAS_BRACKETED_BYTELENGTH ? '[byteLength]' : 'byteLength') +
               ": 10, '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9 " +
           '}'
         )

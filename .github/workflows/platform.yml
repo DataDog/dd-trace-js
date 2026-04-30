@@ -38,7 +38,7 @@ jobs:
           - name: yarn-berry
             install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
           - name: bun
-            install: bun add
+            install: bun add --linker=hoisted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -74,11 +74,10 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@ce82dc1f14a32888a057bfeeb47adfd0fd96e555 # v3.1.0
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: always()
         with:
-          api_key: ${{ steps.dd-sts.outputs.api_key }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   core:
     runs-on: ubuntu-latest
@@ -128,7 +127,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -176,8 +174,8 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts express@4 # Use older express to support old Node.js versions
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
