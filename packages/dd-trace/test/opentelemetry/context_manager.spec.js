@@ -174,6 +174,21 @@ describe('OTel Context Manager', () => {
     assert.deepStrictEqual(propagation.getActiveBaggage(), undefined)
   })
 
+  it('should silently drop otel baggage that targets Object.prototype.__proto__', () => {
+    const entries = { foo: { value: 'bar' } }
+    Object.defineProperty(entries, '__proto__', {
+      value: { value: 'poison' }, writable: true, enumerable: true, configurable: true,
+    })
+    const baggage = propagation.createBaggage(entries)
+    const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
+    api.context.with(contextWithBaggage, () => {
+      const baggageItems = getAllBaggageItems()
+      assert.strictEqual(Object.getOwnPropertyDescriptor(baggageItems, '__proto__'), undefined)
+      assert.strictEqual(Object.getPrototypeOf(baggageItems), Object.prototype)
+      assert.deepStrictEqual({ ...baggageItems }, { foo: 'bar' })
+    })
+  })
+
   it('should return active span', () => {
     const otelTracer = getTracer()
     otelTracer.startActiveSpan('otel', (span) => {
