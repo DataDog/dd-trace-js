@@ -274,7 +274,11 @@ class DatadogSpan {
       finishedRegistry.register(this, this._name)
     }
 
-    finishTime = Number.parseFloat(finishTime) || this._getTime()
+    // Dominant call site is `span.finish()` with no argument; skip the
+    // `Number.parseFloat` round-trip for the undefined case.
+    finishTime = finishTime === undefined
+      ? this._getTime()
+      : (Number.parseFloat(finishTime) || this._getTime())
 
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
@@ -288,8 +292,8 @@ class DatadogSpan {
 
     const addArrayOrScalarAttributes = (key, maybeArray) => {
       if (Array.isArray(maybeArray)) {
-        for (const subkey in maybeArray) {
-          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+        for (let i = 0; i < maybeArray.length; i++) {
+          addArrayOrScalarAttributes(`${key}.${i}`, maybeArray[i])
         }
       } else {
         const maybeScalar = maybeArray
@@ -302,8 +306,8 @@ class DatadogSpan {
       }
     }
 
-    for (const [key, value] of Object.entries(attributes)) {
-      addArrayOrScalarAttributes(key, value)
+    for (const key of Object.keys(attributes)) {
+      addArrayOrScalarAttributes(key, attributes[key])
     }
     return sanitizedAttributes
   }
@@ -311,10 +315,11 @@ class DatadogSpan {
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
-    for (const [key, value] of Object.entries(attributes)) {
+    for (const key of Object.keys(attributes)) {
+      const value = attributes[key]
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subvalue of Object.values(value)) {
+        for (const subvalue of value) {
           if (ALLOWED.has(typeof subvalue)) {
             newArray.push(subvalue)
           } else {
