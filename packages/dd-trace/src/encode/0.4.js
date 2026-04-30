@@ -97,12 +97,101 @@ const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0x
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
-    span.meta.events = JSON.stringify(span.span_events)
+    span.meta.events = stringifySpanEvents(span.span_events)
     // `= undefined` over `delete` to keep the span's hidden class — `delete`
     // would push every event-bearing span into V8 dictionary mode.
     span.span_events = undefined
   }
   return span
+}
+
+/**
+ * Hand-written stringifier for `span.span_events`. The shape is fixed by
+ * `extractSpanEvents` (`{ name, time_unix_nano, attributes? }`) and attribute
+ * values are pre-sanitized to primitives or arrays of primitives, so we can
+ * skip everything `JSON.stringify` does for the generic case (toJSON probing,
+ * key iteration over the prototype chain, replacer hooks). Output matches
+ * `JSON.stringify(spanEvents)` byte-for-byte for the post-sanitization shape.
+ *
+ * @param {Array<{ name: string, time_unix_nano: number, attributes?: object }>} spanEvents
+ * @returns {string}
+ */
+function stringifySpanEvents (spanEvents) {
+  let result = '['
+  for (let index = 0; index < spanEvents.length; index++) {
+    if (index > 0) result += ','
+    const event = spanEvents[index]
+    result += '{"name":' + escapeJsonString(event.name) +
+      ',"time_unix_nano":' + jsonNumber(event.time_unix_nano)
+    if (event.attributes) {
+      result += ',"attributes":' + stringifyAttributes(event.attributes)
+    }
+    result += '}'
+  }
+  return result + ']'
+}
+
+function stringifyAttributes (attributes) {
+  let result = '{'
+  let first = true
+  for (const key of Object.keys(attributes)) {
+    if (first) {
+      first = false
+    } else {
+      result += ','
+    }
+    result += escapeJsonString(key) + ':' + stringifyAttributeValue(attributes[key])
+  }
+  return result + '}'
+}
+
+function stringifyAttributeValue (value) {
+  if (typeof value === 'string') return escapeJsonString(value)
+  if (typeof value === 'number') return jsonNumber(value)
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (Array.isArray(value)) {
+    let result = '['
+    for (let index = 0; index < value.length; index++) {
+      if (index > 0) result += ','
+      result += stringifyAttributeValue(value[index])
+    }
+    return result + ']'
+  }
+  // Sanitization rejects everything else, but keep the safety net.
+  return 'null'
+}
+
+/**
+ * Match `JSON.stringify` for numbers: `NaN` and `±Infinity` collapse to the
+ * literal `null`, everything else uses ECMAScript's default `Number → String`
+ * conversion (which is what `JSON.stringify` calls internally).
+ *
+ * @param {number} value
+ * @returns {string}
+ */
+function jsonNumber (value) {
+  if (Number.isFinite(value)) return String(value)
+  return 'null'
+}
+
+/**
+ * Fast path: scan once, and if no character in the string requires JSON
+ * escaping, emit `"<str>"` as-is. The scanned chars are `"`, `\`, and any
+ * control char in the U+0000–U+001F range. Anything else delegates to
+ * `JSON.stringify` for full spec-compliant escaping (surrogate pairs,
+ * lone surrogates, etc.).
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeJsonString (value) {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code < 0x20 || code === 0x22 || code === 0x5C) {
+      return JSON.stringify(value)
+    }
+  }
+  return '"' + value + '"'
 }
 
 class AgentEncoder {
@@ -202,10 +291,12 @@ class AgentEncoder {
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
 
-      let blockSize = 1 +                                // map prefix
-        KEY_TRACE_ID_PREFIX.length + 8 +                 // trace_id
-        KEY_SPAN_ID_PREFIX.length + 8 +                  // span_id
-        KEY_PARENT_ID_PREFIX.length + 8 +                // parent_id
+      // 1 byte map prefix + 3 ID fields (10/9/11 bytes prefix + 8 bytes value
+      // each) + the three string fields.
+      let blockSize = 1 +
+        KEY_TRACE_ID_PREFIX.length + 8 +
+        KEY_SPAN_ID_PREFIX.length + 8 +
+        KEY_PARENT_ID_PREFIX.length + 8 +
         KEY_NAME.length + nameLen +
         KEY_RESOURCE.length + resourceLen +
         KEY_SERVICE.length + serviceLen
@@ -811,4 +902,4 @@ function memoizedLogDebug (key, message) {
   }
 }
 
-module.exports = { AgentEncoder }
+module.exports = { AgentEncoder, stringifySpanEvents }
