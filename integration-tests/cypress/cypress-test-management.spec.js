@@ -461,7 +461,6 @@ moduleTypes.forEach(({
             }
           )
 
-          // TODO: remove this once we have figured out flakiness
           childProcess.stdout?.on('data', data => {
             stdout += data
             process.stdout.write(data)
@@ -589,10 +588,6 @@ moduleTypes.forEach(({
           ])
         })
 
-        /**
-         * TODO:
-         * The spec says that attempt-to-fix ignores quarantine outcome suppression.
-         */
         it('ignores quarantine when attempting to fix a test', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
@@ -615,10 +610,6 @@ moduleTypes.forEach(({
           await runAttemptToFixTest({ isAttemptToFix: true, isQuarantined: true })
         })
 
-        /**
-         * TODO:
-         * The spec says that attempt-to-fix ignores disabled outcome suppression.
-         */
         it('ignores disabled when attempting to fix a test', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
