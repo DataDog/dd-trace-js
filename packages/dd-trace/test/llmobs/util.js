@@ -211,6 +211,12 @@ function assertLlmObsSpanEvent (actual, expected) {
   delete actual.tags
   delete actual._dd // we do not care about asserting on the private dd fields
 
+  // strip empty _dd block from metadata
+  if (actualMetadata?._dd && typeof actualMetadata._dd === 'object' &&
+      !Array.isArray(actualMetadata._dd) && Object.keys(actualMetadata._dd).length === 0) {
+    delete actualMetadata._dd
+  }
+
   assertWithMockValues(actualTraceId, traceId, 'traceId')
   assertWithMockValues(actualMetrics, metrics ?? {}, 'metrics')
   assertWithMockValues(actualMetadata, metadata, 'metadata')

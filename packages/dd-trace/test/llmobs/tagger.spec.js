@@ -6,7 +6,6 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-const { storage } = require('../../src/llmobs/storage')
 
 function unserializableObject () {
   const obj = {}
@@ -20,7 +19,6 @@ describe('tagger', () => {
   let Tagger
   let tagger
   let logger
-  let validateCostTags
 
   beforeEach(() => {
     spanContext = {
@@ -39,11 +37,8 @@ describe('tagger', () => {
       warn: sinon.stub(),
     }
 
-    validateCostTags = sinon.stub().returns([])
-
     Tagger = proxyquire('../../src/llmobs/tagger', {
       '../log': logger,
-      './util': { validateCostTags },
     })
   })
 
@@ -171,55 +166,6 @@ describe('tagger', () => {
         assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-propagated-ml-app')
       })
 
-      it('applies annotation context cost tags at span start', () => {
-        validateCostTags.returns(['team', 'feature'])
-
-        storage.run({
-          annotationContext: {
-            tags: { team: 'ml', feature: 'chatbot' },
-            costTags: ['team', 'feature'],
-          },
-        }, () => {
-          tagger.registerLLMObsSpan(span, { kind: 'llm', modelProvider: 'openai' })
-        })
-
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
-          '_ml_obs.meta.span.kind': 'llm',
-          '_ml_obs.meta.ml_app': 'my-default-ml-app',
-          '_ml_obs.meta.model_provider': 'openai',
-          '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.tags': { team: 'ml', feature: 'chatbot' },
-          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
-        })
-        sinon.assert.calledOnceWithExactly(
-          validateCostTags,
-          span,
-          ['team', 'feature'],
-          'annotation_context',
-          { team: 'ml', feature: 'chatbot' }
-        )
-      })
-
-      it('ignores null annotation context cost tags', () => {
-        storage.run({
-          annotationContext: {
-            tags: { team: 'ml' },
-            costTags: null,
-          },
-        }, () => {
-          tagger.registerLLMObsSpan(span, { kind: 'llm', modelProvider: 'openai' })
-        })
-
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
-          '_ml_obs.meta.span.kind': 'llm',
-          '_ml_obs.meta.ml_app': 'my-default-ml-app',
-          '_ml_obs.meta.model_provider': 'openai',
-          '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.tags': { team: 'ml' },
-        })
-        sinon.assert.notCalled(validateCostTags)
-      })
-
       describe('with no global mlApp configured', () => {
         beforeEach(() => {
           tagger = new Tagger({ llmobs: { enabled: true } })
@@ -329,10 +275,10 @@ describe('tagger', () => {
     })
 
     describe('tagCostTags', () => {
-      it('sets validated cost tags', () => {
+      it('validates and sets cost tags', () => {
         tagger._register(span)
 
-        tagger.tagCostTags(span, ['team', 'feature'])
+        tagger.tagCostTags(span, ['team', 'feature'], 'annotate', { team: 'ml', feature: 'chatbot' })
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
@@ -344,8 +290,9 @@ describe('tagger', () => {
           '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
         })
 
-        tagger.tagCostTags(span, ['team', 'feature', 'team'])
-        tagger.tagCostTags(span, ['feature', 'project'])
+        const spanTags = { team: 'ml', feature: 'chatbot', project: 'alpha' }
+        tagger.tagCostTags(span, ['team', 'feature', 'team'], 'annotate', spanTags)
+        tagger.tagCostTags(span, ['feature', 'project'], 'annotate', spanTags)
 
         assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], [
           'team',
@@ -354,10 +301,26 @@ describe('tagger', () => {
         ])
       })
 
+      it('skips entries that do not reference an existing span tag', () => {
+        tagger._register(span)
+
+        tagger.tagCostTags(span, ['team', 'missing'], 'annotate', { team: 'ml' })
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], ['team'])
+      })
+
       it('does not set cost tags for an empty list', () => {
         tagger._register(span)
 
-        tagger.tagCostTags(span, [])
+        tagger.tagCostTags(span, [], 'annotate', {})
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], undefined)
+      })
+
+      it('does not set cost tags when costTags is not an array', () => {
+        tagger._register(span)
+
+        tagger.tagCostTags(span, 'not-an-array', 'annotate', { team: 'ml' })
 
         assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], undefined)
       })

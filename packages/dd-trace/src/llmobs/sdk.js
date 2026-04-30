@@ -10,7 +10,6 @@ const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE, TAGS } = require('./constants/tags')
 const {
   getFunctionArguments,
-  validateCostTags,
   validateKind,
 } = require('./util')
 const { storage } = require('./storage')
@@ -272,8 +271,7 @@ class LLMObs extends NoopLLMObs {
       }
       if (costTags != null) {
         const spanTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
-        const validatedCostTags = validateCostTags(span, costTags, 'annotate', spanTags)
-        if (validatedCostTags.length) this._tagger.tagCostTags(span, validatedCostTags)
+        this._tagger.tagCostTags(span, costTags, 'annotate', spanTags)
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)

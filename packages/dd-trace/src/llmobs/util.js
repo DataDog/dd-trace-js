@@ -32,6 +32,7 @@ function validateKind (kind) {
  * @returns {string[]}
  */
 function validateCostTags (span, costTags, source, spanTags) {
+  // Lazy-required to avoid the `index.js -> telemetry -> tagger -> util` module cycle.
   const telemetry = require('./telemetry')
 
   telemetry.recordCostTagsAnnotated(span, source)
@@ -42,7 +43,7 @@ function validateCostTags (span, costTags, source, spanTags) {
     return []
   }
 
-  const validatedCostTags = []
+  const validatedCostTags = new Set()
   let nonStringEntries = 0
   let missingSpanTags = 0
 
@@ -57,9 +58,7 @@ function validateCostTags (span, costTags, source, spanTags) {
       missingSpanTags++
       continue
     }
-    if (!validatedCostTags.includes(costTag)) {
-      validatedCostTags.push(costTag)
-    }
+    validatedCostTags.add(costTag)
   }
 
   if (nonStringEntries) {
@@ -68,11 +67,11 @@ function validateCostTags (span, costTags, source, spanTags) {
   if (missingSpanTags) {
     telemetry.recordCostTagsSubmitted(span, missingSpanTags, source, 'error', 'missing_span_tag')
   }
-  if (validatedCostTags.length) {
-    telemetry.recordCostTagsSubmitted(span, validatedCostTags.length, source, 'success')
+  if (validatedCostTags.size) {
+    telemetry.recordCostTagsSubmitted(span, validatedCostTags.size, source, 'success')
   }
 
-  return validatedCostTags
+  return [...validatedCostTags]
 }
 
 // extracts the argument names from a function string
