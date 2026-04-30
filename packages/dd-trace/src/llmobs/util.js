@@ -148,19 +148,16 @@ function getFunctionArguments (fn, args = []) {
 
     const argsObject = {}
 
-    for (const argIdx in args) {
-      const name = names[argIdx]
-      const arg = args[argIdx]
+    for (let i = 0; i < args.length; i++) {
+      const name = names[i]
 
-      const spread = name?.startsWith('...')
-
-      // this can only be the last argument
-      if (spread) {
-        argsObject[name.slice(3)] = args.slice(argIdx)
+      // Spread can only be the last argument.
+      if (name?.startsWith('...')) {
+        argsObject[name.slice(3)] = args.slice(i)
         break
       }
 
-      argsObject[name] = arg
+      argsObject[name] = args[i]
     }
 
     return argsObject
