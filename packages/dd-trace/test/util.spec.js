@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 require('./setup/core')
-const { isTrue, isFalse, globMatch } = require('../src/util')
+const { hasAtLeast, isEmpty, isTrue, isFalse, globMatch } = require('../src/util')
 
 const TRUES = [
   1,
@@ -69,5 +69,22 @@ describe('util', () => {
     NONMATCH_CASES.forEach(({ subject, pattern }) => {
       assert.strictEqual(globMatch(pattern, subject), false)
     })
+  })
+
+  it('isEmpty works', () => {
+    assert.strictEqual(isEmpty({}), true)
+    assert.strictEqual(isEmpty(Object.create(null)), true)
+    assert.strictEqual(isEmpty({ a: 1 }), false)
+    assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
+    // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
+    assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+  })
+
+  it('hasAtLeast works', () => {
+    assert.strictEqual(hasAtLeast({}, 1), false)
+    assert.strictEqual(hasAtLeast({ a: 1 }, 1), true)
+    assert.strictEqual(hasAtLeast({ a: 1 }, 2), false)
+    assert.strictEqual(hasAtLeast({ a: 1, b: 2, c: 3, d: 4 }, 4), true)
+    assert.strictEqual(hasAtLeast({ a: 1, b: 2, c: 3 }, 4), false)
   })
 })

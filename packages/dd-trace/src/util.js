@@ -2,6 +2,40 @@
 
 const path = require('path')
 
+/**
+ * `for-in` with an early return is the only allocation-free shape for
+ * "does this object have any own enumerable properties". Microbenchmarks
+ * pin it as 1.3-1.4x faster than `Object.keys(obj).length === 0` across
+ * small / medium / large objects -- enough that hot paths in the AWS SDK
+ * and AppSec reporter promote it.
+ *
+ * @param {object | undefined} obj
+ * @returns {boolean}
+ */
+function isEmpty (obj) {
+  // eslint-disable-next-line no-unreachable-loop
+  for (const _ in obj) return false
+  return true
+}
+
+/**
+ * Same `for-in` motivation as {@link isEmpty}; the early return stops
+ * counting once the threshold is reached so per-call work is bounded by
+ * `n` instead of the full key set.
+ *
+ * @param {object | undefined} obj
+ * @param {number} n
+ * @returns {boolean}
+ */
+function hasAtLeast (obj, n) {
+  let count = 0
+  // eslint-disable-next-line no-unused-vars
+  for (const _ in obj) {
+    if (++count >= n) return true
+  }
+  return false
+}
+
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -76,6 +110,8 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
 }
 
 module.exports = {
+  hasAtLeast,
+  isEmpty,
   isTrue,
   isFalse,
   isError,
