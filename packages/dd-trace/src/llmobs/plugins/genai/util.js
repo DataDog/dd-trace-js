@@ -237,15 +237,23 @@ function formatContentObject (content) {
     }
   }
 
-  // Check for function calls
-  const functionCalls = parts.filter(part => part.functionCall)
-  if (functionCalls.length > 0) {
+  // Two filter passes over `parts` collapse to a single walk. Most parts are
+  // text-only so neither bucket is allocated unless a matching part appears.
+  let functionCalls
+  let functionResponses
+  for (const part of parts) {
+    if (part.functionCall) {
+      ;(functionCalls ??= []).push(part)
+    } else if (part.functionResponse) {
+      ;(functionResponses ??= []).push(part)
+    }
+  }
+
+  if (functionCalls) {
     return formatFunctionCallMessage(parts, functionCalls, role)
   }
 
-  // Check for function responses
-  const functionResponses = parts.filter(part => part.functionResponse)
-  if (functionResponses.length > 0) {
+  if (functionResponses) {
     return formatFunctionResponseMessage(functionResponses, role)
   }
 
@@ -326,15 +334,26 @@ function formatNonStreamingCandidate (candidate) {
 
   const { parts } = content
 
-  // Check for function calls
-  const functionCalls = parts.filter(part => part.functionCall)
-  if (functionCalls.length > 0) {
+  // One walk replaces three (`filter` + two `find`); priority order is
+  // functionCall > executableCode > codeExecutionResult, same as before.
+  let functionCalls
+  let executableCode
+  let codeExecutionResult
+  for (const part of parts) {
+    if (part.functionCall) {
+      ;(functionCalls ??= []).push(part)
+    } else if (!executableCode && part.executableCode) {
+      executableCode = part
+    } else if (!codeExecutionResult && part.codeExecutionResult) {
+      codeExecutionResult = part
+    }
+  }
+
+  if (functionCalls) {
     messages.push(formatFunctionCallMessage(parts, functionCalls, ROLES.ASSISTANT))
     return messages
   }
 
-  // Check for executable code
-  const executableCode = parts.find(part => part.executableCode)
   if (executableCode) {
     messages.push({
       role: ROLES.ASSISTANT,
@@ -346,8 +365,6 @@ function formatNonStreamingCandidate (candidate) {
     return messages
   }
 
-  // Check for code execution result
-  const codeExecutionResult = parts.find(part => part.codeExecutionResult)
   if (codeExecutionResult) {
     messages.push({
       role: ROLES.ASSISTANT,

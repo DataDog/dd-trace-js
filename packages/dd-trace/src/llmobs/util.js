@@ -2,13 +2,23 @@
 
 const { SPAN_KINDS } = require('./constants/tags')
 
+// LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
+// looking for the first non-ASCII char; if there is none, hand the input
+// straight back. Otherwise pick up the slow path from the byte that needed
+// escaping. ~5x faster on typical prompt strings than the per-char `+=`
+// loop the function used to do unconditionally.
 function encodeUnicode (str = '') {
-  let result = ''
   for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i)
-    result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[i]
+    if (str.charCodeAt(i) > 127) {
+      let result = str.slice(0, i)
+      for (; i < str.length; i++) {
+        const code = str.charCodeAt(i)
+        result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[i]
+      }
+      return result
+    }
   }
-  return result
+  return str
 }
 
 function validateKind (kind) {
