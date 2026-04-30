@@ -2,6 +2,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @anthropic-ai/sdk,anthropic,0.14.0,0.73.0,True
 @apollo/gateway,apollo,2.3.0,2.12.2,True
 @aws-sdk/smithy-client,aws-sdk,3.0.0,3.374.0,True
+@azure/cosmos,azure-cosmos,4.4.1,4.9.2,True
 @azure/event-hubs,azure-event-hubs,6.0.0,6.0.2,True
 @azure/functions,azure-functions,4.0.0,4.11.0,True
 @azure/service-bus,azure-service-bus,7.9.2,7.9.5,True
