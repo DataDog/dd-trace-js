@@ -15,7 +15,19 @@ if (!patched.has(Runner.prototype)) {
   patched.add(Runner.prototype)
 
   const fail = Runner.prototype.fail
+  const runTest = Runner.prototype.runTest
   const runHook = Hook.prototype.run
+
+  /**
+   * @this {Mocha.Runner}
+   * @param {(err?: Error) => void} fn
+   */
+  Runner.prototype.runTest = function patchedRunTest (fn) {
+    return runTest.call(this, (err) => {
+      if (err && this.test) failedTests.add(this.test)
+      return fn(err)
+    })
+  }
 
   /**
    * @this {Mocha.Runner}
