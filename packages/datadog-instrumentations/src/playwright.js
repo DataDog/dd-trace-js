@@ -121,11 +121,11 @@ function getSuiteType (test, type) {
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
-function deepCloneSuite (suite, filterTest, tags = [], isLastRetry = false) {
+function deepCloneSuite (suite, filterTest, tags = []) {
   const copy = suite._clone()
   for (const entry of suite._entries) {
     if (entry.constructor.name === 'Suite') {
-      copy._addSuite(deepCloneSuite(entry, filterTest, tags, isLastRetry))
+      copy._addSuite(deepCloneSuite(entry, filterTest, tags))
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
@@ -135,9 +135,6 @@ function deepCloneSuite (suite, filterTest, tags = [], isLastRetry = false) {
           if (resolvedTag) {
             copiedTest[resolvedTag] = true
           }
-        }
-        if (isLastRetry) {
-          copiedTest._ddIsLastEfdRetry = true
         }
         copy._addTest(copiedTest)
       }
@@ -293,7 +290,7 @@ function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
 
-function computeFinalStatus ({
+function getFinalStatus ({
   isFinalExecution,
   isDisabled,
   isQuarantined,
@@ -465,7 +462,7 @@ function testEndHandler ({
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
-    const finalStatus = computeFinalStatus({
+    const finalStatus = getFinalStatus({
       isFinalExecution: !testWillRetry(test, testStatus),
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
@@ -658,18 +655,17 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
 
-      // EFD/ATF retries are implemented as test clones with retries=0, so testWillRetry
-      // always returns false for them. We use _ddIsLastEfdRetry (set at clone-creation time)
-      // to identify the final EFD run deterministically, avoiding race conditions when
-      // multiple clones run in parallel across workers.
-      // The original run of a new EFD test (not _ddIsEfdRetry) is never the final execution
-      // when retries are configured, since a later clone always represents the final result.
+      // EFD retries (new or modified tests) are implemented as clones with retries=0,
+      // so testWillRetry always returns false for them. Instead, we track how many
+      // executions have been reported via testsToTestStatuses (updated by testEndHandler
+      // above) and mark the execution final once the count reaches the expected total.
+      // This mirrors how ATF finality is detected and centralizes the decision in the
+      // main process, so workers only need to act on the _ddIsFinalExecution flag.
       let isFinalExecution
-      if (test._ddIsEfdRetry) {
-        isFinalExecution = !!test._ddIsLastEfdRetry
-      } else if (test._ddIsNew && !test._ddIsModified && isEarlyFlakeDetectionEnabled) {
-        // Original run of a new EFD test: only final when no retries are configured
-        isFinalExecution = earlyFlakeDetectionNumRetries === 0
+      if ((test._ddIsNew || test._ddIsModified) && !test._ddIsAttemptToFix && isEarlyFlakeDetectionEnabled) {
+        const testFqn = getTestFullyQualifiedName(test)
+        const efdTestStatuses = testsToTestStatuses.get(testFqn) || []
+        isFinalExecution = efdTestStatuses.length === earlyFlakeDetectionNumRetries + 1
       } else if (test._ddIsAttemptToFix) {
         isFinalExecution = !!(test._ddHasPassedAttemptToFixRetries || test._ddHasFailedAttemptToFixRetries)
       } else {
@@ -982,8 +978,7 @@ addHook({
 function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToApply, numRetries) {
   for (const [fileSuite, projectSuite] of fileSuitesWithTestsToRetry.entries()) {
     for (let repeatEachIndex = 1; repeatEachIndex <= numRetries; repeatEachIndex++) {
-      const isLastRetry = repeatEachIndex === numRetries
-      const copyFileSuite = deepCloneSuite(fileSuite, filterTest, tagsToApply, isLastRetry)
+      const copyFileSuite = deepCloneSuite(fileSuite, filterTest, tagsToApply)
       applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
       projectSuite._addSuite(copyFileSuite)
     }
@@ -1340,7 +1335,7 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
-    const finalStatus = computeFinalStatus({
+    const finalStatus = getFinalStatus({
       isFinalExecution: test._ddIsFinalExecution,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
