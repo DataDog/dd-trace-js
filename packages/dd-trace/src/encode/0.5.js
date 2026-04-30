@@ -8,10 +8,11 @@ const ARRAY_OF_TWELVE = 0x9C
 
 function formatSpan (span) {
   span = normalizeSpan(span)
-  // ensure span events are encoded as tags
+  // v0.5 has no native span_events slot; always serialize as a meta tag.
   if (span.span_events) {
     span.meta.events = JSON.stringify(span.span_events)
-    delete span.span_events
+    // `= undefined` over `delete` to keep the span's hidden class.
+    span.span_events = undefined
   }
   return span
 }
@@ -55,12 +56,17 @@ class AgentEncoder extends BaseEncoder {
   }
 
   _encodeString (bytes, value = '') {
-    this._cacheString(value)
-    this._encodeInteger(bytes, this._stringMap[value])
+    let index = this._stringMap[value]
+    if (index === undefined) {
+      index = this._stringCount++
+      this._stringMap[value] = index
+      this._stringBytes.write(value)
+    }
+    this._encodeInteger(bytes, index)
   }
 
   _cacheString (value) {
-    if (!(value in this._stringMap)) {
+    if (this._stringMap[value] === undefined) {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
     }
