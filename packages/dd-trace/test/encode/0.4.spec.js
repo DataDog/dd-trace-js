@@ -130,8 +130,13 @@ describe('encode', () => {
     })
 
     it('should log adding an encoded trace to the buffer if enabled', () => {
-      encoder._debugEncoding = true
-      encoder.encode(data)
+      const debugConfig = () => ({ trace: { nativeSpanEvents: false }, DD_TRACE_ENCODING_DEBUG: true })
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+        '../log': logger,
+        '../config': debugConfig,
+      })
+      const debugEncoder = new AgentEncoder(writer)
+      debugEncoder.encode(data)
 
       const message = logger.debug.firstCall.args[0]()
 
