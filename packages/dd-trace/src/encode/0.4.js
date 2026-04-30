@@ -449,6 +449,17 @@ class AgentEncoder {
    * @param {number} value
    */
   _encodeIntOrFloat (bytes, value) {
+    // Fast path: positive fixint (0..127). `value === (value & 0x7F)` is true
+    // iff `value` is an exact integer in that range — covers `error: 0/1`,
+    // priority flags, attribute counts, HTTP status codes mapped to numbers,
+    // and most small metrics. NaN, ±Infinity, negatives, and any non-integer
+    // float fall through.
+    if (value === (value & 0x7F)) {
+      const offset = bytes.length
+      bytes.reserve(1)
+      bytes.buffer[offset] = value
+      return
+    }
     if (Number.isInteger(value)) {
       if (value >= 0) {
         this.#msgpack.encodeUnsigned(bytes, value)
