@@ -216,18 +216,25 @@ versions.forEach((version) => {
             assert.ok(!(TEST_IS_NEW in knownTest.meta))
             assert.strictEqual(knownTest.meta[TEST_FINAL_STATUS], knownTest.meta[TEST_STATUS])
 
-            // New tests: exactly one run (the last EFD clone by repeat index) has TEST_FINAL_STATUS;
-            // all others must not. We avoid sorting by start time because parallel workers make
-            // wall-clock order non-deterministic.
+            // New tests: exactly one run has TEST_FINAL_STATUS and it must be the last to finish.
+            // The main process marks the execution final based on arrival order of testEnd events,
+            // so the run that completes last is always the one that gets the tag.
             const assertEfdFinalStatus = (testName, expectedFinalStatus) => {
               const group = tests.filter(t => t.meta[TEST_NAME] === testName)
-              const finalRuns = group.filter(t => TEST_FINAL_STATUS in t.meta)
-              assert.strictEqual(finalRuns.length, 1,
-                `Exactly one run of "${testName}" should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
-              assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], expectedFinalStatus)
-              const nonFinalRuns = group.filter(t => !(TEST_FINAL_STATUS in t.meta))
-              assert.strictEqual(nonFinalRuns.length, group.length - 1,
-                `All other runs of "${testName}" should not have TEST_FINAL_STATUS`)
+              group.sort((a, b) => {
+                const endA = BigInt(a.start) + BigInt(a.duration)
+                const endB = BigInt(b.start) + BigInt(b.duration)
+                return endA < endB ? -1 : endA > endB ? 1 : 0
+              })
+              group.forEach((t, index) => {
+                if (index < group.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in t.meta),
+                    `Run ${index} of "${testName}" should not have TEST_FINAL_STATUS`)
+                } else {
+                  assert.strictEqual(t.meta[TEST_FINAL_STATUS], expectedFinalStatus,
+                    `Last run of "${testName}" should have TEST_FINAL_STATUS="${expectedFinalStatus}"`)
+                }
+              })
             }
 
             // should work with passing tests is new and passes consistently → final_status='pass'
