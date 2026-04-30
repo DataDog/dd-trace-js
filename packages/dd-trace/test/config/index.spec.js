@@ -385,18 +385,18 @@ describe('Config', () => {
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318',
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/v1/traces',
-      otelLogsUrl: 'http://collector:4318/v1/logs',
-      otelMetricsUrl: 'http://collector:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://collector:4318/v1/logs',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://collector:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
-      otelProtocol: 'grpc',
-      otelLogsProtocol: 'grpc',
-      otelMetricsProtocol: 'grpc',
-      otelTimeout: 1234,
-      otelLogsTimeout: 1234,
-      otelMetricsTimeout: 1234,
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
   })
 
@@ -427,8 +427,8 @@ describe('Config', () => {
     // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
     // so telemetry reports the full URL users will hit.
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
-    assert.strictEqual(config.otelMetricsUrl, 'http://127.0.0.1:4318/v1/metrics')
-    assert.strictEqual(config.otelLogsUrl, 'http://127.0.0.1:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
   })
 
   it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
@@ -441,8 +441,8 @@ describe('Config', () => {
     // In the unified-agent model, OTLP lives on the same host as the DD agent (different port),
     // so DD_AGENT_HOST drives the default OTLP host too.
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://myHostName:4318/v1/traces')
-    assert.strictEqual(config.otelMetricsUrl, 'http://myHostName:4318/v1/metrics')
-    assert.strictEqual(config.otelLogsUrl, 'http://myHostName:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://myHostName:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://myHostName:4318/v1/logs')
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
@@ -651,14 +651,14 @@ describe('Config', () => {
           enabled: true,
         },
       },
-      injectForce: false,
+      DD_INJECT_FORCE: false,
       installSignature: {
         id: undefined,
         time: undefined,
         type: undefined,
       },
       instrumentationSource: 'manual',
-      instrumentation_config_id: undefined,
+      DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
         agentlessEnabled: undefined,
         enabled: false,
@@ -697,7 +697,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
     assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
-    assert.deepStrictEqual(config.injectionEnabled, undefined)
+    assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
@@ -1121,7 +1121,7 @@ describe('Config', () => {
         },
         telemetryVerbosity: 'DEBUG',
       },
-      instrumentation_config_id: 'abcdef123',
+      DD_INSTRUMENTATION_CONFIG_ID: 'abcdef123',
       llmobs: {
         agentlessEnabled: true,
         mlApp: 'myMlApp',
@@ -1366,7 +1366,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: false,
-      tracePropagationExtractFirst: true,
+      DD_TRACE_PROPAGATION_EXTRACT_FIRST: true,
       runtimeMetrics: {
         enabled: false,
       },
@@ -3010,21 +3010,21 @@ describe('Config', () => {
       })
       it('should enable manual testing API by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.isManualApiEnabled, true)
+        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, true)
       })
       it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config.isManualApiEnabled, false)
+        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.memcachedCommandEnabled, false)
+        assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, false)
       })
       it('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', () => {
         process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.memcachedCommandEnabled, true)
+        assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, true)
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
@@ -3070,16 +3070,16 @@ describe('Config', () => {
       it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisibilityTestSessionName, 'my-test-session')
+        assert.strictEqual(config.DD_TEST_SESSION_NAME, 'my-test-session')
       })
       it('should not enable agentless log submission by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, false)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       })
       it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
         process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, true)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
       })
       it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = getConfig(options)

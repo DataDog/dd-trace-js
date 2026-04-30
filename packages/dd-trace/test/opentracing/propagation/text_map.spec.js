@@ -63,7 +63,7 @@ describe('TextMapPropagator', () => {
       '../../log': log,
       '../../telemetry/metrics': telemetryMetrics,
     })
-    config = getConfigFresh({ tagsHeaderMaxLength: 512 })
+    config = getConfigFresh({ DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512 })
     propagator = new TextMapPropagator(config)
     textMap = {
       'x-datadog-trace-id': '123',
@@ -300,7 +300,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should drop trace tags if disabled', () => {
-      config.tagsHeaderMaxLength = 0
+      config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = 0
 
       const carrier = {}
       const spanContext = createContext({
@@ -865,7 +865,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should not extract trace tags when disabled', () => {
-      config.tagsHeaderMaxLength = 0
+      config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = 0
       textMap['x-datadog-tags'] = '_dd.p.foo=bar,_dd.p.baz=qux'
 
       const carrier = textMap
@@ -998,7 +998,7 @@ describe('TextMapPropagator', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
       config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
-      config.tracePropagationExtractFirst = true
+      config.DD_TRACE_PROPAGATION_EXTRACT_FIRST = true
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)

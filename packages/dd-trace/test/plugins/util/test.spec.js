@@ -99,7 +99,7 @@ describe('getTestSessionName', () => {
     process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
     process.env.LAGE_PACKAGE_NAME = 'lage-package'
 
-    const testSessionName = getTestSessionName({ ciVisibilityTestSessionName: 'explicit-session' }, 'jest', {})
+    const testSessionName = getTestSessionName({ DD_TEST_SESSION_NAME: 'explicit-session' }, 'jest', {})
 
     assert.strictEqual(testSessionName, 'explicit-session')
   })

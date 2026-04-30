@@ -209,7 +209,7 @@ class TextMapPropagator {
   _injectTags (spanContext, carrier) {
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping injection.')
       return
     }
@@ -228,7 +228,7 @@ class TextMapPropagator {
 
     const header = tags.join(',')
 
-    if (header.length > this._config.tagsHeaderMaxLength) {
+    if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from span are too large, skipping injection.')
     } else if (header) {
       carrier[tagsKey] = header
@@ -387,7 +387,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         style = extractor
-        if (this._config.tracePropagationExtractFirst) {
+        if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) {
           break
         }
       } else {
@@ -436,7 +436,7 @@ class TextMapPropagator {
     this._extractSamplingPriority(carrier, spanContext)
     this._extractTags(carrier, spanContext)
 
-    if (this._config.tracePropagationExtractFirst) return spanContext
+    if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) return spanContext
 
     const tc = this._extractTraceparentContext(carrier)
 
@@ -734,9 +734,9 @@ class TextMapPropagator {
 
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
-    } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
+    } else if (carrier[tagsKey].length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
     } else {
       const pairs = carrier[tagsKey].split(',')
