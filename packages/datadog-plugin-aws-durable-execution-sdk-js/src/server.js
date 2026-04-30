@@ -88,8 +88,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
     this.finish(ctx)
   }
 
-  // tracingChannel fires both asyncEnd and end; Need to call finish in both cases
-  // to ensure the span is finished regardless of how the tracingChannel is configured.
+  // tracingChannel fires both asyncEnd and end; Need to call finish in both cases to ensure the span is finished regardless of how the tracingChannel is configured.
   finish(ctx) {
     super.finish(ctx)
   }
