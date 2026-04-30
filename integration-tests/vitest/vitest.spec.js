@@ -2016,7 +2016,7 @@ versions.forEach((version) => {
             receiver.setTestManagementTests({
               vitest: {
                 suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix-failing-after-each.mjs': {
+                  'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs': {
                     tests: {
                       [testName]: {
                         properties: {
@@ -2063,7 +2063,7 @@ versions.forEach((version) => {
                 cwd,
                 env: {
                   ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix-failing-after-each.mjs',
+                  TEST_DIR: 'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs',
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                 },
               }
