@@ -174,15 +174,15 @@ class TextMapPropagator {
       const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
       for (const [key, value] of Object.entries(baggageItems)) {
-        const baggageKey = String(key).trim()
-        if (!baggageKey || !baggageTokenExpr.test(baggageKey)) continue
+        const baggageKey = key.trim()
+        if (!baggageTokenExpr.test(baggageKey)) continue
 
         // Do not trim values. If callers include leading/trailing whitespace, it must be percent-encoded.
         // W3C list-member allows optional properties after ';'.
         // https://www.w3.org/TR/baggage/#header-content
-        const item = `${baggageKey}=${encodeURIComponent(String(value))},`
+        const item = `${baggageKey}=${encodeURIComponent(value)},`
         itemCounter += 1
-        byteCounter += Buffer.byteLength(item)
+        byteCounter += item.length
 
         // Check for item count limit exceeded
         if (itemCounter > this._config.baggageMaxItems) {
