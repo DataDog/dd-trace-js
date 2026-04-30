@@ -32,6 +32,8 @@ try {
   if (pipeline) {
     // Initialize the WASM module before use
     pipeline.init()
+    const legacyStorage = storage('legacy');
+    pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
   }
   // Only mark as available if WasmSpanState is actually present
   available = pipeline?.WasmSpanState != null
