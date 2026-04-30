@@ -42,27 +42,21 @@ function getReadableResourceName (readableActionName, collection, query) {
     readableActionName += ' ' + collection
   }
   if (query) {
-    readableActionName += ' ' + JSON.stringify(sanitize(query))
+    readableActionName += ' ' + JSON.stringify(query, sanitiseReplacer)
   }
   return readableActionName
 }
 
-function sanitize (input) {
-  const output = {}
-
-  if (!isObject(input) || Buffer.isBuffer(input)) return '?'
-
-  for (const key in input) {
-    if (typeof input[key] === 'function') continue
-
-    output[key] = sanitize(input[key])
+// Folds the previous recursive `sanitize` clone into a JSON.stringify replacer: non-plain
+// values become '?', nested functions drop, plain objects walk natively without an intermediate copy.
+function sanitiseReplacer (key, value) {
+  if (typeof value === 'function') {
+    return key === '' ? '?' : undefined
   }
-
-  return output
-}
-
-function isObject (val) {
-  return val !== null && typeof val === 'object' && !Array.isArray(val)
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || Buffer.isBuffer(value)) {
+    return '?'
+  }
+  return value
 }
 
 module.exports = SharedbPlugin

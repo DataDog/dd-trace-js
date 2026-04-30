@@ -42,12 +42,14 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     throw new Error('injectTraceContext must be implemented by subclass')
   }
 
+  // Returns the parsed metadata so setProducerCheckpoint can mutate it without a second parse.
   _injectIntoOpts (span, opts) {
     const carrier = {}
     this.tracer.inject(span, 'text_map', carrier)
-    const existing = opts.telemetry?.metadata ? JSON.parse(opts.telemetry.metadata) : {}
-    existing._datadog = carrier
-    opts.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+    const metadata = opts.telemetry?.metadata ? JSON.parse(opts.telemetry.metadata) : {}
+    metadata._datadog = carrier
+    opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
+    return metadata
   }
 
   setProducerCheckpoint (span, ctx) {
@@ -56,10 +58,11 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
 
     if (optsTarget && typeof optsTarget === 'object') {
-      const existing = optsTarget.telemetry?.metadata ? JSON.parse(optsTarget.telemetry.metadata) : {}
-      DsmPathwayCodec.encode(dataStreamsContext, existing._datadog || existing)
-      if (!existing._datadog) existing._datadog = {}
-      optsTarget.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+      const metadata = ctx._ddMetadata ??
+        (optsTarget.telemetry?.metadata ? JSON.parse(optsTarget.telemetry.metadata) : {})
+      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
+      if (!metadata._datadog) metadata._datadog = {}
+      optsTarget.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
     }
   }
 
@@ -96,7 +99,7 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
 
   injectTraceContext (span, ctx) {
     const opts = this.#ensureOpts(ctx)
-    this._injectIntoOpts(span, opts)
+    ctx._ddMetadata = this._injectIntoOpts(span, opts)
   }
 
   getDsmData (ctx) {
@@ -132,39 +135,32 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
 
-    for (const job of jobs) {
+    const cache = []
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
       if (!job) continue
       job.opts = job.opts || {}
-      this._injectIntoOpts(span, job.opts)
+      cache[i] = this._injectIntoOpts(span, job.opts)
     }
-  }
-
-  getDsmData (ctx) {
-    const jobs = ctx.arguments?.[0] || []
-    const payloadSize = jobs.reduce((total, job) => {
-      return total + (job?.data ? getMessageSize(job.data) : 0)
-    }, 0)
-    return {
-      queueName: ctx.self?.name || 'bullmq',
-      payloadSize,
-      optsTarget: jobs[0]?.opts,
-    }
+    ctx._ddMetadata = cache
   }
 
   setProducerCheckpoint (span, ctx) {
     const jobs = ctx.arguments?.[0] || []
     const queueName = ctx.self?.name || 'bullmq'
     const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
+    const cache = ctx._ddMetadata
 
-    for (const job of jobs) {
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
       if (!job?.data) continue
       const payloadSize = getMessageSize(job.data)
       const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-      job.opts = job.opts || {}
-      const existing = job.opts.telemetry?.metadata ? JSON.parse(job.opts.telemetry.metadata) : {}
-      DsmPathwayCodec.encode(dataStreamsContext, existing._datadog || existing)
-      if (!existing._datadog) existing._datadog = {}
-      job.opts.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+      const metadata = cache?.[i] ??
+        (job.opts.telemetry?.metadata ? JSON.parse(job.opts.telemetry.metadata) : {})
+      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
+      if (!metadata._datadog) metadata._datadog = {}
+      job.opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
     }
   }
 }
@@ -187,7 +183,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
     const flow = ctx.arguments?.[0]
     if (!flow) return
     flow.opts = flow.opts || {}
-    this._injectIntoOpts(span, flow.opts)
+    ctx._ddMetadata = this._injectIntoOpts(span, flow.opts)
   }
 
   getDsmData (ctx) {

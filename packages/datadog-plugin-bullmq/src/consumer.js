@@ -68,8 +68,8 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
       const ddCarrier = metadata._datadog
       if (!ddCarrier) return
 
-      // Clean up only our _datadog key, preserve other metadata
-      delete metadata._datadog
+      // Avoid `delete`'s hidden-class transition; JSON.stringify also omits undefined values.
+      metadata._datadog = undefined
       job.opts.telemetry.metadata = JSON.stringify(metadata)
 
       return ddCarrier
