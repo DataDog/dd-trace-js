@@ -81,6 +81,7 @@ let quarantinedButNotAttemptToFixFqns = new Set()
 const newTestsWithDynamicNames = new Set()
 let rootDir = ''
 let sessionProjects = []
+let activeTestPages
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
@@ -281,6 +282,32 @@ function getChannelPromise (channelToPublishTo, params) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ onDone: resolve, ...params })
   })
+}
+
+async function stopRumSessionForPage (page) {
+  try {
+    const isRumActive = await page.evaluate(stopRumSession)
+
+    if (isRumActive) {
+      // Give some time RUM to flush data, similar to what we do in selenium
+      await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+      const url = page.url()
+      if (url) {
+        const domain = new URL(url).hostname
+        await page.context().addCookies([{
+          name: 'datadog-ci-visibility-test-execution-id',
+          value: '',
+          domain,
+          path: '/',
+        }])
+      } else {
+        log.error('RUM is active but page.url() is not available')
+      }
+    }
+  } catch (e) {
+    // ignore errors
+    log.error('afterEach hook error', e)
+  }
 }
 
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
@@ -1120,6 +1147,10 @@ addHook({
 
     try {
       if (page) {
+        if (activeTestPages && !activeTestPages.includes(page)) {
+          activeTestPages.push(page)
+        }
+
         const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(detectRum)
         if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
           log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
@@ -1158,6 +1189,7 @@ addHook({
       return _runTest.apply(this, arguments)
     }
     steps = []
+    activeTestPages = []
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -1200,32 +1232,15 @@ addHook({
       if (!existAfterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
-          fn: async function ({ page }) {
-            try {
-              if (page) {
-                const isRumActive = await page.evaluate(stopRumSession)
+          fn: async function () {
+            const pages = activeTestPages || []
+            activeTestPages = []
+            const stopRumSessionPromises = []
 
-                if (isRumActive) {
-                  // Give some time RUM to flush data, similar to what we do in selenium
-                  await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
-                  const url = page.url()
-                  if (url) {
-                    const domain = new URL(url).hostname
-                    await page.context().addCookies([{
-                      name: 'datadog-ci-visibility-test-execution-id',
-                      value: '',
-                      domain,
-                      path: '/',
-                    }])
-                  } else {
-                    log.error('RUM is active but page.url() is not available')
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore errors
-              log.error('afterEach hook error', e)
+            for (const page of pages) {
+              stopRumSessionPromises.push(stopRumSessionForPage(page))
             }
+            await Promise.all(stopRumSessionPromises)
           },
           title: 'afterEach hook',
           _ddHook: true,
