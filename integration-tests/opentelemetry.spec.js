@@ -9,7 +9,7 @@ const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
-    ? agent.assertTelemetryReceived(onMessage, 'generate-metrics', timeout)
+    ? agent.assertTelemetryReceived({ fn: onMessage, requestType: 'generate-metrics', timeout })
     : agent.assertMessageReceived(onMessage, timeout)
 
   const [res] = await Promise.all([
@@ -58,7 +58,7 @@ describe('opentelemetry', function () {
   let cwd = /** @type {string} */ ('')
   const timeout = 5000
   const dependencies = [
-    '@opentelemetry/api@1.8.0',
+    '@opentelemetry/api',
     '@opentelemetry/instrumentation',
     '@opentelemetry/instrumentation-http',
     '@opentelemetry/instrumentation-express@0.47.1',

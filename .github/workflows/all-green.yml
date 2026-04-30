@@ -8,8 +8,8 @@ on:
     - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   all-green:
@@ -31,7 +31,7 @@ jobs:
       - run: yarn add @actions/core @actions/github octokit
       - run: node scripts/all-green.mjs
         env:
-          DELAY: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
+          DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ github.token }}
           POLLING_INTERVAL: 1

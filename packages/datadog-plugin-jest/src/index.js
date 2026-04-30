@@ -5,7 +5,7 @@ const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 const {
@@ -166,7 +166,7 @@ class JestPlugin extends CiPlugin {
 
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       appClosingTelemetry()

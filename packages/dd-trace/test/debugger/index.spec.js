@@ -70,6 +70,8 @@ describe('debugger/index', () => {
       tags: {
         'runtime-id': 'test-runtime-id',
       },
+      version: '1.2.3',
+      env: 'test-env',
       url: new URL('http://localhost:8126'),
     }
 
@@ -225,6 +227,7 @@ describe('debugger/index', () => {
         dynamicInstrumentation: {
           enabled: true,
         },
+        env: 'test-env',
         hostname: 'test-host',
         inputPath: '/debugger/v2/input',
         logLevel: 'info',
@@ -234,6 +237,7 @@ describe('debugger/index', () => {
         runtimeId: 'test-runtime-id',
         service: 'test-service',
         url: 'http://localhost:8126/',
+        version: '1.2.3',
       })
     })
   })

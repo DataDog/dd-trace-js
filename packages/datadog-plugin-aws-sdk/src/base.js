@@ -197,8 +197,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
-    return envVarValue ? isTrue(envVarValue) : true
+    return this._tracerConfig[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`] ?? true
   }
 
   addResponseTags (span, response) {

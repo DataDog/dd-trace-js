@@ -138,21 +138,26 @@ describe('Endpoints collection', () => {
 
       const expectedMessageCount = framework === 'express' ? 7 : 4
 
-      const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
-        isFirstFlags.push(Boolean(payload.payload.is_first))
+      const telemetryPromise = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          isFirstFlags.push(Boolean(payload.payload.is_first))
 
-        if (payload.payload.endpoints) {
-          payload.payload.endpoints.forEach(endpoint => {
-            endpointsFound.push({
-              method: endpoint.method,
-              path: endpoint.path,
-              type: endpoint.type,
-              operation_name: endpoint.operation_name,
-              resource_name: endpoint.resource_name,
+          if (payload.payload.endpoints) {
+            payload.payload.endpoints.forEach(endpoint => {
+              endpointsFound.push({
+                method: endpoint.method,
+                path: endpoint.path,
+                type: endpoint.type,
+                operation_name: endpoint.operation_name,
+                resource_name: endpoint.resource_name,
+              })
             })
-          })
-        }
-      }, 'app-endpoints', 5_000, expectedMessageCount)
+          }
+        },
+        requestType: 'app-endpoints',
+        timeout: 5_000,
+        expectedMessageCount,
+      })
 
       proc = await spawnProc(appFile, {
         cwd,

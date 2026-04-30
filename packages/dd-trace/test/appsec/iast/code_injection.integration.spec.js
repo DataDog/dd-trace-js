@@ -32,20 +32,24 @@ describe('IAST - code_injection - integration', () => {
     await axios.get(url)
 
     let iastTelemetryReceived = false
-    const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
-      const { namespace, series } = payload.payload
+    const checkTelemetry = agent.assertTelemetryReceived({
+      fn: ({ headers, payload }) => {
+        const { namespace, series } = payload.payload
 
-      if (namespace === 'iast') {
-        iastTelemetryReceived = true
+        if (namespace === 'iast') {
+          iastTelemetryReceived = true
 
-        const instrumentedSink = series.find(({ metric, tags, type }) => {
-          return type === 'count' &&
-            metric === 'instrumented.sink' &&
-            tags[0] === 'vulnerability_type:code_injection'
-        })
-        assert.notStrictEqual(instrumentedSink, null)
-      }
-    }, 'generate-metrics', 30_000, 2)
+          const instrumentedSink = series.find(({ metric, tags, type }) => {
+            return type === 'count' &&
+              metric === 'instrumented.sink' &&
+              tags[0] === 'vulnerability_type:code_injection'
+          })
+          assert.notStrictEqual(instrumentedSink, null)
+        }
+      },
+      requestType: 'generate-metrics',
+      expectedMessageCount: 2,
+    })
 
     const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
