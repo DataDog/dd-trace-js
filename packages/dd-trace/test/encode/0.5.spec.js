@@ -221,6 +221,29 @@ describe('encode 0.5', () => {
     assert.strictEqual(payload[11], 0)
   })
 
+  it('should emit span.error as a compact msgpack int on the wire', () => {
+    data[0].error = 1
+    data[0].start = 0
+    data[0].duration = 0
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
+    const trace = decoded[1][0]
+    assert.strictEqual(trace[0][8], 1)
+
+    // The three uint64 IDs are encoded back-to-back; parent_id is the last
+    // 9-byte `0xCF | <id-bytes>` run. With start = duration = 0 (single-byte
+    // fixints), the next byte after parent_id+2 is `error`. Pin it to
+    // fixint 0x01 — emitting 0xCB (float64) here would mean the override
+    // dropped off the 0.5 wire.
+    const idMarker = Buffer.from([0xCF, 0x12, 0x34, 0xAB, 0xCD, 0x12, 0x34, 0xAB, 0xCD])
+    const parentIdOffset = buffer.lastIndexOf(idMarker)
+    assert.notStrictEqual(parentIdOffset, -1)
+    assert.strictEqual(buffer[parentIdOffset + idMarker.length + 2], 0x01)
+  })
+
   it('should ignore meta_struct property', () => {
     data[0].meta_struct = { foo: 'bar' }
 

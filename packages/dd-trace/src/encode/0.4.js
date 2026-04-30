@@ -345,11 +345,11 @@ class AgentEncoder {
       target.set(serviceEntry, cursor)
 
       bytes.set(KEY_ERROR)
-      this.#encodeIntOrFloat(bytes, span.error)
+      this._encodeIntOrFloat(bytes, span.error)
       bytes.set(KEY_START)
-      this.#encodeIntOrFloat(bytes, span.start)
+      this._encodeIntOrFloat(bytes, span.start)
       bytes.set(KEY_DURATION)
-      this.#encodeIntOrFloat(bytes, span.duration)
+      this._encodeIntOrFloat(bytes, span.duration)
 
       this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
       this.#encodeMetaEntries(bytes, KEY_METRICS_PREFIX, span.metrics)
@@ -549,7 +549,7 @@ class AgentEncoder {
       } else {
         bytes.reserve(keyEntryLen)
         bytes.buffer.set(keyEntry, writeOffset)
-        this.#encodeIntOrFloat(bytes, entryValue)
+        this._encodeIntOrFloat(bytes, entryValue)
       }
       count++
     }
@@ -595,10 +595,13 @@ class AgentEncoder {
    * `MsgpackEncoder#encodeNumber`, NaN keeps its float64 bits instead of
    * coercing to fixint 0.
    *
+   * Underscore-protected so the 0.5 subclass can call it from its own
+   * `_encode` / `_encodeMap` overrides.
+   *
    * @param {MsgpackChunk} bytes
    * @param {number} value
    */
-  #encodeIntOrFloat (bytes, value) {
+  _encodeIntOrFloat (bytes, value) {
     if (Number.isInteger(value)) {
       if (value >= 0) {
         this.#msgpack.encodeUnsigned(bytes, value)
@@ -827,7 +830,7 @@ class AgentEncoder {
     if (typeof value === 'number') {
       this._encodeString(bytes, key)
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this.#encodeIntOrFloat(bytes, value)
+      this._encodeIntOrFloat(bytes, value)
       return true
     }
     if (typeof value === 'boolean') {
@@ -897,7 +900,7 @@ class AgentEncoder {
     }
     if (typeof value === 'number') {
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this.#encodeIntOrFloat(bytes, value)
+      this._encodeIntOrFloat(bytes, value)
       return true
     }
     if (typeof value === 'boolean') {
