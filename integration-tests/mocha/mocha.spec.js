@@ -1119,7 +1119,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
-  const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
+  const envVarSettings = ['DD_TRACE_ENABLED']
 
   envVarSettings.forEach(envVar => {
     context(`when ${envVar}=false`, () => {

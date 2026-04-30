@@ -479,6 +479,11 @@ async function packTarballWithLock (tarballPath, env) {
 
       while (!existsSync(tarballPath)) {
         await new Promise(resolve => setTimeout(resolve, 100))
+        if (!existsSync(lockFile) && !existsSync(tarballPath)) {
+          // Lock holder failed without creating the tarball, retry from scratch
+          log('Lock released without tarball, retrying:', tarballPath)
+          return packTarballWithLock(tarballPath, env)
+        }
       }
 
       log('Tarball ready:', tarballPath)
@@ -486,9 +491,9 @@ async function packTarballWithLock (tarballPath, env) {
       throw err
     }
   } finally {
-    // Strictly no need to clean up the lock - it's in a temp directory
     if (lockFd) {
-      lockFd.close().catch(() => {})
+      await lockFd.close().catch(() => {})
+      await fs.unlink(lockFile).catch(() => {})
     }
   }
 }
@@ -537,11 +542,10 @@ async function createSandbox (
   const out = tarballEnv && tarballEnv !== '0' && tarballEnv !== 'false'
     ? tarballEnv
     : path.join(sandboxRoot, 'dd-trace.tgz')
-  const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
-  const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--trust']
+  const addOptions = { cwd: folder, env: restOfEnv, timeout: 60_000 }
+  const addFlags = ['--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
@@ -562,10 +566,12 @@ async function createSandbox (
     addFlags.push('--silent')
   }
 
-  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
-    ...addOptions,
-    timeout: 90_000,
-  })
+  if (cappedDependencies.length > 0) {
+    execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, addOptions)
+  }
+
+  execHelper(`${BUN} add file:${out} ${[...addFlags, '--ignore-scripts'].join(' ')}`, addOptions)
+
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
     execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
@@ -942,7 +948,9 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
-    return sandbox.remove()
+    const oldSandbox = sandbox
+    sandbox = undefined
+    return oldSandbox?.remove()
   })
 }
 

@@ -213,30 +213,25 @@ module.exports = class FakeAgent extends EventEmitter {
   /**
    * Assert that a telemetry message is received.
    *
-   * @overload
-   * @param {string} requestType - The request type to assert.
-   * @param {number} [timeout=30_000] - The timeout in milliseconds.
-   * @param {number} [expectedMessageCount=1] - The number of messages to expect.
-   * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received.
+   * @param {object} options
+   * @param {Function} [options.fn] - Function called with each matching telemetry message. If it throws,
+   *     the error is collected and the listener stays alive for the next message. Defaults to a no-op.
+   * @param {string} options.requestType - The telemetry request type to match.
+   * @param {number} [options.timeout=30_000] - Timeout in milliseconds before the promise rejects.
+   * @param {number} [options.expectedMessageCount=1] - Number of matching messages to wait for.
+   * @param {boolean} [options.resolveAtFirstSuccess=false] - Resolve as soon as `fn` first runs without throwing.
+   * @param {string} [options.namespace] - If set, only consider messages whose payload namespace equals this value.
+   * @returns {Promise<void>} A promise that resolves when the expected telemetry messages are received and `fn` has
+   *     run successfully. If `fn` throws on every matching message, the promise rejects once `timeout` is reached.
    */
-  /**
-   * @overload
-   * @param {Function} fn - The function to call with the telemetry message of type `requestType`.
-   * @param {string} requestType - The request type to assert.
-   * @param {number} [timeout=30_000] - The timeout in milliseconds.
-   * @param {number} [expectedMessageCount=1] - The number of messages to expect.
-   * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received and
-   *     the function `fn` has finished running. If `fn` throws an error, the promise will be rejected once `timeout`
-   *     is reached.
-   */
-  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1, resolveAtFirstSuccess = false) {
-    if (typeof fn !== 'function') {
-      expectedMessageCount = timeout
-      timeout = requestType
-      requestType = fn
-      fn = noop
-    }
-
+  assertTelemetryReceived ({
+    fn = noop,
+    requestType,
+    timeout = 30_000,
+    expectedMessageCount = 1,
+    resolveAtFirstSuccess = false,
+    namespace,
+  }) {
     let resultResolve
     let resultReject
     let msgCount = 0
@@ -260,6 +255,7 @@ module.exports = class FakeAgent extends EventEmitter {
 
     const messageHandler = msg => {
       if (msg.payload.request_type !== requestType) return
+      if (namespace !== undefined && msg.payload.payload?.namespace !== namespace) return
       msgCount += 1
       try {
         fn(msg)
@@ -506,6 +502,14 @@ function buildExpressServer (agent) {
   app.post('/v1/traces', (req, res) => {
     res.status(200).send()
     agent.emit('otlp-traces', {
+      headers: req.headers,
+      payload: req.body,
+    })
+  })
+
+  app.post('/v1/logs', (req, res) => {
+    res.status(200).send()
+    agent.emit('otlp-logs', {
       headers: req.headers,
       payload: req.body,
     })
