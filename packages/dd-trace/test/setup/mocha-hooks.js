@@ -14,8 +14,19 @@ const failedTests = new WeakSet()
 if (!patched.has(Runner.prototype)) {
   patched.add(Runner.prototype)
 
+  const emit = Runner.prototype.emit
   const fail = Runner.prototype.fail
   const runHook = Hook.prototype.run
+
+  /**
+   * @this {Mocha.Runner}
+   * @param {string} event
+   * @param {...unknown} args
+   */
+  Runner.prototype.emit = function patchedEmit (event, ...args) {
+    if (event === 'retry' && args[0]) failedTests.add(args[0])
+    return emit.call(this, event, ...args)
+  }
 
   /**
    * @this {Mocha.Runner}
