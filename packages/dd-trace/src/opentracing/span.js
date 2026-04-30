@@ -37,6 +37,20 @@ const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
+// Module-scope so we don't allocate a fresh recursive closure on every
+// `addLink` / `addEvent`. The output map is passed in.
+function addArrayOrScalarAttribute (out, key, value) {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
+    }
+  } else if (ALLOWED.has(typeof value)) {
+    out[key] = typeof value === 'string' ? value : String(value)
+  } else {
+    log.warn('Dropping span link attribute. It is not of an allowed type')
+  }
+}
+
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
 
@@ -58,7 +72,10 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // TODO(BridgeAR): Investigate why this is causing a performance regression
+    // Stay on `Object.assign({}, src)` for backportability: V8 12+ (Node 22 /
+    // 24) inlines `{ ...src }` and beats `Object.assign` here, but on V8 10.2
+    // / 11.3 (Node 18 / 20) the spread takes a generic runtime path and slows
+    // `spans-finish-*` by ~140%. Revisit once those LTS lines drop.
     // eslint-disable-next-line prefer-object-spread
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
@@ -89,10 +106,17 @@ class DatadogSpan {
 
     this._startTime = fields.startTime || this._getTime()
 
-    this._links = fields.links?.map(link => ({
-      context: link.context._ddContext ?? link.context,
-      attributes: this._sanitizeAttributes(link.attributes),
-    })) ?? []
+    this._links = []
+    const inputLinks = fields.links
+    if (inputLinks) {
+      for (let i = 0; i < inputLinks.length; i++) {
+        const link = inputLinks[i]
+        this._links.push({
+          context: link.context._ddContext ?? link.context,
+          attributes: this._sanitizeAttributes(link.attributes),
+        })
+      }
+    }
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -288,28 +312,11 @@ class DatadogSpan {
   }
 
   _sanitizeAttributes (attributes = {}) {
-    const sanitizedAttributes = {}
-
-    const addArrayOrScalarAttributes = (key, maybeArray) => {
-      if (Array.isArray(maybeArray)) {
-        for (let i = 0; i < maybeArray.length; i++) {
-          addArrayOrScalarAttributes(`${key}.${i}`, maybeArray[i])
-        }
-      } else {
-        const maybeScalar = maybeArray
-        if (ALLOWED.has(typeof maybeScalar)) {
-          // Wrap the value as a string if it's not already a string
-          sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
-        } else {
-          log.warn('Dropping span link attribute. It is not of an allowed type')
-        }
-      }
-    }
-
+    const out = {}
     for (const key of Object.keys(attributes)) {
-      addArrayOrScalarAttributes(key, attributes[key])
+      addArrayOrScalarAttribute(out, key, attributes[key])
     }
-    return sanitizedAttributes
+    return out
   }
 
   _sanitizeEventAttributes (attributes = {}) {

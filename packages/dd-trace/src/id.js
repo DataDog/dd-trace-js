@@ -70,13 +70,9 @@ class Identifier {
    * @returns {boolean}
    */
   equals (other) {
-    const length = this.#buffer.length
-    const otherLength = other.#buffer.length
-
-    // Buffers may differ in length when one ID was constructed from a
-    // 16-hex traceId and the other from an 8-hex spanId; the shorter is
-    // treated as zero-padded on the left.
-    for (let i = length - 1, j = otherLength - 1; i >= 0 && j >= 0; i--, j--) {
+    // Big-endian suffix compare: when buffers differ in length, only the
+    // rightmost `min(this.length, other.length)` bytes are checked.
+    for (let i = this.#buffer.length - 1, j = other.#buffer.length - 1; i >= 0 && j >= 0; i--, j--) {
       if (this.#buffer[i] !== other.#buffer[j]) return false
     }
 
