@@ -112,7 +112,7 @@ class TraceState extends Map {
     if (state.changed) {
       const value = state.toString()
       if (value) {
-        this.set(vendor, state.toString())
+        this.set(vendor, value)
       } else {
         this.delete(vendor)
       }
