@@ -205,6 +205,8 @@ describe('Plugin', () => {
         assert.ok(response)
 
         const { apmSpans, llmobsSpans } = await getEvents()
+        assert.ok(!llmobsSpans[0].meta.output.messages[0].content.includes('signature'))
+
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
