@@ -121,7 +121,10 @@ function wrapRequest (send) {
       cbExists,
     }
 
-    this.once('complete', response => {
+    // AWS SDK v2 mixes in its own `SequentialExecutor` (no `once`), so stick
+    // to `on('complete')`. The event fires exactly once per Request — even
+    // across retries — so we don't get duplicate publishes.
+    this.on('complete', response => {
       ctx.response = response
       channels.complete.publish(ctx)
     })

@@ -72,10 +72,12 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // V8 (>= 11) inlines `{ ...src }` for plain-object `src` and beats the
-    // `Object.assign({}, src)` round-trip for the 1- to 4-key tag shapes that
-    // dominate plugin span construction.
-    const tags = { ...fields.tags }
+    // Stay on `Object.assign({}, src)` for backportability: V8 12+ (Node 22 /
+    // 24) inlines `{ ...src }` and beats `Object.assign` here, but on V8 10.2
+    // / 11.3 (Node 18 / 20) the spread takes a generic runtime path and slows
+    // `spans-finish-*` by ~140%. Revisit once those LTS lines drop.
+    // eslint-disable-next-line prefer-object-spread
+    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this._parentTracer = tracer

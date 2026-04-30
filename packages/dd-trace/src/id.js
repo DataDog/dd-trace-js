@@ -11,18 +11,12 @@ let batch = 0
 
 // Internal representation of a trace or span ID.
 class Identifier {
-  /** @type {number[] | Uint8Array} */
-  #buffer
-
-  /** @type {bigint | undefined} Cached uint64 view of `#buffer`; populated lazily. */
-  #bigInt
-
   /**
    * @param {string} value
    * @param {number} [radix]
    */
   constructor (value, radix = 16) {
-    this.#buffer = radix === 16
+    this._buffer = radix === 16
       ? createBuffer(value)
       : fromString(value, radix)
   }
@@ -33,35 +27,32 @@ class Identifier {
    */
   toString (radix = 16) {
     return radix === 16
-      ? Buffer.from(this.#buffer).toString('hex')
-      : toNumberString(this.#buffer, radix)
+      ? Buffer.from(this._buffer).toString('hex')
+      : toNumberString(this._buffer, radix)
   }
 
   /**
    * @returns {bigint}
    */
   toBigInt () {
-    // Identifier is immutable, so we can cache the BigInt across calls.
-    // PrioritySampler reads this on every span sampled with a partial rate.
-    this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(0)
-    return this.#bigInt
+    return Buffer.from(this._buffer).readBigUInt64BE(0)
   }
 
   /**
    * @returns {number[] | Uint8Array}
    */
   toBuffer () {
-    return this.#buffer
+    return this._buffer
   }
 
   /**
    * @returns {number[] | Uint8Array}
    */
   toArray () {
-    if (this.#buffer.length === 8) {
-      return this.#buffer
+    if (this._buffer.length === 8) {
+      return this._buffer
     }
-    return this.#buffer.slice(-8)
+    return this._buffer.slice(-8)
   }
 
   /**
@@ -76,14 +67,14 @@ class Identifier {
    * @returns {boolean}
    */
   equals (other) {
-    const length = this.#buffer.length
-    const otherLength = other.#buffer.length
+    const length = this._buffer.length
+    const otherLength = other._buffer.length
 
     // Buffers may differ in length when one ID was constructed from a
     // 16-hex traceId and the other from an 8-hex spanId; the shorter is
     // treated as zero-padded on the left.
     for (let i = length - 1, j = otherLength - 1; i >= 0 && j >= 0; i--, j--) {
-      if (this.#buffer[i] !== other.#buffer[j]) return false
+      if (this._buffer[i] !== other._buffer[j]) return false
     }
 
     return true
