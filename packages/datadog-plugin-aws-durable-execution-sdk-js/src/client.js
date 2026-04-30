@@ -17,6 +17,8 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
       meta,
     }, ctx)
 
+    this.injectTraceContextIntoInvokePayload(ctx)
+
     return ctx.currentStore
   }
 
@@ -49,6 +51,46 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     return tags
   }
 
+  /**
+   * Inject Datadog trace headers into invoke input payload under `_datadog`
+   * when the input is a plain object.
+   *
+   * Durable invoke overloads:
+   *   invoke(name, funcId, input?, config?)
+   *   invoke(funcId, input?, config?)
+   *
+   * We only mutate the payload when there is a dictionary-like input object.
+   * Primitive/array/empty input values are left unchanged.
+   *
+   * @param {{ arguments?: ArrayLike<unknown>, currentStore?: { span?: unknown } }} ctx
+   */
+  injectTraceContextIntoInvokePayload (ctx) {
+    const args = ctx.arguments || []
+    const inputArgIndex = getInvokeInputArgIndex(args)
+    if (inputArgIndex === -1 || inputArgIndex >= args.length) return
+
+    const input = args[inputArgIndex]
+    if (!isPlainObject(input)) return
+
+    const span = ctx.currentStore?.span
+    if (!span || typeof this._tracer?.inject !== 'function') return
+
+    const injectedHeaders = {}
+    try {
+      this._tracer.inject(span, 'http_headers', injectedHeaders)
+    } catch {
+      return
+    }
+    if (Object.keys(injectedHeaders).length === 0) return
+
+    try {
+      const existing = isPlainObject(input._datadog) ? input._datadog : {}
+      input._datadog = { ...existing, ...injectedHeaders }
+    } catch {
+      // Best-effort: payload may be frozen/non-writable.
+    }
+  }
+
   asyncEnd (ctx) {
     this.finish(ctx)
   }
@@ -60,6 +102,20 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   finish (ctx) {
     super.finish(ctx)
   }
+}
+
+function getInvokeInputArgIndex (args) {
+  const hasName = typeof args[0] === 'string' && typeof args[1] === 'string'
+  if (hasName) return 2
+  if (typeof args[0] === 'string') return 1
+  return -1
+}
+
+function isPlainObject (value) {
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
 }
 
 module.exports = AwsDurableExecutionSdkJsClientPlugin
