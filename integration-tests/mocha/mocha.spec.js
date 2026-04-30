@@ -4400,6 +4400,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const NUM_RETRIES = 3
         const testName = 'attempt to fix tests with failing afterEach ' +
           'can attempt to fix a test whose afterEach fails before the last attempt'
+        let stdout = ''
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
         receiver.setTestManagementTests({
           mocha: {
@@ -4459,11 +4460,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         )
 
+        childProcess.stdout?.on('data', data => {
+          stdout += data
+        })
+        childProcess.stderr?.on('data', data => {
+          stdout += data
+        })
+
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
           eventsPromise,
         ])
 
+        assert.match(stdout, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 1 test\(s\)\./)
         assert.strictEqual(exitCode, 1)
       })
 

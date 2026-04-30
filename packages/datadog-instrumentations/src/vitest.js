@@ -262,6 +262,30 @@ function getTestName (task) {
   return testName
 }
 
+function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
+  if (isSwitchedStatus && attemptToFixTasks.has(task) && testCtx?.status) {
+    return testCtx.status
+  }
+
+  return state === 'fail' ? 'fail' : 'pass'
+}
+
+function recordFinalAttemptToFixExecution (task, status, error, providedContext) {
+  const statuses = attemptToFixTaskToStatuses.get(task)
+  if (statuses && statuses.length <= providedContext.testManagementAttemptToFixRetries) {
+    statuses.push(status)
+  }
+
+  recordAttemptToFixExecution(attemptToFixExecutions, {
+    testSuite: getTestSuitePath(task.file.filepath, process.cwd()),
+    testName: getTestName(task),
+    status,
+    error: status === 'fail' ? error : undefined,
+    isDisabled: disabledTasks.has(task),
+    isQuarantined: quarantinedTasks.has(task),
+  })
+}
+
 /**
  * Wraps a function so it runs inside the current test span context.
  * @param {object} task
@@ -989,17 +1013,6 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
 
-      if (attemptToFixTasks.has(task)) {
-        recordAttemptToFixExecution(attemptToFixExecutions, {
-          testSuite: getTestSuitePath(task.file.filepath, process.cwd()),
-          testName: getTestName(task),
-          status,
-          error: task.result?.errors?.[0],
-          isDisabled: disabledTasks.has(task),
-          isQuarantined: quarantinedTasks.has(task),
-        })
-      }
-
       if (ctx) {
         // We don't finish here because the test might fail in a later hook (afterEach)
         ctx.status = status
@@ -1195,9 +1208,16 @@ addHook({
       // We have to trick vitest into thinking that the test has passed
       // but we want to report it as failed if it did fail
       const isSwitchedStatus = switchedStatuses.has(task)
+      const providedContext = getProvidedContext()
 
       if (result) {
         const { state, duration, errors } = result
+        const testError = errors?.[0]
+        if (attemptToFixTasks.has(task)) {
+          const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
+          recordFinalAttemptToFixExecution(task, status, testError, providedContext)
+        }
+
         if (state === 'skip') { // programmatic skip
           testSkipCh.publish({
             testName: getTestName(task),
@@ -1216,12 +1236,6 @@ addHook({
             })
           }
         } else if (state === 'fail' || isSwitchedStatus) {
-          let testError
-
-          if (errors?.length) {
-            testError = errors[0]
-          }
-
           let hasFailedAllRetries = false
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
@@ -1235,7 +1249,6 @@ addHook({
           }
 
           // Check if all EFD retries failed
-          const providedContext = getProvidedContext()
           const isEfdRetry =
             providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
           if (isEfdRetry) {
