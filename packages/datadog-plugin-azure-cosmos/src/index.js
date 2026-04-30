@@ -42,12 +42,12 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   bindStart (ctx) {
-    const requestContext = ctx.arguments?.[1]
-    const resource = requestContext ? this.getResource(requestContext) : null
-    const { dbName, containerName } = requestContext ? this.getDbInfo(requestContext) : null
-    const connectionMode = requestContext ? this.getConnectionMode(requestContext) : null
-    const { outHost, userAgent } = requestContext ? this.getHttpInfo(requestContext) : null
-    const pluginOn = ctx.arguments?.[3]
+    const requestContext = ctx.arguments[1]
+    const resource = this.getResource(requestContext)
+    const { dbName, containerName } = this.getDbInfo(requestContext)
+    const connectionMode = this.getConnectionMode(requestContext)
+    const { outHost, userAgent } = this.getHttpInfo(requestContext)
+    const pluginOn = ctx.arguments[3]
 
     // only trace operations not requests (pluginOn)
     // trace requests only if they are read or query operations not on docs
