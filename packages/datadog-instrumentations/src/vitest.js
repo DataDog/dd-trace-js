@@ -53,6 +53,7 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const attemptToFixTaskToStatuses = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
 const dynamicNameTasks = new WeakSet()
@@ -667,7 +668,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
             isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
             task.repeats = testManagementAttemptToFixRetries
             attemptToFixTasks.add(task)
-            taskToStatuses.set(task, [])
+            attemptToFixTaskToStatuses.set(task, [])
           }
         },
       })
@@ -736,6 +737,14 @@ function wrapVitestTestRunner (VitestTestRunner) {
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
       const isQuarantined = quarantinedTasks.has(task)
+
+      if (isAttemptingToFix) {
+        const statuses = attemptToFixTaskToStatuses.get(task)
+        if (task.result.state === 'pass' && statuses?.includes('fail')) {
+          switchedStatuses.add(task)
+          task.result.state = 'fail'
+        }
+      }
 
       if (!isAttemptingToFix && isQuarantined) {
         if (task.result.state === 'fail') {
@@ -826,8 +835,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const lastExecutionStatus = task.result.state
     const isAtf = attemptToFixTasks.has(task)
     const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled
-    const statuses = taskToStatuses.get(task)
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isAtf
+    const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
     // The only thing that EFD does is to forcefully pass the test if it has passed at least once
@@ -844,7 +853,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (shouldTrackStatuses) {
+        if (shouldTrackStatuses && statuses) {
           statuses.push(lastExecutionStatus)
         }
         if (shouldFlipStatus) {
@@ -857,7 +866,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
     } else if (numRepetition === task.repeats) {
-      if (shouldTrackStatuses) {
+      if (shouldTrackStatuses && statuses) {
         statuses.push(lastExecutionStatus)
       }
 
@@ -970,11 +979,11 @@ function wrapVitestTestRunner (VitestTestRunner) {
       let attemptToFixPassed = false
       let attemptToFixFailed = false
       if (attemptToFixTasks.has(task)) {
-        const statuses = taskToStatuses.get(task)
+        const statuses = attemptToFixTaskToStatuses.get(task)
         if (statuses.length === testManagementAttemptToFixRetries) {
-          if (statuses.every(status => status === 'pass')) {
+          if (status === 'pass' && statuses.every(status => status === 'pass')) {
             attemptToFixPassed = true
-          } else if (statuses.includes('fail')) {
+          } else if (status === 'fail' || statuses.includes('fail')) {
             attemptToFixFailed = true
           }
         }
@@ -1198,10 +1207,11 @@ addHook({
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
+            const isSkippedByTestManagement =
+              !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
             testPassCh.publish({
               task,
-              finalStatus:
-                disabledTasks.has(task) || quarantinedTasks.has(task) ? 'skip' : 'pass',
+              finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
               ...testCtx.currentStore,
             })
           }
@@ -1215,7 +1225,7 @@ addHook({
           let hasFailedAllRetries = false
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
-            const statuses = taskToStatuses.get(task)
+            const statuses = attemptToFixTaskToStatuses.get(task)
             if (statuses.includes('fail')) {
               attemptToFixFailed = true
             }

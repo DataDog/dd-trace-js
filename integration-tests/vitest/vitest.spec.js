@@ -1821,6 +1821,7 @@ versions.forEach((version) => {
             isAttemptingToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
+            shouldFailFirstOnly,
             isQuarantining,
             isDisabling,
           }) =>
@@ -1871,7 +1872,7 @@ versions.forEach((version) => {
                     if (isLastAttempt) {
                       if (shouldAlwaysPass) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                      } else if (shouldFailSometimes) {
+                      } else if (shouldFailSometimes || shouldFailFirstOnly) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                         assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                       } else {
@@ -1902,6 +1903,7 @@ versions.forEach((version) => {
            *   shouldAlwaysPass?: boolean,
            *   isQuarantining?: boolean,
            *   shouldFailSometimes?: boolean,
+           *   shouldFailFirstOnly?: boolean,
            *   isDisabling?: boolean,
            *   extraEnvVars?: Record<string, string>
            * }} [options]
@@ -1920,6 +1922,7 @@ versions.forEach((version) => {
               isAttemptingToFix,
               shouldAlwaysPass,
               shouldFailSometimes,
+              shouldFailFirstOnly,
               isQuarantining,
               isDisabling,
             })
@@ -2004,6 +2007,32 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
+          })
+
+          it('preserves raw attempt statuses for quarantined attempt to fix tests', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                    tests: {
+                      'attempt to fix tests can attempt to fix a test': {
+                        properties: {
+                          attempt_to_fix: true,
+                          quarantined: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              isQuarantining: true,
+              shouldFailFirstOnly: true,
+            })
           })
 
           it('does not attempt to fix tests if test management is not enabled', (done) => {
@@ -2112,6 +2141,32 @@ versions.forEach((version) => {
             })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabling: true })
+          })
+
+          it('reports passing disabled attempt to fix tests as passed', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                    tests: {
+                      'attempt to fix tests can attempt to fix a test': {
+                        properties: {
+                          attempt_to_fix: true,
+                          disabled: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              isDisabling: true,
+              shouldAlwaysPass: true,
+            })
           })
         })
 
