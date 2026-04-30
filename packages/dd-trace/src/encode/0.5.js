@@ -1,7 +1,7 @@
 'use strict'
 
 const { normalizeSpan } = require('./tags-processors')
-const { AgentEncoder: BaseEncoder } = require('./0.4')
+const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
@@ -10,7 +10,7 @@ function formatSpan (span) {
   span = normalizeSpan(span)
   // v0.5 has no native span_events slot; always serialize as a meta tag.
   if (span.span_events) {
-    span.meta.events = JSON.stringify(span.span_events)
+    span.meta.events = stringifySpanEvents(span.span_events)
     // `= undefined` over `delete` to keep the span's hidden class.
     span.span_events = undefined
   }
