@@ -183,13 +183,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
-    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (!['tools', 'functions'].includes(key)) {
-        obj[key] = value
+    const metadata = {}
+    for (const key of Object.keys(parameters)) {
+      if (key !== 'tools' && key !== 'functions') {
+        metadata[key] = parameters[key]
       }
-
-      return obj
-    }, {})
+    }
 
     this._tagger.tagMetadata(span, metadata)
 
@@ -317,12 +316,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'user', content: input })
     }
 
-    const inputMetadata = Object.entries(parameters).reduce((obj, [key, value]) => {
+    const inputMetadata = {}
+    for (const key of Object.keys(parameters)) {
       if (allowedParamKeys.has(key)) {
-        obj[key] = value
+        inputMetadata[key] = parameters[key]
       }
-      return obj
-    }, {})
+    }
 
     this._tagger.tagMetadata(span, inputMetadata)
 
