@@ -48,10 +48,13 @@ function getAllBaggageItems () {
 }
 
 /**
- * @param {string} keyToRemove
+ * @param {string} keyToRemove No-op for non-string or empty keys.
  */
 function removeBaggageItem (keyToRemove) {
   const store = baggageStorage.getStore() ?? {}
+  if (typeof keyToRemove !== 'string' || keyToRemove === '') {
+    return store
+  }
   const { [keyToRemove]: _, ...newBaggage } = store
   baggageStorage.enterWith(newBaggage)
   return newBaggage

@@ -766,6 +766,15 @@ describe('TracerProxy', () => {
           const baggage = proxy.removeBaggageItem('missing')
           assert.deepStrictEqual(baggage, { key: 'value' })
         })
+
+        it('should not replace the store on invalid keys', () => {
+          proxy.setBaggageItem('key', 'value')
+          const before = proxy.getAllBaggageItems()
+          proxy.removeBaggageItem(null)
+          proxy.removeBaggageItem(123)
+          proxy.removeBaggageItem('')
+          assert.strictEqual(proxy.getAllBaggageItems(), before)
+        })
       })
 
       describe('removeAllBaggageItems', () => {
