@@ -90,4 +90,15 @@ describe('TraceState', () => {
     // Vendor key should move to the front on modification
     assert.strictEqual(ts.toString(), 'other=bleh')
   })
+
+  it('should cap parsing at 32 list-members per W3C Trace Context §3.3.1.2', () => {
+    const header = Array.from({ length: 50 }, (_, index) => `k${index}=v${index}`).join(',')
+    const ts = TraceState.fromString(header)
+    assert.strictEqual(ts.size, 32)
+  })
+
+  it('should ignore non-conformant input that contains no list-members', () => {
+    const ts = TraceState.fromString('a'.repeat(16_000))
+    assert.strictEqual(ts.size, 0)
+  })
 })

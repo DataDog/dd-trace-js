@@ -1,19 +1,44 @@
 'use strict'
 
-const traceStateRegex = /[ \t]*([^=]+)=([ \t]*[^, \t]+)[ \t]*(,|$)/gim
-const traceStateDataRegex = /([^:]+):([^;]+)(;|$)/gim
+// W3C Trace Context §3.3.1.2: max 32 list-members.
+// https://www.w3.org/TR/trace-context/#tracestate-header-field-values
+const MAX_LIST_MEMBERS = 32
+const WHITESPACE = /[ \t]/
 
-function fromString (Type, regex, value) {
+/**
+ * Parse a separator-delimited string into key/value entries.
+ *
+ * @param {string} value
+ * @param {string} fieldSeparator Between entries.
+ * @param {string} pairSeparator Between key and value within an entry.
+ * @param {boolean} rejectValueWhitespace Drop entries whose value contains internal whitespace.
+ * @returns {[string, string][]} Entries in reverse of wire order.
+ */
+function parseEntries (value, fieldSeparator, pairSeparator, rejectValueWhitespace) {
+  const segments = value.split(fieldSeparator)
+  const entries = []
+  for (let index = 0; index < segments.length && entries.length < MAX_LIST_MEMBERS; index++) {
+    const segment = segments[index]
+    const splitIndex = segment.indexOf(pairSeparator)
+    if (splitIndex === -1) continue
+    const key = segment.slice(0, splitIndex).trim()
+    if (!key || WHITESPACE.test(key)) continue
+    const entryValue = segment.slice(splitIndex + 1).trim()
+    if (!entryValue) continue
+    if (rejectValueWhitespace && WHITESPACE.test(entryValue)) continue
+    entries.push([key, entryValue])
+  }
+  // Reverse so the Map's insertion order is reverse of wire order. `toString`
+  // prepends as it iterates, which yields the original wire order back.
+  entries.reverse()
+  return entries
+}
+
+function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueWhitespace) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-
-  const values = []
-  for (const row of value.matchAll(regex)) {
-    values.unshift(row.slice(1, 3))
-  }
-
-  return new Type(values)
+  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueWhitespace))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -52,7 +77,7 @@ class TraceStateData extends Map {
   }
 
   static fromString (value) {
-    return fromString(TraceStateData, traceStateDataRegex, value)
+    return fromString(TraceStateData, value, ';', ':', false)
   }
 
   toString () {
@@ -92,7 +117,7 @@ class TraceState extends Map {
   }
 
   static fromString (value) {
-    return fromString(TraceState, traceStateRegex, value)
+    return fromString(TraceState, value, ',', '=', true)
   }
 
   toString () {
