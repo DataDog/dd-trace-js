@@ -85,6 +85,39 @@ Eventually we plan to look into putting these permission-required tests behind a
 
 Always search the codebase first before creating new code to avoid duplicates. Check for existing utilities, helpers, or patterns that solve similar problems. Reuse existing code when possible rather than reinventing solutions.
 
+## Pull Request Titles
+
+PR titles must follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```
+type(scope): description
+```
+
+The `scope` is optional. Valid types are:
+
+| Type | When to use |
+|------|-------------|
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation changes only |
+| `style` | Formatting, missing semicolons, etc. (no logic change) |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `perf` | A code change that improves performance |
+| `test` | Adding or updating tests |
+| `build` | Changes to build system or external dependencies |
+| `ci` | Changes to CI configuration files and scripts |
+| `chore` | Other changes that don't modify src or test files |
+| `revert` | Reverts a previous commit |
+
+Examples:
+
+```
+feat(appsec): add new WAF rule
+fix(redis): handle connection timeout
+docs: update contributing guidelines
+chore(deps): bump express to v5
+```
+
 ## Sign your commits
 
 All commits in a pull request must be signed. We require commit signing to ensure the authenticity and integrity of contributions to the project.
