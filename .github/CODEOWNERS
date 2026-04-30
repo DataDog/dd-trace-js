@@ -213,6 +213,7 @@
 # CI
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
+/.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
 /.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
@@ -259,6 +260,7 @@
 /packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/log.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/msgpack/ @DataDog/lang-platform-js
+/packages/dd-trace/test/mocha-hooks.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/noop.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/pkg.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/plugin_manager.spec.js @DataDog/lang-platform-js

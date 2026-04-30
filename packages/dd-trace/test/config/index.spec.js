@@ -162,6 +162,33 @@ describe('Config', () => {
     })
   })
 
+  describe('property surface', () => {
+    // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
+    const INTERNAL_RUNTIME_PROPERTIES = [
+      'commitSHA',
+      'debug',
+      'isServiceNameInferred',
+      'repositoryUrl',
+      'sampler',
+      'stableConfig',
+    ]
+
+    it('does not expose own properties beyond supported-configurations.json and index.d.ts', () => {
+      // Top-level segment only: nested defaults (e.g. `foo.bar`) live as `foo` on the instance.
+      const known = new Set(Object.keys(defaults).map(name => name.split('.', 1)[0]))
+      for (const name of INTERNAL_RUNTIME_PROPERTIES) {
+        known.add(name)
+      }
+
+      const config = getConfig()
+      const unknownConfigurations = Object.keys(config).filter(name => !known.has(name))
+
+      assert.deepStrictEqual(unknownConfigurations, [], 'Unknown Config properties detected.\n' +
+        'Add it to supported-configurations.json (or index.d.ts), if it truly is a Config property.\n' +
+        'Otherwise, remove / handle elsewhere. This reports telemetry about unrecognized properties.')
+    })
+  })
+
   it('should initialize its own logging config based off the loggers config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
@@ -173,6 +200,34 @@ describe('Config', () => {
       logger: undefined,
       logLevel: 'error',
     })
+  })
+
+  it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
+    // Shape mirrors winston: log methods, transports with a parent back-reference,
+    // and stream-state self-references (Transform's _readableState.pipes).
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      transports: [],
+    }
+    logger.transports.push({ name: 'console', log: () => {}, parent: logger })
+    logger._readableState = { pipes: logger }
+    logger._writableState = { pipes: logger }
+
+    // Previously this threw `RangeError: Maximum call stack size exceeded`
+    // from the rfdc baseline-clone in setAndTrack.
+    const config = getConfig({ logger, logInjection: true })
+
+    assert.strictEqual(config.logger, logger)
+    assert.strictEqual(config.logInjection, true)
+  })
+
+  it('should hold a custom lookup function by reference', () => {
+    const lookup = (_h, _o, cb) => cb(null, '127.0.0.1', 4)
+    const config = getConfig({ lookup })
+    assert.strictEqual(config.lookup, lookup)
   })
 
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
@@ -255,13 +310,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should use proxy when dynamic instrumentation is enabled with DD_TRACE_ENABLED=false', () => {
-    process.env.DD_TRACE_ENABLED = 'false'
+  it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
+    assert.strictEqual(config.apmTracingEnabled, false)
     assert.strictEqual(config.dynamicInstrumentation.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
@@ -270,13 +325,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  it('should use proxy when dynamic instrumentation is enabled with DD_TRACING_ENABLED=false', () => {
+  it('should keep the real proxy when dynamic instrumentation is enabled with DD_TRACING_ENABLED=false', () => {
     process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
+    assert.strictEqual(config.apmTracingEnabled, false)
     assert.strictEqual(config.dynamicInstrumentation.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
@@ -285,19 +340,28 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  it('should use proxy when appsec standalone is enabled with DD_TRACE_ENABLED=false', () => {
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+  it('should keep the real proxy when appsec is enabled with DD_APM_TRACING_ENABLED=false', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'false'
+    process.env.DD_APPSEC_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
     assert.strictEqual(config.apmTracingEnabled, false)
+    assert.strictEqual(config.appsec.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should prefer DD_APM_TRACING_ENABLED over DD_TRACING_ENABLED alias', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'true'
+    process.env.DD_TRACING_ENABLED = 'false'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.apmTracingEnabled, true)
   })
 
   it('should prefer DD propagation style over OTEL propagators', () => {
@@ -1301,7 +1365,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config, {
-      tracing: false,
+      apmTracingEnabled: false,
       tracePropagationExtractFirst: true,
       runtimeMetrics: {
         enabled: false,
