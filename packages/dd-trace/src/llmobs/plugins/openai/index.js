@@ -36,7 +36,7 @@ function safeJsonParse (value, fallback) {
   try {
     return JSON.parse(value)
   } catch {
-    return fallback === undefined ? value : fallback
+    return fallback
   }
 }
 
@@ -224,14 +224,14 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (message.function_call) {
         const functionCallInfo = {
           name: message.function_call.name,
-          arguments: safeJsonParse(message.function_call.arguments),
+          arguments: safeJsonParse(message.function_call.arguments, {}),
         }
         outputMessages.push({ content, role, toolCalls: [functionCallInfo] })
       } else if (message.tool_calls) {
         const toolCallsInfo = []
         for (const toolCall of message.tool_calls) {
           const toolCallInfo = {
-            arguments: safeJsonParse(toolCall.function.arguments),
+            arguments: safeJsonParse(toolCall.function.arguments, {}),
             name: toolCall.function.name,
             toolId: toolCall.id,
             type: toolCall.type,

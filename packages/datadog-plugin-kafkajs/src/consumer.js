@@ -56,21 +56,9 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   commit (commitList) {
     if (!this.config.dsmEnabled) return
-    const keys = ['consumer_group', 'type', 'partition', 'offset', 'topic']
-
-    // Avoid `commitList.map(...)` (allocates a transformed Array) and
-    // `keys.some(closure)` (allocates a closure per commit). One walk
-    // with a counted loop and an early-exit `in` check is ~25% faster.
-    for (let i = 0; i < commitList.length; i++) {
-      const commit = this.transformCommit(commitList[i])
-      let allKeys = true
-      for (let j = 0; j < keys.length; j++) {
-        if (!(keys[j] in commit)) {
-          allKeys = false
-          break
-        }
-      }
-      if (allKeys) this.tracer.setOffset(commit)
+    for (const rawCommit of commitList) {
+      const commit = this.transformCommit(rawCommit)
+      this.tracer.setOffset(commit)
     }
   }
 
