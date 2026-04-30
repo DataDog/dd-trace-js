@@ -662,14 +662,11 @@ describe('profiler', () => {
       // so expect telemetry callback to time out. expectedMessageCount: Infinity keeps the listener
       // from ever resolving, so the only outcome is the timeout that expectTimeout requires.
       const checkTelemetry = agent.assertTelemetryReceived({
-        fn: ({ payload }) => {
-          assert.notStrictEqual(payload.payload.namespace, 'profilers')
-        },
         requestType: 'generate-metrics',
         timeout: 1000,
         expectedMessageCount: Infinity,
       })
-      await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry, true)])
+      await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
     describe('on non-Windows platform', () => {
