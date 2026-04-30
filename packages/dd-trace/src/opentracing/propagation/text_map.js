@@ -68,6 +68,12 @@ const hex16 = /^[0-9A-Fa-f]{16}$/
 class TextMapPropagator {
   #extractB3Context
 
+  /** @type {Set<string> | undefined} Cached `Set` view of `_config.baggageTagKeys`. */
+  #baggageTagKeysSet
+
+  /** @type {string[] | undefined} Source array that `#baggageTagKeysSet` was built from. */
+  #baggageTagKeysSetSource
+
   constructor (config) {
     this._config = config
 
@@ -75,6 +81,23 @@ class TextMapPropagator {
     const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     this.#extractB3Context = envName === 'OTEL_PROPAGATORS' ? this._extractB3SingleContext : this._extractB3MultiContext
+  }
+
+  /**
+   * Returns a `Set` view of `_config.baggageTagKeys` that is rebuilt only
+   * when the source array reference changes. Avoids an `O(n)` `Set` alloc
+   * per baggage extract (which is per-request when baggage propagation is
+   * enabled).
+   *
+   * @returns {Set<string>}
+   */
+  #getBaggageTagKeysSet () {
+    const source = this._config.baggageTagKeys
+    if (this.#baggageTagKeysSetSource !== source) {
+      this.#baggageTagKeysSet = new Set(source)
+      this.#baggageTagKeysSetSource = source
+    }
+    return this.#baggageTagKeysSet
   }
 
   inject (spanContext, carrier) {
@@ -172,14 +195,14 @@ class TextMapPropagator {
 
       const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
-      for (const [key, value] of Object.entries(baggageItems)) {
+      for (const key of Object.keys(baggageItems)) {
         const baggageKey = String(key).trim()
         if (!baggageKey || !baggageTokenExpr.test(baggageKey)) continue
 
         // Do not trim values. If callers include leading/trailing whitespace, it must be percent-encoded.
         // W3C list-member allows optional properties after ';'.
         // https://www.w3.org/TR/baggage/#header-content
-        const item = `${baggageKey}=${encodeURIComponent(String(value))},`
+        const item = `${baggageKey}=${encodeURIComponent(String(baggageItems[key]))},`
         itemCounter += 1
         byteCounter += Buffer.byteLength(item)
 
@@ -216,14 +239,15 @@ class TextMapPropagator {
 
     const tags = []
 
-    for (const key in trace.tags) {
-      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
-      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+    for (const key of Object.keys(trace.tags)) {
+      const value = trace.tags[key]
+      if (!value || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
       }
 
-      tags.push(`${key}=${trace.tags[key]}`)
+      tags.push(`${key}=${value}`)
     }
 
     const header = tags.join(',')
@@ -295,21 +319,22 @@ class TextMapPropagator {
       if (typeof origin === 'string') {
         const originValue = origin
           .replaceAll(tracestateOriginFilter, '_')
-          .replaceAll(/[\x3D]/g, '~')
+          .replaceAll('=', '~')
 
         state.set('o', originValue)
       }
 
-      for (const key in tags) {
-        if (!tags[key] || !key.startsWith('_dd.p.')) continue
+      for (const key of Object.keys(tags)) {
+        const tagValueRaw = tags[key]
+        if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
           .replaceAll(tracestateTagKeyFilter, '_')
 
-        const tagValue = tags[key]
+        const tagValue = tagValueRaw
           .toString()
           .replaceAll(tracestateTagValueFilter, '_')
-          .replaceAll(/[\x3D]/g, '~')
+          .replaceAll('=', '~')
 
         state.set(tagKey, tagValue)
       }
@@ -561,7 +586,7 @@ class TextMapPropagator {
             default: {
               if (!key.startsWith('t.')) continue
               const subKey = key.slice(2) // e.g. t.tid -> tid
-              const transformedValue = value.replaceAll(/[\x7E]/gm, '=')
+              const transformedValue = value.replaceAll('~', '=')
 
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
@@ -676,7 +701,7 @@ class TextMapPropagator {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
     if (!carrier?.baggage) return
     const baggages = carrier.baggage.split(',')
-    const baggageTagKeys = new Set(this._config.baggageTagKeys)
+    const baggageTagKeys = this.#getBaggageTagKeysSet()
     const tagAllKeys = baggageTagKeys.has('*')
     for (const keyValue of baggages) {
       if (!keyValue) continue
@@ -703,12 +728,18 @@ class TextMapPropagator {
         removeAllBaggageItems()
         return
       }
-      try {
-        value = decodeURIComponent(value)
-      } catch {
-        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-        removeAllBaggageItems()
-        return
+      // `decodeURIComponent` only does work when the value contains a
+      // percent-encoded sequence; everything else passes through unchanged.
+      // Skipping the call (and the surrounding `try` frame) shaves an alloc
+      // per baggage entry on the dominant ASCII case.
+      if (value.includes('%')) {
+        try {
+          value = decodeURIComponent(value)
+        } catch {
+          tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
+          removeAllBaggageItems()
+          return
+        }
       }
 
       if (spanContext && (tagAllKeys || baggageTagKeys.has(key))) {

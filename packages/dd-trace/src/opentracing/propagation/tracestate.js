@@ -8,10 +8,14 @@ function fromString (Type, regex, value) {
     return new Type()
   }
 
+  // Pairs are stored in reverse of the serialized format (see TraceState),
+  // but `Array#unshift` inside the loop is O(n) per insert -> O(n²) total.
+  // Push then reverse once to get the same final order in O(n).
   const values = []
   for (const row of value.matchAll(regex)) {
-    values.unshift(row.slice(1, 3))
+    values.push(row.slice(1, 3))
   }
+  values.reverse()
 
   return new Type(values)
 }
@@ -82,7 +86,7 @@ class TraceState extends Map {
     if (state.changed) {
       const value = state.toString()
       if (value) {
-        this.set(vendor, state.toString())
+        this.set(vendor, value)
       } else {
         this.delete(vendor)
       }
