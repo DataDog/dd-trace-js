@@ -28,17 +28,19 @@ class Lambda extends BaseAwsSdkPlugin {
       request.params.InvocationType === 'RequestResponse'
     if (!isSyncInvocation) return
 
-    try {
-      const injected = {}
-      this.tracer.inject(span, 'text_map', injected)
+    const injected = {}
+    this.tracer.inject(span, 'text_map', injected)
 
-      let newContextJson
-      if (request.params.ClientContext) {
-        const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
-        // When no `custom` field is present we can splice via the shared
-        // helper. Otherwise parse and merge so existing customer keys
-        // under `custom` survive the round-trip.
+    let newContextJson
+    if (request.params.ClientContext) {
+      const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
+
+      // The two throwing surfaces here are the inline `JSON.parse` and the
+      // slow path inside `injectFieldIntoJsonObject`. Tighten the catch
+      // around the JSON ops so the rest of the inject stays optimisable.
+      try {
         if (clientContextJson.includes('"custom"')) {
+          // Existing customer keys under `custom` survive the round-trip.
           const clientContext = JSON.parse(clientContextJson)
           if (!clientContext.custom) clientContext.custom = {}
           Object.assign(clientContext.custom, injected)
@@ -46,13 +48,14 @@ class Lambda extends BaseAwsSdkPlugin {
         } else {
           newContextJson = BaseAwsSdkPlugin.injectFieldIntoJsonObject(clientContextJson, 'custom', injected)
         }
-      } else {
-        newContextJson = `{"custom":${JSON.stringify(injected)}}`
+      } catch (error) {
+        log.error('Lambda error injecting request', error)
+        return
       }
-      request.params.ClientContext = Buffer.from(newContextJson).toString('base64')
-    } catch (error) {
-      log.error('Lambda error injecting request', error)
+    } else {
+      newContextJson = `{"custom":${JSON.stringify(injected)}}`
     }
+    request.params.ClientContext = Buffer.from(newContextJson).toString('base64')
   }
 
   operationFromRequest (request) {

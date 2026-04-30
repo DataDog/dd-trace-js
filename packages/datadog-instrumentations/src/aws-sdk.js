@@ -99,6 +99,10 @@ function getOperationName (commandCtor) {
 }
 
 function wrapRequest (send) {
+  // V8 deopts both this function and `send.apply(this, arguments)` once
+  // `arguments[0] = wrapCb(...)` materialises the arguments object on the
+  // hot path. Pass the (at most one-arg) call site through explicitly --
+  // `Request.send` only accepts an optional callback in both v2 and v3 SDKs.
   return function wrappedRequest (cb) {
     if (!this.service) return send.apply(this, arguments)
 
@@ -107,25 +111,25 @@ function wrapRequest (send) {
     const channels = getChannelBag(channelSuffix)
     if (!channels.start.hasSubscribers) return send.apply(this, arguments)
 
+    const cbExists = typeof cb === 'function'
     const ctx = {
       serviceIdentifier,
       operation: this.operation,
       awsRegion: this.service.config && this.service.config.region,
       awsService: this.service.api && this.service.api.className,
       request: this,
-      cbExists: typeof cb === 'function',
+      cbExists,
     }
 
-    this.on('complete', response => {
+    this.once('complete', response => {
       ctx.response = response
       channels.complete.publish(ctx)
     })
 
-    if (ctx.cbExists) {
-      arguments[0] = wrapCb(cb, channels, ctx)
+    if (cbExists) {
+      return channels.start.runStores(ctx, send, this, wrapCb(cb, channels, ctx))
     }
-
-    return channels.start.runStores(ctx, send, this, ...arguments)
+    return channels.start.runStores(ctx, send, this)
   }
 }
 

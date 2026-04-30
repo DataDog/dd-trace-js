@@ -47,9 +47,12 @@ class Stepfunctions extends BaseAwsSdkPlugin {
     // round-trip parse.
     if (typeof input !== 'string' || input.length < 2 || input[input.length - 1] !== '}') return
 
+    const injected = {}
+    this.tracer.inject(span, 'text_map', injected)
+
+    // `injectFieldIntoJsonObject` is the only throwing call path
+    // (`JSON.parse` slow path for non-trivial JSON shapes).
     try {
-      const injected = {}
-      this.tracer.inject(span, 'text_map', injected)
       request.params.input = BaseAwsSdkPlugin.injectFieldIntoJsonObject(input, '_datadog', injected)
     } catch {
       log.info('Unable to treat input as JSON')
