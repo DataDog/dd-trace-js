@@ -479,6 +479,11 @@ async function packTarballWithLock (tarballPath, env) {
 
       while (!existsSync(tarballPath)) {
         await new Promise(resolve => setTimeout(resolve, 100))
+        if (!existsSync(lockFile) && !existsSync(tarballPath)) {
+          // Lock holder failed without creating the tarball, retry from scratch
+          log('Lock released without tarball, retrying:', tarballPath)
+          return packTarballWithLock(tarballPath, env)
+        }
       }
 
       log('Tarball ready:', tarballPath)
@@ -486,9 +491,9 @@ async function packTarballWithLock (tarballPath, env) {
       throw err
     }
   } finally {
-    // Strictly no need to clean up the lock - it's in a temp directory
     if (lockFd) {
-      lockFd.close().catch(() => {})
+      await lockFd.close().catch(() => {})
+      await fs.unlink(lockFile).catch(() => {})
     }
   }
 }
