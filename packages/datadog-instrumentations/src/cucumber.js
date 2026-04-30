@@ -64,6 +64,7 @@ const atrStatusesByScenarioKey = new Map()
 const numRetriesByPickleId = new Map()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
+const attemptToFixTestsByTestFullname = new Map()
 const modifiedTestsByPickleId = new Map()
 // Pickle IDs for tests that are genuinely new (not in known tests list).
 const newTestPickleIds = new Set()
@@ -695,6 +696,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     atrStatusesByScenarioKey.clear()
+    attemptToFixTestsByTestFullname.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
@@ -1011,6 +1013,23 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
           const newTestFinalStatus = getTestStatusFromRetries(testStatuses)
           // we only push to `finished` if the retries have finished
           finished.push(newTestFinalStatus)
+        }
+      } else if (
+        isTestManagementTestsEnabled &&
+        getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
+      ) {
+        const testFullname = `${pickle.uri}:${pickle.name}`
+        let testStatuses = attemptToFixTestsByTestFullname.get(testFullname)
+        if (testStatuses) {
+          testStatuses.push(status)
+        } else {
+          testStatuses = [status]
+          attemptToFixTestsByTestFullname.set(testFullname, testStatuses)
+        }
+
+        if (status === 'skip' || testStatuses.length === testManagementAttemptToFixRetries + 1) {
+          finished.push(getTestStatusFromAttemptToFixExecutions(testStatuses))
+          attemptToFixTestsByTestFullname.delete(testFullname)
         }
       } else {
         // TODO: can we get error message?
