@@ -22,41 +22,28 @@ class AzureCosmosPlugin extends DatabasePlugin {
   asyncEnd (ctx) {
     if (!ctx.span) return
     const span = ctx.currentStore?.span
-    if (span != null) {
+    if (span) {
       const result = ctx.result
-      if (result != null) {
-        if (result.code != null) {
-          span.setTag('http.status_code', result.code)
-        }
-        if (result.substatus !== undefined) {
-          span.setTag('http.status_subcode', result.substatus)
-        }
-      }
-      span.finish()
+      if (result?.code) span.setTag('http.status_code', result.code)
+      if (result?.substatus) span.setTag('http.status_subcode', result.substatus)
     }
+    span.finish()
   }
 
   error (ctx) {
     if (!ctx.span) return
     const span = ctx.currentStore?.span
-    if (span != null) {
-      this.addError(ctx.error, span)
-      const error = ctx.error
-      if (error?.code != null) {
-        span.setTag('http.status_code', error.code)
-      }
-      if (error?.substatus != null) {
-        span.setTag('http.status_subcode', error.substatus)
-      }
-    }
+    const error = ctx.error
+    if (error?.code) span.setTag('http.status_code', error.code)
+    if (error?.substatus) span.setTag('http.status_subcode', error.substatus)
   }
 
   bindStart (ctx) {
     const requestContext = ctx.arguments?.[1]
-    const resource = this.getResource(requestContext)
-    const { dbName, containerName } = this.getDbInfo(requestContext)
-    const connectionMode = this.getConnectionMode(requestContext)
-    const { outHost, userAgent } = this.getHttpInfo(requestContext)
+    const resource = requestContext ? this.getResource(requestContext) : null
+    const { dbName, containerName } = requestContext ? this.getDbInfo(requestContext) : null
+    const connectionMode = requestContext ? this.getConnectionMode(requestContext) : null
+    const { outHost, userAgent } = requestContext ? this.getHttpInfo(requestContext) : null
     const pluginOn = ctx.arguments?.[3]
 
     // only trace operations not requests (pluginOn)
@@ -100,29 +87,36 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   getResource (requestContext) {
-    return requestContext
-      ? `${requestContext.operationType} ${requestContext.path}`
-      : null
+    const path = requestContext.path
+    const parts = path.split('/')
+    let modified = false
+    for (let i = 0; i < parts.length; i += 2) {
+      if (parts[i].length > 0 && parts[i - 1] !== 'dbs' && parts[i - 1] !== 'colls') {
+        parts[i] = '?'
+        modified = true
+      }
+    }
+
+    return `${requestContext.operationType} ${modified ? parts.join('/') : path}`
   }
 
   getDbInfo (requestContext) {
     let dbName = null
     let containerName = null
-    if (requestContext != null) {
-      if (requestContext.operationType === 'create' && requestContext.resourceType === 'dbs' &&
-        requestContext.body != null && requestContext.body.id != null) {
-        dbName = requestContext.body.id
-      }
 
-      let resourceLink = requestContext.path
-      if (resourceLink?.length > 1 && resourceLink.startsWith('/')) {
-        resourceLink = resourceLink.slice(1)
-        const parts = resourceLink.split('/')
-        if (parts.length > 0 && parts[0].toLowerCase() === 'dbs' && parts.length >= 2) {
-          dbName = parts[1]
-          if (parts.length >= 4 && parts[2].toLowerCase() === 'colls' && parts[3] !== '') {
-            containerName = parts[3]
-          }
+    if (requestContext.operationType === 'create' && requestContext.resourceType === 'dbs' &&
+      requestContext.body != null && requestContext.body.id != null) {
+      dbName = requestContext.body.id
+    }
+
+    let resourceLink = requestContext.path
+    if (resourceLink?.length > 1 && resourceLink.startsWith('/')) {
+      resourceLink = resourceLink.slice(1)
+      const parts = resourceLink.split('/')
+      if (parts.length > 0 && parts[0].toLowerCase() === 'dbs' && parts.length >= 2) {
+        dbName = parts[1]
+        if (parts.length >= 4 && parts[2].toLowerCase() === 'colls' && parts[3] !== '') {
+          containerName = parts[3]
         }
       }
     }
@@ -131,9 +125,6 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   getConnectionMode (requestContext) {
-    if (!requestContext) {
-      return null
-    }
     const mode = requestContext.client?.connectionPolicy?.connectionMode
     if (mode === 0) {
       return 'gateway'
@@ -144,8 +135,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   getHttpInfo (requestContext) {
-    const outHost = requestContext?.client?.cosmosClientOptions?.endpoint
-    const userAgent = requestContext?.headers?.['User-Agent']
+    const outHost = requestContext.client?.cosmosClientOptions?.endpoint
+    const userAgent = requestContext.headers?.['User-Agent']
     return { outHost, userAgent }
   }
 }
