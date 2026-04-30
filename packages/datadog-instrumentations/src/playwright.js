@@ -305,7 +305,7 @@ function computeFinalStatus ({
   testStatus,
 }) {
   if (!isFinalExecution) {
-    return undefined
+    return
   }
   if (isDisabled || isQuarantined) {
     return 'skip'
