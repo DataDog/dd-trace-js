@@ -15,7 +15,10 @@ const enterChannel = channel('apm:hono:middleware:enter')
 const exitChannel = channel('apm:hono:middleware:exit')
 const finishChannel = channel('apm:hono:middleware:finish')
 
-function wrapFetch (fetch) {
+// honoInstance is captured from the constructor so that `getPath` and `router`
+// are accessible even when the fetch callback is called without a `this` context
+// (node-server calls opts.fetch(req, env) without binding the Hono instance).
+function wrapFetch (fetch, honoInstance) {
   return function (request, env, executionCtx) {
     const incoming = env.incoming
     handleChannel.publish({ req: incoming })
@@ -27,8 +30,8 @@ function wrapFetch (fetch) {
     if (routeChannel.hasSubscribers) {
       try {
         const method = request.method === 'HEAD' ? 'GET' : request.method
-        const path = this.getPath(request, { env })
-        const matchResult = this.router.match(method, path)
+        const path = honoInstance.getPath(request, { env })
+        const matchResult = honoInstance.router.match(method, path)
         if (matchResult[0].length === 1) {
           const meta = matchResult[0][0][0][1]
           // Skip middleware-only matches (method === 'ALL'); only publish for real route handlers
@@ -126,7 +129,7 @@ addHook({
   class Hono extends hono.Hono {
     constructor (...args) {
       super(...args)
-      shimmer.wrap(this, 'fetch', wrapFetch)
+      shimmer.wrap(this, 'fetch', (fetch) => wrapFetch(fetch, this))
     }
   }
 
@@ -143,7 +146,7 @@ addHook({
   class Hono extends hono.Hono {
     constructor (...args) {
       super(...args)
-      shimmer.wrap(this, 'fetch', wrapFetch)
+      shimmer.wrap(this, 'fetch', (fetch) => wrapFetch(fetch, this))
     }
   }
 
