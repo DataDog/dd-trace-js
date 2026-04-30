@@ -40,14 +40,14 @@ const KEY_TYPE = buildKey('type')
 const KEY_NAME = buildKey('name')
 const KEY_RESOURCE = buildKey('resource')
 const KEY_SERVICE = buildKey('service')
+const KEY_ERROR = buildKey('error')
+const KEY_START = buildKey('start')
+const KEY_DURATION = buildKey('duration')
 const KEY_SPAN_EVENTS = buildKey('span_events')
 const KEY_META_STRUCT = buildKey('meta_struct')
 const KEY_TRACE_ID_PREFIX = buildKeyWithPrefix('trace_id', 0xCF)
 const KEY_SPAN_ID_PREFIX = buildKeyWithPrefix('span_id', 0xCF)
 const KEY_PARENT_ID_PREFIX = buildKeyWithPrefix('parent_id', 0xCF)
-const KEY_ERROR_PREFIX = buildKeyWithPrefix('error', 0xCE)
-const KEY_START_PREFIX = buildKeyWithPrefix('start', 0xCF)
-const KEY_DURATION_PREFIX = buildKeyWithPrefix('duration', 0xCF)
 const KEY_META_PREFIX = buildKeyWithPrefix('meta', 0xDF)
 const KEY_METRICS_PREFIX = buildKeyWithPrefix('metrics', 0xDF)
 
@@ -344,9 +344,12 @@ class AgentEncoder {
       cursor += KEY_SERVICE.length
       target.set(serviceEntry, cursor)
 
-      this.#writeIntegerField(bytes, KEY_ERROR_PREFIX, span.error)
-      this.#writeLongField(bytes, KEY_START_PREFIX, span.start)
-      this.#writeLongField(bytes, KEY_DURATION_PREFIX, span.duration)
+      bytes.set(KEY_ERROR)
+      this.#encodeIntOrFloat(bytes, span.error)
+      bytes.set(KEY_START)
+      this.#encodeIntOrFloat(bytes, span.start)
+      bytes.set(KEY_DURATION)
+      this.#encodeIntOrFloat(bytes, span.duration)
 
       this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
       this.#encodeMetaEntries(bytes, KEY_METRICS_PREFIX, span.metrics)
@@ -448,6 +451,8 @@ class AgentEncoder {
   }
 
   // Single pass: reserve the count slot, encode entries while counting, patch the count.
+  // Subclasses (0.5, CI visibility encoders) inherit this; the wire stays on float64
+  // for numeric values to keep their established trace / events intake unchanged.
   _encodeMap (bytes, value) {
     const offset = bytes.length
     bytes.reserve(5)
@@ -542,12 +547,9 @@ class AgentEncoder {
         target.set(keyEntry, writeOffset)
         target.set(valueEntry, writeOffset + keyEntryLen)
       } else {
-        bytes.reserve(keyEntryLen + 9)
-        const target = bytes.buffer
-        target.set(keyEntry, writeOffset)
-        const valueOffset = writeOffset + keyEntryLen
-        target[valueOffset] = 0xCB
-        bytes.view.setFloat64(valueOffset + 1, entryValue)
+        bytes.reserve(keyEntryLen)
+        bytes.buffer.set(keyEntry, writeOffset)
+        this.#encodeIntOrFloat(bytes, entryValue)
       }
       count++
     }
@@ -588,49 +590,24 @@ class AgentEncoder {
   }
 
   /**
+   * Emit `value` as the smallest valid msgpack number encoding: compact
+   * unsigned/signed int when integer, float64 otherwise. Unlike
+   * `MsgpackEncoder#encodeNumber`, NaN keeps its float64 bits instead of
+   * coercing to fixint 0.
+   *
    * @param {MsgpackChunk} bytes
-   * @param {Buffer} keyPrefix Precomputed `[key, 0xCE]`.
    * @param {number} value
    */
-  #writeIntegerField (bytes, keyPrefix, value) {
-    const keyPrefixLen = keyPrefix.length
-    const offset = bytes.length
-    bytes.reserve(keyPrefixLen + 4)
-
-    const target = bytes.buffer
-    target.set(keyPrefix, offset)
-
-    const valueOffset = offset + keyPrefixLen
-    target[valueOffset] = value >> 24
-    target[valueOffset + 1] = value >> 16
-    target[valueOffset + 2] = value >> 8
-    target[valueOffset + 3] = value
-  }
-
-  /**
-   * @param {MsgpackChunk} bytes
-   * @param {Buffer} keyPrefix Precomputed `[key, 0xCF]`.
-   * @param {number} value Up to a 53-bit safe integer.
-   */
-  #writeLongField (bytes, keyPrefix, value) {
-    const high = (value / 2 ** 32) >> 0
-    const low = value >>> 0
-    const keyPrefixLen = keyPrefix.length
-    const offset = bytes.length
-    bytes.reserve(keyPrefixLen + 8)
-
-    const target = bytes.buffer
-    target.set(keyPrefix, offset)
-
-    const valueOffset = offset + keyPrefixLen
-    target[valueOffset] = high >> 24
-    target[valueOffset + 1] = high >> 16
-    target[valueOffset + 2] = high >> 8
-    target[valueOffset + 3] = high
-    target[valueOffset + 4] = low >> 24
-    target[valueOffset + 5] = low >> 16
-    target[valueOffset + 6] = low >> 8
-    target[valueOffset + 7] = low
+  #encodeIntOrFloat (bytes, value) {
+    if (Number.isInteger(value)) {
+      if (value >= 0) {
+        this.#msgpack.encodeUnsigned(bytes, value)
+      } else {
+        this.#msgpack.encodeSigned(bytes, value)
+      }
+    } else {
+      this.#encodeFloat(bytes, value)
+    }
   }
 
   /**
@@ -850,7 +827,7 @@ class AgentEncoder {
     if (typeof value === 'number') {
       this._encodeString(bytes, key)
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this.#encodeFloat(bytes, value)
+      this.#encodeIntOrFloat(bytes, value)
       return true
     }
     if (typeof value === 'boolean') {
@@ -920,7 +897,7 @@ class AgentEncoder {
     }
     if (typeof value === 'number') {
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this.#encodeFloat(bytes, value)
+      this.#encodeIntOrFloat(bytes, value)
       return true
     }
     if (typeof value === 'boolean') {
