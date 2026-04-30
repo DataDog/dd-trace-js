@@ -5401,6 +5401,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
                 assert.doesNotMatch(stdout, /test failure\(s\) were ignored/)
               }
+              if (isQuarantined) {
+                assert.match(
+                  stdout,
+                  /Test was marked as quarantined but was not quarantined because it is attempt to fix\./
+                )
+              }
+              if (isDisabled) {
+                assert.match(stdout, /Test was marked as disabled but was run because it is attempt to fix\./)
+              }
             }
             if (shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
@@ -5979,6 +5988,40 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             {
               isAttemptToFix: true,
               isParallel: true,
+              extraEnvVars: {
+                // we need to run more than 1 suite for parallel mode to kick in
+                TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
+                RUN_IN_PARALLEL: 'true',
+              },
+            }
+          )
+        })
+
+        it('reports attempt to fix summary when not running in band', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          runAttemptToFixTest(
+            done,
+            {
+              isAttemptToFix: true,
+              isParallel: true,
+              isQuarantined: true,
               extraEnvVars: {
                 // we need to run more than 1 suite for parallel mode to kick in
                 TESTS_TO_RUN: 'test-management/test-attempt-to-fix',

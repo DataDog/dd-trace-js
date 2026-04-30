@@ -394,6 +394,8 @@ function getOnTestEndHandler (config) {
         testName: test.fullTitle(),
         status,
         error: ctx?.err || test.err,
+        isDisabled: _ddIsDisabled,
+        isQuarantined: _ddIsQuarantined,
       })
     }
 
@@ -479,6 +481,8 @@ function getOnFailHandler (isMain) {
             testName: test.fullTitle(),
             status: 'fail',
             error: err,
+            isDisabled: test._ddIsDisabled,
+            isQuarantined: test._ddIsQuarantined,
           })
         }
         // if it's a hook and it has failed, 'test end' will not be called

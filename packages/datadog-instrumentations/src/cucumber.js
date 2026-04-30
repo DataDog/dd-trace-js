@@ -160,6 +160,16 @@ function getTestStatusFromRetries (testStatuses) {
   return 'pass'
 }
 
+function getTestStatusFromAttemptToFixExecutions (testStatuses) {
+  if (testStatuses.every(status => status === 'pass')) {
+    return 'pass'
+  }
+  if (testStatuses.every(status => status === 'skip')) {
+    return 'skip'
+  }
+  return 'fail'
+}
+
 function getErrorFromCucumberResult (cucumberResult) {
   if (!cucumberResult.message) {
     return
@@ -460,6 +470,8 @@ function wrapRun (pl, isLatestVersion, version) {
             testName: this.pickle.name,
             status,
             error,
+            isDisabled,
+            isQuarantined,
           })
         }
 
@@ -835,6 +847,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
     let shouldBePassedByTestManagement = false
+    let shouldBeFailedByAttemptToFix = false
     if ((isNew || isModified) && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -848,6 +861,14 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         // for cucumber@>=11, setting `this.success` does not work, so we have to change the returned value
         shouldBePassedByEFD = true
         this.success = true
+      }
+    }
+
+    if (isAttemptToFix && testStatuses.length === testManagementAttemptToFixRetries + 1) {
+      testStatus = getTestStatusFromAttemptToFixExecutions(testStatuses)
+      if (testStatus === 'fail') {
+        this.success = false
+        shouldBeFailedByAttemptToFix = true
       }
     }
 
@@ -889,6 +910,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     if (isNewerCucumberVersion && isTestManagementTestsEnabled && !isAttemptToFix && (isQuarantined || isDisabled)) {
       return shouldBePassedByTestManagement
+    }
+
+    if (isNewerCucumberVersion && isAttemptToFix && shouldBeFailedByAttemptToFix) {
+      return false
     }
 
     return runTestCaseResult

@@ -233,13 +233,57 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
  *
  * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  */
-function logSessionSummary (ignoredFailures) {
+function logSessionSummary (ignoredFailures, summaryAttemptToFixExecutions = attemptToFixExecutions) {
   logTestOptimizationSummary({
-    attemptToFixExecutions,
+    attemptToFixExecutions: summaryAttemptToFixExecutions,
     extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
     newTestsWithDynamicNames,
   })
+  if (summaryAttemptToFixExecutions !== attemptToFixExecutions) {
+    attemptToFixExecutions.clear()
+  }
   loggedAttemptToFixTests.clear()
+}
+
+function getTestStatusFromJestResult (status) {
+  if (status === 'failed') return 'fail'
+  if (status === 'passed') return 'pass'
+}
+
+function getAttemptToFixExecutionsFromJestResults (result) {
+  const executions = new Map()
+  const rootDir = result.globalConfig?.rootDir || process.cwd()
+
+  for (const { testResults, testFilePath } of result.results.testResults) {
+    const testSuite = getTestSuitePath(testFilePath, rootDir)
+    const testManagementTestsForSuite = testManagementTests
+      ?.jest
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+    if (!testManagementTestsForSuite) continue
+
+    for (const { fullName, status } of testResults) {
+      const testName = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
+        ? fullName.replace(SEED_SUFFIX_RE, '')
+        : fullName
+      const testStatus = getTestStatusFromJestResult(status)
+      if (!testStatus) continue
+
+      const testManagementTest = testManagementTestsForSuite[testName]?.properties
+      if (!testManagementTest?.attempt_to_fix) continue
+
+      recordAttemptToFixExecution(executions, {
+        testSuite,
+        testName,
+        status: testStatus,
+        isDisabled: testManagementTest.disabled,
+        isQuarantined: testManagementTest.quarantined,
+      })
+    }
+  }
+
+  return executions
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -806,6 +850,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testName,
             status,
             error: formatJestError(originalError),
+            isDisabled: ctx.isDisabled,
+            isQuarantined: ctx.isQuarantined,
           })
         }
 
@@ -1470,7 +1516,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      logSessionSummary(ignoredFailuresSummary)
+      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
       numSkippedSuites = 0
 

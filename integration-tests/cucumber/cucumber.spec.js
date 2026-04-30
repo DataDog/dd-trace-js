@@ -2469,6 +2469,7 @@ describe(`cucumber@${version} commonJS`, () => {
         isDisabled,
         shouldAlwaysPass,
         shouldFailSometimes,
+        numRetries = 3,
       }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2487,8 +2488,7 @@ describe(`cucumber@${version} commonJS`, () => {
             )
 
             if (isAttemptToFix) {
-              // 3 retries + 1 initial run
-              assert.strictEqual(retriedTests.length, 4)
+              assert.strictEqual(retriedTests.length, numRetries + 1)
             } else {
               assert.strictEqual(retriedTests.length, 1)
             }
@@ -2552,7 +2552,8 @@ describe(`cucumber@${version} commonJS`, () => {
        *   isDisabled?: boolean,
        *   extraEnvVars?: Record<string, string>,
        *   shouldAlwaysPass?: boolean,
-       *   shouldFailSometimes?: boolean
+       *   shouldFailSometimes?: boolean,
+       *   numRetries?: number
        * }} [options]
        */
       const runTest = (done, {
@@ -2562,6 +2563,7 @@ describe(`cucumber@${version} commonJS`, () => {
         extraEnvVars,
         shouldAlwaysPass,
         shouldFailSometimes,
+        numRetries,
       } = {}) => {
         const testAssertions = getTestAssertions({
           isAttemptToFix,
@@ -2569,6 +2571,7 @@ describe(`cucumber@${version} commonJS`, () => {
           isDisabled,
           shouldAlwaysPass,
           shouldFailSometimes,
+          numRetries,
         })
         let stdout = ''
 
@@ -2614,6 +2617,15 @@ describe(`cucumber@${version} commonJS`, () => {
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
               }
+              if (isQuarantined) {
+                assert.match(
+                  stdout,
+                  /Test was marked as quarantined but was not quarantined because it is attempt to fix\./
+                )
+              }
+              if (isDisabled) {
+                assert.match(stdout, /Test was marked as disabled but was run because it is attempt to fix\./)
+              }
             }
             if (shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
@@ -2641,6 +2653,12 @@ describe(`cucumber@${version} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+      })
+
+      it('fails attempt to fix when an earlier attempt fails and the last attempt passes', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
+
+        runTest(done, { isAttemptToFix: true, shouldFailSometimes: true, numRetries: 2 })
       })
 
       it('does not attempt to fix tests if test management is not enabled', (done) => {

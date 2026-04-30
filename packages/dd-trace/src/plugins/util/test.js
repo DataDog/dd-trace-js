@@ -1366,6 +1366,8 @@ function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
  * @property {string} name
  * @property {number} executions
  * @property {number[]} failedExecutions
+ * @property {boolean} isDisabled
+ * @property {boolean} isQuarantined
  */
 
 /**
@@ -1425,13 +1427,16 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
  * @param {{
  *   testSuite?: string,
  *   testName: string,
- *   status: string
+ *   status: string,
+ *   error?: Error,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   if (!execution?.testName) return
 
-  const { testSuite, testName, status } = execution
+  const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const name = formatTestOptimizationName(testSuite, testName)
   let result = attemptToFixExecutions.get(name)
 
@@ -1440,11 +1445,15 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
       name,
       executions: 0,
       failedExecutions: [],
+      isDisabled: false,
+      isQuarantined: false,
     }
     attemptToFixExecutions.set(name, result)
   }
 
   result.executions++
+  result.isDisabled = result.isDisabled || !!isDisabled
+  result.isQuarantined = result.isQuarantined || !!isQuarantined
 
   if (status === 'fail') {
     result.failedExecutions.push(result.executions)
@@ -1469,11 +1478,34 @@ function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) 
           testSuite: meta[TEST_SUITE],
           testName: meta[TEST_NAME],
           status: meta[TEST_STATUS],
+          isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
         })
       }
     }
   } catch {
     // ignore parse errors
+  }
+}
+
+function getAttemptToFixManagementNotes (result) {
+  const notes = []
+
+  if (result.isDisabled) {
+    notes.push('Test was marked as disabled but was run because it is attempt to fix.')
+  }
+  if (result.isQuarantined) {
+    notes.push('Test was marked as quarantined but was not quarantined because it is attempt to fix.')
+  }
+
+  return notes
+}
+
+function addAttemptToFixResultLine (lines, result) {
+  lines.push(`  • ${result.name}`)
+
+  for (const note of getAttemptToFixManagementNotes(result)) {
+    lines.push(`    ${note}`)
   }
 }
 
@@ -1491,7 +1523,17 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
   const totalExecutions = results.reduce((total, result) => total + result.executions, 0)
 
   if (failedResults.length === 0) {
-    return `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`
+    const lines = [
+      `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`,
+    ]
+
+    for (const result of results) {
+      if (getAttemptToFixManagementNotes(result).length > 0) {
+        addAttemptToFixResultLine(lines, result)
+      }
+    }
+
+    return lines.join('\n')
   }
 
   const totalFailedExecutions = failedResults.reduce(
@@ -1504,7 +1546,7 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
   ]
 
   for (const result of failedResults) {
-    lines.push(`  • ${result.name}`)
+    addAttemptToFixResultLine(lines, result)
   }
 
   return lines.join('\n')

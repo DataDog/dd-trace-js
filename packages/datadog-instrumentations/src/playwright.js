@@ -417,6 +417,8 @@ function testEndHandler ({
       testName: getTestFullname(test),
       status: testStatus,
       error,
+      isDisabled: testProperties.disabled,
+      isQuarantined: testProperties.quarantined,
     })
   }
 

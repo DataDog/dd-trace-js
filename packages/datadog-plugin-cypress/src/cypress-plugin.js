@@ -1216,6 +1216,8 @@ class CypressPlugin {
             testName,
             status: testStatus,
             error,
+            isDisabled: isDisabledFromSupport,
+            isQuarantined: isQuarantinedFromSupport,
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed

@@ -161,6 +161,49 @@ describe('attempt to fix summary', () => {
     assert.ok(!summary.includes('execution 1:'))
   })
 
+  it('reports when quarantine and disabled were ignored for attempt to fix', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+    assert.doesNotMatch(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+  })
+
+  it('reports ignored quarantine and disabled for passing attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
   it('lists each failed test once', () => {
     const executions = new Map()
 
@@ -219,6 +262,7 @@ describe('attempt to fix summary', () => {
     assert.ok(!summary.includes('worker failure'))
     assert.ok(!summary.includes('worker-suite.js:10:5'))
     assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
   })
 
   it('logs and clears the attempt to fix summary', () => {

@@ -986,6 +986,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
           testName: getTestName(task),
           status,
           error: task.result?.errors?.[0],
+          isDisabled: disabledTasks.has(task),
+          isQuarantined: quarantinedTasks.has(task),
         })
       }
 
