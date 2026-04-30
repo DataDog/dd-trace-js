@@ -785,6 +785,22 @@ describe('TracerProxy', () => {
           assert.deepStrictEqual(baggage, {})
         })
       })
+
+      describe('immutability', () => {
+        it('should freeze every store handed out', () => {
+          assert.ok(Object.isFrozen(proxy.getAllBaggageItems()))
+          assert.ok(Object.isFrozen(proxy.setBaggageItem('key', 'value')))
+          assert.ok(Object.isFrozen(proxy.removeBaggageItem('key')))
+          assert.ok(Object.isFrozen(proxy.removeAllBaggageItems()))
+        })
+
+        it('should refuse mutation through the returned reference', () => {
+          const baggage = proxy.setBaggageItem('key', 'value')
+          assert.throws(() => { baggage.key = 'tampered' }, TypeError)
+          assert.throws(() => { baggage.added = 'value' }, TypeError)
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), { key: 'value' })
+        })
+      })
     })
 
     describe('appsec', () => {
