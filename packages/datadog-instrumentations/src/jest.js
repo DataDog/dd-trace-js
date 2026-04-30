@@ -191,18 +191,6 @@ function getTestEnvironmentOptions (config) {
 
 const MAX_IGNORED_TEST_NAMES = 10
 
-/**
- * @typedef {object} AttemptToFixExecutionResult
- * @property {string} name
- * @property {{ execution: number, errorMessage: string }[]} failedExecutions
- * @property {boolean} isQuarantined
- * @property {boolean} isDisabled
- */
-
-/**
- * @typedef {Map<string, AttemptToFixExecutionResult>} AttemptToFixExecutions
- */
-
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
@@ -214,29 +202,21 @@ function getTestStats (testStatuses) {
  * Formats the ignored-failure section for the Test Optimization summary.
  *
  * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
- * @param {AttemptToFixExecutions} attemptToFixExecutions
  * @returns {string}
  */
-function formatIgnoredFailuresSummary (ignoredFailures, attemptToFixExecutions) {
+function formatIgnoredFailuresSummary (ignoredFailures) {
   if (!ignoredFailures) return ''
 
-  const attemptToFixSuppressedNames = getSuppressedAttemptToFixTestNames(attemptToFixExecutions)
   const items = []
-  let totalCount = ignoredFailures.totalCount
 
   for (const n of ignoredFailures.efdNames) {
     items.push({ text: n, suffix: 'Early Flake Detection' })
   }
   for (const n of ignoredFailures.quarantineNames) {
-    if (attemptToFixSuppressedNames.has(n)) {
-      totalCount--
-      continue
-    }
-
     items.push({ text: n, suffix: 'Quarantine' })
   }
 
-  if (items.length === 0 || totalCount <= 0) return ''
+  if (items.length === 0 || ignoredFailures.totalCount <= 0) return ''
 
   const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
   const more = items.length - shown.length
@@ -245,26 +225,7 @@ function formatIgnoredFailuresSummary (ignoredFailures, attemptToFixExecutions) 
     .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
     .join('\n') + moreSuffix
 
-  return `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
-}
-
-/**
- * Gets attempt-to-fix tests whose failures are already explained by the attempt-to-fix summary.
- *
- * @param {AttemptToFixExecutions} attemptToFixExecutions
- * @returns {Set<string>}
- */
-function getSuppressedAttemptToFixTestNames (attemptToFixExecutions) {
-  const names = new Set()
-
-  for (const result of attemptToFixExecutions.values()) {
-    if (result.failedExecutions.length === 0) continue
-    if (!result.isQuarantined && !result.isDisabled) continue
-
-    names.add(result.name)
-  }
-
-  return names
+  return `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
 
 /**
@@ -275,7 +236,7 @@ function getSuppressedAttemptToFixTestNames (attemptToFixExecutions) {
 function logSessionSummary (ignoredFailures) {
   logTestOptimizationSummary({
     attemptToFixExecutions,
-    extraSections: [formatIgnoredFailuresSummary(ignoredFailures, attemptToFixExecutions)],
+    extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
     newTestsWithDynamicNames,
   })
   loggedAttemptToFixTests.clear()
@@ -827,7 +788,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
         if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
           const quarantineCtx = testContexts.get(event.test)
-          if (quarantineCtx?.isQuarantined && event.test.errors?.length) {
+          if (quarantineCtx?.isQuarantined && !quarantineCtx.isAttemptToFix && event.test.errors?.length) {
             quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)
             event.test.errors = []
           }
@@ -845,8 +806,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testName,
             status,
             error: formatJestError(originalError),
-            isQuarantined: ctx.isQuarantined,
-            isDisabled: ctx.isDisabled,
           })
         }
 
@@ -901,10 +860,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
-          // Do not restore errors for quarantined tests — they should stay suppressed
+          // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
           const ctx = testContexts.get(test)
-          if (ctx?.isQuarantined) {
+          if (ctx?.isQuarantined && !ctx.isAttemptToFix) {
             const testName = getJestTestName(test, this.getShouldStripSeedFromTestName())
             quarantinedFailingTests.add(`${ctx.suite} › ${testName}`)
           } else {
@@ -1027,7 +986,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       // If the test is quarantined, regardless of its actual execution result,
       // the final status of its last execution should be reported as 'skip'.
-      if (this.isTestManagementTestsEnabled &&
+      if (!attemptToFixResult.isAttemptToFixEnabled &&
+        this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.quarantined?.includes(testName)) {
         return 'skip'
       }
@@ -1358,7 +1318,6 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       let numFailedQuarantinedTests = 0
-      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
       let numSuppressedQuarantinedTests = 0
       if (isTestManagementTestsEnabled) {
         const failedTests = result
@@ -1386,11 +1345,7 @@ function getCliWrapper (isNewJestVersion) {
             ?.tests
             ?.[testName]
             ?.properties
-          // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
-          if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
-            numFailedQuarantinedOrDisabledAttemptedToFixTests++
-            quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
-          } else if (testManagementTest?.quarantined) {
+          if (testManagementTest?.quarantined && !testManagementTest?.attempt_to_fix) {
             numFailedQuarantinedTests++
             quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
           }
@@ -1408,13 +1363,11 @@ function getCliWrapper (isNewJestVersion) {
         quarantinedFailingTests.clear()
 
         // If every test that failed was quarantined, we'll consider the suite passed
-        // Note that if a test is attempted to fix,
-        // it's considered quarantined both if it's disabled and if it's quarantined
-        // (it'll run but its status is ignored)
+        // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
         // Skip if EFD block already flipped (to avoid logging twice)
         // Only use visible failures (from Jest results) for the flip check.
         // Suppressed quarantine failures are not in numFailedTests.
-        const visibleQuarantineFailures = numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        const visibleQuarantineFailures = numFailedQuarantinedTests
         if (
           !result.results.success &&
           !mustNotFlipSuccess &&
@@ -1449,7 +1402,7 @@ function getCliWrapper (isNewJestVersion) {
         (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
       ) {
         const visibleIgnoredFailures =
-          numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+          numEfdFailedTestsToIgnore + numFailedQuarantinedTests
         if (
           visibleIgnoredFailures !== 0 &&
           result.results.numFailedTests === visibleIgnoredFailures

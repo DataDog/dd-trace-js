@@ -735,15 +735,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
-      const isDisabled = disabledTasks.has(task)
       const isQuarantined = quarantinedTasks.has(task)
 
-      if (isAttemptingToFix && (isDisabled || isQuarantined)) {
-        if (task.result.state === 'fail') {
-          switchedStatuses.add(task)
-        }
-        task.result.state = 'pass'
-      } else if (isQuarantined) {
+      if (!isAttemptingToFix && isQuarantined) {
         if (task.result.state === 'fail') {
           switchedStatuses.add(task)
         }
@@ -831,9 +825,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     const lastExecutionStatus = task.result.state
     const isAtf = attemptToFixTasks.has(task)
-    const isQuarantinedOrDisabledAtf = isAtf && (quarantinedTasks.has(task) || disabledTasks.has(task))
     const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isQuarantinedOrDisabledAtf
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled
     const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -993,8 +986,6 @@ function wrapVitestTestRunner (VitestTestRunner) {
           testName: getTestName(task),
           status,
           error: task.result?.errors?.[0],
-          isQuarantined: quarantinedTasks.has(task),
-          isDisabled: disabledTasks.has(task),
         })
       }
 
@@ -1260,7 +1251,7 @@ addHook({
 
             let finalStatus
             if (isSwitchedStatus) {
-              if (disabledTasks.has(task) || quarantinedTasks.has(task)) {
+              if (!attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))) {
                 finalStatus = 'skip'
               } else if (isAtrRetry || isEfdRetry) {
                 finalStatus = hasFailedAllRetries ? 'fail' : 'pass'

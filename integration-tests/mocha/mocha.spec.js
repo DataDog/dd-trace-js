@@ -4094,12 +4094,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 }
-                // Final status: quarantined/disabled always report 'skip';
-                // pass only if all attempts passed, fail otherwise
-                const expectedFinalStatus = (isQuarantined || isDisabled)
-                  ? 'skip'
-                  : (shouldAlwaysPass ? 'pass' : 'fail')
-                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                // Attempt to fix ignores quarantine/disabled outcome suppression:
+                // pass only if all attempts passed, fail otherwise.
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], shouldAlwaysPass ? 'pass' : 'fail')
               } else {
                 // Intermediate ATF executions must not carry a final status tag
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
@@ -4179,20 +4176,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.match(stdout, /Attempt to fix passed/)
               } else {
                 assert.match(stdout, /Attempt to fix failed/)
-                assert.match(
-                  stdout,
-                  shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
-                )
+                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
               }
-              if (isQuarantined) {
-                assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
-              }
-              if (isDisabled) {
-                assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+              if (isQuarantined || isDisabled) {
+                assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
               }
             }
-            if (shouldAlwaysPass || isQuarantined || isDisabled) {
-              // even though a test fails, the exit code is 0 because the test is quarantined or disabled
+            if (shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)
@@ -4285,7 +4275,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ])
       })
 
-      onlyLatestIt('does not fail retry if a test is quarantined', (done) => {
+      onlyLatestIt('ignores quarantine when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
@@ -4406,7 +4396,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         })
 
-      onlyLatestIt('does not fail retry if a test is disabled', (done) => {
+      onlyLatestIt('ignores disabled when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {

@@ -492,20 +492,14 @@ moduleTypes.forEach(({
               assert.match(stdout, /Attempt to fix passed/)
             } else {
               assert.match(stdout, /Attempt to fix failed/)
-              assert.match(
-                stdout,
-                shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
-              )
+              assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
             }
-            if (isQuarantined) {
-              assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
-            }
-            if (isDisabled) {
-              assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+            if (isQuarantined || isDisabled) {
+              assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
             }
           }
 
-          if (shouldAlwaysPass || isQuarantined || isDisabled) {
+          if (shouldAlwaysPass) {
             assert.strictEqual(exitCode, 0)
           } else {
             assert.strictEqual(exitCode, 1)
@@ -600,10 +594,9 @@ moduleTypes.forEach(({
 
         /**
          * TODO:
-         * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
-         * Cypress will skip the test instead.
+         * The spec says that attempt-to-fix ignores quarantine outcome suppression.
          */
-        it('can mark tests as quarantined and tests are not skipped', async () => {
+        it('ignores quarantine when attempting to fix a test', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             cypress: {
@@ -627,10 +620,9 @@ moduleTypes.forEach(({
 
         /**
          * TODO:
-         * When a test is disabled and attempted to fix, the spec is to run the test and ignore its result.
-         * Cypress will run the test, but it won't ignore its result.
+         * The spec says that attempt-to-fix ignores disabled outcome suppression.
          */
-        it('can mark tests as disabled and tests are not skipped', async () => {
+        it('ignores disabled when attempting to fix a test', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             cypress: {

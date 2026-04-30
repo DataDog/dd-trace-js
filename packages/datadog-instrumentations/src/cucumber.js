@@ -253,9 +253,12 @@ function getFinalStatus ({
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
-  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
-  // the final status of its last execution should be reported as 'skip'.
-  if (isQuarantined || isDisabled || status === 'skip') {
+  if (status === 'skip') {
+    return 'skip'
+  }
+
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (!isLastAttemptToFix && (isQuarantined || isDisabled)) {
     return 'skip'
   }
 
@@ -457,8 +460,6 @@ function wrapRun (pl, isLatestVersion, version) {
             testName: this.pickle.name,
             status,
             error,
-            isQuarantined,
-            isDisabled,
           })
         }
 
@@ -850,7 +851,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
 
-    if (isTestManagementTestsEnabled && (isDisabled || isQuarantined)) {
+    if (isTestManagementTestsEnabled && !isAttemptToFix && (isDisabled || isQuarantined)) {
       this.success = true
       shouldBePassedByTestManagement = true
     }
@@ -886,7 +887,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       return shouldBePassedByEFD
     }
 
-    if (isNewerCucumberVersion && isTestManagementTestsEnabled && (isQuarantined || isDisabled)) {
+    if (isNewerCucumberVersion && isTestManagementTestsEnabled && !isAttemptToFix && (isQuarantined || isDisabled)) {
       return shouldBePassedByTestManagement
     }
 

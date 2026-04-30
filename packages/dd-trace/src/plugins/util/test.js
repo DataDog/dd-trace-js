@@ -217,7 +217,6 @@ const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
-const MAX_ATTEMPT_TO_FIX_ERROR_MESSAGE_LENGTH = 500
 const MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS = 10
 
 // Impacted tests
@@ -1363,207 +1362,15 @@ function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
 }
 
 /**
- * @typedef {object} AttemptToFixFailedExecution
- * @property {number} execution
- * @property {string} errorMessage
- */
-
-/**
  * @typedef {object} AttemptToFixExecutionResult
  * @property {string} name
  * @property {number} executions
- * @property {AttemptToFixFailedExecution[]} failedExecutions
- * @property {boolean} isQuarantined
- * @property {boolean} isDisabled
+ * @property {number[]} failedExecutions
  */
 
 /**
  * @typedef {Map<string, AttemptToFixExecutionResult>} AttemptToFixExecutions
  */
-
-const ATTEMPT_TO_FIX_INTERNAL_STACK_FRAME_RE = new RegExp([
-  String.raw`packages[\\/](?:datadog-instrumentations|dd-trace|datadog-core)[\\/]`,
-  'node:diagnostics_channel',
-  String.raw`node:internal[\\/]`,
-  'node:async_hooks',
-].join('|'))
-
-/**
- * Normalizes an attempt-to-fix error message for a user-facing summary.
- *
- * @param {string} message
- * @returns {string}
- */
-function normalizeAttemptToFixErrorMessage (message) {
-  return message
-    .replaceAll(/\r\n?/g, '\n')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\n')
-    .trim() || 'No error message available'
-}
-
-/**
- * Checks whether a stack frame is implementation plumbing that does not help explain the failed test.
- *
- * @param {string} line
- * @returns {boolean}
- */
-function isAttemptToFixInternalStackFrame (line) {
-  return ATTEMPT_TO_FIX_INTERNAL_STACK_FRAME_RE.test(line)
-}
-
-/**
- * Keeps the useful part of an attempt-to-fix stack while hiding Datadog and Node internals.
- *
- * @param {string} stack
- * @returns {string}
- */
-function formatAttemptToFixStackTrace (stack) {
-  const message = normalizeAttemptToFixErrorMessage(stack)
-  const lines = message.split('\n')
-  if (lines.length <= 1) return message
-
-  const filteredLines = [lines[0]]
-  let hiddenFrames = 0
-
-  for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex]
-    if (isAttemptToFixInternalStackFrame(line)) {
-      hiddenFrames++
-      continue
-    }
-
-    filteredLines.push(line)
-  }
-
-  if (hiddenFrames > 0) {
-    filteredLines.push(`... ${hiddenFrames} internal frame(s) hidden`)
-  }
-
-  return filteredLines.join('\n')
-}
-
-/**
- * Gets a compact error report for an attempt-to-fix execution.
- *
- * @param {Error | { message?: string, stack?: string } | string | undefined} error
- * @returns {string}
- */
-function getAttemptToFixErrorMessage (error) {
-  if (!error) return 'No error message available'
-
-  let message
-  let isStack = false
-  if (typeof error === 'string') {
-    message = error
-  } else if (error.stack) {
-    message = error.stack
-    isStack = true
-  } else if (error.message) {
-    message = error.message
-  } else {
-    message = String(error)
-  }
-
-  return isStack
-    ? formatAttemptToFixStackTrace(message)
-    : normalizeAttemptToFixErrorMessage(message)
-}
-
-/**
- * Truncates an attempt-to-fix error message to the user-facing summary limit.
- *
- * @param {string} message
- * @returns {string}
- */
-function truncateAttemptToFixErrorMessage (message) {
-  if (message.length <= MAX_ATTEMPT_TO_FIX_ERROR_MESSAGE_LENGTH) return message
-
-  return `${message.slice(0, MAX_ATTEMPT_TO_FIX_ERROR_MESSAGE_LENGTH - 3)}...`
-}
-
-/**
- * Formats execution numbers, collapsing consecutive numbers into ranges.
- *
- * @param {number[]} executions
- * @returns {string}
- */
-function formatAttemptToFixExecutionNumbers (executions) {
-  const ranges = []
-  let start
-  let previous
-
-  for (const execution of executions) {
-    if (start === undefined) {
-      start = execution
-      previous = execution
-      continue
-    }
-
-    if (execution === previous + 1) {
-      previous = execution
-      continue
-    }
-
-    ranges.push(start === previous ? `${start}` : `${start}-${previous}`)
-    start = execution
-    previous = execution
-  }
-
-  if (start !== undefined) {
-    ranges.push(start === previous ? `${start}` : `${start}-${previous}`)
-  }
-
-  return ranges.join(', ')
-}
-
-/**
- * Groups failed attempt-to-fix executions that have the same error report.
- *
- * @param {AttemptToFixFailedExecution[]} failedExecutions
- * @returns {Array<{ executions: number[], errorMessage: string }>}
- */
-function groupAttemptToFixFailedExecutions (failedExecutions) {
-  const groups = []
-  const groupsByErrorMessage = new Map()
-
-  for (const failedExecution of failedExecutions) {
-    let group = groupsByErrorMessage.get(failedExecution.errorMessage)
-
-    if (!group) {
-      group = {
-        executions: [],
-        errorMessage: failedExecution.errorMessage,
-      }
-      groupsByErrorMessage.set(failedExecution.errorMessage, group)
-      groups.push(group)
-    }
-
-    group.executions.push(failedExecution.execution)
-  }
-
-  return groups
-}
-
-/**
- * Appends a grouped failed attempt-to-fix execution report to the summary.
- *
- * @param {string[]} lines
- * @param {{ executions: number[], errorMessage: string }} failedExecutionGroup
- */
-function addAttemptToFixFailedExecutionLines (lines, failedExecutionGroup) {
-  const { executions, errorMessage } = failedExecutionGroup
-  const executionNumbers = formatAttemptToFixExecutionNumbers(executions)
-  const label = executions.length === 1 ? `execution ${executionNumbers}` : `executions ${executionNumbers}`
-  const messageLines = errorMessage.split('\n')
-
-  lines.push(`    - ${label}: ${messageLines[0]}`)
-
-  for (let lineIndex = 1; lineIndex < messageLines.length; lineIndex++) {
-    lines.push(`      ${messageLines[lineIndex]}`)
-  }
-}
 
 /**
  * Formats a test name for user-facing Test Optimization summaries.
@@ -1618,16 +1425,13 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
  * @param {{
  *   testSuite?: string,
  *   testName: string,
- *   status: string,
- *   error?: Error | { message?: string, stack?: string } | string,
- *   isQuarantined?: boolean,
- *   isDisabled?: boolean
+ *   status: string
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   if (!execution?.testName) return
 
-  const { testSuite, testName, status, error, isQuarantined, isDisabled } = execution
+  const { testSuite, testName, status } = execution
   const name = formatTestOptimizationName(testSuite, testName)
   let result = attemptToFixExecutions.get(name)
 
@@ -1636,21 +1440,14 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
       name,
       executions: 0,
       failedExecutions: [],
-      isQuarantined: false,
-      isDisabled: false,
     }
     attemptToFixExecutions.set(name, result)
   }
 
   result.executions++
-  result.isQuarantined = result.isQuarantined || !!isQuarantined
-  result.isDisabled = result.isDisabled || !!isDisabled
 
   if (status === 'fail') {
-    result.failedExecutions.push({
-      execution: result.executions,
-      errorMessage: truncateAttemptToFixErrorMessage(getAttemptToFixErrorMessage(error)),
-    })
+    result.failedExecutions.push(result.executions)
   }
 }
 
@@ -1667,40 +1464,16 @@ function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) 
       for (const span of trace) {
         const meta = span.meta
         if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') continue
-        const error = meta['error.stack']
-          ? { message: meta['error.message'], stack: meta['error.stack'] }
-          : meta['error.message']
 
         recordAttemptToFixExecution(attemptToFixExecutions, {
           testSuite: meta[TEST_SUITE],
           testName: meta[TEST_NAME],
           status: meta[TEST_STATUS],
-          error,
-          isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
-          isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })
       }
     }
   } catch {
     // ignore parse errors
-  }
-}
-
-/**
- * Gets the suppression reason shown for quarantined or disabled attempt-to-fix tests.
- *
- * @param {AttemptToFixExecutionResult} result
- * @returns {string | undefined}
- */
-function getSuppressedReason (result) {
-  if (result.isQuarantined && result.isDisabled) {
-    return 'this test is quarantined and disabled'
-  }
-  if (result.isQuarantined) {
-    return 'this test is quarantined'
-  }
-  if (result.isDisabled) {
-    return 'this test is disabled'
   }
 }
 
@@ -1732,15 +1505,6 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
 
   for (const result of failedResults) {
     lines.push(`  • ${result.name}`)
-
-    const suppressedReason = getSuppressedReason(result)
-    if (suppressedReason) {
-      lines.push(`    Errors are suppressed because ${suppressedReason}.`)
-    }
-
-    for (const failedExecutionGroup of groupAttemptToFixFailedExecutions(result.failedExecutions)) {
-      addAttemptToFixFailedExecutionLines(lines, failedExecutionGroup)
-    }
   }
 
   return lines.join('\n')

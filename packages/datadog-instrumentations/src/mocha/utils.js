@@ -286,9 +286,8 @@ function getFinalStatus ({
     return
   }
 
-  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
-  // the final status of its last execution should be reported as 'skip'.
-  if (isQuarantined || isDisabled) {
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (!isAttemptToFix && (isQuarantined || isDisabled)) {
     return 'skip'
   }
 
@@ -395,8 +394,6 @@ function getOnTestEndHandler (config) {
         testName: test.fullTitle(),
         status,
         error: ctx?.err || test.err,
-        isQuarantined: _ddIsQuarantined,
-        isDisabled: _ddIsDisabled,
       })
     }
 
@@ -405,7 +402,7 @@ function getOnTestEndHandler (config) {
     // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
     // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
     // directly sets finalStatus without waiting for hooks
-    if (ctx && (!getAfterEachHooks(test).length || test._ddIsDisabled)) {
+    if (ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))) {
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
@@ -440,7 +437,7 @@ function getOnHookEndHandler () {
         const ctx = getTestContext(test)
         // Disabled tests are already finished in getOnTestEndHandler,
         // skip to avoid double-publishing
-        if (ctx && !test._ddIsDisabled) {
+        if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
@@ -482,14 +479,10 @@ function getOnFailHandler (isMain) {
             testName: test.fullTitle(),
             status: 'fail',
             error: err,
-            isQuarantined: test._ddIsQuarantined,
-            isDisabled: test._ddIsDisabled,
           })
         }
         // if it's a hook and it has failed, 'test end' will not be called
-        // quarantined and disabled tests always report 'skip'
-        // as final status, even when hooks fail
-        const isSkippedByManagement = test._ddIsQuarantined || test._ddIsDisabled
+        const isSkippedByManagement = !test._ddIsAttemptToFix && (test._ddIsQuarantined || test._ddIsDisabled)
         testFinishCh.publish({
           status: 'fail',
           hasBeenRetried: isMochaRetry(test),

@@ -280,9 +280,12 @@ function getFinalStatus ({
   isQuarantined,
   isDisabled,
 }) {
-  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
-  // the final status of its last execution should be reported as 'skip'.
-  if (isQuarantined || isDisabled || status === 'skip') {
+  if (status === 'skip') {
+    return 'skip'
+  }
+
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (retryKind !== FINAL_STATUS_RETRY_KIND.atf && (isQuarantined || isDisabled)) {
     return 'skip'
   }
 
@@ -949,10 +952,10 @@ class CypressPlugin {
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
         }
-        // Update test status - but NOT for quarantined tests where we intentionally
+        // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
         const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
-        if (cypressTestStatus !== finishedTest.testStatus && !isQuarantinedTest) {
+        if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
         }
@@ -1208,14 +1211,11 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
-          const { isDisabled, isQuarantined } = this.getTestProperties(testSuite, testName)
           recordAttemptToFixExecution(this.attemptToFixExecutions, {
             testSuite,
             testName,
             status: testStatus,
             error,
-            isQuarantined: isQuarantined || isQuarantinedFromSupport,
-            isDisabled: isDisabled || isDisabledFromSupport,
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed

@@ -35,8 +35,6 @@ const {
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
-  testsAttemptToFix,
-  testsStatuses,
   newTestsWithDynamicNames,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
@@ -149,26 +147,17 @@ function getOnEndHandler (isParallel) {
       }
     }
 
-    // We substract the errors of attempt to fix tests (quarantined or disabled) from the total number of failures
-    // We subtract the errors from quarantined tests from the total number of failures
+    // We subtract the errors from quarantined tests from the total number of failures.
+    // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
     if (config.isTestManagementTestsEnabled) {
       let numFailedQuarantinedTests = 0
-      let numFailedRetriedQuarantinedOrDisabledTests = 0
-      for (const test of testsAttemptToFix) {
-        const testName = getTestFullName(test)
-        const testProperties = getTestProperties(test, config.testManagementTests)
-        if (isTestFailed(test) && (testProperties.isQuarantined || testProperties.isDisabled)) {
-          const numFailedTests = testsStatuses.get(testName).filter(status => status === 'fail').length
-          numFailedRetriedQuarantinedOrDisabledTests += numFailedTests
-        }
-      }
       for (const test of testsQuarantined) {
         if (isTestFailed(test)) {
           numFailedQuarantinedTests++
         }
       }
-      this.stats.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
-      this.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
+      this.stats.failures -= numFailedQuarantinedTests
+      this.failures -= numFailedQuarantinedTests
     }
 
     // Recompute status after EFD and quarantine adjustments have reduced failure counts
@@ -776,7 +765,8 @@ addHook({
         }
       }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
+      const testProperties = getTestProperties(test, config.testManagementTests)
+      if (config.isTestManagementTestsEnabled && testProperties.isQuarantined && !testProperties.isAttemptToFix) {
         testsQuarantined.add(test)
       }
     }

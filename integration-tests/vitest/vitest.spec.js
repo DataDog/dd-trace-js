@@ -1880,8 +1880,6 @@ versions.forEach((version) => {
                       }
                       if (shouldAlwaysPass) {
                         assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                      } else if (isQuarantining || isDisabling) {
-                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
                       } else {
                         assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
                       }
@@ -1968,19 +1966,13 @@ versions.forEach((version) => {
                     assert.match(stdout, /Attempt to fix passed/)
                   } else {
                     assert.match(stdout, /Attempt to fix failed/)
-                    assert.match(
-                      stdout,
-                      shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
-                    )
+                    assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
                   }
-                  if (isQuarantining) {
-                    assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
-                  }
-                  if (isDisabling) {
-                    assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+                  if (isQuarantining || isDisabling) {
+                    assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
                   }
                 }
-                if (shouldAlwaysPass || (isAttemptingToFix && isQuarantining) || (isAttemptingToFix && isDisabling)) {
+                if (shouldAlwaysPass) {
                   assert.strictEqual(exitCode, 0)
                 } else {
                   assert.strictEqual(exitCode, 1)
@@ -2078,7 +2070,7 @@ versions.forEach((version) => {
             ])
           })
 
-          it('does not fail retry if a test is quarantined', (done) => {
+          it('ignores quarantine when attempting to fix a test', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
             receiver.setTestManagementTests({
               vitest: {
@@ -2100,7 +2092,7 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantining: true })
           })
 
-          it('does not fail retry if a test is disabled', (done) => {
+          it('ignores disabled when attempting to fix a test', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
             receiver.setTestManagementTests({
               vitest: {

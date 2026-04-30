@@ -61,12 +61,11 @@ Cypress.on('fail', (err, runnable) => {
   }
 
   const testName = runnable.fullTitle()
-  const { isQuarantined, isDisabled } = getTestProperties(testName)
+  const { isAttemptToFix, isQuarantined, isDisabled } = getTestProperties(testName)
 
   // Suppress failures for quarantined or disabled tests so they don't affect the exit code.
-  // This applies regardless of attempt-to-fix status: per spec, quarantined/disabled test
-  // results are always ignored.
-  if (isQuarantined || isDisabled) {
+  // Attempt-to-fix ignores quarantine/disabled suppression and keeps the normal framework result.
+  if (!isAttemptToFix && (isQuarantined || isDisabled)) {
     suppressedTestFailures.set(testName, { error: err, isQuarantined, isDisabled })
     return
   }

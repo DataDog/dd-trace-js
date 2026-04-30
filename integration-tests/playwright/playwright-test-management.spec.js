@@ -260,7 +260,7 @@ versions.forEach((version) => {
 
               const testsMarkedAsFailedAllRetries = attemptedToFixTests.filter(test =>
                 test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-              ).length
+              )
 
               const testsMarkedAsPassedAllRetries = attemptedToFixTests.filter(test =>
                 test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
@@ -275,24 +275,31 @@ versions.forEach((version) => {
                 assert.strictEqual(countAttemptToFixTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
                 assert.strictEqual(countRetriedAttemptToFixTests, 2 * ATTEMPT_TO_FIX_NUM_RETRIES)
                 if (shouldAlwaysPass) {
-                  assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries.length, 0)
                   assert.strictEqual(testsMarkedAsFailed, 0)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 2)
                 } else if (shouldFailSometimes) {
                   // one test failed sometimes, the other always passed
-                  assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries.length, 0)
                   assert.strictEqual(testsMarkedAsFailed, 1)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
                 } else {
                   // one test failed always, the other always passed
-                  assert.strictEqual(testsMarkedAsFailedAllRetries, 1)
+                  assert.strictEqual(
+                    testsMarkedAsFailedAllRetries.length,
+                    1,
+                    JSON.stringify(testsMarkedAsFailedAllRetries.map(test => ({
+                      name: test.meta[TEST_NAME],
+                      status: test.meta[TEST_STATUS],
+                    })))
+                  )
                   assert.strictEqual(testsMarkedAsFailed, 1)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
                 }
               } else {
                 assert.strictEqual(countAttemptToFixTests, 0)
                 assert.strictEqual(countRetriedAttemptToFixTests, 0)
-                assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                assert.strictEqual(testsMarkedAsFailedAllRetries.length, 0)
                 assert.strictEqual(testsMarkedAsPassedAllRetries, 0)
               }
               if (shouldIncludeFlakyTest) {
@@ -382,21 +389,14 @@ versions.forEach((version) => {
               assert.match(stdout, /Attempt to fix passed/)
             } else {
               assert.match(stdout, /Attempt to fix failed/)
-              assert.match(
-                stdout,
-                shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
-              )
+              assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
             }
-            if (isQuarantined) {
-              assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
-            }
-            if (isDisabled) {
-              assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+            if (isQuarantined || isDisabled) {
+              assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
             }
           }
 
-          if (isQuarantined || isDisabled || shouldAlwaysPass) {
-            // even though a test fails, the exit code is 0 because the test is quarantined
+          if (shouldAlwaysPass) {
             assert.strictEqual(exitCode, 0)
           } else {
             assert.strictEqual(exitCode, 1)
@@ -496,7 +496,7 @@ versions.forEach((version) => {
           ])
         })
 
-        it('does not fail retry if a test is quarantined', async () => {
+        it('ignores quarantine when attempting to fix a test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
@@ -526,7 +526,7 @@ versions.forEach((version) => {
           await runAttemptToFixTest({ isAttemptingToFix: true, isQuarantined: true })
         })
 
-        it('does not fail retry if a test is disabled', async () => {
+        it('ignores disabled when attempting to fix a test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })

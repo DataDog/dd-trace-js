@@ -143,73 +143,55 @@ describe('attempt to fix summary', () => {
     )
   })
 
-  it('reports failed executions with truncated error messages and suppressed failure context', () => {
+  it('reports failed executions without error messages', () => {
     const executions = new Map()
-    const longMessage = 'x'.repeat(600)
 
     recordAttemptToFixExecution(executions, {
       testSuite: 'suite.js',
       testName: 'fails',
       status: 'fail',
-      error: new Error(longMessage),
-      isQuarantined: true,
-      isDisabled: true,
     })
 
     const summary = formatAttemptToFixSummary(executions)
 
     assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
     assert.match(summary, /suite\.js › fails/)
-    assert.match(summary, /Errors are suppressed because this test is quarantined and disabled\./)
-    assert.match(summary, /execution 1: Error: x+\.\.\./)
-    assert.ok(!summary.includes(longMessage))
+    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.ok(!summary.includes('Error:'))
+    assert.ok(!summary.includes('execution 1:'))
   })
 
-  it('reports stack traces and collapses identical failed executions', () => {
+  it('lists each failed test once', () => {
     const executions = new Map()
-    const error = new Error('same failure')
-    error.stack = [
-      'Error: same failure',
-      '    at Object.<anonymous> (suite.js:10:5)',
-      '    at /repo/packages/datadog-instrumentations/src/jest.js:572:57',
-      '    at run (node:diagnostics_channel:162:14)',
-      '    at processTicksAndRejections (node:internal/process/task_queues:95:5)',
-    ].join('\n')
 
     recordAttemptToFixExecution(executions, {
       testSuite: 'suite.js',
-      testName: 'collapses repeated stack',
+      testName: 'fails sometimes',
       status: 'fail',
-      error,
     })
     recordAttemptToFixExecution(executions, {
       testSuite: 'suite.js',
-      testName: 'collapses repeated stack',
+      testName: 'fails sometimes',
       status: 'pass',
     })
     recordAttemptToFixExecution(executions, {
       testSuite: 'suite.js',
-      testName: 'collapses repeated stack',
+      testName: 'fails sometimes',
       status: 'fail',
-      error,
     })
     recordAttemptToFixExecution(executions, {
       testSuite: 'suite.js',
-      testName: 'collapses repeated stack',
+      testName: 'always fails',
       status: 'fail',
-      error,
     })
 
     const summary = formatAttemptToFixSummary(executions)
 
-    assert.match(summary, /executions 1, 3-4: Error: same failure/)
-    assert.match(summary, /\n\s+at Object\.<anonymous> \(suite\.js:10:5\)/)
-    assert.match(summary, /\n\s+\.\.\. 3 internal frame\(s\) hidden/)
-    assert.ok(!summary.includes('packages/datadog-instrumentations'))
-    assert.ok(!summary.includes('node:diagnostics_channel'))
-    assert.ok(!summary.includes('node:internal'))
-    assert.strictEqual(summary.match(/Error: same failure/g).length, 1)
-    assert.ok(!summary.includes('execution 3:'))
+    assert.match(summary, /Attempt to fix failed: 3 of 4 execution\(s\) failed across 2 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails sometimes/)
+    assert.match(summary, /suite\.js › always fails/)
+    assert.strictEqual(summary.match(/suite\.js › fails sometimes/g).length, 1)
+    assert.doesNotMatch(summary, /execution \d+:/)
   })
 
   it('collects attempt to fix executions from worker traces', () => {
@@ -234,9 +216,9 @@ describe('attempt to fix summary', () => {
 
     const summary = formatAttemptToFixSummary(executions)
     assert.match(summary, /worker-suite\.js › worker test/)
-    assert.match(summary, /execution 1: Error: worker failure/)
-    assert.match(summary, /\n\s+at worker-suite\.js:10:5/)
-    assert.match(summary, /Errors are suppressed because this test is quarantined\./)
+    assert.ok(!summary.includes('worker failure'))
+    assert.ok(!summary.includes('worker-suite.js:10:5'))
+    assert.ok(!summary.includes('Errors are suppressed because'))
   })
 
   it('logs and clears the attempt to fix summary', () => {
