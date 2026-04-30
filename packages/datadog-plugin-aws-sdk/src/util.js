@@ -2,6 +2,7 @@
 
 const crypto = require('crypto')
 const log = require('../../dd-trace/src/log')
+const { hasAtLeast, isEmpty } = require('../../dd-trace/src/util')
 
 /**
  * Generates a unique hash from an array of strings by joining them with | before hashing.
@@ -141,41 +142,6 @@ const extractQueueMetadata = queueURL => {
 
   const arn = `arn:${partition}:sqs:${region}:${accountId}:${queueName}`
   return { queueName, arn }
-}
-
-/**
- * Returns true when `obj` has no own enumerable properties. The
- * `for-in` loop with an early return is the only allocation-free shape
- * for this check; benchmarks pin it as 1.3-1.4x faster than
- * `Object.keys(obj).length === 0` across small / medium / large
- * objects, and this is the hot path on every AWS messaging send.
- *
- * @param {object} obj
- * @returns {boolean}
- */
-const isEmpty = obj => {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) return false
-  return true
-}
-
-/**
- * Returns true when `obj` has at least `n` own enumerable properties.
- * Same `for-in` motivation as {@link isEmpty}; the early return stops
- * counting after the threshold is reached so per-message work is
- * bounded by `n`, not the full key set.
- *
- * @param {object} obj
- * @param {number} n
- * @returns {boolean}
- */
-const hasAtLeast = (obj, n) => {
-  let count = 0
-  // eslint-disable-next-line no-unused-vars
-  for (const _ in obj) {
-    if (++count >= n) return true
-  }
-  return false
 }
 
 module.exports = {
