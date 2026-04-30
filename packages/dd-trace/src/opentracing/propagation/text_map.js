@@ -64,6 +64,7 @@ const tracestateTagValueFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
+const percentByte = /%([0-9A-Fa-f]{2})/g
 
 class TextMapPropagator {
   #extractB3Context
@@ -706,9 +707,8 @@ class TextMapPropagator {
       try {
         value = decodeURIComponent(value)
       } catch {
-        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-        removeAllBaggageItems()
-        return
+        const bytes = value.replaceAll(percentByte, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+        value = Buffer.from(bytes, 'binary').toString('utf8')
       }
 
       if (spanContext && (tagAllKeys || baggageTagKeys.has(key))) {
