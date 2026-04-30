@@ -176,6 +176,8 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     const formatSpan = this.#formatSpan
+    const stringMap = this._stringMap
+
     for (let span of trace) {
       span = formatSpan(span)
 
@@ -184,21 +186,63 @@ class AgentEncoder {
       if (span.meta_struct) mapSize++
       if (span.span_events) mapSize++
 
-      const headerOffset = bytes.length
-      bytes.reserve(1)
-      bytes.buffer[headerOffset] = 0x80 + mapSize
-
+      // Pre-fetch the cached string entries up front and fuse the map prefix,
+      // optional `type`, three IDs, and `name` / `resource` / `service`
+      // emissions into a single `bytes.reserve` + sequential native writes.
+      // Replaces seven `bytes.reserve` calls per span (one each for the
+      // header, type, three IDs, three strings) with one.
+      let typeEntry
       if (span.type) {
-        this.#writeKeyAndString(bytes, KEY_TYPE, span.type)
+        typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
+      }
+      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name)
+      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource)
+      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service)
+      const nameLen = nameEntry.length
+      const resourceLen = resourceEntry.length
+      const serviceLen = serviceEntry.length
+
+      let blockSize = 1 +                                // map prefix
+        KEY_TRACE_ID_PREFIX.length + 8 +                 // trace_id
+        KEY_SPAN_ID_PREFIX.length + 8 +                  // span_id
+        KEY_PARENT_ID_PREFIX.length + 8 +                // parent_id
+        KEY_NAME.length + nameLen +
+        KEY_RESOURCE.length + resourceLen +
+        KEY_SERVICE.length + serviceLen
+      if (typeEntry) blockSize += KEY_TYPE.length + typeEntry.length
+
+      const blockOffset = bytes.length
+      bytes.reserve(blockSize)
+      const target = bytes.buffer
+      let cursor = blockOffset
+
+      target[cursor++] = 0x80 + mapSize
+
+      if (typeEntry) {
+        target.set(KEY_TYPE, cursor)
+        cursor += KEY_TYPE.length
+        target.set(typeEntry, cursor)
+        cursor += typeEntry.length
       }
 
-      this.#writeIdField(bytes, KEY_TRACE_ID_PREFIX, span.trace_id)
-      this.#writeIdField(bytes, KEY_SPAN_ID_PREFIX, span.span_id)
-      this.#writeIdField(bytes, KEY_PARENT_ID_PREFIX, span.parent_id)
+      cursor = this.#writeIdAt(target, cursor, KEY_TRACE_ID_PREFIX, span.trace_id)
+      cursor = this.#writeIdAt(target, cursor, KEY_SPAN_ID_PREFIX, span.span_id)
+      cursor = this.#writeIdAt(target, cursor, KEY_PARENT_ID_PREFIX, span.parent_id)
 
-      this.#writeKeyAndString(bytes, KEY_NAME, span.name)
-      this.#writeKeyAndString(bytes, KEY_RESOURCE, span.resource)
-      this.#writeKeyAndString(bytes, KEY_SERVICE, span.service)
+      target.set(KEY_NAME, cursor)
+      cursor += KEY_NAME.length
+      target.set(nameEntry, cursor)
+      cursor += nameLen
+
+      target.set(KEY_RESOURCE, cursor)
+      cursor += KEY_RESOURCE.length
+      target.set(resourceEntry, cursor)
+      cursor += resourceLen
+
+      target.set(KEY_SERVICE, cursor)
+      cursor += KEY_SERVICE.length
+      target.set(serviceEntry, cursor)
+
       bytes.set(KEY_ERROR)
       this._encodeIntOrFloat(bytes, span.error)
       bytes.set(KEY_START)
@@ -394,46 +438,31 @@ class AgentEncoder {
   }
 
   /**
-   * @param {MsgpackChunk} bytes
-   * @param {Buffer} keyBuffer
-   * @param {string} value
-   */
-  #writeKeyAndString (bytes, keyBuffer, value) {
-    const valueEntry = this._stringMap[value] ?? this._cacheString(value)
-    const keyLen = keyBuffer.length
-    const valueLen = valueEntry.length
-    const offset = bytes.length
-    bytes.reserve(keyLen + valueLen)
-
-    const target = bytes.buffer
-    target.set(keyBuffer, offset)
-    target.set(valueEntry, offset + keyLen)
-  }
-
-  /**
-   * @param {MsgpackChunk} bytes
+   * Write `[keyPrefix, 8-byte uint64 id]` into `target` at `offset` and
+   * return the new cursor. Caller is responsible for having reserved enough
+   * room — this is the no-reserve variant used inside `_encode`'s combined
+   * fixed-fields block.
+   *
+   * @param {Uint8Array} target
+   * @param {number} offset
    * @param {Buffer} keyPrefix Precomputed `[key, 0xCF]`.
    * @param {{ toBuffer: () => Uint8Array | number[] }} identifier
+   * @returns {number}
    */
-  #writeIdField (bytes, keyPrefix, identifier) {
+  #writeIdAt (target, offset, keyPrefix, identifier) {
+    target.set(keyPrefix, offset)
+    offset += keyPrefix.length
     const idBuffer = identifier.toBuffer()
     const start = idBuffer.length - 8
-    const keyPrefixLen = keyPrefix.length
-    const offset = bytes.length
-    bytes.reserve(keyPrefixLen + 8)
-
-    const target = bytes.buffer
-    target.set(keyPrefix, offset)
-
-    const valueOffset = offset + keyPrefixLen
-    target[valueOffset] = idBuffer[start]
-    target[valueOffset + 1] = idBuffer[start + 1]
-    target[valueOffset + 2] = idBuffer[start + 2]
-    target[valueOffset + 3] = idBuffer[start + 3]
-    target[valueOffset + 4] = idBuffer[start + 4]
-    target[valueOffset + 5] = idBuffer[start + 5]
-    target[valueOffset + 6] = idBuffer[start + 6]
-    target[valueOffset + 7] = idBuffer[start + 7]
+    target[offset] = idBuffer[start]
+    target[offset + 1] = idBuffer[start + 1]
+    target[offset + 2] = idBuffer[start + 2]
+    target[offset + 3] = idBuffer[start + 3]
+    target[offset + 4] = idBuffer[start + 4]
+    target[offset + 5] = idBuffer[start + 5]
+    target[offset + 6] = idBuffer[start + 6]
+    target[offset + 7] = idBuffer[start + 7]
+    return offset + 8
   }
 
   /**
