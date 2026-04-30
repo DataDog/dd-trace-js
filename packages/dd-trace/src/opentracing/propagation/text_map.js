@@ -433,9 +433,11 @@ class TextMapPropagator {
     }
 
     if (this._config.tracePropagationBehaviorExtract === 'ignore') {
-      context._links = []
+      // `context` is null when no extractor matched; the fallback below picks up
+      // the SQSD context if present, otherwise the request runs untraced.
+      if (context) context._links = []
     } else {
-      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+      if (this._config.tracePropagationBehaviorExtract === 'restart' && context) {
         context._links = []
         context._links.push({
           context,

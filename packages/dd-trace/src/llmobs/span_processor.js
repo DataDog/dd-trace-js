@@ -299,9 +299,13 @@ class LLMObsSpanProcessor {
       }
 
       return processedLLMObsSpan
-    } catch (e) {
-      logger.error(`[LLMObs] Error in LLMObs span processor (${util.inspect(processor)}): ${util.inspect(e)}`)
+    } catch (error_) {
+      // Surface the original span when a user processor throws; the alternative
+      // (returning undefined) silently drops the span under the same code path
+      // that "user returned null" deliberately drops it.
+      logger.error(`[LLMObs] Error in LLMObs span processor (${util.inspect(processor)}): ${util.inspect(error_)}`)
       error = true
+      return span
     } finally {
       telemetry.recordLLMObsUserProcessorCalled(error)
     }

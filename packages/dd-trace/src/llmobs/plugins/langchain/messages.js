@@ -40,22 +40,38 @@ function isBaseMessage (data) {
 }
 
 function formatIO (data) {
+  return formatIOInternal(data, new WeakSet())
+}
+
+// LangChain `Document`/state graphs can carry cycles (e.g. parent <-> child
+// linked nodes); without the WeakSet guard, the recursion blows the stack
+// before the JSON.stringify fallback catches.
+function formatIOInternal (data, seen) {
   if (data == null) return ''
 
   if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
     return data
   }
 
+  if (typeof data === 'object') {
+    if (seen.has(data)) return '[Circular]'
+    seen.add(data)
+  }
+
   if (data.constructor?.name === 'Object') {
     const formatted = {}
-    for (const [key, value] of Object.entries(data)) {
-      formatted[key] = formatIO(value)
+    for (const key of Object.keys(data)) {
+      formatted[key] = formatIOInternal(data[key], seen)
     }
     return formatted
   }
 
   if (Array.isArray(data)) {
-    return data.map(item => formatIO(item))
+    const out = new Array(data.length)
+    for (let i = 0; i < data.length; i++) {
+      out[i] = formatIOInternal(data[i], seen)
+    }
+    return out
   }
 
   // Only duck-typed BaseMessage instances collapse to { content, role }.
