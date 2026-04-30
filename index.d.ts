@@ -23,7 +23,7 @@ interface Tracer extends opentracing.Tracer {
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan(name: string, options?: tracer.SpanOptions): tracer.Span;
+  startSpan (name: string, options?: tracer.SpanOptions): tracer.Span;
 
   /**
    * Injects the given SpanContext instance for cross-process propagation
@@ -35,7 +35,7 @@ interface Tracer extends opentracing.Tracer {
    * @param  {string} format The format of the carrier.
    * @param  {any} carrier The carrier object.
    */
-  inject(spanContext: tracer.SpanContext | tracer.Span, format: string, carrier: any): void;
+  inject (spanContext: tracer.SpanContext | tracer.Span, format: string, carrier: any): void;
 
   /**
    * Returns a SpanContext instance extracted from `carrier` in the given
@@ -46,31 +46,31 @@ interface Tracer extends opentracing.Tracer {
    *         The extracted SpanContext, or null if no such SpanContext could
    *         be found in `carrier`
    */
-  extract(format: string, carrier: any): tracer.SpanContext | null;
+  extract (format: string, carrier: any): tracer.SpanContext | null;
 
   /**
    * Initializes the tracer. This should be called before importing other libraries.
    */
-  init(options?: tracer.TracerOptions): this;
+  init (options?: tracer.TracerOptions): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
    * init() is called, only in cases where the URL needs to be set after
    * initialization.
    */
-  setUrl(url: string): this;
+  setUrl (url: string): this;
 
   /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
    */
-  scope(): tracer.Scope;
+  scope (): tracer.Scope;
 
   /**
    * Instruments a function by automatically creating a span activated on its
@@ -86,9 +86,9 @@ interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  trace<T>(name: string, fn: (span: tracer.Span) => T): T;
-  trace<T>(name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
-  trace<T>(name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
+  trace<T> (name: string, fn: (span: tracer.Span) => T): T;
+  trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
+  trace<T> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -104,9 +104,9 @@ interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
 
   /**
    * Returns an HTML string containing <meta> tags that should be included in
@@ -119,14 +119,14 @@ interface Tracer extends opentracing.Tracer {
    * Note that this feature is currently not supported by the backend and
    * using it will have no effect.
    */
-  getRumData(): string;
+  getRumData (): string;
 
   /**
    * Links an authenticated user to the current trace.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser(user: tracer.User): Tracer;
+  setUser (user: tracer.User): Tracer;
 
   appsec: tracer.Appsec;
 
@@ -182,7 +182,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * Work with storage('baggage'), therefore do not follow the same continuity as other APIs.
    */
-  setBaggageItem(key: string, value: string, metadata?: object): Record<string, string>;
+  setBaggageItem (key: string, value: string, metadata?: object): Record<string, string>;
   /**
    * @experimental
    *
@@ -190,7 +190,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#get-value
    */
-  getBaggageItem(key: string): string | undefined;
+  getBaggageItem (key: string): string | undefined;
   /**
    * @experimental
    *
@@ -198,7 +198,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#get-all-values
    */
-  getAllBaggageItems(): Record<string, string>;
+  getAllBaggageItems (): Record<string, string>;
   /**
    * @experimental
    *
@@ -206,7 +206,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-value
    */
-  removeBaggageItem(key: string): Record<string, string>;
+  removeBaggageItem (key: string): Record<string, string>;
 
   /**
    * @experimental
@@ -215,7 +215,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-all-values
    */
-  removeAllBaggageItems(): Record<string, string>;
+  removeAllBaggageItems (): Record<string, string>;
 }
 
 // left out of the namespace, so it
@@ -306,11 +306,11 @@ interface Plugins {
 
 declare namespace tracer {
   export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
-    /**
-     * Set childOf to 'null' to create a root span without a parent, even when a parent span
-     * exists in the current async context. If 'undefined' the parent will be inferred from the
-     * existing async context.
-     */
+  /**
+   * Set childOf to 'null' to create a root span without a parent, even when a parent span
+   * exists in the current async context. If 'undefined' the parent will be inferred from the
+   * existing async context.
+   */
     childOf?: opentracing.Span | opentracing.SpanContext | null;
     /**
      * Optional name of the integration that crated this span.
@@ -351,7 +351,7 @@ declare namespace tracer {
    * have children.
    */
   export interface Span extends opentracing.Span {
-    context(): SpanContext;
+    context (): SpanContext;
 
     /**
      * Causally links another span to the current span
@@ -362,7 +362,7 @@ declare namespace tracer {
      * @param {Object} attributes An optional key value pair of arbitrary values.
      * @returns {void}
      */
-    addLink(context: SpanContext, attributes?: Object): void;
+    addLink (context: SpanContext, attributes?: Object): void;
 
     /**
      * Adds a single link to the span.
@@ -372,7 +372,7 @@ declare namespace tracer {
      *
      * @param link the link to add.
      */
-    addLink(link: { context: SpanContext, attributes?: Object }): void;
+    addLink (link: { context: SpanContext, attributes?: Object }): void;
 
     /**
      * Adds multiple links to the span.
@@ -382,7 +382,7 @@ declare namespace tracer {
      *
      * @param links the links to add.
      */
-    addLinks(links: { context: SpanContext, attributes?: Object }[]): void;
+    addLinks (links: { context: SpanContext, attributes?: Object }[]): void;
   }
 
   /**
@@ -399,17 +399,17 @@ declare namespace tracer {
     /**
      * Returns the string representation of the internal trace ID.
      */
-    toTraceId(): string;
+    toTraceId (): string;
 
     /**
      * Returns the string representation of the internal span ID.
      */
-    toSpanId(): string;
+    toSpanId (): string;
 
     /**
      * Returns the string representation used for DBM integration.
      */
-    toTraceparent(): string;
+    toTraceparent (): string;
   }
 
   /**
@@ -651,30 +651,30 @@ declare namespace tracer {
      */
     runtimeMetrics?: boolean | {
 
-      /**
-      * @env DD_RUNTIME_METRICS_ENABLED
-      * Programmatic configuration takes precedence over the environment variables listed above.
-      */
+       /**
+       * @env DD_RUNTIME_METRICS_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       enabled?: boolean,
 
-      /**
-      * @env DD_RUNTIME_METRICS_GC_ENABLED
-      * Programmatic configuration takes precedence over the environment variables listed above.
-      */
+       /**
+       * @env DD_RUNTIME_METRICS_GC_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       gc?: boolean,
 
-      /**
-      * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
-      * Programmatic configuration takes precedence over the environment variables listed above.
-      */
+       /**
+       * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       eventLoop?: boolean,
 
-      /**
-      * Whether to use native metrics. When set to false, forces the JS implementation
-      * @default true
-      * @env DD_RUNTIME_METRICS_NATIVE
-      * Programmatic configuration takes precedence over the environment variables listed above.
-      */
+       /**
+       * Whether to use native metrics. When set to false, forces the JS implementation
+       * @default true
+       * @env DD_RUNTIME_METRICS_NATIVE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       native?: boolean
     }
 
@@ -1032,9 +1032,9 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         mode?:
-        'anonymous' | 'anon' | 'safe' |
-        'identification' | 'ident' | 'extended' |
-        'disabled'
+          'anonymous' | 'anon' | 'safe' |
+          'identification' | 'ident' | 'extended' |
+          'disabled'
       },
       /**
        * Configuration for Api Security
@@ -1478,7 +1478,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    increment(stat: string, value?: number, tags?: Record<string, string | number> | string[]): void
+    increment(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Decrements a metric by the specified value, optionally specifying tags.
@@ -1486,7 +1486,7 @@ declare namespace tracer {
      * @param value The amount to decrement the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    decrement(stat: string, value?: number, tags?: Record<string, string | number> | string[]): void
+    decrement(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a distribution value, optionally specifying tags.
@@ -1494,7 +1494,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    distribution(stat: string, value?: number, tags?: Record<string, string | number> | string[]): void
+    distribution(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a gauge value, optionally specifying tags.
@@ -1502,7 +1502,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    gauge(stat: string, value?: number, tags?: Record<string, string | number> | string[]): void
+    gauge(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a histogram value, optionally specifying tags.
@@ -1510,7 +1510,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    histogram(stat: string, value?: number, tags?: Record<string, string | number> | string[]): void
+    histogram(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Forces any unsent metrics to be sent
@@ -1530,7 +1530,7 @@ declare namespace tracer {
      * @param target The target of data (topic, exchange, stream name).
      * @param carrier The carrier object to inject DSM context into.
      */
-    setProduceCheckpoint(type: string, target: string, carrier: any): void;
+    setProduceCheckpoint (type: string, target: string, carrier: any): void;
 
     /**
      * Sets a consume checkpoint and extracts DSM context from the provided carrier.
@@ -1540,7 +1540,7 @@ declare namespace tracer {
      * @param manualCheckpoint Whether this checkpoint was manually set. Defaults to true.
      * @returns The DSM context associated with the current pathway.
      */
-    setConsumeCheckpoint(type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
+    setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
 
     /**
      * Records a transaction ID at a named checkpoint without pathway propagation.
@@ -1691,7 +1691,7 @@ declare namespace tracer {
     /**
      * Metadata about this provider.
      */
-    metadata: { name: string;[key: string]: any };
+    metadata: { name: string; [key: string]: any };
 
     /**
      * Resolves a boolean flag value.
@@ -1702,7 +1702,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string;[key: string]: any }>;
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string; [key: string]: any }>;
 
     /**
      * Resolves a string flag value.
@@ -1713,7 +1713,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string;[key: string]: any }>;
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string; [key: string]: any }>;
 
     /**
      * Resolves a number flag value.
@@ -1724,7 +1724,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string;[key: string]: any }>;
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string; [key: string]: any }>;
 
     /**
      * Resolves an object flag value.
@@ -1735,7 +1735,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string;[key: string]: any }>;
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
   }
 
   export namespace aiguard {
@@ -1922,7 +1922,7 @@ declare namespace tracer {
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
-      evaluate(messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
     }
   }
 
@@ -1949,7 +1949,7 @@ declare namespace tracer {
      *
      * @returns {Span} The active span.
      */
-    active(): Span | null;
+    active (): Span | null;
 
     /**
      * Activate a span in the scope of a function.
@@ -1958,7 +1958,7 @@ declare namespace tracer {
      * @param {Function} fn Function that will have the span activated on its scope.
      * @returns The return value of the provided function.
      */
-    activate<T>(span: Span, fn: ((...args: any[]) => T)): T;
+    activate<T> (span: Span, fn: ((...args: any[]) => T)): T;
 
     /**
      * Binds a target to the provided span, or the active span if omitted.
@@ -1967,9 +1967,9 @@ declare namespace tracer {
      * @param {Span} [span=scope.active()] The span to activate.
      * @returns The bound target.
      */
-    bind<T extends (...args: any[]) => void>(fn: T, span?: Span | null): T;
-    bind<V, T extends (...args: any[]) => V>(fn: T, span?: Span | null): T;
-    bind<T>(fn: Promise<T>, span?: Span | null): Promise<T>;
+    bind<T extends (...args: any[]) => void> (fn: T, span?: Span | null): T;
+    bind<V, T extends (...args: any[]) => V> (fn: T, span?: Span | null): T;
+    bind<T> (fn: Promise<T>, span?: Span | null): Promise<T>;
   }
 
   /** @hidden */
@@ -1996,7 +1996,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Instrumentation extends Integration, Analyzable { }
+    interface Instrumentation extends Integration, Analyzable {}
 
     /** @hidden */
     interface Http extends Instrumentation {
@@ -2218,43 +2218,43 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Prisma extends Instrumentation { }
+    interface Prisma extends Instrumentation {}
 
     /** @hidden */
-    interface PrismaClient extends Prisma { }
+    interface PrismaClient extends Prisma {}
 
     /** @hidden */
-    interface PrismaEngine extends Prisma { }
+    interface PrismaEngine extends Prisma {}
 
     /**
      * This plugin automatically instruments the
      * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
      */
-    interface aerospike extends Instrumentation { }
+    interface aerospike extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
      */
-    interface ai extends Instrumentation { }
+    interface ai extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
      */
-    interface amqp10 extends Instrumentation { }
+    interface amqp10 extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [amqplib](https://github.com/squaremo/amqp.node) module.
      */
-    interface amqplib extends Instrumentation { }
+    interface amqplib extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
-    interface anthropic extends Instrumentation { }
+    interface anthropic extends Instrumentation {}
 
     /**
      * Currently this plugin automatically instruments
@@ -2303,7 +2303,7 @@ declare namespace tracer {
      * This plugin automatically patches the [avsc](https://github.com/mtth/avsc) module
      * to collect avro message schemas when Datastreams Monitoring is enabled.
      */
-    interface avsc extends Integration { }
+    interface avsc extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2341,13 +2341,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * @azure/cosmos module
      */
-    interface azure_cosmos extends Integration { }
+    interface azure_cosmos extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * @azure/event-hubs module
      */
-    interface azure_event_hubs extends Integration { }
+    interface azure_event_hubs extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2364,13 +2364,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * @azure/service-bus module
      */
-    interface azure_service_bus extends Integration { }
+    interface azure_service_bus extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * durable-functions module
      */
-    interface azure_durable_functions extends Integration { }
+      interface azure_durable_functions extends Integration {}
 
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -2382,57 +2382,57 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation { }
+    interface bullmq extends Instrumentation {}
 
-    interface bunyan extends Integration { }
+    interface bunyan extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
      */
-    interface cassandra_driver extends Instrumentation { }
+    interface cassandra_driver extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [child_process](https://nodejs.org/api/child_process.html) module.
      */
-    interface child_process extends Instrumentation { }
+    interface child_process extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [confluentinc-kafka-javascript](https://github.com/confluentinc/confluent-kafka-js) module.
      */
-    interface confluentinc_kafka_javascript extends Instrumentation { }
+    interface confluentinc_kafka_javascript extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [connect](https://github.com/senchalabs/connect) module.
      */
-    interface connect extends HttpServer { }
+    interface connect extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [couchbase](https://www.npmjs.com/package/couchbase) module.
      */
-    interface couchbase extends Instrumentation { }
+    interface couchbase extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [cucumber](https://www.npmjs.com/package/@cucumber/cucumber) module.
      */
-    interface cucumber extends Integration { }
+    interface cucumber extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * [cypress](https://github.com/cypress-io/cypress) module.
      */
-    interface cypress extends Integration { }
+    interface cypress extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * [dns](https://nodejs.org/api/dns.html) module.
      */
-    interface dns extends Instrumentation { }
+    interface dns extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2454,64 +2454,64 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
-    interface express extends HttpServer { }
+    interface express extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [fastify](https://www.fastify.io/) module.
      */
-    interface fastify extends HttpServer { }
+    interface fastify extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [fetch](https://nodejs.org/api/globals.html#fetch) global.
      */
-    interface fetch extends HttpClient { }
+    interface fetch extends HttpClient {}
 
     /**
      * This plugin patches the [find-my-way](https://github.com/delvedor/find-my-way) router.
      */
-    interface find_my_way extends Integration { }
+    interface find_my_way extends Integration {}
 
     /**
      * This plugin automatically instruments Node.js core fs operations.
      */
-    interface fs extends Instrumentation { }
+    interface fs extends Instrumentation {}
 
     /**
      * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
      * module to bind the callbacks the the caller context.
      */
-    interface generic_pool extends Integration { }
+    interface generic_pool extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
-    interface google_cloud_pubsub extends Integration { }
+    interface google_cloud_pubsub extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-    interface google_cloud_vertexai extends Integration { }
+   interface google_cloud_vertexai extends Integration {}
 
-    /**
-     * This plugin automatically instruments the
-     * [@google-genai](https://github.com/googleapis/js-genai) module.
-     */
-    interface google_genai extends Integration { }
+   /**
+    * This plugin automatically instruments the
+    * [@google-genai](https://github.com/googleapis/js-genai) module.
+    */
+   interface google_genai extends Integration {}
 
-    /** @hidden */
-    interface ExecutionArgs {
-      schema: any,
-      document: any,
-      rootValue?: any,
-      contextValue?: any,
-      variableValues?: any,
-      operationName?: string,
-      fieldResolver?: any,
-      typeResolver?: any,
+   /** @hidden */
+   interface ExecutionArgs {
+     schema: any,
+     document: any,
+     rootValue?: any,
+     contextValue?: any,
+     variableValues?: any,
+     operationName?: string,
+     fieldResolver?: any,
+     typeResolver?: any,
     }
 
     /**
@@ -2615,13 +2615,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [hapi](https://hapijs.com/) module.
      */
-    interface hapi extends HttpServer { }
+    interface hapi extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [hono](https://hono.dev/) module.
      */
-    interface hono extends HttpServer { }
+    interface hono extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
@@ -2795,74 +2795,74 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [jest](https://github.com/jestjs/jest) module.
      */
-    interface jest extends Integration { }
+    interface jest extends Integration {}
 
     /**
      * This plugin patches the [knex](https://knexjs.org/)
      * module to bind the promise callback the the caller context.
      */
-    interface knex extends Integration { }
+    interface knex extends Integration {}
 
     /**
      * This plugin automatically instruments the
      * [koa](https://koajs.com/) module.
      */
-    interface koa extends HttpServer { }
+    interface koa extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [kafkajs](https://kafka.js.org/) module.
      */
-    interface kafkajs extends Instrumentation { }
+    interface kafkajs extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [langchain](https://js.langchain.com/) module
      */
-    interface langchain extends Instrumentation { }
+    interface langchain extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [langgraph](https://github.com/npmjs/package/langgraph) library.
      */
-    interface langgraph extends Instrumentation { }
+    interface langgraph extends Instrumentation {}
 
-    /**
-   * This plugin automatically instruments the
-   * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
-   */
-    interface ldapjs extends Instrumentation { }
+      /**
+     * This plugin automatically instruments the
+     * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
+     */
+    interface ldapjs extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
      */
-    interface mariadb extends mysql { }
+    interface mariadb extends mysql {}
 
     /**
      * This plugin automatically instruments the
      * [memcached](https://github.com/3rd-Eden/memcached) module.
      */
-    interface memcached extends Instrumentation { }
+    interface memcached extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [microgateway-core](https://github.com/apigee/microgateway-core) module.
      */
-    interface microgateway_core extends HttpServer { }
+    interface microgateway_core extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [mocha](https://mochajs.org/) module.
      */
-    interface mocha extends Integration { }
-
+    interface mocha extends Integration {}
+    
     /**
      * This plugin automatically instruments the
      * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
      */
-    interface modelcontextprotocol_sdk extends Instrumentation { }
-
+    interface modelcontextprotocol_sdk extends Instrumentation {}
+    
     /**
      * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
@@ -2904,7 +2904,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mongoose](https://mongoosejs.com/) module.
      */
-    interface mongoose extends Instrumentation { }
+    interface mongoose extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2918,13 +2918,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
-    interface mysql2 extends mysql { }
+    interface mysql2 extends mysql {}
 
     /**
      * This plugin automatically instruments the
      * [net](https://nodejs.org/api/net.html) module.
      */
-    interface net extends Instrumentation { }
+    interface net extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2945,7 +2945,7 @@ declare namespace tracer {
     /**
      * This plugin integrates with [nyc](https://github.com/istanbuljs/nyc) for CI visibility.
      */
-    interface nyc extends Integration { }
+    interface nyc extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2960,13 +2960,13 @@ declare namespace tracer {
      * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
      * in the agent.
      */
-    interface openai extends Instrumentation { }
+    interface openai extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
      */
-    interface opensearch extends elasticsearch { }
+    interface opensearch extends elasticsearch {}
 
     /**
      * This plugin automatically instruments the
@@ -2983,7 +2983,7 @@ declare namespace tracer {
     * This plugin automatically instruments the
     * [playwright](https://github.com/microsoft/playwright) module.
     */
-    interface playwright extends Integration { }
+    interface playwright extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -3010,7 +3010,7 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
-    interface pino extends Integration { }
+    interface pino extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -3032,7 +3032,7 @@ declare namespace tracer {
      * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
      */
-    interface protobufjs extends Integration { }
+    interface protobufjs extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -3093,25 +3093,25 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [restify](http://restify.com/) module.
      */
-    interface restify extends HttpServer { }
+    interface restify extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
      * [rhea](https://github.com/amqp/rhea) module.
      */
-    interface rhea extends Instrumentation { }
+    interface rhea extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [router](https://github.com/pillarjs/router) module.
      */
-    interface router extends Integration { }
+    interface router extends Integration {}
 
     /**
     * This plugin automatically instruments the
     * [selenium-webdriver](https://www.npmjs.com/package/selenium-webdriver) module.
     */
-    interface selenium extends Integration { }
+    interface selenium extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -3138,24 +3138,24 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
-    interface tedious extends Instrumentation { }
+    interface tedious extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
      * [undici](https://github.com/nodejs/undici) module.
      */
-    interface undici extends HttpClient { }
+    interface undici extends HttpClient {}
 
     /**
      * This plugin automatically instruments the
      * [vitest](https://github.com/vitest-dev/vitest) module.
      */
-    interface vitest extends Integration { }
+    interface vitest extends Integration {}
 
     /**
      * This plugin implements shared web request instrumentation helpers.
      */
-    interface web extends HttpServer { }
+    interface web extends HttpServer {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
@@ -3163,7 +3163,7 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
-    interface winston extends Integration { }
+    interface winston extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -3592,12 +3592,12 @@ declare namespace tracer {
       /**
        * Enable LLM Observability tracing.
        */
-      enable(options: LLMObsEnableOptions): void,
+      enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
        */
-      disable(): void,
+      disable (): void,
 
       /**
        * Instruments a function by automatically creating a span activated on its
@@ -3616,7 +3616,7 @@ declare namespace tracer {
        * @param options Optional LLM Observability span options.
        * @returns The return value of the function.
        */
-      trace<T>(options: LLMObsNamedSpanOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
+      trace<T> (options: LLMObsNamedSpanOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
 
       /**
        * Wrap a function to automatically create a span activated on its
@@ -3635,7 +3635,7 @@ declare namespace tracer {
        * @param options Optional LLM Observability span options.
        * @returns A new function that wraps the provided function with span creation.
        */
-      wrap<T = (...args: any[]) => any>(options: LLMObsNamelessSpanOptions, fn: T): T
+      wrap<T = (...args: any[]) => any> (options: LLMObsNamelessSpanOptions, fn: T): T
 
       /**
        * Decorate a function in a javascript runtime that supports function decorators.
@@ -3646,7 +3646,7 @@ declare namespace tracer {
        *
        * @param options Optional LLM Observability span options.
        */
-      decorate(options: llmobs.LLMObsNamelessSpanOptions): any
+      decorate (options: llmobs.LLMObsNamelessSpanOptions): any
 
       /**
        * Returns a representation of a span to export its span and trace IDs.
@@ -3654,7 +3654,7 @@ declare namespace tracer {
        * @param span Optional span to export.
        * @returns An object containing the span and trace IDs.
        */
-      exportSpan(span?: tracer.Span): llmobs.ExportedLLMObsSpan
+      exportSpan (span?: tracer.Span): llmobs.ExportedLLMObsSpan
 
 
       /**
@@ -3677,8 +3677,8 @@ declare namespace tracer {
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
        * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
        */
-      annotate(options: llmobs.AnnotationOptions): void
-      annotate(span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
+      annotate (options: llmobs.AnnotationOptions): void
+      annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
 
       /**
        * Register a processor to be called on each LLMObs span.
@@ -3692,19 +3692,19 @@ declare namespace tracer {
        * @param processor A function that will be called for each span.
        * @throws {Error} If a processor is already registered.
        */
-      registerProcessor(processor: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)): void
+      registerProcessor (processor: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)): void
 
       /**
        * Deregister a processor.
        */
-      deregisterProcessor(): void
+      deregisterProcessor (): void
 
       /**
        * Submits a custom evaluation metric for a given span ID and trace ID.
        * @param spanContext The span context of the span to submit the evaluation metric for.
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
        */
-      submitEvaluation(spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
+      submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
 
       /**
@@ -3713,7 +3713,7 @@ declare namespace tracer {
        * @param fn The callback over which to apply the annotation context options.
        * @returns The result of the function.
        */
-      annotationContext<T>(options: llmobs.AnnotationContextOptions, fn: () => T): T
+      annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
 
       /**
        * Execute a function within a routing context, directing all LLMObs spans to a specific Datadog organization.
@@ -3721,12 +3721,12 @@ declare namespace tracer {
        * @param fn The callback over which to apply the routing context.
        * @returns The result of the function.
        */
-      routingContext<T>(options: llmobs.RoutingContextOptions, fn: () => T): T
+      routingContext<T> (options: llmobs.RoutingContextOptions, fn: () => T): T
 
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
-      flush(): void
+      flush (): void
     }
 
     interface LLMObservabilitySpan {
@@ -3745,7 +3745,7 @@ declare namespace tracer {
        * @param key The key of the tag to get.
        * @returns The value of the tag, or `undefined` if the tag does not exist.
        */
-      getTag(key: string): string | undefined
+      getTag (key: string): string | undefined
     }
 
     interface EvaluationOptions {
