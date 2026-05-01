@@ -3285,6 +3285,9 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "configurationNames": [
+          "traceMetricsEnabled"
+        ],
         "default": null,
         "internalPropertyName": "traceMetricsEnabled"
       }
