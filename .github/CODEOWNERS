@@ -238,6 +238,8 @@
 
 /.github/actions/ @DataDog/lang-platform-js
 
+/benchmark/sirun/encoding/ @DataDog/lang-platform-js
+
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/coverage/ @DataDog/lang-platform-js
 /integration-tests/coverage-child-process.spec.js @DataDog/lang-platform-js
