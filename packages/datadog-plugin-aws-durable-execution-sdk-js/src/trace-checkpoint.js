@@ -5,8 +5,6 @@ const log = require('../../dd-trace/src/log')
 const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
 
 const CHECKPOINT_NAME_PREFIX = '_datadog_'
-const LEGACY_CHECKPOINT_NAME_PREFIX = '_dd_trace_context_'
-const CHECKPOINT_NAME_PREFIXES = [CHECKPOINT_NAME_PREFIX, LEGACY_CHECKPOINT_NAME_PREFIX]
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED'])
 
 /**
@@ -142,29 +140,32 @@ function shallowEqual(a, b) {
 }
 
 /**
- * Find existing _datadog_{N} (or legacy _dd_trace_context_{N}) checkpoints in
- * the event's operations.
- * Returns an array of { number, operation } sorted ascending by number.
+ * Find the checkpoint with the highest N for _datadog_{N} in the event's operations.
  * @param {unknown} event
- * @returns {{ number: number, operation: object }[]}
+ * @returns {{ number: number, operation: object } | null}
  */
-function findExistingCheckpoints(event) {
-  const results = []
-  if (!event || typeof event !== 'object') return results
+function findLastCheckpointOrNull(event) {
+  if (!event || typeof event !== 'object') return null
+
   const operations = event.InitialExecutionState?.Operations
-  if (!Array.isArray(operations)) return results
+  if (!Array.isArray(operations)) return null
+
+  let best = null
   for (const op of operations) {
     const name = op?.Name
     if (typeof name !== 'string') continue
-    const matchedPrefix = CHECKPOINT_NAME_PREFIXES.find(prefix => name.startsWith(prefix))
-    if (!matchedPrefix) continue
-    const suffix = name.slice(matchedPrefix.length)
+
+    if (!name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
+    const suffix = name.slice(CHECKPOINT_NAME_PREFIX.length)
     const n = Number.parseInt(suffix, 10)
     if (Number.isNaN(n) || String(n) !== suffix) continue
-    results.push({ number: n, operation: op })
+
+    if (!best || n > best.number) {
+      best = { number: n, operation: op }
+    }
   }
-  results.sort((a, b) => a.number - b.number)
-  return results
+
+  return best
 }
 
 /**
@@ -179,6 +180,7 @@ function parseCheckpointPayload(op) {
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? parsed : null
   } catch {
+    log.debug('Failed to parse checkpoint payload')
     return null
   }
 }
@@ -227,19 +229,19 @@ async function saveCheckpoint(checkpointManager, executionArn, number, headers) 
 /**
  * If conditions are met, save a new trace-context checkpoint.
  *   - Skips when result Status is SUCCEEDED/FAILED (terminal).
- *   - First checkpoint (no previous): uses number 0, parent_id = grandparentSpanId.
+ *   - First checkpoint (no previous): uses number 0, parent_id = parentSpanId.
  *   - Subsequent: picks max number + 1, reuses previous checkpoint's parent_id,
  *     and saves only if trace context changed (ignoring parent_id).
  * @param {object} tracer
  * @param {object} span - aws.durable_execution.execute span
  * @param {object} durableContext - SDK's DurableContextImpl
- * @param {string | undefined} grandparentSpanId
+ * @param {string | undefined} parentSpanId
  * @param {unknown} event - raw invocation event (has InitialExecutionState)
  * @param {unknown} result - user handler return value
  * @returns {Promise<void>}
  */
 async function maybeSaveTraceContextCheckpoint(
-  tracer, span, durableContext, grandparentSpanId, event, result,
+  tracer, span, durableContext, parentSpanId, event, result,
 ) {
   try {
     if (!span || !durableContext) return
@@ -249,7 +251,6 @@ async function maybeSaveTraceContextCheckpoint(
     // Skip if the manager is already terminating — its checkpoint() returns
     // a Promise that never resolves, which would hang Lambda until timeout.
     if (checkpointManager.isTerminating) {
-      log.debug('Skipping trace context checkpoint: manager is terminating')
       return
     }
 
@@ -261,22 +262,15 @@ async function maybeSaveTraceContextCheckpoint(
     const currentHeaders = injectHeaders(tracer, span)
     if (!currentHeaders || Object.keys(currentHeaders).length === 0) return
 
-    const existing = findExistingCheckpoints(event)
+    const latest = findLastCheckpointOrNull(event)
 
     let newNumber
-    if (existing.length === 0) {
+    if (!latest) {
       newNumber = 0
-      if (grandparentSpanId) overrideParentId(currentHeaders, grandparentSpanId)
+      if (parentSpanId) overrideParentId(currentHeaders, parentSpanId)
     } else {
-      const latest = existing[existing.length - 1]
       const latestHeaders = parseCheckpointPayload(latest.operation)
       if (!latestHeaders) return
-
-      const curTid = headersTraceId(currentHeaders)
-      const prevTid = headersTraceId(latestHeaders)
-      if (curTid && prevTid && curTid !== prevTid) {
-        log.warn(`Trace ID mismatch between checkpoints: current=${curTid} previous=${prevTid}`)
-      }
 
       if (shallowEqual(
         normalizeAndIgnoreParentContextFields(currentHeaders),
@@ -298,6 +292,5 @@ async function maybeSaveTraceContextCheckpoint(
 
 module.exports = {
   CHECKPOINT_NAME_PREFIX,
-  LEGACY_CHECKPOINT_NAME_PREFIX,
   maybeSaveTraceContextCheckpoint,
 }

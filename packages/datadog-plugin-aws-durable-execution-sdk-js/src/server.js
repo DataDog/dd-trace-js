@@ -10,6 +10,8 @@ const NON_PENDING_TERMINATION_REASONS = new Set([
   'CONTEXT_VALIDATION_ERROR',
 ])
 const kTerminationHookInstalled = Symbol('dd-trace:aws-durable-execution-sdk-js:termination-hook-installed')
+const kDurableRootSpan = Symbol('dd-trace:aws-durable-execution-sdk-js:durable-root-span')
+const kDurableSpansFinished = Symbol('dd-trace:aws-durable-execution-sdk-js:durable-spans-finished')
 
 class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -18,33 +20,38 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
 
   bindStart(ctx) {
     const meta = this.getTags(ctx)
+    const args = ctx.arguments
+    const invocationEvent = args?.[0]
+    const rootExecutionSpan = _createDurableRootExecutionSpan(this, invocationEvent, meta)
 
-    this.startSpan('aws.durable_execution.execute', {
+    const executeSpanOptions = {
       service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_execution',
       resource: 'aws.durable_execution.execute',
       meta,
-    }, ctx)
+    }
+    if (rootExecutionSpan) {
+      executeSpanOptions.childOf = rootExecutionSpan
+    }
 
-    // Wrap the user handler so we can capture the DurableContext and save the
-    // trace-context checkpoint AFTER the handler returns (or throws).
-    // This ensures the checkpoint contains the fully-updated trace context
-    //
-    // The isTerminating guard in maybeSaveTraceContextCheckpoint prevents hangs
-    // when the CheckpointManager has already started tearing down.
-    //
+    this.startSpan('aws.durable_execution.execute', executeSpanOptions, ctx)
+    if (rootExecutionSpan && ctx.currentStore) {
+      ctx.currentStore[kDurableRootSpan] = rootExecutionSpan
+    }
+
+    // Wrap the user handler so we can capture the DurableContext.
+    // _datadog checkpoints are saved only from the termination hook path,
+    // i.e. only when we expect follow-up invocations.
     // runHandler signature: (event, context, executionContext, mode, checkpointToken, handler)
-    const args = ctx.arguments
     if (args && args.length >= 6 && typeof args[5] === 'function') {
       const originalHandler = args[5]
-      const invocationEvent = args[0]
       const span = ctx.currentStore?.span
       const tracer = this._tracer
-      // Capture the grandparent span_id (parent of aws.lambda) so checkpoint
-      // headers point at the root aws.durable-execution span across invocations.
-      const grandparentSpanId = _getGrandparentSpanId(tracer, span)
+      // Capture the regular parent span_id of aws.durable_execution.execute
+      // for first-checkpoint parent linkage.
+      const parentSpanId = _getParentSpanId(span)
       const checkpointState = {
         durableContext: undefined,
-        grandparentSpanId,
+        parentSpanId,
         invocationEvent,
         savePromise: null,
         saved: false,
@@ -56,17 +63,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
 
       args[5] = async function (...handlerArgs) {
         checkpointState.durableContext = handlerArgs[1]
-        let result
-        try {
-          result = await originalHandler.apply(this, handlerArgs)
-        } finally {
-          try {
-            await _maybeSaveCheckpoint(checkpointState, result)
-          } catch {
-            // Best-effort — never break the customer's handler
-          }
-        }
-        return result
+        return originalHandler.apply(this, handlerArgs)
       }
     }
 
@@ -90,34 +87,84 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
 
   // tracingChannel fires both asyncEnd and end; Need to call finish in both cases to ensure the span is finished regardless of how the tracingChannel is configured.
   finish(ctx) {
+    if (ctx?.currentStore?.[kDurableSpansFinished]) return
+
     super.finish(ctx)
+
+    const rootSpan = ctx?.currentStore?.[kDurableRootSpan]
+    if (rootSpan && typeof rootSpan.finish === 'function') {
+      rootSpan.finish()
+    }
+
+    if (ctx?.currentStore) {
+      ctx.currentStore[kDurableSpansFinished] = true
+    }
   }
 }
 
 /**
- * Return the parent_id of the currently active span — that is, the span_id of
- * the "grandparent" relative to the aws.durable_execution.execute span we just
- * started.  In datadog-lambda-js this resolves to the root aws.durable-execution
- * span created by the wrapper.
- * @param {object} tracer
+ * Return the parent_id of aws.durable_execution.execute.
  * @param {object} span
  * @returns {string | undefined}
  */
-function _getGrandparentSpanId(tracer, span) {
+function _getParentSpanId(span) {
   try {
-    // span.context()._parentId holds the parent of aws.durable_execution.execute.
-    // That parent is aws.lambda, whose own parent is the durable root span.
-    // To find that root, walk via the active tracer's scope.
-    const active = tracer.scope().active()
-    if (active && typeof active.context === 'function') {
-      const ctx = active.context()
-      const parentId = ctx?._parentId
-      if (parentId) return parentId.toString()
-    }
+    const parentId = span?.context?.()?._parentId
+    if (parentId) return parentId.toString()
   } catch {
     // best-effort
   }
   return undefined
+}
+
+function _extractExecutionStartTime(event) {
+  const operations = event?.InitialExecutionState?.Operations
+  if (!Array.isArray(operations) || operations.length === 0) return undefined
+
+  const firstStartTs = operations[0]?.StartTimestamp
+  if (firstStartTs === undefined || firstStartTs === null) return undefined
+
+  const parsed = Number(firstStartTs)
+  if (Number.isNaN(parsed)) return undefined
+
+  return parsed
+}
+
+function _createDurableRootExecutionSpan(plugin, event, meta) {
+  if (!event || typeof event !== 'object') {
+    return null
+  }
+
+  const executionArn = event?.DurableExecutionArn
+  if (!executionArn) {
+    return null
+  }
+
+  const operations = event?.InitialExecutionState?.Operations
+  if (!Array.isArray(operations) || operations.length !== 1) {
+    return null
+  }
+
+  const startTime = _extractExecutionStartTime(event)
+  const serviceName = process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable-execution'
+  const resourceName = executionArn.includes(':') ? executionArn.split(':').pop() : executionArn
+  const spanOptions = {
+    service: serviceName,
+    resource: resourceName,
+    type: 'serverless',
+    kind: 'server',
+    meta: {
+      ...meta,
+      'durable.execution_arn': executionArn,
+      'durable.is_root_span': true,
+      'durable.invocation_count': operations?.length ?? 0,
+    },
+  }
+  if (startTime !== undefined) {
+    spanOptions.startTime = startTime
+  }
+
+  return plugin.startSpan('aws.durable-execution', spanOptions, false)
 }
 
 function _installTerminationCheckpointHook(executionContext, checkpointState) {
@@ -153,7 +200,7 @@ function _maybeSaveCheckpoint(state, result) {
     state.tracer,
     state.span,
     state.durableContext,
-    state.grandparentSpanId,
+    state.parentSpanId,
     state.invocationEvent,
     result,
   ).catch(() => {

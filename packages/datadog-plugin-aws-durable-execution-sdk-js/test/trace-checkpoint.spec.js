@@ -95,7 +95,7 @@ describe('trace-checkpoint', () => {
           Operations: [
             {
               Id: 'trace-checkpoint-0',
-              Name: '_dd_trace_context_0',
+              Name: '_datadog_0',
               Status: 'SUCCEEDED',
               Payload: JSON.stringify(previousCheckpointHeaders),
             },
