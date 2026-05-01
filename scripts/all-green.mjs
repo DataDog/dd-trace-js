@@ -13,7 +13,19 @@ const {
   RETRIES,
 } = process.env
 
-const octokit = new Octokit({ auth: GITHUB_TOKEN })
+const octokit = new Octokit({
+  auth: GITHUB_TOKEN,
+  throttle: {
+    onRateLimit: () => {
+      console.error('GitHub API rate limit reached, failing immediately.')
+      return false
+    },
+    onSecondaryRateLimit: () => {
+      console.error('GitHub API secondary rate limit reached, failing immediately.')
+      return false
+    },
+  },
+})
 const owner = 'DataDog'
 const repo = 'dd-trace-js'
 const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
