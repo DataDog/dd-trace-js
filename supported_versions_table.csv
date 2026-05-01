@@ -23,6 +23,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @langchain/langgraph,langgraph,1.1.2,1.1.2,True
 @modelcontextprotocol/sdk,modelcontextprotocol-sdk,1.27.1,1.27.1,True
 @node-redis/client,redis,1.0.0,1.0.6,True
+@openai/agents-core,openai-agents,0.7.0,0.7.0,True
 @opensearch-project/opensearch,opensearch,1.0.0,3.5.1,True
 @prisma/client,prisma,6.1.0,7.2.0,True
 @redis/client,redis,1.1.0,5.10.0,True
