@@ -6,7 +6,19 @@
   "instructions": true,
   "iterations": 22,
   "variants": {
-    "0.4": { "env": { "ENCODER_VERSION": "0.4" } },
-    "0.5": { "env": { "ENCODER_VERSION": "0.5" } }
+    "0.4": { "env": { "ENCODER_VERSION": "0.4", "WITH_SPAN_EVENTS": "none" } },
+    "0.5": { "env": { "ENCODER_VERSION": "0.5", "WITH_SPAN_EVENTS": "none" } },
+    "0.4-events-native": {
+      "baseline": "0.4",
+      "env": { "ENCODER_VERSION": "0.4", "WITH_SPAN_EVENTS": "native", "DD_TRACE_NATIVE_SPAN_EVENTS": "true" }
+    },
+    "0.4-events-legacy": {
+      "baseline": "0.4",
+      "env": { "ENCODER_VERSION": "0.4", "WITH_SPAN_EVENTS": "legacy", "DD_TRACE_NATIVE_SPAN_EVENTS": "false" }
+    },
+    "0.5-events-legacy": {
+      "baseline": "0.5",
+      "env": { "ENCODER_VERSION": "0.5", "WITH_SPAN_EVENTS": "legacy" }
+    }
   }
 }

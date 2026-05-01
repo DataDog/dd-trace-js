@@ -1055,8 +1055,8 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
 }
 
 function getTestSessionName (config, trimmedCommand, envTags) {
-  if (config.ciVisibilityTestSessionName) {
-    return config.ciVisibilityTestSessionName
+  if (config.DD_TEST_SESSION_NAME) {
+    return config.DD_TEST_SESSION_NAME
   }
   const lageTestSessionName = getLageTestSessionName()
   if (lageTestSessionName) {
