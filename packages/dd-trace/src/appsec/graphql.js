@@ -78,7 +78,7 @@ function enterInApolloRequest () {
     // Set isInGraphqlRequest=true since this function only runs for GraphQL requests
     // This works for both Apollo v4 (middleware) and v5 (HTTP server) contexts
     requestData.isInGraphqlRequest = true
-    addSpecificEndpoint(req.method, req.originalUrl || req.url, specificBlockingTypes.GRAPHQL)
+    addSpecificEndpoint(req, specificBlockingTypes.GRAPHQL)
   }
 }
 

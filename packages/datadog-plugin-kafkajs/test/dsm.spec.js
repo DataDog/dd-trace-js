@@ -49,6 +49,10 @@ describe('Plugin', () => {
       let expectedProducerHash
       let expectedConsumerHash
       let testTopic
+      let topicAIn
+      let topicAOut
+      let topicBIn
+      let topicBOut
 
       describe('data stream monitoring', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
@@ -69,13 +73,18 @@ describe('Plugin', () => {
             logLevel: lib.logLevel.WARN,
           })
           testTopic = `test-topic-${randomUUID()}`
+          topicAIn = `topic-a-in-${randomUUID()}`
+          topicAOut = `topic-a-out-${randomUUID()}`
+          topicBIn = `topic-b-in-${randomUUID()}`
+          topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
-            topics: [{
-              topic: testTopic,
+            waitForLeaders: false,
+            topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
+              topic,
               numPartitions: 1,
               replicationFactor: 1,
-            }],
+            })),
           })
           clusterIdAvailable = semver.intersects(version, '>=1.13')
           expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
@@ -91,7 +100,7 @@ describe('Plugin', () => {
             tracer.use('kafkajs', { dsmEnabled: true })
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
           })
 
@@ -182,20 +191,6 @@ describe('Plugin', () => {
           })
 
           it('Should maintain separate DSM context for interleaved consume-produce flows', async () => {
-            // Four topics: A reads aIn → produces aOut, B reads bIn → produces bOut
-            const topicAIn = `topic-a-in-${randomUUID()}`
-            const topicAOut = `topic-a-out-${randomUUID()}`
-            const topicBIn = `topic-b-in-${randomUUID()}`
-            const topicBOut = `topic-b-out-${randomUUID()}`
-
-            await admin.createTopics({
-              topics: [topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
-                topic,
-                numPartitions: 1,
-                replicationFactor: 1,
-              })),
-            })
-
             producer = kafka.producer()
             await producer.connect()
 
@@ -208,7 +203,7 @@ describe('Plugin', () => {
 
             consumerA = kafka.consumer({ groupId: 'test-group-a' })
             await consumerA.connect()
-            await consumerA.subscribe({ topic: topicAIn })
+            await consumerA.subscribe({ topic: topicAIn, fromBeginning: true })
             await consumerA.run({
               eachMessage: async () => {
                 resolveAEntered()
@@ -220,7 +215,7 @@ describe('Plugin', () => {
 
             consumerB = kafka.consumer({ groupId: 'test-group-b' })
             await consumerB.connect()
-            await consumerB.subscribe({ topic: topicBIn })
+            await consumerB.subscribe({ topic: topicBIn, fromBeginning: true })
             await consumerB.run({
               eachMessage: async () => {
                 resolveBEntered()
@@ -261,7 +256,7 @@ describe('Plugin', () => {
             tracer.use('kafkajs', { dsmEnabled: true })
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             setOffsetSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setOffset')
           })
 
