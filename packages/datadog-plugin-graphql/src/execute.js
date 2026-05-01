@@ -123,15 +123,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     ctx._ddArgs = args
 
-    // Fast-path for the depth=0 / instrumentation-disabled case: skip the
-    // resolver-wrap setup and rootCtx allocation entirely. resolveAsync bails
-    // on _depthDisabled before reading either, so wrapping fields just to
-    // produce a wrapped function that immediately returns burns per-execute
-    // CPU for nothing.
-    if (_depthDisabled) {
-      return ctx.currentStore
-    }
-
     // Wrap the default field resolver + walk the schema to wrap explicit field
     // resolvers. Done ONCE per execute (patchedResolvers/patchedTypes WeakSets
     // make this idempotent across calls that share a schema).
