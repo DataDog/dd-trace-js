@@ -64,20 +64,9 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     if (!this.config.dsmEnabled) return
     if (!commitList || !Array.isArray(commitList)) return
-    const keys = ['type', 'partition', 'offset', 'topic']
-
-    // Same shape as the consumer commit walk: drop the `.map()` Array and the
-    // `keys.some(closure)` allocation per commit; counted loop is faster.
-    for (let i = 0; i < commitList.length; i++) {
-      const commit = this.transformProduceResponse(commitList[i], clusterId)
-      let allKeys = true
-      for (let j = 0; j < keys.length; j++) {
-        if (!(keys[j] in commit)) {
-          allKeys = false
-          break
-        }
-      }
-      if (allKeys) this.tracer.setOffset(commit)
+    for (const rawCommit of commitList) {
+      const commit = this.transformProduceResponse(rawCommit, clusterId)
+      this.tracer.setOffset(commit)
     }
   }
 
