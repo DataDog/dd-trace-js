@@ -151,7 +151,7 @@ describe('TracerProxy', () => {
           enabled: true,
         },
       },
-      injectionEnabled: undefined,
+      DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
       profiling: {},
       apmTracingEnabled: false,
