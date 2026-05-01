@@ -19,6 +19,7 @@ module.exports = {
   '@apollo/gateway': () => require('../apollo'),
   '@langchain/langgraph': { esmFirst: true, fn: () => require('../langgraph') },
   '@modelcontextprotocol/sdk': () => require('../modelcontextprotocol-sdk'),
+  '@openai/agents-core': () => require('../openai-agents'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@azure/event-hubs': () => require('../azure-event-hubs'),

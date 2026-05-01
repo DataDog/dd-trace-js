@@ -168,6 +168,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@openai/agents-core",
+    "integration": "openai-agents",
+    "minimum_tracer_supported": "0.7.0",
+    "max_tracer_supported": "0.7.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@opensearch-project/opensearch",
     "integration": "opensearch",
     "minimum_tracer_supported": "1.0.0",

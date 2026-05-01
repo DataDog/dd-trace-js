@@ -3235,6 +3235,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_OPENAI_AGENTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_OPENSEARCH_ENABLED": [
       {
         "implementation": "A",

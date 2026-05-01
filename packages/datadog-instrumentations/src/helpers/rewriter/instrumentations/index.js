@@ -6,4 +6,5 @@ module.exports = [
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
+  ...require('./openai-agents'),
 ]
