@@ -11,21 +11,16 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
-const { getValueFromEnvSources } = require('../config/helper')
-const { isTrue } = require('../util')
 const SpanContext = require('./span_context')
 
 const dateNow = Date.now
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING'))
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS'))
-
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))
+let OTEL_ENABLED = false
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
@@ -55,7 +50,11 @@ function getIntegrationCounter (event, integration) {
 }
 
 class DatadogSpan {
+  #parentTracer
+
   constructor (tracer, processor, prioritySampler, fields, debug) {
+    OTEL_ENABLED = tracer._config.DD_TRACE_OTEL_ENABLED
+
     const operationName = fields.operationName
     const parent = fields.parent || null
     // TODO(BridgeAR): Investigate why this is causing a performance regression
@@ -63,7 +62,7 @@ class DatadogSpan {
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
-    this._parentTracer = tracer
+    this.#parentTracer = tracer
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
@@ -94,7 +93,7 @@ class DatadogSpan {
       attributes: this._sanitizeAttributes(link.attributes),
     })) ?? []
 
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
       runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
 
@@ -104,16 +103,8 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
 
-    // Nullish operator is used here because both `tracer` and `tracer._config`
-    // can be null and there are tests passing invalid values to the `Span`
-    // constructor which still succeed today. Part of the problem is that `Span`
-    // stores only the tracer and not the config, so anything that needs the
-    // config has to read it from the tracer stored on the span, including
-    // even `Span` itself in this case.
-    //
-    // TODO: Refactor Tracer/Span + tests to avoid having to do nullish checks.
-    if (tracer?._config?.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
-      require('../spanleak').addSpan(this, operationName)
+    if (tracer._config.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
+      require('../spanleak').addSpan(this)
     }
 
     if (startCh.hasSubscribers) {
@@ -124,7 +115,7 @@ class DatadogSpan {
   [util.inspect.custom] () {
     return {
       ...this,
-      _parentTracer: `[${this._parentTracer.constructor.name}]`,
+      parentTracer: `[${this.#parentTracer.constructor.name}]`,
       _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
       _processor: `[${this._processor.constructor.name}]`,
     }
@@ -156,7 +147,7 @@ class DatadogSpan {
   }
 
   tracer () {
-    return this._parentTracer
+    return this.#parentTracer
   }
 
   setOperationName (name) {
@@ -254,14 +245,14 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
       log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
     this._spanContext._tags['_dd.integration'] = this._integrationName
 
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
       runtimeMetrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
       runtimeMetrics.increment('runtime.node.spans.finished')
@@ -336,7 +327,7 @@ class DatadogSpan {
     let startTime
 
     let baggage = {}
-    const propagationBehavior = this._parentTracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+    const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
       parent = null
