@@ -19,7 +19,9 @@ jobs:
     env:
       # Shared between both steps. Must stay portable across bash ERE and JS
       # regex (no lookarounds, named groups, or other JS-only features).
-      PR_TITLE_PATTERN: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(([^)]+)\))?(!)?: .+'
+      # Revert PRs nest the reverted commit's type, e.g. `revert: feat(api): undo X`,
+      # so the semver label can track the magnitude of the original change.
+      PR_TITLE_PATTERN: '^(revert(!)?: )?(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(([^)]+)\))?(!)?: .+'
     steps:
       - name: Validate PR title against Conventional Commits
         env:
@@ -28,8 +30,11 @@ jobs:
           if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
             echo "::error::PR title does not follow Conventional Commits format."
             echo "Got:      $PR_TITLE"
-            echo "Expected: <type>(<optional scope>)?: <subject>"
-            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+            echo "Expected: <type>(<scope>)?(!)?: <subject>"
+            echo "          revert(!)?: <type>(<scope>)?(!)?: <subject>  (for reverts)"
+            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore"
+            echo "Reverts of reverts re-apply the original change, so use the original"
+            echo "title (e.g. 'feat: x', not 'revert: revert: feat: x')."
             exit 1
           fi
           echo "PR title OK: $PR_TITLE"
@@ -41,16 +46,24 @@ jobs:
             const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
             const parse = (title) => {
               const m = (title || '').match(pattern)
-              return { type: m?.[1], scope: m?.[3], breaking: m?.[4] === '!' }
+              if (!m) return {}
+              const isRevert = !!m[1]
+              return {
+                type: isRevert ? 'revert' : m[3],
+                revertedType: isRevert ? m[3] : undefined,
+                scope: m[5],
+                breaking: m[2] === '!' || m[6] === '!',
+              }
             }
 
-            // TODO: for `revert`, inspect the reverted commit and use its
-            // semver label instead of defaulting to patch.
-            const semverFor = ({ type, breaking }) => {
+            // For reverts, the semver bump tracks the magnitude of the change
+            // being undone, parsed from the nested type in the title.
+            const semverFor = ({ type, revertedType, breaking }) => {
               if (!type) return undefined
               if (breaking) return 'semver-major'
-              if (type === 'feat') return 'semver-minor'
-              if (type === 'fix' || type === 'perf' || type === 'refactor' || type === 'revert') {
+              const effective = type === 'revert' ? revertedType : type
+              if (effective === 'feat') return 'semver-minor'
+              if (effective === 'fix' || effective === 'perf' || effective === 'refactor') {
                 return 'semver-patch'
               }
               return undefined
