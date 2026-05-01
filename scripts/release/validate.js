@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: Deduplicate any code that is also in proposal.js
+
 const { randomUUID } = require('crypto')
 const {
   capture,
@@ -12,7 +14,6 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
-const { parseDiffLine } = require('./helpers/commits')
 const { checkAll } = require('./helpers/requirements')
 
 const main = 'master'
@@ -57,7 +58,7 @@ try {
 
   pass()
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js'
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
 
   start('Validate differences between proposal and main branch.')
 
@@ -68,12 +69,9 @@ try {
   run(`git checkout -b ${tempBranch}`)
 
   const versionCommit = proposalCommits[0]
-  const tempCommits = capture(`${diffCmd} --format=simple --reverse v${releaseLine}.x ${main}`)
+  const tempCommits = capture(`${diffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
     .split('\n')
-    .map(parseDiffLine)
-    .filter(entry => entry && !entry.isMajor)
     .slice(0, proposalCommits.length - 1)
-    .map(entry => entry.sha)
     .join(' ')
 
   run(`git cherry-pick ${tempCommits} ${versionCommit}`)
