@@ -41,17 +41,6 @@ const conclusionEmojis = {
   timed_out: '⌛',
 }
 
-const conclusionSeverity = {
-  failure: 0,
-  timed_out: 1,
-  action_required: 2,
-  cancelled: 3,
-  stale: 4,
-  neutral: 5,
-  skipped: 6,
-  success: 7,
-}
-
 const failureConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
@@ -197,13 +186,9 @@ function formatDuration (startedAt, completedAt) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function bySeverity (a, b) {
-  return (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8)
-}
-
 async function printSummary (runs) {
   const rows = runs
-    .sort(bySeverity)
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map(run => ({
       name: run.name,
       status: run.status,
