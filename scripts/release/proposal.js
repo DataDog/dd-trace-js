@@ -17,7 +17,6 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
-const { extractSha, parseDiffLine } = require('./helpers/commits')
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
@@ -67,37 +66,22 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js'
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
 
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
+  const lineDiff = capture(`${diffCmd} --format=markdown v${releaseLine}.x ${main}`)
 
-  // All non-major entries: ride along in the release notes and get
-  // cherry-picked, but only releasable ones (feat/fix/perf/refactor/revert
-  // or breaking-marked) decide whether to cut a proposal at all.
-  const releaseEntries = capture(`${diffCmd} --format=simple v${releaseLine}.x ${main}`)
-    .split('\n')
-    .map(parseDiffLine)
-    .filter(entry => entry && !entry.isMajor)
-
-  const triggerEntries = releaseEntries.filter(entry => entry.isReleasable)
-
-  if (!triggerEntries.length) {
+  // Only commits with a semver-patch/minor label warrant cutting a release;
+  // unlabeled commits (e.g. docs/chore) ride along in the notes and the
+  // cherry-pick, but are not enough on their own.
+  if (!lineDiff.includes('SEMVER-MINOR') && !lineDiff.includes('SEMVER-PATCH')) {
     pass('none (already up to date)')
     process.exit(0)
   }
 
-  const releaseShas = new Set(releaseEntries.map(entry => entry.sha))
-  const lineDiff = capture(`${diffCmd} --format=markdown v${releaseLine}.x ${main}`)
-    .split('\n')
-    .filter(line => {
-      const sha = extractSha(line)
-      return !sha || releaseShas.has(sha)
-    })
-    .join('\n')
-
-  const isMinor = triggerEntries.some(entry => entry.isMinor)
+  const isMinor = lineDiff.includes('SEMVER-MINOR')
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
@@ -126,15 +110,14 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalEntries = capture(`${diffCmd} --format=simple --reverse v${newVersion}-proposal ${main}`)
-    .split('\n')
-    .map(parseDiffLine)
-    .filter(entry => entry && !entry.isMajor)
-
-  const proposalDiff = proposalEntries.map(entry => entry.sha).join(' ').trim()
+  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
+    .replaceAll('\n', ' ').trim()
 
   if (proposalDiff) {
-    pass(`\n${proposalEntries.map(entry => entry.line).join('\n')}`)
+    // Get new changes since last commit of the proposal branch.
+    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
+
+    pass(`\n${newChanges}`)
 
     start('Apply changes from the main branch')
 
