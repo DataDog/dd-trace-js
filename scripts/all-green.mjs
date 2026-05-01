@@ -43,7 +43,7 @@ const conclusionSeverity = {
 const failureConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
-let hasRerun = false
+const retriedRunIds = new Set()
 
 // ETag cache for the workflow-runs poll. GitHub returns 304 Not Modified when
 // the response is unchanged, and 304 responses don't count against the rate
@@ -88,8 +88,21 @@ async function getRuns () {
 
 async function pollUntilDone () {
   const runs = await getRuns()
+
+  const toRetry = runs.filter(r =>
+    r.status === 'completed' &&
+    failureConclusions.has(r.conclusion) &&
+    !retriedRunIds.has(r.id)
+  )
+
+  if (toRetry.length > 0) {
+    await rerunFailedWorkflows(toRetry)
+    for (const run of toRetry) retriedRunIds.add(run.id)
+    runsCache = undefined
+  }
+
   const pending = runs.filter(r => r.status !== 'completed').length
-  if (pending === 0) return { runs, done: true }
+  if (pending === 0 && toRetry.length === 0) return { runs, done: true }
 
   retries++
 
@@ -113,8 +126,9 @@ async function rerunFailedWorkflows (workflowRuns) {
 async function checkAllGreen () {
   const { runs, done } = await pollUntilDone()
 
+  await printSummary(runs)
+
   if (!done) {
-    await printSummary(runs)
     console.log(`State is still pending after ${RETRIES} retries.`)
     process.exitCode = 1
     return
@@ -123,26 +137,11 @@ async function checkAllGreen () {
   const failedRuns = runs.filter(r => failureConclusions.has(r.conclusion))
 
   if (failedRuns.length === 0) {
-    await printSummary(runs)
     console.log('All jobs were successful.')
-    return
+  } else {
+    console.log('One or more jobs failed.')
+    process.exitCode = 1
   }
-
-  if (!hasRerun) {
-    hasRerun = true
-    console.log(`${failedRuns.length} workflow run(s) failed. Rerunning failed jobs...`)
-    await rerunFailedWorkflows(failedRuns)
-    retries = 0
-    runsCache = undefined
-    console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling for rerun results.`)
-    await setTimeout(POLLING_INTERVAL * 60_000)
-    await checkAllGreen()
-    return
-  }
-
-  await printSummary(runs)
-  console.log('One or more jobs failed.')
-  process.exitCode = 1
 }
 
 function formatConclusion (conclusion) {
@@ -160,8 +159,8 @@ async function printSummary (runs) {
       name: run.name,
       status: run.status,
       conclusion: formatConclusion(run.conclusion),
-      // workflow_run has no doned_at; updated_at reflects the final state
-      // change once status === 'doned', otherwise it's an in-flight tick.
+      // workflow_run has no completed_at; updated_at reflects the final state
+      // change once status === 'completed', otherwise it's an in-flight tick.
       started_at: run.run_started_at,
       doned_at: run.status === 'completed' ? run.updated_at : ' ',
       url: run.html_url,
