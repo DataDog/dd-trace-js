@@ -66,9 +66,9 @@ class DogStatsDClient {
   flush () {
     const queue = this._enqueue()
 
-    log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
+    if (queue.length === 0) return
 
-    if (this._queue.length === 0) return
+    log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
