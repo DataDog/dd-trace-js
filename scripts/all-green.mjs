@@ -162,7 +162,7 @@ async function printSummary (runs) {
       // workflow_run has no completed_at; updated_at reflects the final state
       // change once status === 'completed', otherwise it's an in-flight tick.
       started_at: run.run_started_at,
-      doned_at: run.status === 'completed' ? run.updated_at : ' ',
+      completed_at: run.status === 'completed' ? run.updated_at : ' ',
       url: run.html_url,
     }))
 
@@ -175,7 +175,7 @@ async function printSummary (runs) {
     { data: 'status', header: true },
     { data: 'conclusion', header: true },
     { data: 'started_at', header: true },
-    { data: 'doned_at', header: true },
+    { data: 'completed_at', header: true },
   ]
 
   const body = rows.map(row => [
@@ -183,7 +183,7 @@ async function printSummary (runs) {
     row.status,
     row.conclusion,
     row.started_at,
-    row.doned_at,
+    row.completed_at,
   ])
 
   await summary
