@@ -17,6 +17,7 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
+const { parseDiffLine } = require('./helpers/commits')
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
@@ -66,19 +67,28 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js'
 
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
 
-  if (!lineDiff) {
+  const releaseOutputLines = capture(`${diffCmd} --format=markdown v${releaseLine}.x ${main}`)
+    .split('\n')
+  const releaseEntries = releaseOutputLines.map(parseDiffLine)
+    .filter(entry => entry && !entry.isMajor)
+
+  if (!releaseEntries.length) {
     pass('none (already up to date)')
     process.exit(0)
   }
 
-  const isMinor = lineDiff.includes('SEMVER-MINOR')
+  const lineDiff = releaseOutputLines.filter(line => {
+    const entry = parseDiffLine(line)
+    return !entry || !entry.isMajor
+  }).join('\n')
+
+  const isMinor = releaseEntries.some(entry => entry.isMinor)
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
@@ -107,14 +117,15 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
-    .replaceAll('\n', ' ').trim()
+  const proposalEntries = capture(`${diffCmd} --format=simple --reverse v${newVersion}-proposal ${main}`)
+    .split('\n')
+    .map(parseDiffLine)
+    .filter(entry => entry && !entry.isMajor)
+
+  const proposalDiff = proposalEntries.map(entry => entry.sha).join(' ').trim()
 
   if (proposalDiff) {
-    // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
-
-    pass(`\n${newChanges}`)
+    pass(`\n${proposalEntries.map(entry => entry.line).join('\n')}`)
 
     start('Apply changes from the main branch')
 
