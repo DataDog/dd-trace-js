@@ -112,7 +112,7 @@ class DatadogSpan {
     // even `Span` itself in this case.
     //
     // TODO: Refactor Tracer/Span + tests to avoid having to do nullish checks.
-    if (tracer?._config?.spanLeakDebug > 0) {
+    if (tracer?._config?.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
       require('../spanleak').addSpan(this, operationName)
     }
 
