@@ -66,7 +66,7 @@ async function getRuns () {
       }
     )) {
       etag ??= headers.etag
-      allRuns.push(...data.workflow_runs)
+      allRuns.push(...data)
     }
     // Isolate per trigger so a parallel all-green run on the same SHA doesn't
     // see our runs (and we don't see theirs). Filter by event, by PR number
