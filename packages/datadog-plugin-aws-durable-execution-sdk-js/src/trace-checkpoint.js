@@ -25,6 +25,22 @@ function injectHeaders(tracer, span) {
 }
 
 /**
+ * Extract the trace_id string from a headers dict.
+ * Supports Datadog and W3C traceparent formats.
+ * @param {Record<string, string>} headers
+ * @returns {string | undefined}
+ */
+function headersTraceId(headers) {
+  if (headers['x-datadog-trace-id']) return String(headers['x-datadog-trace-id'])
+  const tp = headers.traceparent
+  if (typeof tp === 'string') {
+    const parts = tp.split('-')
+    if (parts.length === 4) return parts[1]
+  }
+  return undefined
+}
+
+/**
  * Extract the parent_id string from a headers dict.
  * @param {Record<string, string>} headers
  * @returns {string | undefined}
@@ -213,19 +229,19 @@ async function saveCheckpoint(checkpointManager, executionArn, number, headers) 
 /**
  * If conditions are met, save a new trace-context checkpoint.
  *   - Skips when result Status is SUCCEEDED/FAILED (terminal).
- *   - First checkpoint (no previous): uses number 0, parent_id = checkpointAnchorSpanId.
+ *   - First checkpoint (no previous): uses number 0, parent_id = parentSpanId.
  *   - Subsequent: picks max number + 1, reuses previous checkpoint's parent_id,
  *     and saves only if trace context changed (ignoring parent_id).
  * @param {object} tracer
  * @param {object} span - aws.durable_execution.execute span
  * @param {object} durableContext - SDK's DurableContextImpl
- * @param {string | undefined} checkpointAnchorSpanId
+ * @param {string | undefined} parentSpanId
  * @param {unknown} event - raw invocation event (has InitialExecutionState)
  * @param {unknown} result - user handler return value
  * @returns {Promise<void>}
  */
 async function maybeSaveTraceContextCheckpoint(
-  tracer, span, durableContext, checkpointAnchorSpanId, event, result,
+  tracer, span, durableContext, parentSpanId, event, result,
 ) {
   try {
     if (!span || !durableContext) return
@@ -251,7 +267,7 @@ async function maybeSaveTraceContextCheckpoint(
     let newNumber
     if (!latest) {
       newNumber = 0
-      if (checkpointAnchorSpanId) overrideParentId(currentHeaders, checkpointAnchorSpanId)
+      if (parentSpanId) overrideParentId(currentHeaders, parentSpanId)
     } else {
       const latestHeaders = parseCheckpointPayload(latest.operation)
       if (!latestHeaders) return
