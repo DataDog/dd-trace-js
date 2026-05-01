@@ -3747,6 +3747,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            // Opt out: the bootstrap adds enough child startup overhead that the single DI
+            // retry races the Inspector probe arming. Pre-instrumentation reduced (but did
+            // not eliminate) the slowdown, and this test is sensitive to either side of it.
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
           },
         }
       )
