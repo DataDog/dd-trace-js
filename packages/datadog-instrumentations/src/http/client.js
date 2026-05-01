@@ -26,10 +26,15 @@ function hookFn (http) {
   return http
 }
 
+// `inputURL` may be the user's options object (for the `http.request(options)`
+// shape); never write directly into it. The result is later mutated by
+// `normalizeHeaders` and read by `url.format`, so the merged object must be
+// owned by the tracer.
 function combineOptions (inputURL, inputOptions) {
-  return inputOptions !== null && typeof inputOptions === 'object'
-    ? Object.assign(inputURL || {}, inputOptions)
-    : inputURL
+  if (inputOptions !== null && typeof inputOptions === 'object') {
+    return { ...inputURL, ...inputOptions }
+  }
+  return { ...inputURL }
 }
 function normalizeHeaders (options) {
   options.headers ??= {}
