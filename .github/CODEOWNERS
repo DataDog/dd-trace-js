@@ -246,6 +246,7 @@
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
+/.github/workflows/pr-title.yml @DataDog/lang-platform-js
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
