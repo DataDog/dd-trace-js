@@ -142,26 +142,84 @@ const ASCII_EVENTS = [
   }),
 ]
 
+// Mirrors ASCII_EVENTS one-for-one in shape (event count, message count per event,
+// per-event total character length within ~5%) so the only meaningful delta is the
+// non-ASCII content share — i.e. how often `encodeUnicode` takes the `code > 127`
+// branch. Without that symmetry, the mixed-vs-ascii diff would also reflect event
+// count and total payload size, not the replacer path.
 const MIXED_EVENTS = [
   buildEvent({
     kind: 'llm',
     modelName: 'gpt-4o-2024-11-20',
     modelProvider: 'openai',
-    input: [{ role: 'user', content: 'お問い合わせありがとうございます。今日はどんなお手伝いが必要ですか？' }],
-    output: [{ role: 'assistant', content: 'Здравствуйте! Чем я могу помочь? 🚀 你好，今天我可以为您做什么？' }],
-    metadata: { temperature: 0.3 },
-    inputTokens: 22,
-    outputTokens: 28,
+    input: [
+      { role: 'system', content: 'あなたはオンコール対応のSREチームを支援する、親切で簡潔な日本語アシスタントです。回答は短い一文に収めて返してください。' },
+      {
+        role: 'user',
+        content: '添付された顧客サポートのスレッドを三つの箇条書きで簡潔に要約してください。問題が解決済みかどうかを明記し、' +
+          '関連する発生時刻、担当者、影響を受けたサービス、および関連するチケット番号も短く含めてください。',
+      },
+    ],
+    output: [
+      {
+        role: 'assistant',
+        content: '・お客様は14:00 UTC頃からチェックアウトサービスで断続的な502エラーを報告。一部のリージョンで影響が特に大きく、' +
+          '約十分間ごとに再発しており、関連するアラートも複数発火していました。\n' +
+          '・オンコール担当者が14:42 UTCに前回のデプロイを安全にロールバックし、五分以内にエラーが停止したことを監視ダッシュボードと' +
+          '合成テストの両方で確認しました。\n' +
+          '・解決済み。再発防止のため、次回のデプロイ前にカナリアヘルスチェックを追加するフォローアップチケットを作成済みで、' +
+          '関連チームに共有しレビュー優先度を上げ、来週中の対応で合意しています。担当は山田さん。',
+      },
+    ],
+    metadata: { temperature: 0.2, max_tokens: 512, top_p: 1, stream: false },
+    inputTokens: 312,
+    outputTokens: 96,
   }),
   buildEvent({
     kind: 'llm',
     modelName: 'claude-3-5-sonnet-20241022',
     modelProvider: 'anthropic',
-    input: [{ role: 'user', content: 'Translate this paragraph to German: "Hello, world."' }],
-    output: [{ role: 'assistant', content: 'Hallo, Welt. ¡Hola, mundo! Olá, mundo. مرحبا بالعالم.' }],
-    metadata: { temperature: 0.2 },
-    inputTokens: 18,
-    outputTokens: 24,
+    input: [
+      {
+        role: 'user',
+        content: 'Напиши функцию на Node.js, которая читает JSON-файл и возвращает разобранное значение, ' +
+          'либо undefined, если такого файла нет.',
+      },
+    ],
+    output: [
+      {
+        role: 'assistant',
+        content: 'Функция на Node.js: синхронно проверяем существование пути, читаем содержимое в кодировке utf8 и ' +
+          'возвращаем разобранный JSON либо undefined, если файл отсутствует. 🚀',
+      },
+    ],
+    metadata: { temperature: 0, max_tokens: 256 },
+    inputTokens: 41,
+    outputTokens: 64,
+  }),
+  buildEvent({
+    kind: 'llm',
+    modelName: 'gemini-1.5-pro-002',
+    modelProvider: 'google',
+    input: [
+      {
+        role: 'user',
+        content: '请将下面这段产品介绍完整地翻译成中文，保持要点列表的项目符号格式，并完整保留结尾处的行动号召语气与标点。' +
+          '请按原文逐条对应翻译，请勿在结果中增加任何额外的解释、注释或营销话术，也不要修改产品名称、版本号或者具体数字与日期。请注意保留原有顺序。',
+      },
+    ],
+    output: [
+      {
+        role: 'assistant',
+        content: '・实时可观测仪表板，配合可自定义的告警通知，全面覆盖多区域生产部署，并与现有的事件管理与可观测平台实现无缝衔接、稳定可靠。\n' +
+          '・与一百多种主流开发工具的深度集成，包含 مراقبة 시스템 등 多种 다국어 환경 的统一监控，支持跨团队、跨语言、跨地域协同作业。\n' +
+          '・故障检测时间平均缩短了百分之四十七，显著提升应急响应效率，并降低每一次事故对最终客户的可感知影响范围。\n\n' +
+          '立即开启您的免费试用，亲身体验更智能、更高效的全方位可观测性能力！',
+      },
+    ],
+    metadata: { temperature: 0.3, max_tokens: 320 },
+    inputTokens: 128,
+    outputTokens: 84,
   }),
 ]
 
