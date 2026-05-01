@@ -84,6 +84,11 @@ const messaging = {
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
       serviceSource: integrationSource('google-cloud-pubsub'),
     },
+    'google-cloud-pubsub-push-subscription': {
+      opName: () => 'pubsub.receive',
+      serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
+      serviceSource: integrationSource('google-cloud-pubsub'),
+    },
     kafkajs: {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`,
