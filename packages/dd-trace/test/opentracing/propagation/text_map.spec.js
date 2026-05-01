@@ -583,6 +583,18 @@ describe('TextMapPropagator', () => {
       assert.deepStrictEqual(getAllBaggageItems(), { special: '",;\\' })
     })
 
+    it('should substitute U+FFFD for percent-encoded sequences that are not valid UTF-8', () => {
+      // %C3 starts a 2-byte UTF-8 sequence; %28 is '(' and not a continuation byte.
+      // Per W3C Baggage 3.3.1.3 the bad sequence MUST be replaced with U+FFFD.
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'k=%C3%28,valid=ok',
+      }
+      propagator.extract(carrier)
+      assert.deepStrictEqual(getAllBaggageItems(), { k: '\uFFFD(', valid: 'ok' })
+    })
+
     it('should not extract baggage when the header is malformed', () => {
       const carrierA = {
         'x-datadog-trace-id': '123',
