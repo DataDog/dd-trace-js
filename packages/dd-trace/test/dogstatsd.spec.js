@@ -16,7 +16,6 @@ describe('dogstatsd', () => {
   let DogStatsDClient
   let CustomMetrics
   let MetricsAggregationClient
-  let GAUGE_EVICTION_FLUSHES
   let dgram
   let udp4
   let udp6
@@ -79,7 +78,6 @@ describe('dogstatsd', () => {
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
     MetricsAggregationClient = dogstatsd.MetricsAggregationClient
-    GAUGE_EVICTION_FLUSHES = dogstatsd.GAUGE_EVICTION_FLUSHES
 
     httpData = []
     statusCode = 200
@@ -723,23 +721,15 @@ describe('dogstatsd', () => {
       assert.deepStrictEqual(incrementCalls, [])
     })
 
-    it('evicts a cold gauge subtree after GAUGE_EVICTION_FLUSHES silent flushes', () => {
+    it('drains all metric trees on flush so cardinality is bounded', () => {
       aggregator.gauge('test.avg', 5, ['t:1'])
+      aggregator.histogram('test.hist', 10, ['t:1'])
+      aggregator.increment('test.count', 1, ['t:1'])
       aggregator.flush()
-
-      assert.strictEqual(aggregator._gauges.size, 1)
-
-      for (let i = 0; i < GAUGE_EVICTION_FLUSHES; i++) {
-        aggregator.flush()
-      }
 
       assert.strictEqual(aggregator._gauges.size, 0)
-
-      gaugeCalls.length = 0
-      aggregator.gauge('test.avg', 7, ['t:1'])
-      aggregator.flush()
-
-      assert.deepStrictEqual(gaugeCalls, [['test.avg', 7, ['t:1']]])
+      assert.strictEqual(aggregator._histograms.size, 0)
+      assert.strictEqual(aggregator._counters.size, 0)
     })
   })
 })
