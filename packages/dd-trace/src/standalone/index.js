@@ -50,6 +50,7 @@ function onSpanInject ({ spanContext, carrier }) {
       } else if (lKey === 'tracestate') {
         const tracestate = TraceState.fromString(carrier[key])
         tracestate.forVendor('dd', state => state.clear())
+        tracestate.forVendor('ot', state => state.clear())
         carrier[key] = tracestate.toString()
       }
     }
