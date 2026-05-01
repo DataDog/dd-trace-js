@@ -2,7 +2,7 @@ name: Pull Request Title
 
 on:
   pull_request_target:
-    types: [opened, edited, reopened, synchronize]
+    types: [opened, edited, reopened]
     branches:
       - "master"
 
@@ -12,14 +12,20 @@ concurrency:
 
 jobs:
   conventional-commit:
+    if: github.event.action == 'opened' || github.event.action == 'reopened' || (github.event.action == 'edited' && github.event.changes.title != null)
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      # Shared between both steps. Must stay portable across bash ERE and JS
+      # regex (no lookarounds, named groups, or other JS-only features).
+      PR_TITLE_PATTERN: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(([^)]+)\))?!?: .+'
     steps:
       - name: Validate PR title against Conventional Commits
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?!?: .+'
-          if [[ ! "$PR_TITLE" =~ $pattern ]]; then
+          if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
             echo "::error::PR title does not follow Conventional Commits format."
             echo "Got:      $PR_TITLE"
             echo "Expected: <type>(<optional scope>)?: <subject>"
@@ -27,3 +33,47 @@ jobs:
             exit 1
           fi
           echo "PR title OK: $PR_TITLE"
+
+      - name: Sync labels with PR title
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
+            const parse = (title) => {
+              const m = (title || '').match(pattern)
+              return { type: m?.[1], scope: m?.[3] }
+            }
+
+            const pr = context.payload.pull_request
+            const next = parse(pr.title)
+            const prev = parse(context.payload.changes?.title?.from)
+
+            const labelExists = async (name) => {
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name })
+                return true
+              } catch (e) {
+                if (e.status === 404) return false
+                throw e
+              }
+            }
+
+            const current = new Set((pr.labels || []).map(l => l.name))
+            const desired = new Set(current)
+
+            if (prev.type && prev.type !== next.type) desired.delete(prev.type)
+            if (prev.scope && prev.scope !== next.scope) desired.delete(prev.scope)
+
+            if (next.type) desired.add(next.type)
+            if (next.scope && !desired.has(next.scope) && await labelExists(next.scope)) {
+              desired.add(next.scope)
+            }
+
+            const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
+            if (!unchanged) {
+              await github.rest.issues.setLabels({
+                ...context.repo,
+                issue_number: pr.number,
+                labels: [...desired],
+              })
+            }
