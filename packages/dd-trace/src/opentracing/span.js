@@ -25,7 +25,7 @@ const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRAC
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')
+const OTEL_ENABLED = isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
