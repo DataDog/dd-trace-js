@@ -16,6 +16,8 @@ const {
   recordException,
   setOtelAttribute,
   setOtelAttributes,
+  setOtelOperationName,
+  setOtelResource,
 } = require('../../src/opentelemetry/span-helpers')
 
 /**
@@ -74,10 +76,13 @@ describe('OTel bridge helpers', () => {
       ])
       addOtelEvent(ddSpan, 'evt', { code: 42 })
       recordException(ddSpan, new Error('boom'))
+      setOtelOperationName(ddSpan, 'GET /users')
+      setOtelResource(ddSpan, 'GET /users')
 
       assert.deepStrictEqual(ddSpan.tags, {})
       assert.strictEqual(ddSpan.links.length, 0)
       assert.strictEqual(ddSpan.events.length, 0)
+      assert.strictEqual(ddSpan.operationName, undefined)
     })
   })
 
@@ -285,6 +290,24 @@ describe('OTel bridge helpers', () => {
       assert.strictEqual(stillOk, 1)
       // The first ERROR's message stays. Tag clearing on OK override is out of scope.
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'first')
+    })
+  })
+
+  describe('setOtelOperationName vs setOtelResource', () => {
+    it('setOtelOperationName routes to setOperationName on the DD span', () => {
+      const ddSpan = createMockDdSpan()
+      setOtelOperationName(ddSpan, 'GET /users')
+
+      assert.strictEqual(ddSpan.operationName, 'GET /users')
+      assert.strictEqual(ddSpan.tags['resource.name'], undefined)
+    })
+
+    it('setOtelResource routes to the resource.name tag, not the operation name', () => {
+      const ddSpan = createMockDdSpan()
+      setOtelResource(ddSpan, 'GET /users')
+
+      assert.strictEqual(ddSpan.tags['resource.name'], 'GET /users')
+      assert.strictEqual(ddSpan.operationName, undefined)
     })
   })
 
