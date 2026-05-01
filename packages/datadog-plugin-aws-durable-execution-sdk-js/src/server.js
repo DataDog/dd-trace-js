@@ -145,21 +145,17 @@ function _createDurableRootExecutionSpan(plugin, event, meta) {
     return null
   }
 
-  const startTime = _extractExecutionStartTime(event)
-  const serviceName = process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable-execution'
-  const resourceName = executionArn.includes(':') ? executionArn.split(':').pop() : executionArn
   const spanOptions = {
-    service: serviceName,
-    resource: resourceName,
+    service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable-execution',
+    resource: executionArn.includes(':') ? executionArn.split(':').pop() : executionArn,
     type: 'serverless',
     kind: 'server',
     meta: {
       ...meta,
       'durable.execution_arn': executionArn,
-      'durable.is_root_span': true,
-      'durable.invocation_count': operations?.length ?? 0,
     },
   }
+  const startTime = _extractExecutionStartTime(event)
   if (startTime !== undefined) {
     spanOptions.startTime = startTime
   }
