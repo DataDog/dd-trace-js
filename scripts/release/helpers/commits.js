@@ -1,12 +1,26 @@
 'use strict'
 
 /**
- * @typedef {{ sha: string, isMajor: boolean, isMinor: boolean, line: string }} DiffEntry
+ * @typedef {{
+ *   sha: string,
+ *   isMajor: boolean,
+ *   isMinor: boolean,
+ *   isPatch: boolean,
+ *   isReleasable: boolean,
+ *   line: string,
+ * }} DiffEntry
  */
+
+const PATCH_TYPES = new Set(['fix', 'perf', 'refactor', 'revert'])
 
 /**
  * Parses a single line from `branch-diff --format=simple` output.
  * Returns null for lines that are not commit entries (e.g. headers, empty lines).
+ *
+ * `isReleasable` is true when the commit warrants a version bump on its own.
+ * Commits with non-releasing types (e.g. `docs`, `chore`) ride along in the
+ * release notes and the cherry-pick set, but should not on their own trigger
+ * a release proposal.
  * @param {string} line
  * @returns {DiffEntry | null}
  */
@@ -15,9 +29,13 @@ function parseDiffLine (line) {
   const match = line.match(/^\* \[([0-9a-f]+)\] (.+)/)
   if (!match) return null
   const [, sha, rest] = match
-  const isMajor = rest.includes('[SEMVER-MAJOR]') || /^[a-z]+(?:\([^)]+\))?!:/.test(rest)
-  const isMinor = !isMajor && (rest.includes('[SEMVER-MINOR]') || /^feat(?:\(|:)/.test(rest))
-  return { sha, isMajor, isMinor, line }
+  const typeMatch = rest.match(/^([a-z]+)(?:\([^)]+\))?(!)?:/)
+  const type = typeMatch?.[1]
+  const isMajor = rest.includes('[SEMVER-MAJOR]') || typeMatch?.[2] === '!'
+  const isMinor = !isMajor && (rest.includes('[SEMVER-MINOR]') || type === 'feat')
+  const isPatch = !isMajor && !isMinor && PATCH_TYPES.has(type)
+  const isReleasable = isMajor || isMinor || isPatch
+  return { sha, isMajor, isMinor, isPatch, isReleasable, line }
 }
 
 /**

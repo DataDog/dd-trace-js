@@ -73,12 +73,17 @@ try {
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
 
+  // All non-major entries: ride along in the release notes and get
+  // cherry-picked, but only releasable ones (feat/fix/perf/refactor/revert
+  // or breaking-marked) decide whether to cut a proposal at all.
   const releaseEntries = capture(`${diffCmd} --format=simple v${releaseLine}.x ${main}`)
     .split('\n')
     .map(parseDiffLine)
     .filter(entry => entry && !entry.isMajor)
 
-  if (!releaseEntries.length) {
+  const triggerEntries = releaseEntries.filter(entry => entry.isReleasable)
+
+  if (!triggerEntries.length) {
     pass('none (already up to date)')
     process.exit(0)
   }
@@ -92,7 +97,7 @@ try {
     })
     .join('\n')
 
-  const isMinor = releaseEntries.some(entry => entry.isMinor)
+  const isMinor = triggerEntries.some(entry => entry.isMinor)
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
