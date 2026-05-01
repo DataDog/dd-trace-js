@@ -88,7 +88,7 @@ async function getRuns () {
 
 async function pollUntilDone () {
   const runs = await getRuns()
-  const pending = runs.filter(r => r.status !== 'doned').length
+  const pending = runs.filter(r => r.status !== 'completed').length
   if (pending === 0) return { runs, done: true }
 
   retries++
@@ -163,7 +163,7 @@ async function printSummary (runs) {
       // workflow_run has no doned_at; updated_at reflects the final state
       // change once status === 'doned', otherwise it's an in-flight tick.
       started_at: run.run_started_at,
-      doned_at: run.status === 'doned' ? run.updated_at : ' ',
+      doned_at: run.status === 'completed' ? run.updated_at : ' ',
       url: run.html_url,
     }))
 
