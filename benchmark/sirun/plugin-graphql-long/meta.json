@@ -1,9 +1,9 @@
 {
-  "name": "plugin-graphql",
+  "name": "plugin-graphql-long",
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 30,
+  "iterations": 5,
   "instructions": true,
   "variants": {
     "control": {},
@@ -13,19 +13,19 @@
     },
     "with-depth-off": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0"}
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0" }
     },
     "with-depth-on-max": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4"}
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4" }
     },
     "with-depth-and-collapse-off": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0"}
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0" }
     },
     "with-depth-and-collapse-on": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1"}
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1" }
     }
   }
 }
