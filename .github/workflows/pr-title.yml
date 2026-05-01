@@ -43,6 +43,11 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const TYPES = [
+              'feat', 'fix', 'docs', 'style', 'refactor',
+              'perf', 'test', 'build', 'ci', 'chore', 'revert',
+            ]
+
             const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
             const parse = (title) => {
               const m = (title || '').match(pattern)
@@ -71,7 +76,6 @@ jobs:
 
             const pr = context.payload.pull_request
             const next = parse(pr.title)
-            const prev = parse(context.payload.changes?.title?.from)
 
             const labelExists = async (name) => {
               try {
@@ -86,12 +90,20 @@ jobs:
             const current = new Set((pr.labels || []).map(l => l.name))
             const desired = new Set(current)
 
-            if (prev.type && prev.type !== next.type) desired.delete(prev.type)
-            if (prev.scope && prev.scope !== next.scope) desired.delete(prev.scope)
-
+            // Reconcile type labels: title is source of truth, remove any
+            // other known conventional-commit type label.
+            for (const name of desired) {
+              if (TYPES.includes(name) && name !== next.type) desired.delete(name)
+            }
             if (next.type) desired.add(next.type)
-            if (next.scope && !desired.has(next.scope) && await labelExists(next.scope)) {
-              desired.add(next.scope)
+
+            // Reconcile scope/* labels: title is source of truth.
+            const targetScope = next.scope ? `scope/${next.scope}` : undefined
+            for (const name of desired) {
+              if (name.startsWith('scope/') && name !== targetScope) desired.delete(name)
+            }
+            if (targetScope && !desired.has(targetScope) && await labelExists(targetScope)) {
+              desired.add(targetScope)
             }
 
             // Reconcile semver-* labels to match the current title. The title
