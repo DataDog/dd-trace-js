@@ -57,18 +57,18 @@ function initializeOpenTelemetryMetrics (config) {
   }
 
   const exporter = new OtlpHttpMetricExporter(
-    config.otelMetricsUrl,
+    config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
-    config.otelMetricsTimeout,
-    config.otelMetricsProtocol,
+    config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+    config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
     resourceAttributes
   )
 
   const reader = new PeriodicMetricReader(
     exporter,
-    config.otelMetricsExportInterval,
-    config.otelMetricsTemporalityPreference,
-    config.otelMaxQueueSize
+    config.OTEL_METRIC_EXPORT_INTERVAL,
+    config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+    config.OTEL_BSP_MAX_QUEUE_SIZE
   )
 
   const meterProvider = new MeterProvider({ reader })
