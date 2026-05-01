@@ -884,6 +884,24 @@ describe('Config', () => {
     assert.strictEqual(config.tags.service, 'test')
   })
 
+  it('should normalize the inferred service name from package.json', () => {
+    pkg.name = '@Scope/My-Service'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'scope/my-service')
+    assert.strictEqual(config.tags.service, 'scope/my-service')
+  })
+
+  it('should fall back to "node" when the inferred service name normalizes to empty', () => {
+    pkg.name = '@@@'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'node')
+    assert.strictEqual(config.tags.service, 'node')
+  })
+
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
 

@@ -39,6 +39,7 @@ const {
   parseErrors,
   generateTelemetry,
 } = require('./defaults')
+const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
@@ -513,7 +514,7 @@ class Config extends ConfigBase {
         const NX_TASK_TARGET_PROJECT = getEnvironmentVariable('NX_TASK_TARGET_PROJECT')
         if (NX_TASK_TARGET_PROJECT) {
           if (this.DD_ENABLE_NX_SERVICE_NAME) {
-            setAndTrack(this, 'service', NX_TASK_TARGET_PROJECT)
+            setAndTrack(this, 'service', normalizeService(NX_TASK_TARGET_PROJECT) || 'node')
             isServiceNameInferred = true
           } else if (DD_MAJOR < 6) {
             log.warn(
@@ -536,7 +537,8 @@ class Config extends ConfigBase {
             )
           : undefined
 
-        setAndTrack(this, 'service', serverlessName || pkg.name || 'node')
+        const inferred = normalizeService(serverlessName) || normalizeService(pkg.name) || 'node'
+        setAndTrack(this, 'service', inferred)
         this.tags.service ??= /** @type {string} */ (this.service)
         isServiceNameInferred = true
       }
