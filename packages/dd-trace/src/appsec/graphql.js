@@ -33,7 +33,7 @@ function disable () {
 }
 
 function onGraphqlStartResolver ({ abortController, resolverInfo }) {
-  const req = storage('legacy').getStore()?.req
+  const req = getActiveRequest()
 
   if (!req) return
 
