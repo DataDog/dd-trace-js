@@ -414,7 +414,7 @@ describe('TextMapPropagator', () => {
       assert.ok('tracestate' in carrier)
       assert.strictEqual(
         carrier.tracestate,
-        'ot=th:0,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,other=bleh'
+        'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,ot=th:0,other=bleh'
       )
     })
 
@@ -430,7 +430,8 @@ describe('TextMapPropagator', () => {
           isRemote: false,
         })
         propagator.inject(spanContext, carrier)
-        assert.ok(carrier.tracestate.startsWith('ot=th:0,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
       })
 
       it('injects th:0 for force-keep with appsec mechanism', () => {
@@ -440,7 +441,8 @@ describe('TextMapPropagator', () => {
           isRemote: false,
         })
         propagator.inject(spanContext, carrier)
-        assert.ok(carrier.tracestate.startsWith('ot=th:0,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
       })
 
       it('injects th:0 for force-keep with ai_guard mechanism', () => {
@@ -450,7 +452,8 @@ describe('TextMapPropagator', () => {
           isRemote: false,
         })
         propagator.inject(spanContext, carrier)
-        assert.ok(carrier.tracestate.startsWith('ot=th:0,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
       })
 
       it('injects th computed from rule + limiter rates', () => {
@@ -462,7 +465,8 @@ describe('TextMapPropagator', () => {
         })
         propagator.inject(spanContext, carrier)
         // 50% keep rate → th = (1 - 0.5) * 2^56 = 2^55 = 0x80000000000000
-        assert.ok(carrier.tracestate.startsWith('ot=th:80000000000000,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:80000000000000'))
       })
 
       it('combines rule and limiter rates for th', () => {
@@ -474,7 +478,8 @@ describe('TextMapPropagator', () => {
         })
         propagator.inject(spanContext, carrier)
         // 100% keep rate → th = 0
-        assert.ok(carrier.tracestate.startsWith('ot=th:0,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
       })
 
       it('injects th from agent sampling rate', () => {
@@ -486,7 +491,8 @@ describe('TextMapPropagator', () => {
         })
         propagator.inject(spanContext, carrier)
         // 100% agent rate → th = 0
-        assert.ok(carrier.tracestate.startsWith('ot=th:0,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
       })
 
       it('does not inject ot entry for rejected spans', () => {
@@ -507,7 +513,8 @@ describe('TextMapPropagator', () => {
           isRemote: false,
         })
         propagator.inject(spanContext, carrier)
-        assert.ok(carrier.tracestate.startsWith('ot=th:0,'))
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
       })
     })
 

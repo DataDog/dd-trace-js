@@ -316,6 +316,15 @@ class TextMapPropagator {
 
     carrier[traceparentKey] = spanContext.toTraceparent()
 
+    // Inject ot before dd so that dd ends up last in the map and first in the serialized output.
+    // TraceState serializes in reverse insertion order; putting dd last keeps it the leading entry.
+    const otTh = _computeOtThreshold(priority, mechanism, spanContext._trace)
+    if (otTh !== undefined) {
+      ts.forVendor('ot', state => {
+        state.set('th', otTh)
+      })
+    }
+
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
         // SpanContext was created by a ddtrace span.
@@ -352,13 +361,6 @@ class TextMapPropagator {
         state.set(tagKey, tagValue)
       }
     })
-
-    const otTh = _computeOtThreshold(priority, mechanism, spanContext._trace)
-    if (otTh !== undefined) {
-      ts.forVendor('ot', state => {
-        state.set('th', otTh)
-      })
-    }
 
     carrier.tracestate = ts.toString()
   }
