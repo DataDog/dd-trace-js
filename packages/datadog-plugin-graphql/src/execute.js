@@ -282,6 +282,12 @@ function wrapResolve (resolve) {
     const rootCtx = contexts.get(contextValue)
     if (!rootCtx) return resolve.apply(this, arguments)
 
+    // depth=0 disables resolve-span instrumentation entirely. Bail before any
+    // path/collapsed-path work so the wrap is effectively free for that variant
+    // (matches the pre-orchestrion plugin which dropped the channel subscriber
+    // at configure time when depth was 0).
+    if (rootCtx.config.depth === 0) return resolve.apply(this, arguments)
+
     const path = pathToArray(info?.path)
     const pathString = path.join('.')
     const collapsedPath = rootCtx.config.collapse ? collapsePath(path) : path
