@@ -7,7 +7,7 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE, TAGS } = require('./constants/tags')
+const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind,
@@ -270,8 +270,7 @@ class LLMObs extends NoopLLMObs {
         this._tagger.tagSpanTags(span, tags)
       }
       if (costTags != null) {
-        const spanTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
-        this._tagger.tagCostTags(span, costTags, 'annotate', spanTags)
+        this._tagger.tagCostTags(span, costTags, 'annotate')
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)

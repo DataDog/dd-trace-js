@@ -122,7 +122,7 @@ class LLMObsSpanProcessor {
       const metadata = { _dd: {} }
       if (mlObsTags[METADATA]) this.#addObject(mlObsTags[METADATA], metadata)
       if (mlObsTags[COST_TAGS]) {
-        metadata._dd.cost_tags = [...mlObsTags[COST_TAGS]]
+        metadata._dd.cost_tags = mlObsTags[COST_TAGS]
       }
       meta.metadata = metadata
     }

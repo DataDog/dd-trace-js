@@ -124,8 +124,7 @@ class LLMObsTagger {
 
     // apply after tags so only keys present at span start are accepted.
     if (annotationContext?.costTags != null) {
-      const spanTags = registry.get(span)?.[TAGS] || {}
-      this.tagCostTags(span, annotationContext.costTags, 'annotation_context', spanTags)
+      this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
     }
 
     // apply annotation context name
@@ -234,16 +233,19 @@ class LLMObsTagger {
   }
 
   /**
-   * Validates and tags cost tag keys on an LLMObs span.
+   * Validates and tags cost tag keys on an LLMObs span. Cost tag references are validated against
+   * the span's already-applied tags, which are read from the registry.
    * @param {import('../opentracing/span')} span
    * @param {unknown} costTags Raw user-provided cost tags; validated here.
    * @param {'annotate' | 'annotation_context'} source
-   * @param {Record<string, unknown>} spanTags Current LLMObs span tags used to validate cost tag references.
    */
-  tagCostTags (span, costTags, source, spanTags) {
+  tagCostTags (span, costTags, source) {
+    const spanTags = registry.get(span)?.[TAGS] || {}
     const validatedCostTags = validateCostTags(span, costTags, source, spanTags)
     if (!validatedCostTags.length) return
 
+    // Might consider switching to a `Set` if per-span cost tag cardinality grows large enough that
+    // this `.includes`/`.push` merge becomes a hot spot
     const currentCostTags = registry.get(span)?.[COST_TAGS]
     if (currentCostTags) {
       for (const costTag of validatedCostTags) {
