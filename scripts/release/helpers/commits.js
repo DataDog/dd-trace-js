@@ -11,29 +11,31 @@
  * }} DiffEntry
  */
 
-const PATCH_TYPES = new Set(['fix', 'perf', 'refactor', 'revert'])
-
 /**
  * Parses a single line from `branch-diff --format=simple` output.
  * Returns null for lines that are not commit entries (e.g. headers, empty lines).
  *
+ * Classification is driven entirely by the `(SEMVER-*)` markers that
+ * `branch-diff` injects from a PR's `semver-*` labels. The
+ * [pr-title.yml](../../../.github/workflows/pr-title.yml) workflow keeps the
+ * label in sync with the conventional-commit type, so the title prefix is
+ * not consulted here.
+ *
  * `isReleasable` is true when the commit warrants a version bump on its own.
- * Commits with non-releasing types (e.g. `docs`, `chore`) ride along in the
+ * Commits without a `semver-*` label (e.g. `docs`, `chore`) ride along in the
  * release notes and the cherry-pick set, but should not on their own trigger
  * a release proposal.
  * @param {string} line
  * @returns {DiffEntry | null}
  */
 function parseDiffLine (line) {
-  // simple: * [abc1234567] feat: subject (Author) [#123] [SEMVER-MINOR]
+  // simple: * [abc1234567] - (SEMVER-MINOR) feat: subject (Author) https://github.com/.../pull/123
   const match = line.match(/^\* \[([0-9a-f]+)\] (.+)/)
   if (!match) return null
   const [, sha, rest] = match
-  const typeMatch = rest.match(/^([a-z]+)(?:\([^)]+\))?(!)?:/)
-  const type = typeMatch?.[1]
-  const isMajor = rest.includes('[SEMVER-MAJOR]') || typeMatch?.[2] === '!'
-  const isMinor = !isMajor && (rest.includes('[SEMVER-MINOR]') || type === 'feat')
-  const isPatch = !isMajor && !isMinor && PATCH_TYPES.has(type)
+  const isMajor = /SEMVER-MAJOR\b/.test(rest)
+  const isMinor = !isMajor && /SEMVER-MINOR\b/.test(rest)
+  const isPatch = !isMajor && !isMinor && /SEMVER-PATCH\b/.test(rest)
   const isReleasable = isMajor || isMinor || isPatch
   return { sha, isMajor, isMinor, isPatch, isReleasable, line }
 }
