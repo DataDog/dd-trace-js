@@ -214,7 +214,7 @@ class Config extends ConfigBase {
 
     warnWrongOtelSettings()
 
-    if (this.gitMetadataEnabled) {
+    if (this.DD_TRACE_GIT_METADATA_ENABLED) {
       this.#loadGitMetadata()
     }
 
@@ -355,7 +355,7 @@ class Config extends ConfigBase {
     }
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
-    if (this.otelLogsEnabled) {
+    if (this.DD_LOGS_OTEL_ENABLED) {
       setAndTrack(this, 'logInjection', false)
     }
     if (this.otelMetricsEnabled &&
@@ -427,7 +427,7 @@ class Config extends ConfigBase {
       ))
     }
 
-    if (this.injectionEnabled) {
+    if (this.DD_INJECTION_ENABLED) {
       setAndTrack(this, 'instrumentationSource', 'ssi')
     }
 
@@ -600,11 +600,11 @@ class Config extends ConfigBase {
     // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
     // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
     const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
-    if (!this.otelLogsUrl) {
-      setAndTrack(this, 'otelLogsUrl', `${defaultOtlpBase}/v1/logs`)
+    if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
     }
-    if (!this.otelMetricsUrl) {
-      setAndTrack(this, 'otelMetricsUrl', `${defaultOtlpBase}/v1/metrics`)
+    if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
     }
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)

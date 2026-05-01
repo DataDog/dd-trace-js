@@ -33,9 +33,13 @@
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
+/benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
+
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
+
+/benchmark/sirun/plugin-graphql-long/ @DataDog/apm-idm-js
 
 /packages/datadog-esbuild @DataDog/apm-idm-js
 /packages/datadog-webpack @DataDog/apm-idm-js
@@ -134,6 +138,7 @@
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
+/benchmark/sirun/llmobs/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
@@ -151,6 +156,7 @@
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/ml-observability
 
 # Data Streams Monitoring
+/benchmark/sirun/datastreams/ @DataDog/data-streams-monitoring
 /packages/dd-trace/src/datastreams/ @DataDog/data-streams-monitoring
 /packages/dd-trace/test/datastreams/ @DataDog/data-streams-monitoring
 /packages/**/dsm.spec.js @DataDog/data-streams-monitoring
@@ -158,6 +164,9 @@
 
 # API SDK Capabilities
 /eslint-rules/ @DataDog/apm-sdk-capabilities-js
+
+/benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
 
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
@@ -215,6 +224,7 @@
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
 /.github/chainguard @DataDog/sdlc-security
+/.github/workflows/mirror-image.yml @Datadog/lang-platform-js
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
@@ -237,6 +247,8 @@
 /* @DataDog/lang-platform-js
 
 /.github/actions/ @DataDog/lang-platform-js
+
+/benchmark/sirun/encoding/ @DataDog/lang-platform-js
 
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/coverage/ @DataDog/lang-platform-js

@@ -78,7 +78,7 @@ let knownTests = {}
 let isCodeCoverageEnabled = false
 let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
-let isKeepingCoverageConfiguration = false
+let DD_TEST_TIA_KEEP_COV_CONFIG = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -1141,8 +1141,8 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-          isKeepingCoverageConfiguration =
-            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
+          DD_TEST_TIA_KEEP_COV_CONFIG =
+            libraryConfig.DD_TEST_TIA_KEEP_COV_CONFIG ?? DD_TEST_TIA_KEEP_COV_CONFIG
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -1495,7 +1495,7 @@ function coverageReporterWrapper (coverageReporter) {
    */
   // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    if (isKeepingCoverageConfiguration) {
+    if (DD_TEST_TIA_KEEP_COV_CONFIG) {
       return addUntestedFiles.apply(this, arguments)
     }
     if (isCodeCoverageEnabledBecauseOfUs) {
@@ -1697,7 +1697,7 @@ function configureTestEnvironment (readConfigsResult) {
       ...readConfigsResult.globalConfig,
       passWithNoTests: true,
     }
-    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
+    if (isCodeCoverageEnabledBecauseOfUs && !DD_TEST_TIA_KEEP_COV_CONFIG) {
       globalConfig.coverageReporters = ['none']
       readConfigsResult.configs = configs.map(config => ({
         ...config,
