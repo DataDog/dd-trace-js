@@ -1,0 +1,13 @@
+{
+  "name": "plugin-aws-sdk",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "extract-response-body": { "env": { "VARIANT": "extract-response-body" } },
+    "eventbridge-inject-detail": { "env": { "VARIANT": "eventbridge-inject-detail" } },
+    "lambda-inject-no-context": { "env": { "VARIANT": "lambda-inject-no-context" } }
+  }
+}
