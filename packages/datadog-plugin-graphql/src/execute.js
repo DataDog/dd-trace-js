@@ -31,6 +31,12 @@ const contexts = new WeakMap()
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
 
+// Module-level fast path for the depth=0 variant: lets resolveAsync skip the
+// WeakMap lookup entirely when resolver instrumentation is disabled. Mirrors
+// master's startResolveCh.hasSubscribers gating shape — a single property read
+// before bailing. Maintained by GraphQLExecutePlugin.configure().
+let _depthDisabled = false
+
 class AbortError extends Error {
   constructor (message) {
     super(message)
@@ -51,6 +57,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
   static extraPrefixes = [
     'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute',
   ]
+
+  configure (config) {
+    super.configure(config)
+    _depthDisabled = config && config.depth === 0
+  }
 
   addTraceSubs () {
     super.addTraceSubs()
@@ -279,14 +290,13 @@ function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   function resolveAsync (source, args, contextValue, info) {
+    // Fast-path: when resolver instrumentation is disabled (depth=0) skip the
+    // WeakMap lookup and any path computation. Single property read, matches
+    // the cost of master's startResolveCh.hasSubscribers gate.
+    if (_depthDisabled) return resolve.apply(this, arguments)
+
     const rootCtx = contexts.get(contextValue)
     if (!rootCtx) return resolve.apply(this, arguments)
-
-    // depth=0 disables resolve-span instrumentation entirely. Bail before any
-    // path/collapsed-path work so the wrap is effectively free for that variant
-    // (matches the pre-orchestrion plugin which dropped the channel subscriber
-    // at configure time when depth was 0).
-    if (rootCtx.config.depth === 0) return resolve.apply(this, arguments)
 
     const path = pathToArray(info?.path)
     const pathString = path.join('.')
