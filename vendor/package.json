@@ -4,7 +4,7 @@
     "postinstall": "node rspack"
   },
   "dependencies": {
-    "@apm-js-collab/code-transformer": "^0.12.0",
+    "@apm-js-collab/code-transformer": "^0.13.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.4",
