@@ -614,13 +614,20 @@ class Config extends ConfigBase {
     // Auto-enabled when both OTEL trace and metrics exporters are configured.
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.OTEL_METRICS_EXPORTER === 'otlp'
     const traceMetricsEnabled = this.traceMetricsEnabled ?? autoTraceMetrics
-    // Derive URL from the traces endpoint base, replacing the signal path.
-    const tracesEndpoint = this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-    const parsedTracesUrl = new URL(tracesEndpoint)
-    parsedTracesUrl.pathname = '/v1/metrics'
+    // Derive the metrics URL from the traces endpoint by swapping the signal path.
+    // Guard with try/catch: the endpoint may contain an unbracketed IPv6 host
+    // (e.g. http://::1:4318/v1/traces) which is not a valid URL.
+    let traceMetricsUrl = 'http://localhost:4318/v1/metrics'
+    try {
+      const parsedTracesUrl = new URL(this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
+      parsedTracesUrl.pathname = '/v1/metrics'
+      traceMetricsUrl = parsedTracesUrl.toString()
+    } catch {
+      // malformed endpoint — traceMetrics will be disabled anyway unless explicitly enabled
+    }
     this.traceMetrics = {
       enabled: traceMetricsEnabled,
-      url: parsedTracesUrl.toString(),
+      url: traceMetricsUrl,
       protocol: this.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || this.otelProtocol || 'http/protobuf',
     }
 
