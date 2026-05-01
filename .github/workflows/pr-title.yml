@@ -19,7 +19,7 @@ jobs:
     env:
       # Shared between both steps. Must stay portable across bash ERE and JS
       # regex (no lookarounds, named groups, or other JS-only features).
-      PR_TITLE_PATTERN: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(([^)]+)\))?!?: .+'
+      PR_TITLE_PATTERN: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(([^)]+)\))?(!)?: .+'
     steps:
       - name: Validate PR title against Conventional Commits
         env:
@@ -41,7 +41,19 @@ jobs:
             const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
             const parse = (title) => {
               const m = (title || '').match(pattern)
-              return { type: m?.[1], scope: m?.[3] }
+              return { type: m?.[1], scope: m?.[3], breaking: m?.[4] === '!' }
+            }
+
+            // TODO: for `revert`, inspect the reverted commit and use its
+            // semver label instead of defaulting to patch.
+            const semverFor = ({ type, breaking }) => {
+              if (!type) return undefined
+              if (breaking) return 'semver-major'
+              if (type === 'feat') return 'semver-minor'
+              if (type === 'fix' || type === 'perf' || type === 'refactor' || type === 'revert') {
+                return 'semver-patch'
+              }
+              return undefined
             }
 
             const pr = context.payload.pull_request
@@ -68,6 +80,14 @@ jobs:
             if (next.scope && !desired.has(next.scope) && await labelExists(next.scope)) {
               desired.add(next.scope)
             }
+
+            // Reconcile semver-* labels to match the current title. The title
+            // is the source of truth: any other semver-* label is removed.
+            const targetSemver = semverFor(next)
+            for (const name of desired) {
+              if (name.startsWith('semver-') && name !== targetSemver) desired.delete(name)
+            }
+            if (targetSemver) desired.add(targetSemver)
 
             const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
             if (!unchanged) {
