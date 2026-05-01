@@ -11,6 +11,7 @@ const {
   useSandbox,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -91,8 +92,7 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
@@ -100,9 +100,8 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
 
     after(async () => {
@@ -241,7 +240,9 @@ moduleTypes.forEach(({
             const test = events.find(event => event.type === 'test').content
             assert.strictEqual(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
             assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-          }, 25000)
+            // cypress@latest esm + multi-origin browser context switching adds cold-start overhead
+            // the suite-level `warmCypressBinary` (commonJS path) doesn't reach.
+          }, 50_000)
 
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
