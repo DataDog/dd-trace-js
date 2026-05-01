@@ -558,6 +558,9 @@ export interface GeneratedConfig {
   testManagementAttemptToFixRetries: number;
   traceId128BitGenerationEnabled: boolean;
   traceId128BitLoggingEnabled: boolean;
+  traceMetricsEnabled: boolean | undefined;
+  tracePropagationBehaviorExtract: "continue" | "restart" | "ignore";
+  tracePropagationExtractFirst: boolean;
   tracePropagationStyle: {
     extract: string[];
     inject: string[];
