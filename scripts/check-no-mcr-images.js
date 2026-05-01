@@ -7,6 +7,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const CHECKED_EXTENSIONS = new Set(['.yml', '.yaml'])
+const CHECKED_BASENAMES = new Set(['Dockerfile'])
 const MCR_IMAGE_RE = /^\s*(image:\s+mcr\.microsoft\.com|FROM\s+mcr\.microsoft\.com)/i
 const MCR_HOST = 'mcr.microsoft.com'
 
@@ -22,7 +23,9 @@ function listFilesFromGit () {
 const violations = []
 
 for (const file of listFilesFromGit()) {
-  if (!CHECKED_EXTENSIONS.has(path.extname(file))) continue
+  const ext = path.extname(file)
+  const base = path.basename(file)
+  if (!CHECKED_EXTENSIONS.has(ext) && !CHECKED_BASENAMES.has(base)) continue
 
   const lines = fs.readFileSync(file, 'utf8').split('\n')
   for (let i = 0; i < lines.length; i++) {
