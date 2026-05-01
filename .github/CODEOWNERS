@@ -138,6 +138,7 @@
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
+/benchmark/sirun/llmobs/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
