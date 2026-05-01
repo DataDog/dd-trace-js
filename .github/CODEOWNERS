@@ -159,6 +159,8 @@
 # API SDK Capabilities
 /eslint-rules/ @DataDog/apm-sdk-capabilities-js
 
+/benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
+
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities-js
