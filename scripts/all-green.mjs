@@ -174,6 +174,32 @@ function formatConclusion (conclusion) {
   return conclusion ? `${conclusion} ${conclusionEmojis[conclusion]}` : ' '
 }
 
+function formatTime (timestamp) {
+  if (!timestamp) return ' '
+  const date = new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'America/New_York',
+    timeZoneName: 'short',
+  })
+}
+
+function formatDuration (startedAt, completedAt) {
+  if (!startedAt || !completedAt) return ' '
+  const start = new Date(startedAt)
+  const end = new Date(completedAt)
+  const seconds = Math.floor((end - start) / 1000)
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
+  if (minutes > 0) return `${minutes}m ${secs}s`
+  return `${secs}s`
+}
+
 function bySeverity (a, b) {
   return (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8)
 }
@@ -187,8 +213,9 @@ async function printSummary (runs) {
       conclusion: formatConclusion(run.conclusion),
       // workflow_run has no completed_at; updated_at reflects the final state
       // change once status === 'completed', otherwise it's an in-flight tick.
-      started_at: run.run_started_at,
-      completed_at: run.status === 'completed' ? run.updated_at : ' ',
+      started_at: formatTime(run.run_started_at),
+      completed_at: formatTime(run.status === 'completed' ? run.updated_at : null),
+      duration: formatDuration(run.run_started_at, run.status === 'completed' ? run.updated_at : null),
       url: run.html_url,
     }))
 
@@ -202,6 +229,7 @@ async function printSummary (runs) {
     { data: 'conclusion', header: true },
     { data: 'started_at', header: true },
     { data: 'completed_at', header: true },
+    { data: 'duration', header: true },
   ]
 
   const body = rows.map(row => [
@@ -210,6 +238,7 @@ async function printSummary (runs) {
     row.conclusion,
     row.started_at,
     row.completed_at,
+    row.duration,
   ])
 
   await summary
