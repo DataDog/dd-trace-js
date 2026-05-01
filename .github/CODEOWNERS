@@ -1,6 +1,8 @@
 # TODO: Restructure the project by product and clean up this file.
 
 # AppSec
+/benchmark/sirun/appsec/ @DataDog/asm-js
+/benchmark/sirun/appsec-iast/ @DataDog/asm-js
 /integration-tests/appsec/ @DataDog/asm-js
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
@@ -13,7 +15,7 @@
 /packages/dd-trace/*/standalone @DataDog/asm-js
 
 # Dynamic Instrumentation
-/benchmark/sirun/debugger @DataDog/debugger-nodejs
+/benchmark/sirun/debugger/ @DataDog/debugger-nodejs
 
 /integration-tests/code-origin/ @DataDog/debugger-nodejs
 /integration-tests/code-origin-remote-config.spec.js @DataDog/debugger-nodejs
@@ -34,6 +36,12 @@
 
 # IDM
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-bluebird/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-dns/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-graphql/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-q/ @DataDog/apm-idm-js
 
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
@@ -238,6 +246,8 @@
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
 
 # Profiling
+/benchmark/sirun/profiler/ @DataDog/profiling-js
+
 /integration-tests/profiler @DataDog/profiling-js
 
 /packages/dd-trace/*/profiling @DataDog/profiling-js
@@ -248,7 +258,18 @@
 
 /.github/actions/ @DataDog/lang-platform-js
 
+/benchmark/* @DataDog/lang-platform-js
+/benchmark/sirun/* @DataDog/lang-platform-js
+/benchmark/stubs/ @DataDog/lang-platform-js
+/benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
 /benchmark/sirun/encoding/ @DataDog/lang-platform-js
+/benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
+/benchmark/sirun/log/ @DataDog/lang-platform-js
+/benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
+/benchmark/sirun/scope/ @DataDog/lang-platform-js
+/benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
+/benchmark/sirun/shimmer-startup/ @DataDog/lang-platform-js
+/benchmark/sirun/startup/ @DataDog/lang-platform-js
 
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/coverage/ @DataDog/lang-platform-js
