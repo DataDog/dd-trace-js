@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   conventional-commit:
-    if: github.event.action == 'opened' || github.event.action == 'reopened' || (github.event.action == 'edited' && github.event.changes.title != null)
+    if: github.event.action != 'edited' || github.event.changes.title != null
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
