@@ -9,7 +9,6 @@ on:
         type: string
       branch:
         description: 'Branch to filter (leave empty for all branches)'
-        default: 'master'
         type: string
       occurrences:
         description: 'Minimum number of occurrences to consider a test flaky'
