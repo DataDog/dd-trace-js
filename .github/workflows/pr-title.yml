@@ -1,9 +1,15 @@
 name: Pull Request Title
+
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize]
     branches:
       - "master"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   conventional-commit:
     runs-on: ubuntu-latest
