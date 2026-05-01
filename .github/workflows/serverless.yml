@@ -154,7 +154,7 @@ jobs:
       SERVICES: azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/integration-test
 
   azure-functions:
     strategy:
@@ -225,7 +225,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
-      - run: yarn test:plugins:ci
+      - run: yarn test:integration:plugins:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
@@ -269,7 +269,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/integration-test
 
   azure-durable-functions:
     runs-on: ubuntu-latest
@@ -288,7 +288,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/integration-test
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
