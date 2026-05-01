@@ -6,6 +6,7 @@ const { before, describe, it } = require('mocha')
 const {
   encodeUnicode,
   getFunctionArguments,
+  safeJsonParse,
   validateKind,
   spanHasError,
 } = require('../../src/llmobs/util')
@@ -142,6 +143,27 @@ describe('util', () => {
 
         assert.deepStrictEqual(getFunctionArguments(foo, ['fn', 'ctx']), { fn: 'fn', ctx: 'ctx' })
       })
+    })
+  })
+
+  describe('safeJsonParse', () => {
+    it('parses valid JSON strings', () => {
+      assert.deepStrictEqual(safeJsonParse('{"a":1,"b":[2,3]}'), { a: 1, b: [2, 3] })
+    })
+
+    it('returns the explicit fallback on malformed JSON', () => {
+      assert.deepStrictEqual(safeJsonParse('{not json', {}), {})
+    })
+
+    it('returns the input string when no fallback is provided and parsing fails', () => {
+      assert.strictEqual(safeJsonParse('{not json'), '{not json')
+    })
+
+    it('returns non-string inputs unchanged without parsing', () => {
+      const obj = { already: 'parsed' }
+      assert.strictEqual(safeJsonParse(obj), obj)
+      assert.strictEqual(safeJsonParse(undefined), undefined)
+      assert.strictEqual(safeJsonParse(null), null)
     })
   })
 
