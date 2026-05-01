@@ -266,6 +266,8 @@ class MetricsAggregationClient {
     this._captureTree(this._gauges, (node, name, tags) => {
       this._client.gauge(name, node.value, tags)
     })
+
+    this._gauges.clear()
   }
 
   _captureCounters () {
@@ -278,12 +280,7 @@ class MetricsAggregationClient {
 
   _captureHistograms () {
     this._captureTree(this._histograms, (node, name, tags) => {
-      let stats = node.value
-
-      // Stats can contain garbage data when a value was never recorded.
-      if (stats.count === 0) {
-        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
-      }
+      const stats = node.value
 
       this._client.gauge(`${name}.min`, stats.min, tags)
       this._client.gauge(`${name}.max`, stats.max, tags)
@@ -293,9 +290,9 @@ class MetricsAggregationClient {
       this._client.increment(`${name}.count`, stats.count, tags)
       this._client.gauge(`${name}.median`, stats.median, tags)
       this._client.gauge(`${name}.95percentile`, stats.p95, tags)
-
-      node.value.reset()
     })
+
+    this._histograms.clear()
   }
 
   _captureTree (tree, fn) {
