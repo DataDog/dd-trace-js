@@ -191,13 +191,10 @@ function formatDuration (startedAt, completedAt) {
   if (!startedAt || !completedAt) return ' '
   const start = new Date(startedAt)
   const end = new Date(completedAt)
-  const seconds = Math.floor((end - start) / 1000)
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
-  if (minutes > 0) return `${minutes}m ${secs}s`
-  return `${secs}s`
+  const totalSeconds = Math.floor((end - start) / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
 function bySeverity (a, b) {
