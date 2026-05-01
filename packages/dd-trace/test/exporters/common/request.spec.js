@@ -42,6 +42,7 @@ describe('request', function () {
   let request
   let log
   let docker
+  let maxAttempts
 
   beforeEach(() => {
     log = {
@@ -53,9 +54,19 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       },
     }
+    // The retry policy is exercised in retry.spec.js. Here we keep the integration
+    // deterministic: zero backoff, no startup-phase mutation, attempt count
+    // overridable per test.
+    maxAttempts = 2
     request = proxyquire('../../../src/exporters/common/request', {
       './docker': docker,
       '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        getRetryDelay: () => 0,
+        getMaxAttempts: () => maxAttempts,
+        markEndpointReached: () => {},
+      },
     })
   })
 
@@ -192,21 +203,72 @@ describe('request', function () {
     })
   })
 
-  it('should not retry more than once', (done) => {
-    const error = new Error('Error ECONNRESET')
+  it('should not retry on a non-retriable error code', (done) => {
+    const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })
 
     nock('http://localhost:80')
-      .put('/path')
-      .replyWithError(error)
       .put('/path')
       .replyWithError(error)
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-    }, (err, res) => {
+    }, (err) => {
       assert.strictEqual(err, error)
       done()
+    })
+  })
+
+  it('should not retry on an uncoded error', (done) => {
+    const error = new Error('Error ECONNRESET')
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err) => {
+      assert.strictEqual(err, error)
+      done()
+    })
+  })
+
+  it('should retry on ECONNREFUSED until max attempts and propagate the final error', (done) => {
+    maxAttempts = 5
+
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .times(5)
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err) => {
+      assert.strictEqual(err, error)
+      done()
+    })
+  })
+
+  it('should retry on UDS ENOENT (socket file not yet present)', (done) => {
+    const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
     })
   })
 

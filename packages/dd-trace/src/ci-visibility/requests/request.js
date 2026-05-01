@@ -7,38 +7,12 @@ const zlib = require('zlib')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { httpAgent, httpsAgent } = require('../../exporters/common/agents')
+const {
+  RATE_LIMIT_MAX_WAIT_MS,
+  isRetriableNetworkError,
+  singleJitteredDelay,
+} = require('../../exporters/common/retry')
 const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
-
-const RATE_LIMIT_MAX_WAIT_MS = 30_000
-const RETRY_BASE_MS = 5000
-const RETRY_JITTER_MS = 2500
-
-/**
- * Calculates retry delay with jitter to prevent thundering herd.
- * Delay is RETRY_BASE_MS + random(0, RETRY_JITTER_MS) (e.g. 5–7.5 seconds).
- *
- * @returns {number} Delay in milliseconds
- */
-function getRetryDelay () {
-  return RETRY_BASE_MS + (Math.random() * RETRY_JITTER_MS)
-}
-
-/**
- * Determines if a network error is retriable (transient failures only).
- * ECONNREFUSED is retried because it can be transient (service starting up,
- * restarts, rolling deploys, k8s pod/readiness transitions). ENOTFOUND is
- * excluded as it indicates DNS failure or wrong host and is usually not transient.
- *
- * @param {Error} err - The error to check
- * @returns {boolean}
- */
-function isRetriableNetworkError (err) {
-  if (!err.code) return false
-  return err.code === 'ECONNREFUSED' ||
-    err.code === 'ECONNRESET' ||
-    err.code === 'ETIMEDOUT' ||
-    err.code === 'EPIPE'
-}
 
 function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
@@ -157,7 +131,7 @@ function request (data, options, callback) {
               // ignore
             }
             hasRetried = true
-            setTimeout(makeRequest, getRetryDelay())
+            setTimeout(makeRequest, singleJitteredDelay())
             return
           }
 
@@ -177,7 +151,7 @@ function request (data, options, callback) {
         // Retry on retriable network errors
         if (!hasRetried && isRetriableNetworkError(err)) {
           hasRetried = true
-          setTimeout(makeRequest, getRetryDelay())
+          setTimeout(makeRequest, singleJitteredDelay())
           return
         }
 
