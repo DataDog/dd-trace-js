@@ -17,7 +17,7 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
-const { parseDiffLine } = require('./helpers/commits')
+const { extractSha, parseDiffLine } = require('./helpers/commits')
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
@@ -73,9 +73,9 @@ try {
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
 
-  const releaseOutputLines = capture(`${diffCmd} --format=markdown v${releaseLine}.x ${main}`)
+  const releaseEntries = capture(`${diffCmd} --format=simple v${releaseLine}.x ${main}`)
     .split('\n')
-  const releaseEntries = releaseOutputLines.map(parseDiffLine)
+    .map(parseDiffLine)
     .filter(entry => entry && !entry.isMajor)
 
   if (!releaseEntries.length) {
@@ -83,10 +83,14 @@ try {
     process.exit(0)
   }
 
-  const lineDiff = releaseOutputLines.filter(line => {
-    const entry = parseDiffLine(line)
-    return !entry || !entry.isMajor
-  }).join('\n')
+  const releaseShas = new Set(releaseEntries.map(entry => entry.sha))
+  const lineDiff = capture(`${diffCmd} --format=markdown v${releaseLine}.x ${main}`)
+    .split('\n')
+    .filter(line => {
+      const sha = extractSha(line)
+      return !sha || releaseShas.has(sha)
+    })
+    .join('\n')
 
   const isMinor = releaseEntries.some(entry => entry.isMinor)
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
