@@ -7,6 +7,39 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+/**
+ * @typedef {object} ChannelBag
+ * @property {ReturnType<typeof channel>} start
+ * @property {ReturnType<typeof channel>} finish
+ * @property {ReturnType<typeof channel>} error
+ * @property {ReturnType<typeof channel>} callbackStart
+ * @property {ReturnType<typeof channel>} callbackFinish
+ */
+
+// Cache the per-op channel set keyed by `apm:couchbase:<name>` so each traced
+// call skips the template-literal allocation and the `channel(...)` lookup.
+/** @type {Map<string, ChannelBag>} */
+const channelBags = new Map()
+
+/**
+ * @param {string} prefix Full channel prefix, e.g. `apm:couchbase:query`.
+ * @returns {ChannelBag}
+ */
+function getChannelBag (prefix) {
+  let bag = channelBags.get(prefix)
+  if (bag === undefined) {
+    bag = {
+      start: channel(`${prefix}:start`),
+      finish: channel(`${prefix}:finish`),
+      error: channel(`${prefix}:error`),
+      callbackStart: channel(`${prefix}:callback:start`),
+      callbackFinish: channel(`${prefix}:callback:finish`),
+    }
+    channelBags.set(prefix, bag)
+  }
+  return bag
+}
+
 function findCallbackIndex (args, lowerbound = 2) {
   for (let i = args.length - 1; i >= lowerbound; i--) {
     if (typeof args[i] === 'function') return i
@@ -26,12 +59,11 @@ function wrapAllNames (names, action) {
 }
 
 function wrapCallback (callback, ctx, channelPrefix) {
-  const callbackStartCh = channel(`${channelPrefix}:callback:start`)
-  const callbackFinishCh = channel(`${channelPrefix}:callback:finish`)
+  const channels = getChannelBag(channelPrefix)
 
-  const wrapped = callbackStartCh.runStores(ctx, () => {
+  const wrapped = channels.callbackStart.runStores(ctx, () => {
     return function (...args) {
-      return callbackFinishCh.runStores(ctx, () => {
+      return channels.callbackFinish.runStores(ctx, () => {
         return callback.apply(this, args)
       })
     }
@@ -52,18 +84,15 @@ function wrapQuery (query) {
   }
 }
 
-function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx, channelPrefix) {
-  const callbackStartCh = channel(`${channelPrefix}:callback:start`)
-  const callbackFinishCh = channel(`${channelPrefix}:callback:finish`)
-
-  const wrapped = callbackStartCh.runStores(ctx, () => {
+function wrapCallbackFinish (callback, thisArg, _args, channels, ctx) {
+  const wrapped = channels.callbackStart.runStores(ctx, () => {
     return function finish (error, result) {
-      return callbackFinishCh.runStores(ctx, () => {
+      return channels.callbackFinish.runStores(ctx, () => {
         if (error) {
           ctx.error = error
-          errorCh.publish(ctx)
+          channels.error.publish(ctx)
         }
-        finishCh.publish(ctx)
+        channels.finish.publish(ctx)
         return callback.apply(thisArg, [error, result])
       })
     }
@@ -73,12 +102,10 @@ function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx, c
 }
 
 function wrap (prefix, fn) {
-  const startCh = channel(prefix + ':start')
-  const finishCh = channel(prefix + ':finish')
-  const errorCh = channel(prefix + ':error')
+  const channels = getChannelBag(prefix)
 
   return function (...args) {
-    if (!startCh.hasSubscribers) {
+    if (!channels.start.hasSubscribers) {
       return fn.apply(this, args)
     }
 
@@ -87,11 +114,11 @@ function wrap (prefix, fn) {
     if (callbackIndex < 0) return fn.apply(this, args)
 
     const ctx = { bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
-    return startCh.runStores(ctx, () => {
+    return channels.start.runStores(ctx, () => {
       const cb = args[callbackIndex]
 
       args[callbackIndex] = shimmer.wrapFunction(cb, (cb) => {
-        return wrapCallbackFinish(cb, this, args, errorCh, finishCh, ctx, prefix)
+        return wrapCallbackFinish(cb, this, args, channels, ctx)
       })
 
       try {
@@ -99,7 +126,7 @@ function wrap (prefix, fn) {
       } catch (error) {
         ctx.error = error
         void error.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(ctx)
+        channels.error.publish(ctx)
 
         throw error
       }
@@ -130,21 +157,19 @@ function wrapMaybeInvoke (_maybeInvoke, channelPrefix) {
 // semver >=3
 
 function wrapCBandPromise (fn, name, startData, thisArg, args) {
-  const startCh = channel(`apm:couchbase:${name}:start`)
-  const finishCh = channel(`apm:couchbase:${name}:finish`)
-  const errorCh = channel(`apm:couchbase:${name}:error`)
+  const channels = getChannelBag(`apm:couchbase:${name}`)
 
-  if (!startCh.hasSubscribers) return fn.apply(thisArg, args)
+  if (!channels.start.hasSubscribers) return fn.apply(thisArg, args)
 
   const ctx = startData
-  return startCh.runStores(ctx, () => {
+  return channels.start.runStores(ctx, () => {
     try {
       const cbIndex = findCallbackIndex(args, 1)
       if (cbIndex >= 0) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
         args[cbIndex] = shimmer.wrapFunction(args[cbIndex], (cb) => {
-          return wrapCallbackFinish(cb, thisArg, args, errorCh, finishCh, ctx, `apm:couchbase:${name}`)
+          return wrapCallbackFinish(cb, thisArg, args, channels, ctx)
         })
       }
       const res = fn.apply(thisArg, args)
@@ -153,19 +178,19 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       res.then(
         (result) => {
           ctx.result = result
-          finishCh.publish(ctx)
+          channels.finish.publish(ctx)
         },
         (err) => {
           ctx.error = err
-          errorCh.publish(ctx)
-          finishCh.publish(ctx)
+          channels.error.publish(ctx)
+          channels.finish.publish(ctx)
         }
       )
       return res
     } catch (e) {
       void e.stack
       ctx.error = e
-      errorCh.publish(ctx)
+      channels.error.publish(ctx)
       throw e
     }
   })
@@ -196,14 +221,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
     return wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:bucket:maybeInvoke')
   })
 
-  const startCh = channel('apm:couchbase:query:start')
-  const finishCh = channel('apm:couchbase:query:finish')
-  const errorCh = channel('apm:couchbase:query:error')
+  const queryChannels = getChannelBag('apm:couchbase:query')
 
   shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
-    if (!startCh.hasSubscribers) {
+    if (!queryChannels.start.hasSubscribers) {
       return _n1qlReq.apply(this, arguments)
     }
 
@@ -212,16 +235,16 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
     const n1qlQuery = getQueryResource(q)
 
     const ctx = { resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
-    return startCh.runStores(ctx, () => {
+    return queryChannels.start.runStores(ctx, () => {
       emitter.once('rows', () => {
-        finishCh.publish(ctx)
+        queryChannels.finish.publish(ctx)
       })
 
       emitter.once(errorMonitor, (error) => {
         if (!error) return
         ctx.error = error
-        errorCh.publish(ctx)
-        finishCh.publish(ctx)
+        queryChannels.error.publish(ctx)
+        queryChannels.finish.publish(ctx)
       })
 
       try {
@@ -229,7 +252,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       } catch (err) {
         void err.stack // trigger getting the stack at the original throwing point
         ctx.error = err
-        errorCh.publish(ctx)
+        queryChannels.error.publish(ctx)
 
         throw err
       }
