@@ -3,9 +3,8 @@
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
-const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const getConfig = require('../../dd-trace/src/config')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
@@ -266,29 +265,25 @@ function normalizeConfig (config, serviceIdentifier) {
   const hooks = getHooks(config)
 
   let specificConfig = config[serviceIdentifier]
-  switch (typeof specificConfig) {
-    case 'undefined':
-      specificConfig = {}
-      break
-    case 'boolean':
-      specificConfig = { enabled: specificConfig }
-      break
+  if (typeof specificConfig === 'boolean') {
+    specificConfig = { enabled: specificConfig }
   }
 
-  // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
+  // Check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
+  const tracerConfig = getConfig()
   const serviceId = serviceIdentifier.toUpperCase()
-  const batchPropagationEnabled = isTrue(
-    specificConfig.batchPropagationEnabled ??
-    getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
-    config.batchPropagationEnabled ??
-    getValueFromEnvSources('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
+  const serviceBatchKey = /** @type {import('../../dd-trace/src/config/config-types').ConfigPath} */(
+    `DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`
   )
+  const batchPropagationEnabled = tracerConfig.getOrigin(serviceBatchKey) === 'default'
+    ? tracerConfig.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED
+    : tracerConfig[serviceBatchKey]
 
   // Merge the specific config back into the main config
   return {
+    batchPropagationEnabled,
     ...config,
     ...specificConfig,
-    batchPropagationEnabled,
     hooks,
   }
 }

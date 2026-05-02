@@ -3,10 +3,8 @@
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
-const {
-  getEnvironmentVariable,
-  getValueFromEnvSources,
-} = require('./config/helper')
+const getConfig = require('./config')
+const { getEnvironmentVariable } = require('./config/helper')
 const { getIsAzureFunction } = require('./serverless')
 
 function extractSubscriptionID (ownerName) {
@@ -56,7 +54,7 @@ function buildMetadata () {
   const WEBSITE_SITE_NAME = getEnvironmentVariable('WEBSITE_SITE_NAME')
   const WEBSITE_SKU = getEnvironmentVariable('WEBSITE_SKU')
 
-  const DD_AZURE_RESOURCE_GROUP = getValueFromEnvSources('DD_AZURE_RESOURCE_GROUP')
+  const { DD_AZURE_RESOURCE_GROUP } = getConfig()
   const isAzureFunction = FUNCTIONS_EXTENSION_VERSION !== undefined && FUNCTIONS_WORKER_RUNTIME !== undefined
   const isFlexConsumptionAzureFunction = isAzureFunction && WEBSITE_SKU === 'FlexConsumption'
 
