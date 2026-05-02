@@ -99,7 +99,7 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    if (!params || (!params.QueueName && !params.QueueUrl)) return {}
+    if (!params || (!params.QueueName && !params.QueueUrl)) return
 
     const queueMetadata = extractQueueMetadata(params.QueueUrl)
     const queueName = queueMetadata?.queueName || params.QueueName

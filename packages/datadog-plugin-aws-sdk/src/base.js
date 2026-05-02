@@ -245,16 +245,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     if (!span || !response.request) return
     const params = response.request.params
     const operation = response.request.operation
-    const extraTags = this.generateTags(params, operation, response) || {}
 
-    const tags = {
-      'aws.response.request_id': response.requestId,
-      'resource.name': operation,
-      'span.kind': 'client',
-      ...extraTags,
+    // `'span.kind': 'client'` is already set by the start-meta; SQS overrides via `generateTags`.
+    span.setTag('aws.response.request_id', response.requestId)
+    span.setTag('resource.name', operation)
+
+    const extraTags = this.generateTags(params, operation, response)
+    if (extraTags) {
+      span.addTags(extraTags)
     }
-
-    span.addTags(tags)
 
     if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
