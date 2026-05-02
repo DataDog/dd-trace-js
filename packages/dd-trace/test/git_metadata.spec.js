@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -13,6 +15,9 @@ const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
 const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
 const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
+// Captured before `beforeEach` wipes process.env: on Windows, `os.tmpdir()`
+// resolves to the literal `undefined\temp` once TEMP/TMP/SystemRoot/windir go.
+const TMP_DIR = os.tmpdir()
 
 function load () {
   const getConfig = proxyquire.noPreserveCache()('../src/config', {})
@@ -167,5 +172,29 @@ describe('git metadata', () => {
       commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
       repositoryUrl: 'git@github.com:DataDog/dummy-dd-trace-js.git',
     })
+  })
+
+  it('caches the result across repeated calls', () => {
+    process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+    process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
+
+    const { config, getGitMetadata } = load()
+    assert.strictEqual(getGitMetadata(config), getGitMetadata(config))
+  })
+
+  it('returns undefined when no git source is configured and cwd has no git', () => {
+    const originalCwd = process.cwd()
+    const tempDir = fs.mkdtempSync(path.join(TMP_DIR, 'dd-trace-no-git-'))
+    process.chdir(tempDir)
+    try {
+      const { config, getGitMetadata } = load()
+      assert.deepStrictEqual(getGitMetadata(config), {
+        commitSHA: undefined,
+        repositoryUrl: undefined,
+      })
+    } finally {
+      process.chdir(originalCwd)
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 })

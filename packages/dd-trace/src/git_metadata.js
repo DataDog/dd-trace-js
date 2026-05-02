@@ -38,7 +38,11 @@ function getGitMetadata (config) {
       repositoryUrl ??= fromProperties.repositoryUrl
     } catch (error) {
       if (propertiesFile) {
+        // The user pointed us at a specific git.properties path; that file is the declared
+        // SCI source. If we can't read it, do not silently fall back to inspecting `.git/`.
         log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', gitPropertiesFile, error)
+        cached = { commitSHA, repositoryUrl }
+        return cached
       }
     }
   }
