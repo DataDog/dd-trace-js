@@ -9,7 +9,7 @@
 - Don't mix cross-cutting concerns. Systems that are intentionally separate (e.g., baggage and span context) must stay separate.
 - Use proper store lifecycle (`runStores`/`bindStore`) instead of `WeakRef`.
 - Don't add helpers that only call another function with no transformation. Inline them.
-- Don't re-export symbols without modification — it adds confusion.
+- Only export symbols that are used outside of the file.
 - Functions called in only one place should be inlined for clarity.
 - Plugin hook setup that is repetitive should be made implicit via `addHooks`.
 
