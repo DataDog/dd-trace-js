@@ -7479,11 +7479,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         fs.writeFileSync(
           path.join(cwd, 'ci-visibility/test-management/test-worker-restart-z-impacted.js'),
           `const assert = require('assert')
-           describe('worker restart impacted tests', () => {
-             it('can pass normally', () => {
-               assert.strictEqual(1 + 2, 3)
-             })
-           })`
+          describe('worker restart impacted tests', () => {
+            it('can pass normally', () => {
+              assert.strictEqual(1 + 2, 3)
+            })
+          })`
         )
         execSync('git add ci-visibility/test-management/test-worker-restart-z-impacted.js', { cwd, stdio: 'ignore' })
         execSync('git commit --amend --no-edit', { cwd, stdio: 'ignore' })

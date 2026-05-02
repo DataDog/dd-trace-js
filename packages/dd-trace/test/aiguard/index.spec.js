@@ -171,7 +171,7 @@ describe('AIGuard SDK', () => {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
           err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === attributes.tags &&
-             err.tagProbabilities === attributes.tag_probs && JSON.stringify(err.sds) === '[]'
+            err.tagProbabilities === attributes.tag_probs && JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })

@@ -818,7 +818,7 @@ class TextMapPropagator {
           (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
         samplingPriority = AUTO_REJECT
       } else if (traceparentSampled === 1 &&
-                 (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+        (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
         samplingPriority = AUTO_KEEP
       }
     }
