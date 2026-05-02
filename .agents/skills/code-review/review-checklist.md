@@ -21,7 +21,7 @@
 
 - dd-trace runs in application hot paths — every allocation and lookup counts.
 - Flag unbounded collections: streams, maps, or listeners that can grow without limit.
-- Flag unnecessary allocations or object creation in hot paths.
+- Flag unnecessary allocations or object creation.
 - A Map keyed by user-operation objects (requests, contexts) must have a guaranteed cleanup path, or use `WeakMap` instead. Timer-based cleanup is risky — it can cause sawtooth memory growth.
 - Prefer lazy initialisation: don't create expensive objects or run expensive computations until they are needed.
 - If a PR claims a performance improvement, a benchmark is required to demonstrate it.
