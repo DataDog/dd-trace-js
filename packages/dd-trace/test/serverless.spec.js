@@ -3,13 +3,10 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, afterEach } = require('mocha')
-const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription } = proxyquire('../src/serverless', {
-  './config': () => proxyquire.noPreserveCache()('../src/config', {})(),
-})
+const { enableGCPPubSubPushSubscription } = require('../src/serverless')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
