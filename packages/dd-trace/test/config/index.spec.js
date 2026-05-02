@@ -3961,6 +3961,16 @@ rules:
       }
     })
 
+    it('should fall back to "node" when NX_TASK_TARGET_PROJECT normalizes to empty', () => {
+      process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+      process.env.NX_TASK_TARGET_PROJECT = '@@@'
+      pkg.name = 'default-service'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.service, 'node')
+    })
+
     it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
       delete process.env.DD_ENABLE_NX_SERVICE_NAME

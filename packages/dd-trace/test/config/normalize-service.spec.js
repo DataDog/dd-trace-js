@@ -44,9 +44,4 @@ describe('normalizeService', () => {
     const longName = 'a'.repeat(150)
     assert.strictEqual(normalizeService(longName).length, 100)
   })
-
-  it('returns undefined when normalization produces an empty string', () => {
-    assert.strictEqual(normalizeService('@@@@'), undefined)
-    assert.strictEqual(normalizeService('---'), undefined)
-  })
 })

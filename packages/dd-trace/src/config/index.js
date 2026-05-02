@@ -537,8 +537,7 @@ class Config extends ConfigBase {
             )
           : undefined
 
-        const inferred = normalizeService(serverlessName) || normalizeService(pkg.name) || 'node'
-        setAndTrack(this, 'service', inferred)
+        setAndTrack(this, 'service', normalizeService(serverlessName) || normalizeService(pkg.name) || 'node')
         this.tags.service ??= /** @type {string} */ (this.service)
         isServiceNameInferred = true
       }
