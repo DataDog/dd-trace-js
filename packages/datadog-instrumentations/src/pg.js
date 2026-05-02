@@ -46,22 +46,35 @@ function wrapQuery (query) {
     const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
+    // Fast path: when the descriptor is a configurable, writable data property, the plugin can
+    // overwrite `text` with the DBM-annotated SQL directly — no getter trampoline on every read.
+    // The pg / pg-cursor common shapes (`{ text: '...' }`, `client.query('text')`) hit this.
+    // Accessor descriptors, missing own descriptors (where a prototype getter may apply), and
+    // read-only data properties still go through `defineProperty(get)` so query objects exposing
+    // `get text ()` keep working.
     let originalText
-    if (!textProp || textProp.configurable) {
+    let directAssign = false
+    if (textProp?.configurable === true && textProp.writable === true) {
+      originalText = textProp.value
+      directAssign = true
+    } else if (!textProp || textProp.configurable === true) {
       originalText = textPropObj.text
 
       Object.defineProperty(textPropObj, 'text', {
+        configurable: true,
+        enumerable: textProp ? textProp.enumerable : true,
         get () {
           return this?.__ddInjectableQuery || originalText
         },
       })
     }
+
     const abortController = new AbortController()
     const ctx = {
       params: this.connectionParameters,
       query: textPropObj,
       originalText,
+      directAssign,
       processId,
       abortController,
       stream,

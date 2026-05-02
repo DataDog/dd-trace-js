@@ -9,7 +9,7 @@ class PGPlugin extends DatabasePlugin {
   static system = 'postgres'
 
   bindStart (ctx) {
-    const { params = {}, query, processId, stream } = ctx
+    const { params = {}, query, processId, stream, directAssign } = ctx
     const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
@@ -32,7 +32,14 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
-    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service.name, !!query.name)
+    const injected = this.injectDbmQuery(span, query.text, service.name, !!query.name)
+    if (directAssign) {
+      // Writable data property (or no own descriptor); skip the getter trampoline.
+      query.text = injected
+    } else {
+      // Accessor / read-only data; the instrumentation installed a getter that reads this field.
+      query.__ddInjectableQuery = injected
+    }
 
     return ctx.currentStore
   }
