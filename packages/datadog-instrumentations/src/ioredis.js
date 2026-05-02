@@ -10,6 +10,8 @@ const startCh = channel('apm:ioredis:command:start')
 const finishCh = channel('apm:ioredis:command:finish')
 const errorCh = channel('apm:ioredis:command:error')
 
+const connectionOptionsSymbol = Symbol('dd-trace.ioredis.connectionOptions')
+
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
     if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
@@ -17,21 +19,23 @@ function wrapRedis (Redis) {
     if (!command || !command.promise) return sendCommand.apply(this, arguments)
 
     const options = this.options || {}
-    const connectionName = options.connectionName
-    const db = options.db
-    const connectionOptions = { host: options.host, port: options.port }
+    let connectionOptions = this[connectionOptionsSymbol]
+    if (connectionOptions === undefined) {
+      connectionOptions = { host: options.host, port: options.port }
+      this[connectionOptionsSymbol] = connectionOptions
+    }
 
-    const ctx = { db, command: command.name, args: command.args, connectionOptions, connectionName }
+    const ctx = {
+      db: options.db,
+      command: command.name,
+      args: command.args,
+      connectionOptions,
+      connectionName: options.connectionName,
+    }
     return startCh.runStores(ctx, () => {
       command.promise.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
 
-      try {
-        return sendCommand.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
-
-        throw err
-      }
+      return sendCommand.apply(this, arguments)
     })
   })
   return Redis
