@@ -314,5 +314,7 @@
 /packages/dd-trace/test/setup @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
 
+/scripts/** @DataDog/lang-platform-js
+
 # Multiple teams
 /eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
