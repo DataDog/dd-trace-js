@@ -93,6 +93,9 @@ describe('Plugin', () => {
                 component: 'mysql',
                 '_dd.integration': 'mysql',
               },
+              metrics: {
+                'network.destination.port': 3306,
+              },
             }, { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ })
             .then(done)
             .catch(done)
