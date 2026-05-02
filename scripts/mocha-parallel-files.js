@@ -12,11 +12,15 @@ const multiMochaRc = require('../.mochamultireporterrc')
 
 function getTestsuiteAttr (openTag, name) {
   const m = openTag.match(new RegExp(`${name}="([^"]*)"`))
-  return m ? Number(m[1]) : 0
+  if (!m) return 0
+  // `time` is decimal seconds; the rest are integer counts.
+  const value = name === 'time' ? Number.parseFloat(m[1]) : Number.parseInt(m[1], 10)
+  return Number.isFinite(value) ? value : 0
 }
 
 function isFailureStartLine (line) {
-  return /\b\d+\s+failing\b/.test(stripAnsi(line))
+  // Anchored so test names containing "N failing" don't flip stdoutInFailure.
+  return /^\s*\d+\s+failing\b/.test(stripAnsi(line))
 }
 
 function isWarningLine (line) {
@@ -127,6 +131,21 @@ function ensureDir (dir) {
   fs.mkdirSync(dir, { recursive: true })
 }
 
+/**
+ * Best-effort filesystem cleanup. On Windows, junit shards can be held open by
+ * AV / editors / a leftover child from a previous run; treating that as a hard
+ * failure aborts the whole test run before mocha even starts.
+ *
+ * @param {string} file
+ */
+function bestEffortRm (file) {
+  try {
+    fs.rmSync(file, { force: true })
+  } catch (err) {
+    process.stderr.write(`mocha-parallel-files: failed to remove ${file}: ${err.message}\n`)
+  }
+}
+
 function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   let totalTests = 0
   let totalErrors = 0
@@ -136,7 +155,14 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   const testcases = []
 
   for (const file of inputFiles) {
-    const xml = fs.readFileSync(file, 'utf8')
+    let xml
+    try {
+      xml = fs.readFileSync(file, 'utf8')
+    } catch (err) {
+      process.stderr.write(`mocha-parallel-files: failed to read ${file}: ${err.message}\n`)
+      continue
+    }
+
     const openTagMatch = xml.match(/<testsuite\s+[^>]*>/)
     if (!openTagMatch) continue
 
@@ -165,7 +191,11 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
     '</testsuite>\n',
   ].join('\n')
 
-  fs.writeFileSync(outputFile, merged)
+  try {
+    fs.writeFileSync(outputFile, merged)
+  } catch (err) {
+    process.stderr.write(`mocha-parallel-files: failed to write ${outputFile}: ${err.message}\n`)
+  }
 }
 
 /**
@@ -178,13 +208,43 @@ function isMochaRunFileResultMessage (msg) {
 }
 
 async function main () {
-  // If output is piped (e.g. to `head`), writes can throw EPIPE. Exit cleanly.
-  process.stdout.on('error', (err) => {
-    if (err && err.code === 'EPIPE') process.exit(0)
-  })
-  process.stderr.on('error', (err) => {
-    if (err && err.code === 'EPIPE') process.exit(0)
-  })
+  /** @type {Set<import('child_process').ChildProcess>} */
+  const liveChildren = new Set()
+  let interrupted = false
+
+  // EPIPE: the consumer (e.g. `head`) closed the pipe. Kill remaining children
+  // and exit with whatever exit code the run has earned so far.
+  const onPipeError = (err) => {
+    if (!err || err.code !== 'EPIPE') return
+    if (interrupted) return
+    interrupted = true
+    for (const child of liveChildren) {
+      child.kill('SIGTERM')
+    }
+    process.exit(process.exitCode ?? 0)
+  }
+  process.stdout.on('error', onPipeError)
+  process.stderr.on('error', onPipeError)
+
+  const onSignal = (signal) => {
+    if (interrupted) return
+    interrupted = true
+    process.stderr.write(
+      `\nmocha-parallel-files: received ${signal}, terminating ${liveChildren.size} child(ren)\n`
+    )
+    for (const child of liveChildren) {
+      child.kill(signal)
+    }
+    // Force-exit if children don't comply within a second. SIGINT → 130, SIGTERM → 143.
+    setTimeout(() => {
+      for (const child of liveChildren) {
+        child.kill('SIGKILL')
+      }
+      process.exit(signal === 'SIGINT' ? 130 : 143)
+    }, 1000).unref()
+  }
+  process.once('SIGINT', () => onSignal('SIGINT'))
+  process.once('SIGTERM', () => onSignal('SIGTERM'))
 
   const opts = parseArgs(process.argv.slice(2))
   if (opts.patterns.length === 0) {
@@ -202,9 +262,11 @@ async function main () {
 
   const timeout = typeof opts.timeout === 'number' && Number.isFinite(opts.timeout) ? opts.timeout : 30_000
 
-  const expandedFiles = stableUnique(opts.patterns.flatMap(p =>
-    globSync(p, { nodir: true, windowsPathsNoEscape: true }).sort((a, b) => a.localeCompare(b, 'en'))
-  ))
+  const expandedFiles = stableUnique(
+    opts.patterns
+      .flatMap(p => globSync(p, { nodir: true, windowsPathsNoEscape: true }))
+      .sort((a, b) => a.localeCompare(b, 'en'))
+  )
 
   if (expandedFiles.length === 0) {
     process.stderr.write('No test files matched.\n')
@@ -221,14 +283,15 @@ async function main () {
   const emitJunit = Boolean(process.env.CI)
 
   if (emitJunit) {
-    fs.rmSync(junitOutFile, { force: true })
-
-    if (jobs > 1) {
-      ensureDir(junitTmpDir)
+    bestEffortRm(junitOutFile)
+    ensureDir(junitTmpDir)
+    try {
       // Clean up any stale junit shards.
       for (const entry of fs.readdirSync(junitTmpDir)) {
-        if (entry.endsWith('.xml')) fs.rmSync(path.join(junitTmpDir, entry), { force: true })
+        if (entry.endsWith('.xml')) bestEffortRm(path.join(junitTmpDir, entry))
       }
+    } catch (err) {
+      process.stderr.write(`mocha-parallel-files: failed to scan ${junitTmpDir}: ${err.message}\n`)
     }
   }
 
@@ -259,6 +322,24 @@ async function main () {
 
     stats: /** @type {{passes:number, failures:number, pending:number, tests:number, duration:number}|null} */ (null),
   }))
+
+  /**
+   * Mark a child as failed without a real exit code (spawn error, missing
+   * stdio, sync spawn throw). Uses `code = 1` so summary accounting and the
+   * crashedFiles bucket pick it up.
+   */
+  const recordSpawnFailure = (entry, file) => {
+    if (entry.exited) return
+    entry.exited = true
+    entry.code = 1
+    entry.signal = null
+    entry.stdoutEnded = true
+    entry.stderrEnded = true
+    running--
+    failures++
+    failed.push({ file, code: 1, signal: null })
+    process.exitCode = 1
+  }
 
   let activeIndex = 0
   const isActive = (entryIndex) => entryIndex === activeIndex
@@ -329,17 +410,33 @@ async function main () {
 
   /** @type {Promise<void>} */
   const runPromise = new Promise((resolve) => {
+    const checkDone = () => {
+      if (running === 0 && (idx >= expandedFiles.length || interrupted)) {
+        resolve()
+      }
+    }
+
+    const safeLaunchNext = () => {
+      try {
+        launchNext()
+      } catch (err) {
+        process.stderr.write(`mocha-parallel-files: launchNext failed: ${err.message}\n`)
+        process.exitCode = 1
+        resolve()
+      }
+    }
+
     const launchNext = () => {
       while (running < jobs && idx < expandedFiles.length) {
+        if (interrupted) break
         const entry = entries[idx]
         const file = entry.file
+        const entryIndex = idx
         idx++
         running++
 
         const junitShard = emitJunit
-          ? (jobs > 1
-              ? path.join(junitTmpDir, `node-${process.versions.node}-${process.pid}-${idx}.xml`)
-              : junitOutFile)
+          ? path.join(junitTmpDir, `node-${process.versions.node}-${process.pid}-${entryIndex + 1}.xml`)
           : null
 
         if (junitShard) junitTmpFiles.push(junitShard)
@@ -358,7 +455,7 @@ async function main () {
           reporterOptions,
         }
 
-        if (timeout) {
+        if (timeout !== undefined) {
           options.timeout = timeout
         }
 
@@ -382,19 +479,29 @@ async function main () {
 
         entry.started = true
 
-        const child = spawn(process.execPath, nodeArgs, {
-          stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-          env: childEnv,
-        })
+        let child
+        try {
+          child = spawn(process.execPath, nodeArgs, {
+            stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+            env: childEnv,
+          })
+        } catch (err) {
+          process.stderr.write(`mocha-parallel-files: spawn failed for ${file}: ${err.message}\n`)
+          recordSpawnFailure(entry, file)
+          continue
+        }
 
         if (!child.stdout || !child.stderr) {
-          throw new Error('Expected child stdout/stderr to be piped')
+          process.stderr.write(`mocha-parallel-files: child stdout/stderr not piped for ${file}\n`)
+          try { child.kill('SIGKILL') } catch {}
+          recordSpawnFailure(entry, file)
+          continue
         }
+
+        liveChildren.add(child)
 
         child.stdout.setEncoding('utf8')
         child.stderr.setEncoding('utf8')
-
-        const entryIndex = idx - 1
 
         child.stdout.on('data', (data) => {
           handleStdoutChunk(entryIndex, data)
@@ -417,51 +524,61 @@ async function main () {
         })
 
         child.stdout.on('end', () => {
-          const entry = entries[entryIndex]
           if (entry.stdoutCarry) {
-            const tail = entry.stdoutCarry
+            // Append a newline so the leftover doesn't fragment the next file's output.
+            handleStdoutLine(entryIndex, entry.stdoutCarry + '\n')
             entry.stdoutCarry = ''
-            // process leftover without newline
-            handleStdoutLine(entryIndex, tail)
           }
           entry.stdoutEnded = true
           maybeAdvanceActive()
         })
 
         child.stderr.on('end', () => {
-          const entry = entries[entryIndex]
           if (entry.stderrCarry) {
-            const tail = entry.stderrCarry
+            handleStderrLine(entryIndex, entry.stderrCarry + '\n')
             entry.stderrCarry = ''
-            handleStderrLine(entryIndex, tail)
           }
           entry.stderrEnded = true
           maybeAdvanceActive()
         })
 
+        // Async spawn failures (ENOENT, EAGAIN, EMFILE, AV blocking the binary
+        // on Windows) arrive as 'error' instead of 'exit'. Without this handler
+        // the EventEmitter contract turns the failure into an uncaught
+        // exception and the parent crashes with no diagnostic.
+        child.on('error', (err) => {
+          process.stderr.write(`mocha-parallel-files: child error for ${file}: ${err.message}\n`)
+          liveChildren.delete(child)
+          if (entry.exited) return
+          recordSpawnFailure(entry, file)
+          safeLaunchNext()
+          maybeAdvanceActive()
+          checkDone()
+        })
+
         child.on('exit', (code, signal) => {
+          liveChildren.delete(child)
+          if (entry.exited) return
+          entry.exited = true
+          entry.code = code
+          entry.signal = signal
           running--
           if (code || signal) {
             failures++
             failed.push({ file, code, signal })
+            process.exitCode = 1
           }
 
-          entry.exited = true
-          entry.code = code
-          entry.signal = signal
-
-          if (idx >= expandedFiles.length && running === 0) {
-            resolve()
-          } else {
-            launchNext()
-          }
-
+          safeLaunchNext()
           maybeAdvanceActive()
+          checkDone()
         })
       }
+
+      checkDone()
     }
 
-    launchNext()
+    safeLaunchNext()
   })
 
   // Wait for all children to complete. Output is emitted live via stream handlers above.
@@ -519,8 +636,9 @@ async function main () {
     }
   }
 
-  if (emitJunit && // Merge xunit shards (one per file) into the historical output file name expected by CI tooling.
-    jobs > 1) {
+  // Sharding is unconditional: writing to junitOutFile directly would let
+  // later children overwrite earlier ones (e.g. when jobs === 1).
+  if (emitJunit) {
     mergeXunitFilesToSingleTestsuite(junitTmpFiles.filter(f => fs.existsSync(f)), junitOutFile)
   }
 
