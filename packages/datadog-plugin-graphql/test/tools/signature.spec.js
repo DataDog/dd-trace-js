@@ -134,10 +134,10 @@ describe('graphql signature byte output', () => {
   })
 
   it('hides literals, drops aliases, and sorts arguments / selections / variableDefinitions', () => {
-    const ast = parse('query Q($z: Int, $a: ID!) { aliased: f(b: 2, a: 1) { y x } }')
+    const ast = parse('query Q($z: Int, $a: ID!) { aliased: f(b: 2, a: 1, ids: [1, 2]) { y x } }')
     assert.equal(
       defaultEngineReportingSignature(ast, 'Q'),
-      'query Q($a:ID!,$z:Int){f(a:0,b:0){x y}}'
+      'query Q($a:ID!,$z:Int){f(a:0,b:0,ids:[]){x y}}'
     )
   })
 })
