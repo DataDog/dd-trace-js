@@ -4,9 +4,16 @@ const assert = require('node:assert/strict')
 const os = require('node:os')
 
 const { describe, it, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('./setup/core')
-const { getAzureAppMetadata, getAzureTagsFromMetadata, getAzureFunctionMetadata } = require('../src/azure_metadata')
+const {
+  getAzureAppMetadata,
+  getAzureTagsFromMetadata,
+  getAzureFunctionMetadata,
+} = proxyquire('../src/azure_metadata', {
+  './config': () => proxyquire.noPreserveCache()('../src/config', {})(),
+})
 
 describe('Azure metadata', () => {
   const AZURE_ENV_KEYS = [

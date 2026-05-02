@@ -45,8 +45,11 @@ describe('git-cache integration tests', () => {
   beforeEach(() => {
     process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = 'true'
     process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
-    // We need this, otherwise the file is already loaded and the cache is disabled
+    // git-cache reads its config from the dd-trace config singleton on first
+    // use; clearing both modules from the require cache makes the next
+    // `require(...)` rebuild the singleton from the env we just set.
     delete require.cache[require.resolve('../../packages/dd-trace/src/plugins/util/git-cache')]
+    delete require.cache[require.resolve('../../packages/dd-trace/src/config')]
     gitCache = require('../../packages/dd-trace/src/plugins/util/git-cache')
 
     originalPath = process.env.PATH
@@ -148,6 +151,7 @@ describe('git-cache integration tests', () => {
     delete process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED
 
     delete require.cache[require.resolve('../../packages/dd-trace/src/plugins/util/git-cache')]
+    delete require.cache[require.resolve('../../packages/dd-trace/src/config')]
     const disabledGitCache = require('../../packages/dd-trace/src/plugins/util/git-cache')
 
     const firstResult = disabledGitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
@@ -177,6 +181,7 @@ describe('git-cache integration tests', () => {
       process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = invalidCacheDir
 
       delete require.cache[require.resolve('../../packages/dd-trace/src/plugins/util/git-cache')]
+      delete require.cache[require.resolve('../../packages/dd-trace/src/config')]
       const invalidDirGitCache = require('../../packages/dd-trace/src/plugins/util/git-cache')
 
       const firstResult = invalidDirGitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
