@@ -23,7 +23,7 @@
 - Flag unbounded collections: streams, maps, or listeners that can grow without limit.
 - Flag unnecessary allocations or object creation.
 - A Map keyed by user-operation objects (requests, contexts) must have a guaranteed cleanup path, or use `WeakMap` instead. Timer-based cleanup is risky — it can cause sawtooth memory growth.
-- Prefer lazy initialisation: don't create expensive objects or run expensive computations until they are needed.
+- Prefer lazy initialisation: don't create objects or run computations until they are needed.
 - Benchmarks are required to proof performance improvement claims
 
 ---
