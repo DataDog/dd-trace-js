@@ -180,6 +180,35 @@ describe('WAFContextWrapper', () => {
     })
   })
 
+  it('should report a finite durationExt when hrtime delta exceeds safe-integer range', () => {
+    const ddwafContext = {
+      run: sinon.stub().returns({
+        events: {},
+        attributes: {},
+      }),
+    }
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
+
+    const startNs = 0n
+    const endNs = 1n << 60n // 2^60 ns -- past Number.MAX_SAFE_INTEGER (2^53)
+    const hrtimeStub = sinon.stub(process.hrtime, 'bigint')
+    hrtimeStub.onCall(0).returns(startNs)
+    hrtimeStub.onCall(1).returns(endNs)
+
+    wafContextWrapper.run({
+      persistent: {
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
+    })
+
+    sinon.assert.calledOnce(Reporter.reportMetrics)
+    const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
+
+    assert.strictEqual(typeof reportedMetrics.durationExt, 'number')
+    assert.strictEqual(Number.isFinite(reportedMetrics.durationExt), true)
+    assert.strictEqual(reportedMetrics.durationExt, Number(endNs - startNs) / 1e3)
+  })
+
   it('should report truncation metrics, blockTriggered, and ruleTriggered on successful waf run', () => {
     const ddwafContext = {
       run: sinon.stub().returns({
