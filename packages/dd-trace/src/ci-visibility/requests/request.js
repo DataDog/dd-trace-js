@@ -37,6 +37,10 @@ function parseUrl (urlObjOrString) {
  * Destroys connections on errors to prevent reuse of bad connections. Preserves
  * original status code across retries for telemetry.
  *
+ * Retry timers stay ref'd. Test-runner plugins block the suite via
+ * `delay: true` channels until this callback fires; an unref'd retry would
+ * let the host exit first and the suite would never run.
+ *
  * @param {string} data - Request body (e.g. JSON string)
  * @param {object} options - { url, path?, method?, headers?, timeout? } (may be mutated)
  * @param {Function} callback - (err, res, statusCode) => void

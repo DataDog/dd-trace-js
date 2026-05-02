@@ -177,7 +177,10 @@ function request (data, options, callback) {
       req.once('error', error => {
         finalize()
         if (attemptIndex < getMaxAttempts() && isRetriableNetworkError(error)) {
-          setTimeout(attempt, getRetryDelay(attemptIndex), attemptIndex + 1)
+          // Unref so a pending retry never keeps the host process alive past
+          // its natural exit point; long-running apps still retry because the
+          // event loop is held open by their own work.
+          setTimeout(attempt, getRetryDelay(attemptIndex), attemptIndex + 1).unref()
         } else {
           callback(error)
         }
