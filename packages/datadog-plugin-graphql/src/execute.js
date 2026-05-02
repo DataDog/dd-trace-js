@@ -54,13 +54,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
 // span-related
 
 function addVariableTags (config, span, variableValues) {
-  const tags = {}
+  if (!variableValues || !config.variables) return
 
-  if (variableValues && config.variables) {
-    const variables = config.variables(variableValues)
-    for (const [param, value] of Object.entries(variables)) {
-      tags[`graphql.variables.${param}`] = value
-    }
+  const tags = {}
+  const variables = config.variables(variableValues)
+  for (const [param, value] of Object.entries(variables)) {
+    tags[`graphql.variables.${param}`] = value
   }
 
   span.addTags(tags)

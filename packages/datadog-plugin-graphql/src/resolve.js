@@ -12,8 +12,6 @@ class GraphQLResolvePlugin extends TracingPlugin {
   start (fieldCtx) {
     const { info, rootCtx, args, path: pathAsArray, pathString } = fieldCtx
 
-    const path = getPath(this.config, pathAsArray)
-
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
     const parentField = getParentField(rootCtx, pathString)
@@ -21,8 +19,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     fieldCtx.parent = parentField
 
-    if (!shouldInstrument(this.config, path)) return
-    const computedPathString = path.join('.')
+    if (!shouldInstrument(this.config, pathAsArray)) return
+    const computedPathString = this.config.collapse
+      ? buildCollapsedPathString(pathAsArray)
+      : pathString
 
     if (this.config.collapse) {
       if (rootCtx.fields[computedPathString]) return
@@ -37,7 +37,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     const document = rootCtx.source
-    const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
+    const fieldNode = info.fieldNodes[0]
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
@@ -78,9 +78,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     this.addTraceSub('updateField', (ctx) => {
       const { field, error, path: pathAsArray } = ctx
 
-      const path = getPath(this.config, pathAsArray)
-
-      if (!shouldInstrument(this.config, path)) return
+      if (!shouldInstrument(this.config, pathAsArray)) return
 
       const span = ctx?.currentStore?.span || this.activeSpan
       field.finishTime = span._getTime ? span._getTime() : 0
@@ -107,56 +105,53 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
 // helpers
 
-function shouldInstrument (config, path) {
+function shouldInstrument (config, pathAsArray) {
+  if (config.depth < 0) return true
+
   let depth = 0
-  for (const item of path) {
-    if (typeof item === 'string') {
-      depth += 1
+  if (config.collapse) {
+    depth = pathAsArray.length
+  } else {
+    for (const segment of pathAsArray) {
+      if (typeof segment === 'string') depth += 1
     }
   }
 
-  return config.depth < 0 || config.depth >= depth
+  return config.depth >= depth
 }
 
-function getPath (config, pathAsArray) {
-  return config.collapse
-    ? withCollapse(pathAsArray)
-    : pathAsArray
-}
-
-function withCollapse (pathAsArray) {
-  return pathAsArray.map(segment => typeof segment === 'number' ? '*' : segment)
+function buildCollapsedPathString (pathAsArray) {
+  let result = ''
+  for (const segment of pathAsArray) {
+    if (result.length > 0) result += '.'
+    result += typeof segment === 'number' ? '*' : segment
+  }
+  return result
 }
 
 function getResolverInfo (info, args) {
-  let resolverInfo = null
-  const resolverVars = {}
+  let resolverVars
 
-  if (args) {
-    Object.assign(resolverVars, args)
+  if (args && Object.keys(args).length > 0) {
+    resolverVars = { ...args }
   }
 
-  let hasResolvers = false
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {
     for (const directive of directives) {
+      if (directive.arguments.length === 0) continue
+
       const argList = {}
       for (const argument of directive.arguments) {
         argList[argument.name.value] = argument.value.value
       }
 
-      if (directive.arguments.length > 0) {
-        hasResolvers = true
-        resolverVars[directive.name.value] = argList
-      }
+      resolverVars ??= {}
+      resolverVars[directive.name.value] = argList
     }
   }
 
-  if (hasResolvers || args && Object.keys(resolverVars).length) {
-    resolverInfo = { [info.fieldName]: resolverVars }
-  }
-
-  return resolverInfo
+  return resolverVars === undefined ? null : { [info.fieldName]: resolverVars }
 }
 
 function getParentField (parentCtx, pathToString) {
