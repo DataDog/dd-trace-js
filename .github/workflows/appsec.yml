@@ -84,6 +84,10 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:appsec:ci
+      - uses: ./.github/actions/upload-node-reports
+        if: always()
+        with:
+          name: appsec-windows
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows

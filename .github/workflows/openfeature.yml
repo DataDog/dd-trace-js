@@ -103,6 +103,10 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/upload-node-reports
+        if: always()
+        with:
+          name: openfeature-windows
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-windows

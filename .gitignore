@@ -51,6 +51,9 @@ coverage/
 !integration-tests/coverage/**
 *.lcov
 
+# Node.js diagnostic reports written by tests in CI
+node-reports/
+
 # nyc test coverage
 .nyc_output
 
