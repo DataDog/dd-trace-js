@@ -378,6 +378,42 @@ describe('Plugin', () => {
             }).toArray()
           })
 
+          it('should collapse beyond max depth', done => {
+            let nested = { a: 1 }
+            for (let i = 0; i < 12; i++) {
+              nested = { a: nested }
+            }
+
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                assert.strictEqual(span.resource, `find test.${collectionName}`)
+                // 10 levels of `{"a":` then `"?"`, then 10 closing braces.
+                assert.strictEqual(span.meta['mongodb.query'], `${'{"a":'.repeat(10)}"?"${'}'.repeat(10)}`)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.find(nested).toArray().catch(() => {})
+          })
+
+          it('should collapse cyclic queries to ?', done => {
+            const cyclic = { name: 'foo' }
+            cyclic.self = cyclic
+
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                assert.strictEqual(span.resource, `find test.${collectionName}`)
+                assert.strictEqual(span.meta['mongodb.query'], '{"name":"foo","self":"?"}')
+              })
+              .then(done)
+              .catch(done)
+
+            // Driver rejects cyclic structures before the wire write; sanitisation runs before that.
+            collection.find(cyclic).toArray().catch(() => {})
+          })
+
           it('should skip functions when sanitizing', done => {
             agent
               .assertSomeTraces(traces => {
