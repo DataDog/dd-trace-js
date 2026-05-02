@@ -134,7 +134,9 @@ describe('graphql instrumentation pathToArray (regression for two-walk rewrite)'
 describe('graphql plugin getResolverInfo (regression for lazy allocation)', () => {
   let GraphQLResolvePlugin
   let plugin
+  let updateFieldHandler
   const channelEvents = []
+  const startSpanCalls = []
 
   beforeEach(() => {
     class StubTracingPlugin {
@@ -143,9 +145,13 @@ describe('graphql plugin getResolverInfo (regression for lazy allocation)', () =
         this._tracerConfig = {}
       }
 
-      addTraceSub () {}
+      addTraceSub (eventName, handler) {
+        if (eventName === 'updateField') updateFieldHandler = handler
+      }
+
       addSub () {}
-      startSpan () {
+      startSpan (operationName, options) {
+        startSpanCalls.push({ operationName, options })
         return {
           setTag: () => {},
           finish: () => {},
@@ -176,6 +182,7 @@ describe('graphql plugin getResolverInfo (regression for lazy allocation)', () =
   afterEach(() => {
     resolverStartCh.unsubscribe(plugin._listener)
     channelEvents.length = 0
+    startSpanCalls.length = 0
   })
 
   it('emits resolverInfo === null when args is undefined and no directives are present', () => {
@@ -237,9 +244,139 @@ describe('graphql plugin getResolverInfo (regression for lazy allocation)', () =
       greet: { id: 7, auth: { role: 'admin' } },
     })
   })
+
+  it('skips the resolver when depth >= 0 and the path is deeper than the configured limit', () => {
+    plugin.configure({ depth: 0, collapse: false, source: false, variables: null })
+    plugin.start(makeFieldCtx({ args: undefined, path: ['people', 0, 'name'], pathString: 'people.0.name' }))
+
+    assert.equal(channelEvents.length, 0)
+  })
+
+  it('counts only string segments in the slow path of shouldInstrument', () => {
+    plugin.configure({ depth: 1, collapse: false, source: false, variables: null })
+    plugin.start(makeFieldCtx({ args: undefined, path: ['people', 0, 'name'], pathString: 'people.0.name' }))
+
+    assert.equal(channelEvents.length, 0)
+
+    plugin.configure({ depth: 2, collapse: false, source: false, variables: null })
+    plugin.start(makeFieldCtx({ args: undefined, path: ['people', 0, 'name'], pathString: 'people.0.name' }))
+
+    assert.equal(channelEvents.length, 1)
+  })
+
+  it('updateField stamps finishTime and propagates errors when shouldInstrument allows the path', () => {
+    const field = { error: null, ctx: {} }
+    const ctx = {
+      field,
+      error: new Error('boom'),
+      path: ['greet'],
+      currentStore: { span: { _getTime: () => 1234 } },
+    }
+    updateFieldHandler(ctx)
+
+    assert.equal(field.finishTime, 1234)
+    assert.equal(field.error.message, 'boom')
+  })
+
+  it('updateField bails out when shouldInstrument rejects the path', () => {
+    plugin.configure({ depth: 1, collapse: false, source: false, variables: null })
+    const field = { error: null, ctx: {} }
+    updateFieldHandler({
+      field,
+      error: new Error('ignored'),
+      path: ['people', 0, 'name'],
+      currentStore: { span: { _getTime: () => 1 } },
+    })
+
+    assert.equal(field.finishTime, undefined)
+    assert.equal(field.error, null)
+  })
+
+  it('collapses numeric segments to "*" and counts every segment when collapse is enabled', () => {
+    plugin.configure({ depth: 2, collapse: true, source: false, variables: null })
+    plugin.start(makeFieldCtx({ args: undefined, path: ['people', 0, 'name'], pathString: 'people.0.name' }))
+
+    assert.equal(channelEvents.length, 0)
+
+    plugin.configure({ depth: 3, collapse: true, source: false, variables: null })
+    plugin.start(makeFieldCtx({ args: undefined, path: ['people', 0, 'name'], pathString: 'people.0.name' }))
+
+    assert.equal(channelEvents.length, 1)
+    assert.equal(startSpanCalls.at(-1).options.meta['graphql.field.path'], 'people.*.name')
+  })
 })
 
-function makeFieldCtx ({ args, directives }) {
+describe('graphql plugin addVariableTags (regression for early-return)', () => {
+  let GraphQLExecutePlugin
+  let plugin
+  const addTagsCalls = []
+
+  beforeEach(() => {
+    class StubTracingPlugin {
+      constructor () {
+        this.config = {}
+        this._tracerConfig = {}
+      }
+
+      operationName () { return 'graphql.execute' }
+      serviceName () { return 'svc' }
+
+      startSpan () {
+        return {
+          addTags: (tags) => addTagsCalls.push(tags),
+          context: () => ({ _trace: { started: [] }, _tags: {} }),
+          _spanContext: { _tags: {} },
+        }
+      }
+
+      configure (config) {
+        this.config = config && typeof config === 'object' ? config : {}
+      }
+    }
+
+    GraphQLExecutePlugin = proxyquire('../src/execute', {
+      '../../dd-trace/src/plugins/tracing': StubTracingPlugin,
+    })
+
+    plugin = new GraphQLExecutePlugin()
+  })
+
+  afterEach(() => {
+    addTagsCalls.length = 0
+  })
+
+  it('skips span.addTags when variableValues is undefined', () => {
+    plugin.configure({ variables: () => ({}), source: false, signature: false, hooks: { execute: () => {} } })
+    plugin.bindStart({ operation: undefined, args: { document: undefined, variableValues: undefined } })
+
+    assert.equal(addTagsCalls.length, 0)
+  })
+
+  it('skips span.addTags when config.variables is not configured', () => {
+    plugin.configure({ variables: undefined, source: false, signature: false, hooks: { execute: () => {} } })
+    plugin.bindStart({ operation: undefined, args: { document: undefined, variableValues: { id: 1 } } })
+
+    assert.equal(addTagsCalls.length, 0)
+  })
+
+  it('forwards graphql.variables.* tags when both variables and a serializer are present', () => {
+    plugin.configure({
+      variables: (vars) => vars,
+      source: false,
+      signature: false,
+      hooks: { execute: () => {} },
+    })
+    plugin.bindStart({ operation: undefined, args: { document: undefined, variableValues: { id: 1, role: 'admin' } } })
+
+    assert.equal(addTagsCalls.length, 1)
+    assert.deepEqual(addTagsCalls[0], {
+      'graphql.variables.id': 1,
+      'graphql.variables.role': 'admin',
+    })
+  })
+})
+
+function makeFieldCtx ({ args, directives, path = ['greet'], pathString = path.join('.') } = {}) {
   const fieldNode = {
     kind: 'Field',
     arguments: [],
@@ -255,7 +392,7 @@ function makeFieldCtx ({ args, directives }) {
     },
     rootCtx: { fields: Object.create(null), source: undefined },
     args,
-    path: ['greet'],
-    pathString: 'greet',
+    path,
+    pathString,
   }
 }
