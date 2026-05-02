@@ -1,108 +1,127 @@
-// file mostly untouched from apollo-graphql
+'use strict'
 
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const ddGlobal = globalThis[Symbol.for('dd-trace')];
-const visitor_1 = ddGlobal.graphql_visitor;
-const printer_1 = ddGlobal.graphql_printer;
-const utilities_1 = ddGlobal.graphql_utilities;
-const lodash_sortby_1 = __importDefault(require("../../../../vendor/dist/lodash.sortby"));
-function hideLiterals(ast) {
-    return visitor_1.visit(ast, {
-        IntValue(node) {
-            return Object.assign({}, node, { value: "0" });
-        },
-        FloatValue(node) {
-            return Object.assign({}, node, { value: "0" });
-        },
-        StringValue(node) {
-            return Object.assign({}, node, { value: "", block: false });
-        },
-        ListValue(node) {
-            return Object.assign({}, node, { values: [] });
-        },
-        ObjectValue(node) {
-            return Object.assign({}, node, { fields: [] });
-        }
-    });
+Object.defineProperty(exports, '__esModule', { value: true })
+
+const ddGlobal = globalThis[Symbol.for('dd-trace')]
+const visitor = ddGlobal.graphql_visitor
+const printer = ddGlobal.graphql_printer
+const utilities = ddGlobal.graphql_utilities
+
+function dropUnusedDefinitions (ast, operationName) {
+  const separated = utilities.separateOperations(ast)[operationName]
+  if (!separated) {
+    return ast
+  }
+  return separated
 }
-exports.hideLiterals = hideLiterals;
-function hideStringAndNumericLiterals(ast) {
-    return visitor_1.visit(ast, {
-        IntValue(node) {
-            return Object.assign({}, node, { value: "0" });
-        },
-        FloatValue(node) {
-            return Object.assign({}, node, { value: "0" });
-        },
-        StringValue(node) {
-            return Object.assign({}, node, { value: "", block: false });
-        }
-    });
+
+// One walk replaces Apollo's `hideLiterals` + `removeAliases` + `sortAST` +
+// the `StringValue` pre-pass that used to live in `printWithReducedWhitespace`.
+// The byte output is unchanged: hideLiterals had already collapsed every
+// `StringValue.value` to '', so the original hex round-trip degenerated to
+// hex('') === '' anyway.
+function transformForSignature (ast) {
+  return visitor.visit(ast, {
+    IntValue (node) {
+      return { ...node, value: '0' }
+    },
+    FloatValue (node) {
+      return { ...node, value: '0' }
+    },
+    StringValue (node) {
+      return { ...node, value: '', block: false }
+    },
+    ListValue (node) {
+      return { ...node, values: [] }
+    },
+    ObjectValue (node) {
+      return { ...node, fields: [] }
+    },
+    Field (node) {
+      return {
+        ...node,
+        alias: undefined,
+        arguments: sortByName(node.arguments),
+      }
+    },
+    OperationDefinition (node) {
+      return {
+        ...node,
+        variableDefinitions: sortByVariableName(node.variableDefinitions),
+      }
+    },
+    SelectionSet (node) {
+      return { ...node, selections: sortByKindThenName(node.selections) }
+    },
+    FragmentSpread (node) {
+      return { ...node, directives: sortByName(node.directives) }
+    },
+    InlineFragment (node) {
+      return { ...node, directives: sortByName(node.directives) }
+    },
+    FragmentDefinition (node) {
+      return {
+        ...node,
+        directives: sortByName(node.directives),
+        variableDefinitions: sortByVariableName(node.variableDefinitions),
+      }
+    },
+    Directive (node) {
+      return { ...node, arguments: sortByName(node.arguments) }
+    },
+  })
 }
-exports.hideStringAndNumericLiterals = hideStringAndNumericLiterals;
-function dropUnusedDefinitions(ast, operationName) {
-    const separated = utilities_1.separateOperations(ast)[operationName];
-    if (!separated) {
-        return ast;
-    }
-    return separated;
+
+function printWithReducedWhitespace (ast) {
+  return printer.print(ast)
+    .replaceAll(/\s+/g, ' ')
+    .replaceAll(/([^_a-zA-Z0-9]) /g, '$1')
+    .replaceAll(/ ([^_a-zA-Z0-9])/g, '$1')
 }
-exports.dropUnusedDefinitions = dropUnusedDefinitions;
-function sorted(items) {
-    if (items) {
-        return lodash_sortby_1.default.apply(null, arguments);
-    }
-    return undefined;
+
+function sortByName (items) {
+  if (!items) return
+  return [...items].sort(byName)
 }
-function sortAST(ast) {
-    return visitor_1.visit(ast, {
-        OperationDefinition(node) {
-            return Object.assign({}, node, { variableDefinitions: sorted(node.variableDefinitions, "variable.name.value") });
-        },
-        SelectionSet(node) {
-            return Object.assign({}, node, { selections: lodash_sortby_1.default(node.selections, "kind", "name.value") });
-        },
-        Field(node) {
-            return Object.assign({}, node, { arguments: sorted(node.arguments, "name.value") });
-        },
-        FragmentSpread(node) {
-            return Object.assign({}, node, { directives: sorted(node.directives, "name.value") });
-        },
-        InlineFragment(node) {
-            return Object.assign({}, node, { directives: sorted(node.directives, "name.value") });
-        },
-        FragmentDefinition(node) {
-            return Object.assign({}, node, { directives: sorted(node.directives, "name.value"), variableDefinitions: sorted(node.variableDefinitions, "variable.name.value") });
-        },
-        Directive(node) {
-            return Object.assign({}, node, { arguments: sorted(node.arguments, "name.value") });
-        }
-    });
+
+function byName (a, b) {
+  const left = a.name.value
+  const right = b.name.value
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
 }
-exports.sortAST = sortAST;
-function removeAliases(ast) {
-    return visitor_1.visit(ast, {
-        Field(node) {
-            return Object.assign({}, node, { alias: undefined });
-        }
-    });
+
+function sortByVariableName (items) {
+  if (!items) return
+  return [...items].sort(byVariableName)
 }
-exports.removeAliases = removeAliases;
-function printWithReducedWhitespace(ast) {
-    const sanitizedAST = visitor_1.visit(ast, {
-        StringValue(node) {
-            return Object.assign({}, node, { value: Buffer.from(node.value, "utf8").toString("hex"), block: false });
-        }
-    });
-    const withWhitespace = printer_1.print(sanitizedAST);
-    const minimizedButStillHex = withWhitespace
-        .replace(/\s+/g, " ")
-        .replace(/([^_a-zA-Z0-9]) /g, (_, c) => c)
-        .replace(/ ([^_a-zA-Z0-9])/g, (_, c) => c);
-    return minimizedButStillHex.replace(/"([a-f0-9]+)"/g, (_, hex) => JSON.stringify(Buffer.from(hex, "hex").toString("utf8")));
+
+function byVariableName (a, b) {
+  const left = a.variable.name.value
+  const right = b.variable.name.value
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
 }
-exports.printWithReducedWhitespace = printWithReducedWhitespace;
+
+// SelectionSet children include InlineFragment, which has no `name`, so the
+// secondary key falls back to undefined and stable sort keeps sibling order.
+function sortByKindThenName (items) {
+  return [...items].sort(byKindThenName)
+}
+
+function byKindThenName (a, b) {
+  if (a.kind < b.kind) return -1
+  if (a.kind > b.kind) return 1
+  const left = a.name?.value
+  const right = b.name?.value
+  if (left === right) return 0
+  if (left === undefined) return 1
+  if (right === undefined) return -1
+  return left < right ? -1 : 1
+}
+
+exports.dropUnusedDefinitions = dropUnusedDefinitions
+exports.transformForSignature = transformForSignature
+exports.printWithReducedWhitespace = printWithReducedWhitespace

@@ -85,3 +85,59 @@ describe('graphql signature memoization', () => {
     assert.equal(sigA, sigB)
   })
 })
+
+describe('graphql signature byte output', () => {
+  // Pinned against the multi-pass output of `hideLiterals` + `removeAliases` +
+  // `sortAST` + `printWithReducedWhitespace` from before the visitor walks
+  // were collapsed; any future drift trips the assertion.
+  const representative = `
+    query GetUser($id: ID!, $verbose: Boolean = false) {
+      aliasUser: user(id: $id, name: "Alice", limit: 100, scale: 1.5) {
+        name
+        id
+        profile @include(if: $verbose) @customDirective(meta: "x") {
+          bio
+          avatar
+        }
+        ...UserFragment
+        ... on AdminUser {
+          permissions @include(if: $verbose)
+        }
+        friends(first: 10, filter: { active: true, names: ["a", "b"] }) {
+          edges {
+            node {
+              name
+              id
+            }
+          }
+        }
+      }
+    }
+
+    fragment UserFragment on User @include(if: $verbose) @priority {
+      metadata
+      tags
+      createdAt
+    }
+  `
+
+  const expected =
+    'query GetUser($id:ID!,$verbose:Boolean=false){user(id:$id,limit:0,name:"",scale:0)' +
+    '{friends(filter:{},first:0){edges{node{id name}}}id name profile' +
+    '@include(if:$verbose)@customDirective(meta:""){avatar bio}...UserFragment' +
+    '...on AdminUser{permissions@include(if:$verbose)}}}fragment UserFragment ' +
+    'on User@include(if:$verbose)@priority{createdAt metadata tags}'
+
+  it('matches the pre-consolidation pipeline byte-for-byte', () => {
+    const ast = parse(representative)
+    assert.equal(defaultEngineReportingSignature(ast, 'GetUser'), expected)
+  })
+
+  it('hides literals, drops aliases, and sorts arguments / selections / variableDefinitions', () => {
+    const ast = parse('query Q($z: Int, $a: ID!) { aliased: f(b: 2, a: 1) { y x } }')
+    assert.equal(
+      defaultEngineReportingSignature(ast, 'Q'),
+      'query Q($a:ID!,$z:Int){f(a:0,b:0){x y}}'
+    )
+  })
+})
