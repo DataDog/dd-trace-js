@@ -7,7 +7,7 @@
 
 - Route through designed interfaces — don't call internal APIs directly when a public interface exists (Diagnostics Channel, `runStores`/`bindStore`, propagator interfaces).
 - Don't mix cross-cutting concerns. Systems that are intentionally separate (e.g., baggage and span context) must stay separate.
-- Avoid `WeakRef` for cleanup — it has caused memory leaks in this codebase. Use proper store lifecycle (`runStores`/`bindStore`) instead.
+- Use proper store lifecycle (`runStores`/`bindStore`) instead of `WeakRef`.
 - Don't add helpers that only call another function with no transformation. Inline them.
 - Don't re-export symbols without modification — it adds confusion.
 - Functions called in only one place should be inlined for clarity.
