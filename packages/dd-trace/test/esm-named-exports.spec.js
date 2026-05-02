@@ -3,12 +3,13 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { describe, it } = require('mocha')
 
 require('./setup/core')
 
-const ddTraceEntry = path.resolve(__dirname, '..', 'index.js')
+const ddTraceEntry = pathToFileURL(path.resolve(__dirname, '..', 'index.js')).href
 
 describe('ESM named exports', () => {
   it('exposes `tracer` and `default` to ESM consumers', () => {
