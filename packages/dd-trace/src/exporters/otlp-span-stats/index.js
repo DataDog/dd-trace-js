@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../log')
 const OtlpHttpExporterBase = require('../../opentelemetry/otlp/otlp_http_exporter_base')
 const OtlpStatsTransformer = require('./transformer')
 
@@ -46,6 +47,8 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
     this.sendPayload(payload, (result) => {
       if (result.code === 0) {
         this.recordTelemetry('dd.trace.span_stats_export_successes', 1, additionalTags)
+      } else {
+        log.error('Failed to export span stats: %s', result.error?.message)
       }
     })
   }
