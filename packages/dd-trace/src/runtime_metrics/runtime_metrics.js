@@ -8,14 +8,9 @@ const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { getValueFromEnvSources } = require('../config/helper')
 
 const { NODE_MAJOR } = require('../../../../version')
 const processTags = require('../process-tags')
-// TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
-// It is only a variable for testing. Think about alternatives.
-const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
-const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 const eventLoopDelayResolution = 4
 
@@ -40,6 +35,8 @@ module.exports = {
    */
   start (config) {
     this.stop()
+    // The agent expects a flush every ten seconds, so this is for tests only.
+    const flushIntervalMs = config.DD_RUNTIME_METRICS_FLUSH_INTERVAL
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
     if (config.propagateProcessTags?.enabled) {
@@ -81,7 +78,7 @@ module.exports = {
         captureNativeMetrics(trackEventLoop, trackGc)
         captureCommonMetrics(trackEventLoop)
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     } else {
       lastCpuUsage = process.cpuUsage()
 
@@ -103,7 +100,7 @@ module.exports = {
           captureEventLoopDelay()
         }
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     }
 
     interval.unref()

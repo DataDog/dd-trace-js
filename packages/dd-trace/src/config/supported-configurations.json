@@ -1948,9 +1948,9 @@
     ],
     "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_AWS_ENABLED": [
@@ -1962,16 +1962,16 @@
     ],
     "DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED": [
@@ -1983,9 +1983,9 @@
     ],
     "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_ENABLED": [
@@ -1997,9 +1997,9 @@
     ],
     "DD_TRACE_AWS_SDK_DYNAMODB_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_DYNAMODB_ENABLED": [
@@ -2018,9 +2018,9 @@
     ],
     "DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_EVENTBRIDGE_ENABLED": [
@@ -2032,9 +2032,9 @@
     ],
     "DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_KINESIS_ENABLED": [
@@ -2046,9 +2046,9 @@
     ],
     "DD_TRACE_AWS_SDK_LAMBDA_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_LAMBDA_ENABLED": [
@@ -2067,9 +2067,9 @@
     ],
     "DD_TRACE_AWS_SDK_REDSHIFT_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_REDSHIFT_ENABLED": [
@@ -2081,9 +2081,9 @@
     ],
     "DD_TRACE_AWS_SDK_S3_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_S3_ENABLED": [
@@ -2095,9 +2095,9 @@
     ],
     "DD_TRACE_AWS_SDK_SFN_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_SFN_CLIENT_ENABLED": [
@@ -2123,9 +2123,9 @@
     ],
     "DD_TRACE_AWS_SDK_SNS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_SNS_ENABLED": [
@@ -2137,9 +2137,9 @@
     ],
     "DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_SQS_ENABLED": [
@@ -2151,9 +2151,9 @@
     ],
     "DD_TRACE_AWS_SDK_STATES_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_STATES_ENABLED": [
@@ -2165,9 +2165,9 @@
     ],
     "DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED": [

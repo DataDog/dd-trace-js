@@ -2,7 +2,8 @@
 
 const { readFileSync, readdirSync, existsSync } = require('fs')
 const path = require('path')
-const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
+const getConfig = require('../../config')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -210,7 +211,7 @@ module.exports = {
         CHANGE_ID,
         CHANGE_TARGET,
       } = env
-      const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
+      const { DD_CUSTOM_TRACE_ID } = getConfig()
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -781,8 +782,7 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
-      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
+      const { DD_ACTION_EXECUTION_ID, DD_PIPELINE_EXECUTION_ID } = getConfig()
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,

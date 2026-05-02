@@ -7,24 +7,29 @@ const crypto = require('crypto')
 const cp = require('child_process')
 
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
-const { isTrue } = require('../../util')
+const getConfig = require('../../config')
 
-let isGitEnabled = isTrue(getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED'))
-const GIT_CACHE_DIR = getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR') ||
-  path.join(os.tmpdir(), 'dd-trace-git-cache')
+let isGitEnabled
+let gitCacheDir
 
 function ensureCacheDir () {
+  if (isGitEnabled === undefined) {
+    const config = getConfig()
+    isGitEnabled = config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED
+    gitCacheDir = config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR ||
+      path.join(os.tmpdir(), 'dd-trace-git-cache')
+  }
+
   if (!isGitEnabled) return false
 
   try {
-    if (fs.existsSync(GIT_CACHE_DIR)) {
-      const stats = fs.statSync(GIT_CACHE_DIR)
+    if (fs.existsSync(gitCacheDir)) {
+      const stats = fs.statSync(gitCacheDir)
       if (!stats.isDirectory()) {
-        throw new Error(`Cache directory path exists but is not a directory: ${GIT_CACHE_DIR}`)
+        throw new Error(`Cache directory path exists but is not a directory: ${gitCacheDir}`)
       }
     } else {
-      fs.mkdirSync(GIT_CACHE_DIR, { recursive: true })
+      fs.mkdirSync(gitCacheDir, { recursive: true })
     }
     return true
   } catch (err) {
@@ -34,9 +39,6 @@ function ensureCacheDir () {
   }
 }
 
-// Initialize cache directory at module load time
-ensureCacheDir()
-
 function getCacheKey (cmd, flags) {
   // Create a hash of the command and flags to use as cache key
   const commandString = `${cmd} ${flags.join(' ')}`
@@ -44,11 +46,12 @@ function getCacheKey (cmd, flags) {
 }
 
 function getCacheFilePath (cacheKey) {
-  return path.join(GIT_CACHE_DIR, `${cacheKey}.cache`)
+  ensureCacheDir()
+  return path.join(gitCacheDir, `${cacheKey}.cache`)
 }
 
 function getCache (cacheKey) {
-  if (!isGitEnabled) return null
+  if (!ensureCacheDir()) return null
 
   try {
     const cacheFilePath = getCacheFilePath(cacheKey)
@@ -65,9 +68,6 @@ function getCache (cacheKey) {
 }
 
 function setCache (cacheKey, result) {
-  if (!isGitEnabled) return
-
-  // Ensure cache directory exists
   if (!ensureCacheDir()) return
 
   try {
@@ -82,7 +82,7 @@ function cachedExec (cmd, flags, options) {
   if (options === undefined) {
     options = { stdio: 'pipe' }
   }
-  if (!isGitEnabled) {
+  if (!ensureCacheDir()) {
     return cp.execFileSync(cmd, flags, options)
   }
   const cacheKey = getCacheKey(cmd, flags)

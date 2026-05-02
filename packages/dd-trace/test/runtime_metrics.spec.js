@@ -212,6 +212,7 @@ function createGarbage (count = 50) {
             obj: {},
             invalid: 't{e*s#t5-:./',
           },
+          DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
           getOrigin: () => {
             return 'default'
           },

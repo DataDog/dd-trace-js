@@ -13,7 +13,7 @@ require('../../setup/core')
 
 const cachedExecStub = sinon.stub().returns('')
 
-const { getCIMetadata, getJobIDFromDiagFile } = require('../../../src/plugins/util/ci')
+const { getJobIDFromDiagFile } = require('../../../src/plugins/util/ci')
 const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
@@ -22,15 +22,26 @@ const {
   GIT_COMMIT_HEAD_SHA,
 } = require('../../../src/plugins/util/tags')
 
+const freshConfig = () => proxyquire.noPreserveCache()('../../../src/config', {})()
+
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
   './git-cache': {
     cachedExec: cachedExecStub,
   },
 })
+const ciModule = proxyquire('../../../src/plugins/util/ci', {
+  '../../config': freshConfig,
+})
+const { getCIMetadata } = ciModule
+const userProvidedGit = proxyquire('../../../src/plugins/util/user-provided-git', {
+  '../../config': freshConfig,
+})
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+  './ci': ciModule,
   './git': {
     getGitMetadata,
   },
+  './user-provided-git': userProvidedGit,
 })
 
 describe('test environment data', () => {
