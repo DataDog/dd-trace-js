@@ -15,7 +15,14 @@ const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
-const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+const {
+  SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION,
+} = require('../../../src/constants')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -407,8 +414,108 @@ describe('TextMapPropagator', () => {
       assert.ok('tracestate' in carrier)
       assert.strictEqual(
         carrier.tracestate,
-        'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,other=bleh'
+        'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,ot=th:0,other=bleh'
       )
+    })
+
+    describe('ot.th tracestate injection', () => {
+      beforeEach(() => {
+        config.tracePropagationStyle.inject = ['tracecontext']
+      })
+
+      it('injects th:0 for force-keep with manual mechanism', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: USER_KEEP, mechanism: SAMPLING_MECHANISM_MANUAL },
+          isRemote: false,
+        })
+        propagator.inject(spanContext, carrier)
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
+      })
+
+      it('injects th:0 for force-keep with appsec mechanism', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: USER_KEEP, mechanism: SAMPLING_MECHANISM_APPSEC },
+          isRemote: false,
+        })
+        propagator.inject(spanContext, carrier)
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
+      })
+
+      it('injects th:0 for force-keep with ai_guard mechanism', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: USER_KEEP, mechanism: SAMPLING_MECHANISM_AI_GUARD },
+          isRemote: false,
+        })
+        propagator.inject(spanContext, carrier)
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
+      })
+
+      it('injects th computed from rule + limiter rates', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: AUTO_KEEP, mechanism: 3 },
+          isRemote: false,
+          trace: { [SAMPLING_RULE_DECISION]: 0.5, [SAMPLING_LIMIT_DECISION]: 1.0 },
+        })
+        propagator.inject(spanContext, carrier)
+        // 50% keep rate → th = (1 - 0.5) * 2^56 = 2^55 = 0x80000000000000
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:80000000000000'))
+      })
+
+      it('combines rule and limiter rates for th', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: AUTO_KEEP, mechanism: 3 },
+          isRemote: false,
+          trace: { [SAMPLING_RULE_DECISION]: 1.0, [SAMPLING_LIMIT_DECISION]: 1.0 },
+        })
+        propagator.inject(spanContext, carrier)
+        // 100% keep rate → th = 0
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
+      })
+
+      it('injects th from agent sampling rate', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: AUTO_KEEP, mechanism: 1 },
+          isRemote: false,
+          trace: { [SAMPLING_AGENT_DECISION]: 1.0 },
+        })
+        propagator.inject(spanContext, carrier)
+        // 100% agent rate → th = 0
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
+      })
+
+      it('does not inject ot entry for rejected spans', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: AUTO_REJECT, mechanism: 1 },
+          isRemote: false,
+          trace: { [SAMPLING_AGENT_DECISION]: 0.1 },
+        })
+        propagator.inject(spanContext, carrier)
+        assert.ok(!carrier.tracestate.includes('ot='))
+      })
+
+      it('injects th:0 when no sampling rates are available but span is kept', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          sampling: { priority: AUTO_KEEP, mechanism: 1 },
+          isRemote: false,
+        })
+        propagator.inject(spanContext, carrier)
+        assert.ok(carrier.tracestate.startsWith('dd='))
+        assert.ok(carrier.tracestate.includes(',ot=th:0'))
+      })
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {

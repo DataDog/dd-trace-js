@@ -80,6 +80,11 @@ const exporter = {
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
 
+const otlpExporter = {
+  export: sinon.stub(),
+}
+const OtlpStatsExporter = sinon.stub().returns(otlpExporter)
+
 const {
   SpanAggStats,
   SpanAggKey,
@@ -89,6 +94,9 @@ const {
 } = proxyquire('../src/span_stats', {
   './exporters/span-stats': {
     SpanStatsExporter,
+  },
+  './exporters/otlp-span-stats': {
+    OtlpStatsExporter,
   },
 })
 
@@ -253,6 +261,17 @@ describe('SpanAggStats', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
     })
+    assert.strictEqual(aggStats.errorDuration, errorSpan.duration)
+  })
+
+  it('should track errorDuration separately', () => {
+    const aggKey = new SpanAggKey(basicSpan)
+    const aggStats = new SpanAggStats(aggKey)
+    aggStats.record(basicSpan)
+    aggStats.record({ ...basicSpan, error: 1, duration: 500 })
+
+    assert.strictEqual(aggStats.errorDuration, 500)
+    assert.strictEqual(aggStats.duration, basicSpan.duration + 500)
   })
 })
 
@@ -432,5 +451,90 @@ describe('SpanStatsProcessor', () => {
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('_drainBuckets should return raw bucket data and clear buckets', () => {
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    assert.strictEqual(p.buckets.size, 1)
+    const drained = p._drainBuckets()
+    assert.strictEqual(drained.length, 1)
+    assert.ok('timeNs' in drained[0])
+    assert.ok(drained[0].bucket instanceof SpanBuckets)
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('should create OtlpStatsExporter when traceMetrics.enabled', () => {
+    OtlpStatsExporter.resetHistory()
+    const p = new SpanStatsProcessor({
+      ...config,
+      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+    })
+    clearTimeout(p.timer)
+
+    assert.ok(OtlpStatsExporter.calledOnce)
+    assert.ok(p.otlpExporter)
+  })
+
+  it('should call OTLP exporter on interval when traceMetrics enabled', () => {
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor({
+      ...config,
+      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+    })
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    p.onInterval()
+
+    assert.ok(otlpExporter.export.calledOnce)
+    const [drained, bucketSizeNs] = otlpExporter.export.firstCall.args
+    assert.strictEqual(drained.length, 1)
+    assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
+  })
+
+  it('should not call OTLP exporter on interval when drained is empty', () => {
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor({
+      ...config,
+      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+    })
+    clearTimeout(p.timer)
+    p.onInterval()
+
+    assert.ok(otlpExporter.export.notCalled)
+  })
+
+  it('should still call legacy exporter when both are enabled', () => {
+    exporter.export.resetHistory()
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor({
+      ...config,
+      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+    })
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    p.onInterval()
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(otlpExporter.export.calledOnce)
+  })
+
+  it('should record spans when only OTLP is enabled', () => {
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor({
+      stats: { enabled: false, interval: 10 },
+      hostname: '127.0.0.1',
+      port: 8126,
+      url: new URL('http://127.0.0.1:8126'),
+      env: 'test',
+      tags: {},
+      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+    })
+    clearTimeout(p.timer)
+
+    p.onSpanFinished(topLevelSpan)
+    assert.strictEqual(p.buckets.size, 1)
   })
 })

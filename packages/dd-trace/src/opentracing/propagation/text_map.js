@@ -11,6 +11,14 @@ const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('.
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+const {
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION,
+  SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
+} = require('../../constants')
 const TraceState = require('./tracestate')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -65,6 +73,36 @@ const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 const percentByte = /%([0-9A-Fa-f]{2})/g
+
+const TWO_56 = 2n ** 56n
+const PROB_PRECISION = 1_000_000_000n
+
+function probabilityToThreshold (probability) {
+  if (probability >= 1) return '0'
+  if (probability <= 0) return
+  const probInt = BigInt(Math.round(probability * Number(PROB_PRECISION)))
+  const th = ((PROB_PRECISION - probInt) * TWO_56) / PROB_PRECISION
+  return th <= 0n ? '0' : th.toString(16)
+}
+
+function _computeOtThreshold (priority, mechanism, trace) {
+  if (priority < AUTO_KEEP) return
+  if (mechanism === SAMPLING_MECHANISM_MANUAL ||
+      mechanism === SAMPLING_MECHANISM_APPSEC ||
+      mechanism === SAMPLING_MECHANISM_AI_GUARD) {
+    return '0'
+  }
+  const ruleRate = trace[SAMPLING_RULE_DECISION]
+  const limiterRate = trace[SAMPLING_LIMIT_DECISION]
+  if (ruleRate !== undefined && limiterRate !== undefined) {
+    return probabilityToThreshold(ruleRate * limiterRate)
+  }
+  const agentRate = trace[SAMPLING_AGENT_DECISION]
+  if (agentRate !== undefined) {
+    return probabilityToThreshold(agentRate)
+  }
+  return '0'
+}
 
 class TextMapPropagator {
   #extractB3Context
@@ -278,6 +316,15 @@ class TextMapPropagator {
     } = spanContext
 
     carrier[traceparentKey] = spanContext.toTraceparent()
+
+    // Inject ot before dd so that dd ends up last in the map and first in the serialized output.
+    // TraceState serializes in reverse insertion order; putting dd last keeps it the leading entry.
+    const otTh = _computeOtThreshold(priority, mechanism, spanContext._trace)
+    if (otTh !== undefined) {
+      ts.forVendor('ot', state => {
+        state.set('th', otTh)
+      })
+    }
 
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {

@@ -3270,6 +3270,17 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_OTEL_METRICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "traceMetricsEnabled"
+        ],
+        "default": null,
+        "internalPropertyName": "traceMetricsEnabled"
+      }
+    ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
       {
         "implementation": "B",

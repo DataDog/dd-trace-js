@@ -171,6 +171,7 @@ describe('Config', () => {
       'repositoryUrl',
       'sampler',
       'stableConfig',
+      'traceMetrics',
     ]
 
     it('does not expose own properties beyond supported-configurations.json and index.d.ts', () => {
