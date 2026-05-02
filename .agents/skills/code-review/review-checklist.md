@@ -1,8 +1,5 @@
 # dd-trace-js Code Review Checklist
 
-Aggregated from analysis of review patterns across the primary maintainers of this repository.
-
----
 
 ## Architecture & Design
 
