@@ -43,20 +43,9 @@ function wrapQuery (query) {
       : { text: args[0] }
 
     const textPropObj = pgQuery.cursor ?? pgQuery
-    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
+    const originalText = textPropObj.text
 
-    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
-    let originalText
-    if (!textProp || textProp.configurable) {
-      originalText = textPropObj.text
-
-      Object.defineProperty(textPropObj, 'text', {
-        get () {
-          return this?.__ddInjectableQuery || originalText
-        },
-      })
-    }
     const abortController = new AbortController()
     const ctx = {
       params: this.connectionParameters,
@@ -107,6 +96,22 @@ function wrapQuery (query) {
         }
 
         return Promise.reject(error)
+      }
+
+      const injected = ctx.injected
+      if (injected !== undefined) {
+        // Skip the per-read getter trampoline when `text` is a configurable, writable data
+        // property (the pg / pg-cursor common shape). Accessor descriptors and read-only data
+        // still go through `defineProperty(get)` so `get text ()` query objects keep working.
+        const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+        if (textProp?.configurable === true && textProp.writable === true) {
+          textPropObj.text = injected
+        } else if (textProp === undefined || textProp.configurable === true) {
+          Object.defineProperty(textPropObj, 'text', {
+            configurable: true,
+            get () { return injected },
+          })
+        }
       }
 
       args[0] = pgQuery
