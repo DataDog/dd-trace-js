@@ -24,7 +24,7 @@
 - Flag unnecessary allocations or object creation.
 - A Map keyed by user-operation objects (requests, contexts) must have a guaranteed cleanup path, or use `WeakMap` instead. Timer-based cleanup is risky — it can cause sawtooth memory growth.
 - Prefer lazy initialisation: don't create expensive objects or run expensive computations until they are needed.
-- If a PR claims a performance improvement, a benchmark is required to demonstrate it.
+- Benchmarks are required to proof performance improvement claims
 
 ---
 
