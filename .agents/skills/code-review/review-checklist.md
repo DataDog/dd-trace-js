@@ -10,7 +10,7 @@
 - Use proper store lifecycle (`runStores`/`bindStore`) instead of `WeakRef`.
 - Don't add helpers that only call another function with no transformation. Inline them.
 - Only export symbols that are used outside of the file.
-- Functions called in only one place should be inlined for clarity.
+- Functions called in only one place should be inlined for clarity, if they are do not provide a good abstraction by themselves.
 - Plugin hook setup that is repetitive should be made implicit via `addHooks`.
 
 ---
