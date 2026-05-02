@@ -8,6 +8,8 @@ class RedisPlugin extends CachePlugin {
   static id = 'redis'
   static system = 'redis'
 
+  #serviceCache = new Map()
+
   constructor (...args) {
     super(...args)
     this._spanType = 'redis'
@@ -24,7 +26,7 @@ class RedisPlugin extends CachePlugin {
 
     this.startSpan({
       resource,
-      service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
+      service: this.#cachedServiceName(connectionName),
       type: this._spanType,
       meta: {
         'db.type': this._spanType,
@@ -39,7 +41,21 @@ class RedisPlugin extends CachePlugin {
   }
 
   configure (config) {
+    this.#serviceCache.clear()
     super.configure(normalizeConfig(config))
+  }
+
+  /**
+   * @param {string | undefined} connectionName
+   * @returns {{ name: string, source: string | undefined }}
+   */
+  #cachedServiceName (connectionName) {
+    let cached = this.#serviceCache.get(connectionName)
+    if (cached === undefined) {
+      cached = this.serviceName({ pluginConfig: this.config, system: this.system, connectionName })
+      this.#serviceCache.set(connectionName, cached)
+    }
+    return cached
   }
 }
 
