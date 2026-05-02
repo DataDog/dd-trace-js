@@ -91,7 +91,7 @@ jobs:
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
       - uses: ./.github/actions/upload-node-reports
-        if: always()
+        if: failure()
         with:
           name: profiling-windows
       - uses: ./.github/actions/coverage

@@ -81,7 +81,7 @@ jobs:
           cache: "true"
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/upload-node-reports
-        if: always()
+        if: failure()
         with:
           name: apm-capabilities-tracing-windows
       - uses: ./.github/actions/coverage

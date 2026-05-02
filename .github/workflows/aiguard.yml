@@ -78,7 +78,7 @@ jobs:
           cache: "true"
       - run: yarn test:aiguard:ci
       - uses: ./.github/actions/upload-node-reports
-        if: always()
+        if: failure()
         with:
           name: aiguard-windows
       - uses: ./.github/actions/coverage
