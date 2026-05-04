@@ -1830,10 +1830,10 @@ eslint-module-utils@^2.12.1:
   dependencies:
     debug "^3.2.7"
 
-eslint-plugin-cypress@^6.3.1:
-  version "6.3.1"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-cypress/-/eslint-plugin-cypress-6.3.1.tgz#b0a4ce9073f39412c3f2b5b8b452a75c1885fec1"
-  integrity sha512-iTJtdIZbyCUlagEI4YlVcwgPFV7X379Qi/upujaD4kvOaQkMvzmpt90vfSnaqgqprp/HPIvhnzv3fdI7mYV4QQ==
+eslint-plugin-cypress@^6.4.0:
+  version "6.4.0"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-cypress/-/eslint-plugin-cypress-6.4.0.tgz#50ed33b4e18d9910ae34fffc9411a6f1690a380a"
+  integrity sha512-zdGXFSmTH4w2A+2aU/Abna2s8Vcz5mDxDsnAXP5Vl+pERWRQxlSE2qrrmriNUEKZ62tlOA87b9AOnJX49tOhAQ==
   dependencies:
     globals "^17.5.0"
 
@@ -1914,10 +1914,10 @@ eslint-plugin-n@^17.23.2:
     semver "^7.6.3"
     ts-declaration-location "^1.0.6"
 
-eslint-plugin-promise@^7.2.1:
-  version "7.2.1"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-promise/-/eslint-plugin-promise-7.2.1.tgz#a0652195700aea40b926dc3c74b38e373377bfb0"
-  integrity sha512-SWKjd+EuvWkYaS+uN2csvj0KoP43YTu7+phKQ5v+xw6+A0gutVX2yqCeCkC3uLCJFiPfR2dD8Es5L7yUsmvEaA==
+eslint-plugin-promise@^7.3.0:
+  version "7.3.0"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-promise/-/eslint-plugin-promise-7.3.0.tgz#7c61e117f5db8d7a300bd5143c15d1d828e4c124"
+  integrity sha512-6uGiOR0INuujr6PEQmeSSP7GbIMJ/ebEXXiEzb/nOj68LknH5Pxzb/AbZivmr6VE6TkTE8rTjRK9zhKpK6HsRA==
   dependencies:
     "@eslint-community/eslint-utils" "^4.4.0"
 
