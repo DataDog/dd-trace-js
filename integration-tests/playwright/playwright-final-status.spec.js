@@ -505,6 +505,60 @@ versions.forEach((version) => {
           receiverPromise,
         ])
       })
+
+      it(
+        'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled', async () => {
+          if (version === 'latest') return
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: false,
+            early_flake_detection: { enabled: false },
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // These serial tests never ran — abandoned when maxFailures cut the run after the
+              // non-serial test exhausted its retries. Each must appear exactly once: the fallback
+              // loop at the end of the run must not re-emit them as duplicates.
+              const abandonedTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
+              t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+              )
+              assert.strictEqual(abandonedTests.length, 2)
+              abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
+
+              // Suite finalization must not be blocked by the abandoned tests staying in remainingTestsByFile
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+              assert.ok(suiteEvents.length > 0, 'Expected test_suite_end — suite must be finalized')
+            }, 30000)
+
+          // --retries=1: `should eventually pass after retrying` needs retry>=2 to pass, so it exhausts
+          // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
+          // PLAYWRIGHT_WORKERS=1 ensures the non-serial test always runs (and fails) before the serial suite.
+          childProcess = exec(
+            './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+                MAX_FAILURES: '1',
+                PLAYWRIGHT_WORKERS: '1',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
     })
   })
 })

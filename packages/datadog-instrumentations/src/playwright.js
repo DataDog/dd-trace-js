@@ -294,7 +294,7 @@ function testWillRetry (test, testStatus) {
   // re-run in the next retry cycle. Treat those skipped attempts as non-final too,
   // but leave intentionally-skipped tests (expectedStatus === 'skipped') unaffected.
   const willBeRerun = testStatus === 'fail' ||
-    (testStatus === 'skip' && test.expectedStatus !== 'skipped')
+    (testStatus === 'skip' && test.expectedStatus !== 'skipped' && test.retries > 0 && test.results.length > 0)
   return willBeRerun && test.results.length <= test.retries
 }
 
