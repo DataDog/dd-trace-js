@@ -304,7 +304,7 @@ function getFinalStatus ({
   if (!isFinalExecution) {
     return
   }
-  if (isDisabled || isQuarantined) {
+  if (isDisabled || isQuarantined || testStatus === 'skip') {
     return 'skip'
   }
   if (isAtrRetry || isEfdRetry) {
