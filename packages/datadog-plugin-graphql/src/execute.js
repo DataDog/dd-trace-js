@@ -557,19 +557,8 @@ function addVariableTags (config, span, variableValues) {
   span.addTags(tags)
 }
 
-// Cache the AST-walked signature per parsed document. Apollo Server / Yoga reuse
-// the same document AST across many requests, so the second-and-onwards execute
-// for any given parsed query hits the cache instead of re-walking the AST in
-// tools.defaultEngineReportingSignature. Keyed by document object via WeakMap so
-// entries free when the document is GC'd — no LRU, no string references held.
-const signatureByDocument = new WeakMap()
-
 function getSignature (document, operationName, operationType, calculate) {
-  if (document && calculate !== false && tools !== false) {
-    const key = operationName ?? ''
-    let perDoc = signatureByDocument.get(document)
-    if (perDoc && key in perDoc) return perDoc[key]
-
+  if (calculate !== false && tools !== false) {
     try {
       try {
         tools = tools || require('./tools')
@@ -578,15 +567,9 @@ function getSignature (document, operationName, operationType, calculate) {
         throw e
       }
 
-      const sig = tools.defaultEngineReportingSignature(document, operationName)
-      if (!perDoc) {
-        perDoc = Object.create(null)
-        signatureByDocument.set(document, perDoc)
-      }
-      perDoc[key] = sig
-      return sig
+      return tools.defaultEngineReportingSignature(document, operationName)
     } catch {
-      // safety net — fall through to the simple resource string
+      // safety net
     }
   }
 
