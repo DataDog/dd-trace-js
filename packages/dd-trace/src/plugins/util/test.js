@@ -217,6 +217,8 @@ const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
+const MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS = 10
+
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
@@ -358,7 +360,14 @@ module.exports = {
   GIT_REPOSITORY_URL,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  formatAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  formatDynamicNamesSummary,
+  logTestOptimizationSummary,
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -1327,6 +1336,158 @@ function getModifiedFilesFromDiff (diff) {
 }
 
 /**
+ * @typedef {object} AttemptToFixExecutionResult
+ * @property {string} name
+ * @property {number} executions
+ * @property {number} failedCount
+ * @property {boolean} isDisabled
+ * @property {boolean} isQuarantined
+ */
+
+/**
+ * @typedef {Map<string, AttemptToFixExecutionResult>} AttemptToFixExecutions
+ */
+
+/**
+ * Formats a test name for user-facing Test Optimization summaries.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @returns {string}
+ */
+function formatTestOptimizationName (testSuite, testName) {
+  return testSuite ? `${testSuite} › ${testName}` : testName
+}
+
+/**
+ * Renders a bounded bullet list for Test Optimization summaries.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
+ */
+function formatTestOptimizationList (items) {
+  const shown = items.slice(0, MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS)
+  const more = items.length - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+}
+
+/**
+ * Logs a compact message when an attempt-to-fix test execution starts.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @param {Set<string>} [loggedAttemptToFixTests]
+ */
+function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTests) {
+  if (!testName) return
+
+  const name = formatTestOptimizationName(testSuite, testName)
+  if (loggedAttemptToFixTests) {
+    if (loggedAttemptToFixTests.has(name)) return
+
+    loggedAttemptToFixTests.add(name)
+  }
+
+  // eslint-disable-next-line no-console -- Intentional user-facing attempt-to-fix progress report
+  console.warn(`Datadog Test Optimization: attempting to fix ${name}`)
+}
+
+/**
+ * Records a single attempt-to-fix execution for the end-of-session user summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @param {{
+ *   testSuite?: string,
+ *   testName: string,
+ *   status: string,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
+ * }} execution
+ */
+function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
+  if (!execution?.testName) return
+
+  const { testSuite, testName, status, isDisabled, isQuarantined } = execution
+  const name = formatTestOptimizationName(testSuite, testName)
+  let result = attemptToFixExecutions.get(name)
+
+  if (!result) {
+    result = {
+      name,
+      executions: 0,
+      failedCount: 0,
+      isDisabled: false,
+      isQuarantined: false,
+    }
+    attemptToFixExecutions.set(name, result)
+  }
+
+  result.executions++
+  result.isDisabled = result.isDisabled || !!isDisabled
+  result.isQuarantined = result.isQuarantined || !!isQuarantined
+
+  if (status === 'fail') {
+    result.failedCount++
+  }
+}
+
+function collectDynamicNameFromTraceSpan (span, newTestsWithDynamicNames) {
+  const meta = span.meta
+  if (meta?.[TEST_HAS_DYNAMIC_NAME] !== 'true') return
+
+  const suite = meta[TEST_SUITE]
+  const name = meta[TEST_NAME]
+  if (suite && name) {
+    newTestsWithDynamicNames.add(`${suite} › ${name}`)
+  }
+}
+
+function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions) {
+  const meta = span.meta
+  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') return
+
+  recordAttemptToFixExecution(attemptToFixExecutions, {
+    testSuite: meta[TEST_SUITE],
+    testName: meta[TEST_NAME],
+    status: meta[TEST_STATUS],
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+  })
+}
+
+/**
+ * Scans serialized worker trace payloads and populates Test Optimization summary data.
+ * Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {{
+ *   newTestsWithDynamicNames?: Set<string>,
+ *   attemptToFixExecutions?: AttemptToFixExecutions
+ * }} summaries
+ */
+function collectTestOptimizationSummariesFromTraces (data, summaries) {
+  const { newTestsWithDynamicNames, attemptToFixExecutions } = summaries
+
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (newTestsWithDynamicNames) {
+          collectDynamicNameFromTraceSpan(span, newTestsWithDynamicNames)
+        }
+        if (attemptToFixExecutions) {
+          collectAttemptToFixExecutionFromTraceSpan(span, attemptToFixExecutions)
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+/**
  * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
  * and populates the provided Set. Silently ignores parse errors.
  *
@@ -1334,21 +1495,146 @@ function getModifiedFilesFromDiff (diff) {
  * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
  */
 function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
-  try {
-    const traces = JSON.parse(data)
-    for (const trace of traces) {
-      for (const span of trace) {
-        if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
-          const suite = span.meta[TEST_SUITE]
-          const name = span.meta[TEST_NAME]
-          if (suite && name) {
-            newTestsWithDynamicNames.add(`${suite} › ${name}`)
-          }
-        }
+  collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
+}
+
+/**
+ * Scans serialized worker trace payloads for attempt-to-fix test spans.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ */
+function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) {
+  collectTestOptimizationSummariesFromTraces(data, { attemptToFixExecutions })
+}
+
+function getAttemptToFixManagementNotes (result) {
+  const notes = []
+
+  if (result.isDisabled) {
+    notes.push('Test was marked as disabled but was run because it is attempt to fix.')
+  }
+  if (result.isQuarantined) {
+    notes.push('Test was marked as quarantined but was not quarantined because it is attempt to fix.')
+  }
+
+  return notes
+}
+
+function hasAttemptToFixManagementNotes (result) {
+  return result.isDisabled || result.isQuarantined
+}
+
+function addAttemptToFixResultLine (lines, result) {
+  lines.push(`  • ${result.name}`)
+
+  for (const note of getAttemptToFixManagementNotes(result)) {
+    lines.push(`    ${note}`)
+  }
+}
+
+/**
+ * Formats the attempt-to-fix end-of-session summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @returns {string}
+ */
+function formatAttemptToFixSummary (attemptToFixExecutions) {
+  if (attemptToFixExecutions.size === 0) return ''
+
+  const results = [...attemptToFixExecutions.values()]
+  const failedResults = results.filter(result => result.failedCount > 0)
+  const totalExecutions = results.reduce((total, result) => total + result.executions, 0)
+
+  if (failedResults.length === 0) {
+    const lines = [
+      `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`,
+    ]
+
+    for (const result of results) {
+      if (hasAttemptToFixManagementNotes(result)) {
+        addAttemptToFixResultLine(lines, result)
       }
     }
-  } catch {
-    // ignore parse errors
+
+    return lines.join('\n')
+  }
+
+  const totalFailedExecutions = failedResults.reduce(
+    (total, result) => total + result.failedCount,
+    0
+  )
+  const lines = [
+    `Attempt to fix failed: ${totalFailedExecutions} of ${totalExecutions} execution(s) failed ` +
+      `across ${failedResults.length} of ${results.length} test(s).`,
+  ]
+
+  for (const result of failedResults) {
+    addAttemptToFixResultLine(lines, result)
+  }
+  for (const result of results) {
+    if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+      addAttemptToFixResultLine(lines, result)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Formats the dynamic-name warning section of the Test Optimization summary.
+ *
+ * @param {Set<string>} newTestsWithDynamicNames
+ * @returns {string}
+ */
+function formatDynamicNamesSummary (newTestsWithDynamicNames) {
+  if (newTestsWithDynamicNames.size === 0) return ''
+
+  const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+  return (
+    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+    'dynamic data (timestamps, UUIDs, etc.).\n' +
+    'Tests with changing names are always treated as new on every run, ' +
+    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+    'Consider using stable, deterministic test names.\n\n' +
+    formatTestOptimizationList(items)
+  )
+}
+
+/**
+ * Logs a single Test Optimization session summary.
+ *
+ * @param {{
+ *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   newTestsWithDynamicNames?: Set<string>,
+ *   extraSections?: string[]
+ * }} summary
+ */
+function logTestOptimizationSummary (summary) {
+  const { attemptToFixExecutions, newTestsWithDynamicNames, extraSections = [] } = summary
+  const sections = []
+  const attemptToFixSummary = attemptToFixExecutions
+    ? formatAttemptToFixSummary(attemptToFixExecutions)
+    : ''
+  const dynamicNamesSummary = newTestsWithDynamicNames
+    ? formatDynamicNamesSummary(newTestsWithDynamicNames)
+    : ''
+
+  if (attemptToFixSummary) sections.push(attemptToFixSummary)
+  sections.push(...extraSections.filter(Boolean))
+  if (dynamicNamesSummary) sections.push(dynamicNamesSummary)
+
+  if (sections.length === 0) return
+
+  const line = '-'.repeat(50)
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
+
+  if (attemptToFixExecutions) {
+    attemptToFixExecutions.clear()
+  }
+  if (newTestsWithDynamicNames) {
+    newTestsWithDynamicNames.clear()
   }
 }
 
@@ -1359,27 +1645,7 @@ function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
  * @param {Set<string>} newTestsWithDynamicNames
  */
 function logDynamicNamesWarning (newTestsWithDynamicNames) {
-  if (newTestsWithDynamicNames.size === 0) return
-
-  const MAX_SHOWN = 10
-  const names = [...newTestsWithDynamicNames]
-  const shown = names.slice(0, MAX_SHOWN)
-  const more = names.length - shown.length
-  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const nameList = shown.map(n => `  • ${n}`).join('\n') + moreSuffix
-
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing session summary
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
-    'dynamic data (timestamps, UUIDs, etc.).\n' +
-    'Tests with changing names are always treated as new on every run, ' +
-    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
-    'Consider using stable, deterministic test names.\n\n' +
-    `${nameList}\n`
-  )
-  newTestsWithDynamicNames.clear()
+  logTestOptimizationSummary({ newTestsWithDynamicNames })
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {

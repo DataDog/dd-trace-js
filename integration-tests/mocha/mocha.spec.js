@@ -4098,12 +4098,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 }
-                // Final status: quarantined/disabled always report 'skip';
-                // pass only if all attempts passed, fail otherwise
-                const expectedFinalStatus = (isQuarantined || isDisabled)
-                  ? 'skip'
-                  : (shouldAlwaysPass ? 'pass' : 'fail')
-                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                // Attempt to fix ignores quarantine/disabled outcome suppression:
+                // pass only if all attempts passed, fail otherwise.
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], shouldAlwaysPass ? 'pass' : 'fail')
               } else {
                 // Intermediate ATF executions must not carry a final status tag
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
@@ -4160,11 +4157,36 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           stdout += data
         })
 
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
+
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             assert.match(stdout, /I am running when attempt to fix/)
-            if (shouldAlwaysPass || isQuarantined || isDisabled) {
-              // even though a test fails, the exit code is 0 because the test is quarantined or disabled
+            if (isAttemptToFix) {
+              assert.match(
+                stdout,
+                /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
+              )
+              assert.strictEqual(
+                (stdout.match(
+                  /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
+                ) || []).length,
+                1
+              )
+              assert.match(stdout, /Datadog Test Optimization/)
+              if (shouldAlwaysPass) {
+                assert.match(stdout, /Attempt to fix passed/)
+              } else {
+                assert.match(stdout, /Attempt to fix failed/)
+                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+              }
+              if (isQuarantined || isDisabled) {
+                assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+              }
+            }
+            if (shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)
@@ -4257,7 +4279,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ])
       })
 
-      onlyLatestIt('does not fail retry if a test is quarantined', (done) => {
+      onlyLatestIt('ignores quarantine when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
@@ -4378,7 +4400,87 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         })
 
-      onlyLatestIt('does not fail retry if a test is disabled', (done) => {
+      onlyLatestIt('omits final status on intermediate attempt to fix hook failures', async () => {
+        const NUM_RETRIES = 3
+        const testName = 'attempt to fix tests with failing afterEach ' +
+          'can attempt to fix a test whose afterEach fails before the last attempt'
+        let stdout = ''
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-with-failing-after-each.js': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const retriedTests = events.filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.strictEqual(retriedTests.length, 2)
+
+            const finalStatusTests = retriedTests.filter(test => TEST_FINAL_STATUS in test.meta)
+            assert.strictEqual(finalStatusTests.length, 0)
+
+            retriedTests.forEach((test, index) => {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+              if (index === 1) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              }
+
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+            })
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './test-management/test-attempt-to-fix-with-failing-after-each.js',
+              ]),
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', data => {
+          stdout += data
+        })
+        childProcess.stderr?.on('data', data => {
+          stdout += data
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.match(stdout, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 1 test\(s\)\./)
+        assert.strictEqual(exitCode, 1)
+      })
+
+      onlyLatestIt('ignores disabled when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
