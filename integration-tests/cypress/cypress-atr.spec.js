@@ -11,6 +11,7 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -88,24 +89,17 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    // typescript@5 is pinned because typescript@6 emits "use strict" on line 1 for
-    // non-module files, shifting compiled line numbers and breaking source map resolution.
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript@5'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
-
-    after(async () => {})
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()

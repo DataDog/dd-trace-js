@@ -162,6 +162,33 @@ describe('Config', () => {
     })
   })
 
+  describe('property surface', () => {
+    // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
+    const INTERNAL_RUNTIME_PROPERTIES = [
+      'commitSHA',
+      'debug',
+      'isServiceNameInferred',
+      'repositoryUrl',
+      'sampler',
+      'stableConfig',
+    ]
+
+    it('does not expose own properties beyond supported-configurations.json and index.d.ts', () => {
+      // Top-level segment only: nested defaults (e.g. `foo.bar`) live as `foo` on the instance.
+      const known = new Set(Object.keys(defaults).map(name => name.split('.', 1)[0]))
+      for (const name of INTERNAL_RUNTIME_PROPERTIES) {
+        known.add(name)
+      }
+
+      const config = getConfig()
+      const unknownConfigurations = Object.keys(config).filter(name => !known.has(name))
+
+      assert.deepStrictEqual(unknownConfigurations, [], 'Unknown Config properties detected.\n' +
+        'Add it to supported-configurations.json (or index.d.ts), if it truly is a Config property.\n' +
+        'Otherwise, remove / handle elsewhere. This reports telemetry about unrecognized properties.')
+    })
+  })
+
   it('should initialize its own logging config based off the loggers config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
@@ -173,6 +200,34 @@ describe('Config', () => {
       logger: undefined,
       logLevel: 'error',
     })
+  })
+
+  it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
+    // Shape mirrors winston: log methods, transports with a parent back-reference,
+    // and stream-state self-references (Transform's _readableState.pipes).
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      transports: [],
+    }
+    logger.transports.push({ name: 'console', log: () => {}, parent: logger })
+    logger._readableState = { pipes: logger }
+    logger._writableState = { pipes: logger }
+
+    // Previously this threw `RangeError: Maximum call stack size exceeded`
+    // from the rfdc baseline-clone in setAndTrack.
+    const config = getConfig({ logger, logInjection: true })
+
+    assert.strictEqual(config.logger, logger)
+    assert.strictEqual(config.logInjection, true)
+  })
+
+  it('should hold a custom lookup function by reference', () => {
+    const lookup = (_h, _o, cb) => cb(null, '127.0.0.1', 4)
+    const config = getConfig({ lookup })
+    assert.strictEqual(config.lookup, lookup)
   })
 
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
@@ -255,13 +310,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should use proxy when dynamic instrumentation is enabled with DD_TRACE_ENABLED=false', () => {
-    process.env.DD_TRACE_ENABLED = 'false'
+  it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
+    assert.strictEqual(config.apmTracingEnabled, false)
     assert.strictEqual(config.dynamicInstrumentation.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
@@ -270,13 +325,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  it('should use proxy when dynamic instrumentation is enabled with DD_TRACING_ENABLED=false', () => {
+  it('should keep the real proxy when dynamic instrumentation is enabled with DD_TRACING_ENABLED=false', () => {
     process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
+    assert.strictEqual(config.apmTracingEnabled, false)
     assert.strictEqual(config.dynamicInstrumentation.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
@@ -285,19 +340,28 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  it('should use proxy when appsec standalone is enabled with DD_TRACE_ENABLED=false', () => {
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+  it('should keep the real proxy when appsec is enabled with DD_APM_TRACING_ENABLED=false', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'false'
+    process.env.DD_APPSEC_ENABLED = 'true'
 
     const config = getConfig()
 
-    assert.strictEqual(config.tracing, false)
     assert.strictEqual(config.apmTracingEnabled, false)
+    assert.strictEqual(config.appsec.enabled, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should prefer DD_APM_TRACING_ENABLED over DD_TRACING_ENABLED alias', () => {
+    process.env.DD_APM_TRACING_ENABLED = 'true'
+    process.env.DD_TRACING_ENABLED = 'false'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.apmTracingEnabled, true)
   })
 
   it('should prefer DD propagation style over OTEL propagators', () => {
@@ -321,18 +385,18 @@ describe('Config', () => {
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318',
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/v1/traces',
-      otelLogsUrl: 'http://collector:4318/v1/logs',
-      otelMetricsUrl: 'http://collector:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://collector:4318/v1/logs',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://collector:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
-      otelProtocol: 'grpc',
-      otelLogsProtocol: 'grpc',
-      otelMetricsProtocol: 'grpc',
-      otelTimeout: 1234,
-      otelLogsTimeout: 1234,
-      otelMetricsTimeout: 1234,
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
   })
 
@@ -363,8 +427,8 @@ describe('Config', () => {
     // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
     // so telemetry reports the full URL users will hit.
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
-    assert.strictEqual(config.otelMetricsUrl, 'http://127.0.0.1:4318/v1/metrics')
-    assert.strictEqual(config.otelLogsUrl, 'http://127.0.0.1:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
   })
 
   it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
@@ -377,8 +441,8 @@ describe('Config', () => {
     // In the unified-agent model, OTLP lives on the same host as the DD agent (different port),
     // so DD_AGENT_HOST drives the default OTLP host too.
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://myHostName:4318/v1/traces')
-    assert.strictEqual(config.otelMetricsUrl, 'http://myHostName:4318/v1/metrics')
-    assert.strictEqual(config.otelLogsUrl, 'http://myHostName:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://myHostName:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://myHostName:4318/v1/logs')
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
@@ -587,14 +651,14 @@ describe('Config', () => {
           enabled: true,
         },
       },
-      injectForce: false,
+      DD_INJECT_FORCE: false,
       installSignature: {
         id: undefined,
         time: undefined,
         type: undefined,
       },
       instrumentationSource: 'manual',
-      instrumentation_config_id: undefined,
+      DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
         agentlessEnabled: undefined,
         enabled: false,
@@ -633,7 +697,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
     assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
-    assert.deepStrictEqual(config.injectionEnabled, undefined)
+    assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
@@ -1057,7 +1121,7 @@ describe('Config', () => {
         },
         telemetryVerbosity: 'DEBUG',
       },
-      instrumentation_config_id: 'abcdef123',
+      DD_INSTRUMENTATION_CONFIG_ID: 'abcdef123',
       llmobs: {
         agentlessEnabled: true,
         mlApp: 'myMlApp',
@@ -1301,8 +1365,8 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config, {
-      tracing: false,
-      tracePropagationExtractFirst: true,
+      apmTracingEnabled: false,
+      DD_TRACE_PROPAGATION_EXTRACT_FIRST: true,
       runtimeMetrics: {
         enabled: false,
       },
@@ -2946,21 +3010,21 @@ describe('Config', () => {
       })
       it('should enable manual testing API by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.isManualApiEnabled, true)
+        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, true)
       })
       it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config.isManualApiEnabled, false)
+        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.memcachedCommandEnabled, false)
+        assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, false)
       })
       it('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', () => {
         process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.memcachedCommandEnabled, true)
+        assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, true)
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
@@ -3006,16 +3070,16 @@ describe('Config', () => {
       it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisibilityTestSessionName, 'my-test-session')
+        assert.strictEqual(config.DD_TEST_SESSION_NAME, 'my-test-session')
       })
       it('should not enable agentless log submission by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, false)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       })
       it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
         process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, true)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
       })
       it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = getConfig(options)
@@ -3040,6 +3104,14 @@ describe('Config', () => {
         })
       })
     })
+
+    it('should accept all values for DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER', () => {
+      for (const provider of ['github', 'gitlab', 'circleci', 'jenkins']) {
+        process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
+        assert.strictEqual(getConfig(options).DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
+      }
+    })
+
     it('disables telemetry if inside a jest worker', () => {
       process.env.JEST_WORKER_ID = '1'
       const config = getConfig(options)

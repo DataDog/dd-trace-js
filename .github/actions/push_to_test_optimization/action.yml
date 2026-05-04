@@ -14,10 +14,22 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
-      uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8 # v3.0.0
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        api_key: ${{ inputs.dd_api_key }}
-        # TODO: remove once https://github.com/DataDog/junit-upload-github-action/pull/54 lands
-        # and junit-upload-github-action releases are tied to datadog-ci releases.
-        datadog-ci-version: 5.13.1
-        service: dd-trace-js-tests
+        path: ${{ github.action_path }}/node_modules
+        key: push-to-test-optimization-${{ hashFiles('.github/actions/push_to_test_optimization/package.json') }}
+    - if: github.actor != 'dependabot[bot]'
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: '20'
+    - if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: |
+        yarn install --no-lockfile
+        echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+      working-directory: ${{ github.action_path }}
+    - if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: datadog-ci junit upload --service dd-trace-js-tests .
+      env:
+        DD_API_KEY: ${{ inputs.dd_api_key }}

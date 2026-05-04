@@ -5,7 +5,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const express = require('express')
@@ -53,6 +53,13 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
+async function createProfiles () {
+  return {
+    wall: await createProfile(['wall', 'microseconds']),
+    space: await createProfile(['space', 'bytes']),
+  }
+}
+
 describe('exporters/agent', function () {
   let AgentExporter
   let sockets
@@ -63,6 +70,17 @@ describe('exporters/agent', function () {
   let http
   let computeRetries
   let startSpan
+
+  before(function () {
+    try {
+      require('@datadog/pprof')
+    } catch (err) {
+      if (err.message?.includes('No native build was found')) {
+        this.skip()
+      }
+      throw err
+    }
+  })
 
   function verifyRequest (req, profiles, start, end) {
     assert.strictEqual(req.headers.test, 'injected')
@@ -204,15 +222,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -247,15 +257,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let attempt = 0
       app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -328,15 +330,7 @@ describe('exporters/agent', function () {
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let tries = 0
       const json = JSON.stringify({ error: 'some error' })
@@ -365,15 +359,7 @@ describe('exporters/agent', function () {
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let tries = 0
       const json = JSON.stringify({ error: 'some error' })
@@ -422,15 +408,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -472,15 +450,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {

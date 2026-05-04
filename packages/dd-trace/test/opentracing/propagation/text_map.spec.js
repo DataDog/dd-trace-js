@@ -63,7 +63,7 @@ describe('TextMapPropagator', () => {
       '../../log': log,
       '../../telemetry/metrics': telemetryMetrics,
     })
-    config = getConfigFresh({ tagsHeaderMaxLength: 512 })
+    config = getConfigFresh({ DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512 })
     propagator = new TextMapPropagator(config)
     textMap = {
       'x-datadog-trace-id': '123',
@@ -300,7 +300,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should drop trace tags if disabled', () => {
-      config.tagsHeaderMaxLength = 0
+      config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = 0
 
       const carrier = {}
       const spanContext = createContext({
@@ -581,6 +581,18 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
       assert.deepStrictEqual(spanContext._baggageItems, {})
       assert.deepStrictEqual(getAllBaggageItems(), { special: '",;\\' })
+    })
+
+    it('should substitute U+FFFD for percent-encoded sequences that are not valid UTF-8', () => {
+      // %C3 starts a 2-byte UTF-8 sequence; %28 is '(' and not a continuation byte.
+      // Per W3C Baggage 3.3.1.3 the bad sequence MUST be replaced with U+FFFD.
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'k=%C3%28,valid=ok',
+      }
+      propagator.extract(carrier)
+      assert.deepStrictEqual(getAllBaggageItems(), { k: '\uFFFD(', valid: 'ok' })
     })
 
     it('should not extract baggage when the header is malformed', () => {
@@ -865,7 +877,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should not extract trace tags when disabled', () => {
-      config.tagsHeaderMaxLength = 0
+      config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = 0
       textMap['x-datadog-tags'] = '_dd.p.foo=bar,_dd.p.baz=qux'
 
       const carrier = textMap
@@ -998,7 +1010,7 @@ describe('TextMapPropagator', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
       config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
-      config.tracePropagationExtractFirst = true
+      config.DD_TRACE_PROPAGATION_EXTRACT_FIRST = true
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
