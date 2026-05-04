@@ -157,7 +157,7 @@ describe('TracerProxy', () => {
       apmTracingEnabled: false,
       appsec: {},
       iast: {},
-      crashtracking: {},
+      DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true,
@@ -167,7 +167,6 @@ describe('TracerProxy', () => {
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 

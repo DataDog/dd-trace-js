@@ -408,10 +408,10 @@ class TextMapPropagator {
       }
     }
 
-    if (this._config.tracePropagationBehaviorExtract === 'ignore') {
+    if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'ignore') {
       context._links = []
     } else {
-      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+      if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'restart') {
         context._links = []
         context._links.push({
           context,

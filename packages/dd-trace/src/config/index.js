@@ -358,10 +358,10 @@ class Config extends ConfigBase {
     if (this.DD_LOGS_OTEL_ENABLED) {
       setAndTrack(this, 'logInjection', false)
     }
-    if (this.otelMetricsEnabled &&
+    if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
-      setAndTrack(this, 'otelMetricsEnabled', false)
+      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
     if (this.OTEL_TRACES_EXPORTER === 'otlp' && this.protocolVersion && this.protocolVersion !== '0.4') {
@@ -560,7 +560,7 @@ class Config extends ConfigBase {
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.enabled', false)
-      setAndTrack(this, 'crashtracking.enabled', false)
+      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
       setAndTrack(this, 'remoteConfig.enabled', false)
     }
 
