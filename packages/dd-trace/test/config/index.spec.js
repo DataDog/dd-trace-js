@@ -878,6 +878,24 @@ describe('Config', () => {
     assert.strictEqual(config.tags.service, 'test')
   })
 
+  it('should normalize the inferred service name from package.json', () => {
+    pkg.name = '@Scope/My-Service'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'scope/my-service')
+    assert.strictEqual(config.tags.service, 'scope/my-service')
+  })
+
+  it('should fall back to "node" when the inferred service name normalizes to empty', () => {
+    pkg.name = '@@@'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'node')
+    assert.strictEqual(config.tags.service, 'node')
+  })
+
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
 
@@ -3924,6 +3942,16 @@ rules:
 
         assert.strictEqual(config.service, 'default-service')
       }
+    })
+
+    it('should fall back to "node" when NX_TASK_TARGET_PROJECT normalizes to empty', () => {
+      process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+      process.env.NX_TASK_TARGET_PROJECT = '@@@'
+      pkg.name = 'default-service'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.service, 'node')
     })
 
     it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
