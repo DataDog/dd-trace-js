@@ -4,25 +4,8 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 
 /**
- * Hooks `CheckpointManager.prototype.checkpoint` to capture the user-thrown
- * exception that triggers a retry-driven suspension, and attach it to the
- * step span as its error.
- *
- * The SDK's `createStepHandler` catches the user error in its retry path and
- * persists it via `checkpoint(stepId, { Action: 'RETRY', Error: errorObject })`
- * before awaiting `waitForRetryTimer`. After the timer await, the workflow may
- * suspend (terminationManager resolves first), so the step's DurablePromise
- * never settles — without this hook, the step span would carry no error.
- *
- * The seam is `checkpoint(...)` itself: at call time the active span (set by
- * the step plugin's bindStart) is the step we want to annotate.
- *
- * The span is finished on `:asyncEnd` rather than `:start` so that the AWS SDK
- * call made inside `checkpoint(...)` is fully contained within the step span;
- * finishing on `:start` would close the step span before its child
- * `aws.request` (`checkpointDurableExecution`) span has even begun. asyncEnd
- * still fires before the SDK's subsequent `await waitForRetryTimer`, so it
- * runs ahead of the suspension race the original eager-finish was guarding.
+ * On retries, execution is suspended and error/asyncEnd are not called.
+ * Finish the span (possibly with error) from the checkpoint.
  */
 class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
   static id = 'aws-durable-execution-sdk-js'

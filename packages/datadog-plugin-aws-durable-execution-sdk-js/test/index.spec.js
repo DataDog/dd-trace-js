@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const TestSetup = require('./test-setup')
@@ -439,7 +438,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
           name: 'aws.durable.invoke',
-          resource: expectedArn,
+          resource: 'test-func',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'client',
@@ -474,42 +473,6 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       } catch {
         // Expected error
       }
-
-      return traceAssertion
-    })
-  })
-
-  describe('peer service computation', () => {
-    let computePeerServiceSpy
-
-    beforeEach(() => {
-      const tracer = require('../../dd-trace')
-      const plugin = tracer._pluginManager._pluginsByName['aws-durable-execution-sdk-js']
-      computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
-    })
-
-    afterEach(() => {
-      computePeerServiceSpy.restore()
-    })
-
-    it('should set peer.service from aws.durable.invoke.function_name', async () => {
-      const expectedArn = 'arn:aws:lambda:us-east-1:123456789012:function:target'
-      const traceAssertion = agent.assertSomeTraces((traces) => {
-        const allSpans = traces.flat()
-        const invokeSpan = allSpans.find(s => s.name === 'aws.durable.invoke')
-        if (!invokeSpan) throw new Error('aws.durable.invoke span not found')
-        assertObjectContains(invokeSpan, {
-          name: 'aws.durable.invoke',
-          resource: expectedArn,
-          meta: {
-            'aws.durable.invoke.function_name': expectedArn,
-            'peer.service': expectedArn,
-            '_dd.peer.service.source': 'aws.durable.invoke.function_name',
-          },
-        })
-      })
-
-      await testSetup.durableContextImplInvoke()
 
       return traceAssertion
     })

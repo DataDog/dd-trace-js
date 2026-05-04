@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { isReplayedOp } = require('./client')
+const { isReplayedOp } = require('./util')
 
 // Span names whose direct children must keep the default resource (the span
 // name) — `map` and `parallel` can iterate over unbounded inputs, so allowing
@@ -39,10 +39,7 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
       ? undefined
       : this.getOperationName(ctx)
 
-    this.startSpan(spanName, {
-      resource: operationName || spanName,
-      meta,
-    }, ctx)
+    this.startSpan(spanName, { resource: operationName, meta }, ctx)
 
     return ctx.currentStore
   }
