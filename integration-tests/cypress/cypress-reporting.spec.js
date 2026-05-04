@@ -71,12 +71,12 @@ function compilePrecompiledTypeScriptSpecs (cwd, env) {
  */
 function configureCypressTypeScriptCompilation (cwd) {
   // Cypress's webpack preprocessor resolves TypeScript config from the spec directory.
+  // Cypress sets inlineSourceMap itself, so setting sourceMap here breaks Cypress 12.
   const tsconfig = {
     compilerOptions: {
       rootDir: '.',
       target: 'ES2020',
       module: 'commonjs',
-      sourceMap: true,
       skipLibCheck: true,
     },
   }
