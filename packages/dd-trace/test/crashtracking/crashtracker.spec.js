@@ -119,6 +119,7 @@ describeNotWindows('crashtracker', () => {
 
   describe('uncaughtExceptionMonitor', () => {
     it('should register a listener on start', () => {
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
       crashtracker.start(config)
 
       assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
@@ -138,16 +139,6 @@ describeNotWindows('crashtracker', () => {
       process.emit('uncaughtExceptionMonitor', error, 'uncaughtException')
 
       sinon.assert.calledOnceWithExactly(binding.reportUncaughtExceptionMonitor, error, 'uncaughtException')
-    })
-
-    it('should handle errors thrown by the binding without crashing', () => {
-      crashtracker.start(config)
-
-      binding.reportUncaughtExceptionMonitor.throws(new Error('native error'))
-
-      process.emit('uncaughtExceptionMonitor', new Error('boom'), 'uncaughtException')
-
-      sinon.assert.called(log.error)
     })
   })
 

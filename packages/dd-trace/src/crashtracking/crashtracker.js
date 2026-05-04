@@ -49,7 +49,7 @@ class Crashtracker {
       try {
         binding.reportUncaughtExceptionMonitor(error, origin)
       } catch (e) {
-        log.error('Error reporting uncaught exception to crashtracker', e)
+        process.stderr.write('Error reporting uncaught exception to crashtracker', e)
       }
     })
   }
