@@ -2,7 +2,6 @@
 
 const { NAME } = require('../../dd-trace/src/llmobs/constants/tags')
 const {
-  extractAgentManifest,
   extractInputMessages,
   extractOutputMessages,
   extractMetrics,
@@ -10,6 +9,7 @@ const {
 } = require('../../dd-trace/src/llmobs/plugins/openai-agents/utils')
 
 const COMPONENT = 'openai-agents'
+const AGENTS_ERROR_TYPE = 'AgentsCoreError'
 
 const KIND_TO_SPAN_KIND = {
   agent: 'internal',
@@ -31,10 +31,9 @@ const KIND_TO_SPAN_KIND = {
  */
 
 /**
- * Holds state shared between the TracingProcessor and the AgentRunner-turn wrap.
- * Mirrors Python's OpenAIAgentsIntegration: owns tracer/tagger refs, maps agents-core
- * span ids → dd-trace spans, reconstructs workflow-level input/output from the first
- * and last response spans of the top-level agent.
+ * Owns tracer/tagger refs, maps agents-core span ids → dd-trace spans, and
+ * reconstructs workflow-level input/output from the first and last response
+ * spans of the top-level agent.
  */
 class OpenAIAgentsIntegration {
   constructor ({ tracer, tagger, config } = {}) {
@@ -47,17 +46,6 @@ class OpenAIAgentsIntegration {
     this._oaiToDdSpan = new Map()
     /** @type {Map<string, LLMObsTraceInfo>} */
     this._traceInfo = new Map()
-    /**
-     * Stack of active agent-type dd-trace spans, in the order the SDK opened
-     * them. The top of the stack is the currently executing agent (used by the
-     * _runSingleTurn wrap to tag the correct span).
-     * @type {Array<import('../../dd-trace/src/opentracing/span')>}
-     */
-    this._agentSpanStack = []
-  }
-
-  currentAgentSpan () {
-    return this._agentSpanStack.at(-1)
   }
 
   get enabled () {
@@ -71,7 +59,6 @@ class OpenAIAgentsIntegration {
   clearState () {
     this._oaiToDdSpan.clear()
     this._traceInfo.clear()
-    this._agentSpanStack.length = 0
   }
 
   // ── Trace lifecycle ─────────────────────────────────────────────────────────
@@ -117,9 +104,8 @@ class OpenAIAgentsIntegration {
   }
 
   /**
-   * Best-effort finalize the workflow span for a trace whose onTraceEnd may
-   * never fire — e.g., when `run()` throws and agents-core does not walk the
-   * Trace.end() path. Called from endSpan when the root agent span ends.
+   * Finalize the workflow span when agents-core's `Trace.end()` won't run —
+   * e.g., `run()` throws and `withTrace` skips its end callback.
    */
   _finalizeTraceIfOrphaned (traceId, rootAgentSpan) {
     if (!traceId) return
@@ -128,8 +114,10 @@ class OpenAIAgentsIntegration {
 
     if (rootAgentSpan?.error) {
       ddSpan.setTag('error', true)
-      const msg = rootAgentSpan.error.message
-      if (msg) ddSpan.setTag('error.type', msg)
+      ddSpan.setTag('error.type', AGENTS_ERROR_TYPE)
+      if (rootAgentSpan.error.message) {
+        ddSpan.setTag('error.message', rootAgentSpan.error.message)
+      }
     }
 
     this._setTraceAttributes(ddSpan, traceId)
@@ -156,10 +144,6 @@ class OpenAIAgentsIntegration {
     })
 
     this._oaiToDdSpan.set(spanId, ddSpan)
-
-    if (oaiSpan.spanData?.type === 'agent') {
-      this._agentSpanStack.push(ddSpan)
-    }
 
     const llmobsOptions = {
       kind: llmobsKind,
@@ -189,49 +173,39 @@ class OpenAIAgentsIntegration {
 
     this._applyError(ddSpan, oaiSpan)
 
-    const type = oaiSpan.spanData?.type
-    if (type === 'response') {
-      this._setResponseAttributes(ddSpan, oaiSpan)
-      this._updateTraceInfoOutput(oaiSpan)
-    } else if (type === 'function') {
-      this._setToolAttributes(ddSpan, oaiSpan)
-    } else if (type === 'handoff') {
-      this._setHandoffAttributes(ddSpan, oaiSpan)
-    } else if (type === 'agent') {
-      this._setAgentAttributes(ddSpan, oaiSpan)
-    } else if (type === 'custom') {
-      this._setCustomAttributes(ddSpan, oaiSpan)
-    }
-
-    if (type === 'agent') {
-      const idx = this._agentSpanStack.lastIndexOf(ddSpan)
-      if (idx !== -1) this._agentSpanStack.splice(idx, 1)
+    const spanData = oaiSpan.spanData
+    switch (spanData?.type) {
+      case 'response':
+        this._setResponseAttributes(ddSpan, oaiSpan)
+        this._updateTraceInfoOutput(oaiSpan)
+        break
+      case 'function':
+        this._tagger.tagTextIO(ddSpan, spanData.input ?? '', spanData.output ?? '')
+        break
+      case 'handoff':
+        this._tagger.tagTextIO(ddSpan, spanData.from_agent ?? '', spanData.to_agent ?? '')
+        break
+      case 'agent':
+        this._setAgentAttributes(ddSpan, oaiSpan)
+        break
+      case 'custom':
+        if (spanData.data && typeof spanData.data === 'object') {
+          this._tagger.tagMetadata(ddSpan, spanData.data)
+        }
+        break
     }
 
     ddSpan.finish()
 
-    // agents-core's withTrace skips Trace.end() when its callback throws, so
-    // any top-level span (no parentId) that errors is our last chance to
-    // finalize the workflow span. Also covers the success path for the root
-    // agent span, since the trace's own onTraceEnd will be a no-op once we've
-    // finalized.
+    // agents-core's withTrace skips Trace.end() when its callback throws, so a
+    // parentless span that errors is our last chance to finalize the workflow.
     if (oaiSpan.parentId == null) {
       this._finalizeTraceIfOrphaned(oaiSpan.traceId, oaiSpan)
     }
     this._oaiToDdSpan.delete(spanId)
   }
 
-  // ── Agent manifest tagging (called from _runSingleTurn wrap) ────────────────
-
-  tagAgentManifest (activeSpan, agent) {
-    if (!activeSpan || !agent) return
-    const manifest = extractAgentManifest(agent)
-    if (manifest) {
-      this._tagger.tagMetadata(activeSpan, { _dd: { agent_manifest: manifest } })
-    }
-  }
-
-  // ── Per-type attribute setters (match Python) ───────────────────────────────
+  // ── Per-type attribute setters ──────────────────────────────────────────────
 
   _setResponseAttributes (ddSpan, oaiSpan) {
     const response = oaiSpan.spanData?._response
@@ -291,21 +265,7 @@ class OpenAIAgentsIntegration {
     return parentDdSpan?.context()._name
   }
 
-  _setToolAttributes (ddSpan, oaiSpan) {
-    const input = oaiSpan.spanData?.input ?? ''
-    const output = oaiSpan.spanData?.output ?? ''
-    this._tagger.tagTextIO(ddSpan, input, output)
-  }
-
-  _setHandoffAttributes (ddSpan, oaiSpan) {
-    const fromAgent = oaiSpan.spanData?.from_agent ?? ''
-    const toAgent = oaiSpan.spanData?.to_agent ?? ''
-    this._tagger.tagTextIO(ddSpan, fromAgent, toAgent)
-  }
-
   _setAgentAttributes (ddSpan, oaiSpan) {
-    // Python only sets metadata here (the manifest is added in tagAgentManifest via
-    // the _runSingleTurn wrap). No additional per-agent tags on span end.
     const spanData = oaiSpan.spanData
     const metadata = {}
     if (Array.isArray(spanData?.handoffs) && spanData.handoffs.length > 0) {
@@ -317,13 +277,6 @@ class OpenAIAgentsIntegration {
     if (spanData?.output_type) metadata.output_type = spanData.output_type
     if (Object.keys(metadata).length > 0) {
       this._tagger.tagMetadata(ddSpan, metadata)
-    }
-  }
-
-  _setCustomAttributes (ddSpan, oaiSpan) {
-    const data = oaiSpan.spanData?.data
-    if (data && typeof data === 'object') {
-      this._tagger.tagMetadata(ddSpan, data)
     }
   }
 
@@ -431,14 +384,14 @@ class OpenAIAgentsIntegration {
     return response.model || undefined
   }
 
+  // agents-core's `error` is a plain `{ message, data }` object, not a JS
+  // Error — there's no constructor to name and no stack. We tag a stable
+  // type constant and stringify `data` into the message so the LLMObs error
+  // shape stays consistent with other integrations.
   _applyError (ddSpan, oaiSpan) {
     const err = oaiSpan.error
     if (!err) return
 
-    // agents-core's `error` is a plain `{ message, data }` object, not a JS
-    // Error — it has no .stack. We still set all three error.{type,message,
-    // stack} tags so the LLMObs error shape matches other integrations and
-    // tests can assert on them uniformly.
     ddSpan.setTag('error', true)
 
     let errorMessage = err.message || 'Error'
@@ -450,7 +403,7 @@ class OpenAIAgentsIntegration {
       }
     }
 
-    ddSpan.setTag('error.type', err.message || 'Error')
+    ddSpan.setTag('error.type', AGENTS_ERROR_TYPE)
     ddSpan.setTag('error.message', errorMessage)
     ddSpan.setTag('error.stack', err.stack || '')
   }

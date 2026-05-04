@@ -1,30 +1,41 @@
 'use strict'
 
-const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const OpenaiAgentsDriverPlugin = require('./driver')
-const turnPlugins = require('./turn')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
+const { OpenAIAgentsIntegration } = require('./integration')
+
+let currentIntegration
 
 /**
  * The openai-agents integration is driven entirely by agents-core's own
- * TracingProcessor interface. The driver plugin owns the integration lifecycle
- * and publishes it via the registry; the addHook in
- * `datadog-instrumentations/src/openai-agents.js` reads the registry and calls
- * `mod.addTraceProcessor(...)` when the module loads.
+ * TracingProcessor interface. This plugin owns the integration lifecycle and
+ * publishes it via a module-level singleton; the addHook in
+ * `datadog-instrumentations/src/openai-agents.js` reads the singleton and
+ * calls `mod.addTraceProcessor(...)` when the module loads.
  *
- * The turn plugins are a Python-parity supplement: they subscribe to
- * `AgentRunner._runSingleTurn(Streamed)` channels and tag the current agent
- * span with the agent manifest (framework, name, instructions, tools, etc.).
+ * The integration's `enabled` flag follows this plugin's configure() lifecycle.
+ * The processor stays registered inside agents-core for the life of the
+ * process — re-enabling the plugin later flips the flag back on.
  */
-const plugins = {
-  [OpenaiAgentsDriverPlugin.id]: OpenaiAgentsDriverPlugin,
-}
-for (const Plugin of turnPlugins) {
-  plugins[Plugin.id] = Plugin
-}
-
-class OpenaiAgentsPlugin extends CompositePlugin {
+class OpenaiAgentsPlugin extends Plugin {
   static id = 'openai-agents'
-  static plugins = plugins
+
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
+    const tagger = new LLMObsTagger(tracerConfig, true)
+    this._integration = new OpenAIAgentsIntegration({
+      tracer: this.tracer,
+      tagger,
+      config: tracerConfig,
+    })
+    currentIntegration = this._integration
+  }
+
+  configure (config) {
+    super.configure(config)
+    this._integration.setEnabled(!!config?.enabled)
+  }
 }
 
 module.exports = OpenaiAgentsPlugin
+module.exports.getIntegration = () => currentIntegration
