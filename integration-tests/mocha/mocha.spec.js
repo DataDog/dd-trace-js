@@ -81,7 +81,7 @@ const {
   ERROR_STACK,
   ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
-const { VERSION: ddTraceVersion } = require('../../version')
+const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
 const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summary ${runTestsCommand}`
@@ -89,7 +89,9 @@ const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
 
-const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
+const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
+const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
+const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 
 describe(`mocha@${MOCHA_VERSION}`, function () {

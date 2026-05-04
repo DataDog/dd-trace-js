@@ -1,6 +1,8 @@
 'use strict'
 
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
+const satisfies = require('../../../../vendor/dist/semifies')
+const { DD_MAJOR } = require('../../../../version')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
@@ -41,7 +43,10 @@ const {
 
 require('./common')
 
+const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
+
 const patched = new WeakSet()
+let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
 let suitesToSkip = []
@@ -78,6 +83,20 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+function warnDeprecatedMochaVersion (frameworkVersion) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedMochaVersion || !frameworkVersion ||
+      !satisfies(frameworkVersion, '<8.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedMochaVersion = true
+  // eslint-disable-next-line no-console
+  console.warn(
+    'dd-trace support for Mocha<8.0.0 is deprecated and will be removed in dd-trace v6. ' +
+      'Please upgrade Mocha to >=8.0.0.'
+  )
+}
 
 // Tests from workers do not come with `isFailed` method
 function isTestFailed (test) {
@@ -353,9 +372,11 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 // It is called but skipped in parallel mode.
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/mocha.js',
 }, (Mocha, frameworkVersion) => {
+  warnDeprecatedMochaVersion(frameworkVersion)
+
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -409,7 +430,7 @@ addHook({
 
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/cli/run-helpers.js',
 }, (run) => {
   // `runMocha` is an async function
@@ -440,7 +461,7 @@ addHook({
 // This hook is used to generate session, module, suite and test events
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/runner.js',
 }, function (Runner, frameworkVersion) {
   if (patched.has(Runner)) return Runner
@@ -549,7 +570,7 @@ addHook({
 // Used to set the correct async resource to the test.
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/runnable.js',
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
