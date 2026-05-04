@@ -2,7 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
+class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static kind = 'internal'
@@ -55,43 +55,43 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
   }
 }
 
-class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_runInChildContext'
   static spanName = 'aws.durable_execution.child_context'
 }
 
-class DurableContextImplWaitPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplWaitPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_wait'
   static spanName = 'aws.durable_execution.wait'
 }
 
-class DurableContextImplWaitForConditionPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplWaitForConditionPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCondition'
   static spanName = 'aws.durable_execution.wait_for_condition'
 }
 
-class DurableContextImplWaitForCallbackPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplWaitForCallbackPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCallback'
   static spanName = 'aws.durable_execution.wait_for_callback'
 }
 
-class DurableContextImplCreateCallbackPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplCreateCallbackPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_createCallback'
   static spanName = 'aws.durable_execution.create_callback'
 }
 
-class DurableContextImplMapPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplMapPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_map'
   static spanName = 'aws.durable_execution.map'
 }
 
-class DurableContextImplParallelPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
+class DurableContextImplParallelPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_parallel'
   static spanName = 'aws.durable_execution.parallel'
 }
 
 module.exports = {
-  BaseAwsDurableExecutionSdkJsInternalPlugin,
+  BaseAwsDurableExecutionSdkJsContextPlugin,
   DurableContextImplRunInChildContextPlugin,
   DurableContextImplWaitPlugin,
   DurableContextImplWaitForConditionPlugin,
