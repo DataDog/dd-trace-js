@@ -108,8 +108,6 @@ updates:
       - dependency-name: "jest-docblock"
         # 30.0.0 onwards only supports Node.js 18.14.x and above
         update-types: ["version-update:semver-major"]
-        # The path-to-regexp version has to be the same as used in express v4.
-      - dependency-name: "path-to-regexp"
       - dependency-name: "lru-cache"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
