@@ -6,13 +6,10 @@
 // header metadata, JS/native stacks, loaded shared objects, and libuv handles.
 
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
-const [inputDir] = process.argv.slice(2)
-if (!inputDir) {
-  process.stderr.write('Usage: node scrub-node-reports.js <input-dir>\n')
-  process.exit(1)
-}
+const inputDir = path.join(os.tmpdir(), 'node-reports')
 
 if (!fs.existsSync(inputDir)) {
   process.stdout.write(`No report directory at ${inputDir}, nothing to print.\n`)

@@ -6,4 +6,4 @@ runs:
   steps:
     - name: Print crash stack traces
       shell: bash
-      run: node scripts/node-crash-report.js "${{ runner.temp }}/node-reports"
+      run: node scripts/node-crash-report.js

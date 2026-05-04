@@ -66,8 +66,6 @@ jobs:
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
-    env:
-      NODE_OPTIONS: --report-on-fatalerror --report-dir=${{ runner.temp }}/node-reports
     permissions:
       id-token: write
     steps:
