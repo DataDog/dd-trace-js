@@ -152,6 +152,54 @@ describe('span processor', () => {
       })
     })
 
+    it('removes problematic fields from the tool definitions', () => {
+      const schema = {
+        type: 'object',
+        bigint: 1n,
+        properties: {
+          city: { type: 'string' },
+        },
+      }
+      schema.circular = schema
+      schema.properties.circular = schema.properties
+
+      const toolDefinitions = [
+        { name: 'get_weather', description: 'Get the weather for a city.', schema },
+      ]
+
+      span = {
+        context () {
+          return {
+            _tags: {},
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'tool',
+        '_ml_obs.meta.tool_definitions': toolDefinitions,
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assert.deepStrictEqual(payload.meta.tool_definitions, [{
+        name: 'get_weather',
+        description: 'Get the weather for a city.',
+        schema: {
+          type: 'object',
+          bigint: 'Unserializable value',
+          properties: {
+            city: { type: 'string' },
+            circular: 'Unserializable value',
+          },
+          circular: 'Unserializable value',
+        },
+      }])
+    })
+
     it('tags output documents for a retrieval span', () => {
       span = {
         context () {
