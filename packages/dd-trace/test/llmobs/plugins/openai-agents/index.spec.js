@@ -12,6 +12,8 @@ const {
   useLlmObs,
 } = require('../../util')
 
+const SYSTEM_INSTRUCTIONS = 'You are a helpful assistant'
+
 describe('integrations', () => {
   describe('openai-agents LLMObs', () => {
     const { getEvents } = useLlmObs({ plugin: 'openai-agents' })
@@ -20,13 +22,7 @@ describe('integrations', () => {
     let OpenAIResponsesModel
     let fakeModel
     let streamModel
-    let errorModel
     let agent
-    // eslint-disable-next-line no-unused-vars
-    let errorAgent
-    let targetAgent
-    let testTool
-    let errorTool
     let toolErrorAgent
 
     withVersions('openai-agents', '@openai/agents-core', (version) => {
@@ -48,56 +44,17 @@ describe('integrations', () => {
           baseURL: 'http://127.0.0.1:9126/vcr/openai',
         })
 
-        // Mock client that throws errors (VCR cannot simulate network-level throws)
-        const mockErrorClient = {
-          baseURL: 'https://api.openai.com/v1',
-          responses: {
-            create: async () => {
-              throw new Error('Intentional error for testing')
-            },
-          },
-        }
-
-        fakeModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
-        streamModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
-        errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
-
         agentsCore.setDefaultModelProvider({
           createModel: (modelName) => new OpenAIResponsesModel(vcrClient, modelName),
         })
+
+        fakeModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
+        streamModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
 
         agent = new agentsCore.Agent({
           name: 'test_agent',
           instructions: 'You are a test agent',
           model: fakeModel,
-        })
-
-        errorAgent = new agentsCore.Agent({
-          name: 'error_agent',
-          instructions: 'You are an error test agent',
-          model: errorModel,
-        })
-
-        targetAgent = new agentsCore.Agent({
-          name: 'target_agent',
-          instructions: 'You are a target agent',
-          model: fakeModel,
-        })
-
-        testTool = agentsCore.tool({
-          name: 'test_tool',
-          description: 'A test tool',
-          parameters: {},
-          execute: async () => 'tool result',
-        })
-
-        errorTool = agentsCore.tool({
-          name: 'error_tool',
-          description: 'A tool that errors',
-          parameters: {},
-          execute: async () => {
-            throw new Error('Intentional error for testing')
-          },
         })
 
         // Tool with a real parameter schema so the model has something to
@@ -148,7 +105,7 @@ describe('integrations', () => {
         it('submits an llm span for a basic getResponse call', async () => {
           await agentsCore.withTrace('test-getResponse', async () => {
             return fakeModel.getResponse({
-              systemInstructions: 'You are a helpful assistant',
+              systemInstructions: SYSTEM_INSTRUCTIONS,
               input: 'Hello',
               modelSettings: { temperature: 0.7 },
               tools: [],
@@ -172,7 +129,7 @@ describe('integrations', () => {
             modelName: 'gpt-4-0613',
             modelProvider: 'openai',
             inputMessages: [
-              { role: 'system', content: 'You are a helpful assistant' },
+              { role: 'system', content: SYSTEM_INSTRUCTIONS },
               { role: 'user', content: 'Hello' },
             ],
             outputMessages: [
@@ -379,245 +336,6 @@ describe('integrations', () => {
           assert.strictEqual(toolEvent.meta['span.kind'], 'tool')
           assert.strictEqual(toolEvent.name, 'add')
           assert.strictEqual(toolEvent.status, 'error')
-        })
-      })
-
-      // Skipped: these tests call agents-core helpers directly. In the
-      // trace-processor architecture span creation lives in the SDK runner,
-      // not in the helpers themselves, so direct calls produce no spans.
-      // dd-trace-py's openai-agents integration shares the same constraint
-      // and only tests through `Runner.run()` flows. Rewriting these to use
-      // `withFunctionSpan` / `withHandoffSpan` / `withGuardrailSpan` is a
-      // follow-up.
-      // eslint-disable-next-line mocha/no-pending-tests
-      describe.skip('invokeFunctionTool', () => {
-        it('submits a tool span for a basic invokeFunctionTool call', async () => {
-          await agentsCore.invokeFunctionTool({
-            tool: testTool,
-            runContext: new agentsCore.RunContext({ context: {} }),
-            input: '{}',
-            details: { toolCallId: 'test-call-id' },
-          })
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'tool',
-            name: 'openai-agents.invokeFunctionTool',
-            inputValue: '{}',
-            outputValue: 'tool result',
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-
-        it('captures tool error as output value (SDK catches tool errors internally)', async () => {
-          // The SDK catches tool errors and returns the error message as the output string.
-          // The span is not marked as error; the error surfaces as the output value.
-          await agentsCore.invokeFunctionTool({
-            tool: errorTool,
-            runContext: new agentsCore.RunContext({ context: {} }),
-            input: '{}',
-            details: { toolCallId: 'error-call-id' },
-          })
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'tool',
-            name: 'openai-agents.invokeFunctionTool',
-            inputValue: '{}',
-            outputValue: MOCK_STRING,
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-      })
-
-      // eslint-disable-next-line mocha/no-pending-tests
-      describe.skip('onInvokeHandoff', () => {
-        it('submits an agent span for a basic onInvokeHandoff call', async () => {
-          const h = agentsCore.handoff(targetAgent)
-          await h.onInvokeHandoff(new agentsCore.RunContext({ context: {} }), '{}')
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'agent',
-            name: 'transfer_to_target_agent',
-            inputValue: '{}',
-            outputValue: MOCK_STRING,
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-
-        it('tags input but empty output on error', async () => {
-          // Invalid JSON with inputType set triggers a ModelBehaviorError (JSON parse failure).
-          // Using a non-empty input so tagTextIO records inputValue.
-          const h = agentsCore.handoff(targetAgent, {
-            inputType: {
-              type: 'object',
-              properties: { reason: { type: 'string' } },
-              required: ['reason'],
-              additionalProperties: false,
-            },
-            onHandoff: async () => {},
-          })
-          try {
-            await h.onInvokeHandoff(new agentsCore.RunContext({ context: {} }), 'not-valid-json')
-          } catch {
-            // Expected ModelBehaviorError
-          }
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'agent',
-            name: 'transfer_to_target_agent',
-            inputValue: 'not-valid-json',
-            error: true,
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-      })
-
-      // eslint-disable-next-line mocha/no-pending-tests
-      describe.skip('runInputGuardrails', () => {
-        it('submits a task span for a basic runInputGuardrails call', async () => {
-          const guardrail = {
-            type: 'tool_input',
-            name: 'test_input_guardrail',
-            run: async () => ({ allow: true }),
-          }
-          await agentsCore.runToolInputGuardrails({
-            guardrails: [guardrail],
-            context: new agentsCore.RunContext({ context: {} }),
-            agent,
-            toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
-          })
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-          const expectedInput = JSON.stringify({ id: 'test-call', name: 'test_tool', arguments: '{}' })
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'task',
-            name: 'openai-agents.runInputGuardrails',
-            inputValue: expectedInput,
-            outputValue: MOCK_STRING,
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-
-        it('tags input but empty output on error', async () => {
-          const guardrail = {
-            type: 'tool_input',
-            name: 'error_input_guardrail',
-            run: async () => {
-              throw new Error('Intentional error for testing')
-            },
-          }
-          try {
-            await agentsCore.runToolInputGuardrails({
-              guardrails: [guardrail],
-              context: new agentsCore.RunContext({ context: {} }),
-              agent,
-              toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
-            })
-          } catch {
-            // Expected error
-          }
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-          const expectedInput = JSON.stringify({ id: 'test-call', name: 'test_tool', arguments: '{}' })
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'task',
-            name: 'openai-agents.runInputGuardrails',
-            inputValue: expectedInput,
-            error: {
-              type: 'Error',
-              message: 'Intentional error for testing',
-              stack: MOCK_NOT_NULLISH,
-            },
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-      })
-
-      // eslint-disable-next-line mocha/no-pending-tests
-      describe.skip('runOutputGuardrails', () => {
-        it('submits a task span for a basic runOutputGuardrails call', async () => {
-          const guardrail = {
-            type: 'tool_output',
-            name: 'test_output_guardrail',
-            run: async () => ({ allow: true }),
-          }
-          await agentsCore.runToolOutputGuardrails({
-            guardrails: [guardrail],
-            context: new agentsCore.RunContext({ context: {} }),
-            agent,
-            toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
-            toolOutput: 'test output',
-          })
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-          const expectedInput = JSON.stringify({
-            toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
-            toolOutput: 'test output',
-          })
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'task',
-            name: 'openai-agents.runOutputGuardrails',
-            inputValue: expectedInput,
-            outputValue: MOCK_STRING,
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
-        })
-
-        it('tags input but empty output on error', async () => {
-          const guardrail = {
-            type: 'tool_output',
-            name: 'error_output_guardrail',
-            run: async () => {
-              throw new Error('Intentional error for testing')
-            },
-          }
-          try {
-            await agentsCore.runToolOutputGuardrails({
-              guardrails: [guardrail],
-              context: new agentsCore.RunContext({ context: {} }),
-              agent,
-              toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
-              toolOutput: 'test output',
-            })
-          } catch {
-            // Expected error
-          }
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-          const expectedInput = JSON.stringify({
-            toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
-            toolOutput: 'test output',
-          })
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'task',
-            name: 'openai-agents.runOutputGuardrails',
-            inputValue: expectedInput,
-            error: {
-              type: 'Error',
-              message: 'Intentional error for testing',
-              stack: MOCK_NOT_NULLISH,
-            },
-            tags: { ml_app: 'test', integration: 'openai-agents' },
-          })
         })
       })
     }) // withVersions
