@@ -2,7 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class AwsDurableExecutionSdkJsExecutePlugin extends TracingPlugin {
+class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static kind = 'internal'
@@ -81,4 +81,4 @@ function finishOpenChildSpans (executeSpan) {
   }
 }
 
-module.exports = AwsDurableExecutionSdkJsExecutePlugin
+module.exports = AwsDurableExecutionSdkJsHandlerPlugin
