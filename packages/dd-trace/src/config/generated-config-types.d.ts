@@ -5,7 +5,6 @@ export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
   apiKey: string | undefined;
   apmTracingEnabled: boolean;
-  appKey: string | undefined;
   appsec: {
     apiSecurity: {
       downstreamBodyAnalysisSampleRate: number;
@@ -48,8 +47,6 @@ export interface GeneratedConfig {
   baggageMaxBytes: number;
   baggageMaxItems: number;
   baggageTagKeys: string[];
-  ciVisAgentlessLogSubmissionEnabled: boolean;
-  ciVisibilityTestSessionName: string | undefined;
   clientIpEnabled: boolean;
   clientIpHeader: string | undefined;
   cloudPayloadTagging: {
@@ -65,16 +62,15 @@ export interface GeneratedConfig {
       };
     };
   };
-  crashtracking: {
-    enabled: boolean;
-  };
   dbm: {
     injectSqlBaseHash: boolean;
   };
   dbmPropagationMode: string;
   DD_ACTION_EXECUTION_ID: string | undefined;
+  DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
+  DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
   DD_CIVISIBILITY_AGENTLESS_URL: string | undefined;
@@ -83,13 +79,16 @@ export interface GeneratedConfig {
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
   DD_CIVISIBILITY_ENABLED: boolean;
   DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: boolean;
+  DD_CIVISIBILITY_MANUAL_API_ENABLED: boolean;
   DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: number;
   DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
   DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
   DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
+  DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_TRACE_ID: string | undefined;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
+  DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
@@ -111,8 +110,22 @@ export interface GeneratedConfig {
   DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA: string | undefined;
   DD_GIT_REPOSITORY_URL: string | undefined;
   DD_GIT_TAG: string | undefined;
+  DD_GRPC_CLIENT_ERROR_STATUSES: number[];
+  DD_GRPC_SERVER_ERROR_STATUSES: number[];
+  DD_HEAP_SNAPSHOT_COUNT: number;
+  DD_HEAP_SNAPSHOT_DESTINATION: string;
+  DD_HEAP_SNAPSHOT_INTERVAL: number;
+  DD_INJECT_FORCE: boolean;
+  DD_INJECTION_ENABLED: string | undefined;
+  DD_INSTRUMENTATION_CONFIG_ID: string | undefined;
+  DD_INSTRUMENTATION_INSTALL_ID: string | undefined;
+  DD_INSTRUMENTATION_INSTALL_TIME: string | undefined;
+  DD_INSTRUMENTATION_INSTALL_TYPE: string | undefined;
+  DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: number;
   DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: boolean;
   DD_LAMBDA_HANDLER: string | undefined;
+  DD_LOGS_OTEL_ENABLED: boolean;
+  DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
@@ -147,6 +160,8 @@ export interface GeneratedConfig {
   DD_TELEMETRY_FORWARDER_PATH: string | undefined;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
+  DD_TEST_SESSION_NAME: string | undefined;
+  DD_TEST_TIA_KEEP_COV_CONFIG: boolean;
   DD_TRACE_AEROSPIKE_ENABLED: boolean;
   DD_TRACE_AI_ENABLED: boolean;
   DD_TRACE_AMQP10_ENABLED: boolean;
@@ -160,6 +175,7 @@ export interface GeneratedConfig {
   DD_TRACE_APOLLO_SERVER_FASTIFY_ENABLED: boolean;
   DD_TRACE_APOLLO_SUBGRAPH_ENABLED: boolean;
   DD_TRACE_AVSC_ENABLED: boolean;
+  DD_TRACE_AWS_ADD_SPAN_POINTERS: boolean;
   DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_ENABLED: boolean;
   DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED: boolean;
@@ -224,6 +240,7 @@ export interface GeneratedConfig {
   DD_TRACE_DISABLED_INSTRUMENTATIONS: string;
   DD_TRACE_DISABLED_PLUGINS: string | undefined;
   DD_TRACE_DNS_ENABLED: boolean;
+  DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: string | undefined;
   DD_TRACE_ELASTIC_ELASTICSEARCH_ENABLED: boolean;
   DD_TRACE_ELASTIC_TRANSPORT_ENABLED: boolean;
   DD_TRACE_ELASTICSEARCH_ENABLED: boolean;
@@ -240,11 +257,13 @@ export interface GeneratedConfig {
   DD_TRACE_FS_ENABLED: boolean;
   DD_TRACE_GCP_PUBSUB_PUSH_ENABLED: boolean;
   DD_TRACE_GENERIC_POOL_ENABLED: boolean;
+  DD_TRACE_GIT_METADATA_ENABLED: boolean;
   DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED: boolean;
   DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED: boolean;
   DD_TRACE_GOOGLE_GAX_ENABLED: boolean;
   DD_TRACE_GOOGLE_GENAI_ENABLED: boolean;
   DD_TRACE_GRAPHQL_ENABLED: boolean;
+  DD_TRACE_GRAPHQL_ERROR_EXTENSIONS: string[];
   DD_TRACE_GRAPHQL_TAG_ENABLED: boolean;
   DD_TRACE_GRAPHQL_TOOLS_ENABLED: boolean;
   DD_TRACE_GRAPHQL_TOOLS_EXECUTOR_ENABLED: boolean;
@@ -293,6 +312,7 @@ export interface GeneratedConfig {
   DD_TRACE_LODASH_ENABLED: boolean;
   DD_TRACE_LOOPBACK_ENABLED: boolean;
   DD_TRACE_MARIADB_ENABLED: boolean;
+  DD_TRACE_MEMCACHED_COMMAND_ENABLED: boolean;
   DD_TRACE_MEMCACHED_ENABLED: boolean;
   DD_TRACE_MICROGATEWAY_CORE_ENABLED: boolean;
   DD_TRACE_MIDDIE_ENABLED: boolean;
@@ -308,6 +328,7 @@ export interface GeneratedConfig {
   DD_TRACE_MULTER_ENABLED: boolean;
   DD_TRACE_MYSQL_ENABLED: boolean;
   DD_TRACE_MYSQL2_ENABLED: boolean;
+  DD_TRACE_NATIVE_SPAN_EVENTS: boolean;
   DD_TRACE_NET_ENABLED: boolean;
   DD_TRACE_NEXT_ENABLED: boolean;
   DD_TRACE_NODE_CHILD_PROCESS_ENABLED: boolean;
@@ -336,6 +357,8 @@ export interface GeneratedConfig {
   DD_TRACE_PROCESS_ENABLED: boolean;
   DD_TRACE_PROMISE_ENABLED: boolean;
   DD_TRACE_PROMISE_JS_ENABLED: boolean;
+  DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: "continue" | "restart" | "ignore";
+  DD_TRACE_PROPAGATION_EXTRACT_FIRST: boolean;
   DD_TRACE_PROPAGATION_STYLE: string[];
   DD_TRACE_PROTOBUFJS_ENABLED: boolean;
   DD_TRACE_PUG_ENABLED: boolean;
@@ -353,6 +376,7 @@ export interface GeneratedConfig {
   DD_TRACE_SEQUELIZE_ENABLED: boolean;
   DD_TRACE_SHAREDB_ENABLED: boolean;
   DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED: boolean;
+  DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
@@ -366,6 +390,7 @@ export interface GeneratedConfig {
   DD_TRACE_WINSTON_ENABLED: boolean;
   DD_TRACE_WORKERPOOL_ENABLED: boolean;
   DD_TRACE_WS_ENABLED: boolean;
+  DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: number;
   DD_VITEST_WORKER: string | undefined;
   dogstatsd: {
     hostname: string;
@@ -406,26 +431,7 @@ export interface GeneratedConfig {
   flakyTestRetriesCount: number;
   flushInterval: number;
   flushMinSpans: number;
-  gitMetadataEnabled: boolean;
-  graphqlErrorExtensions: string[];
-  grpc: {
-    client: {
-      error: {
-        statuses: number[];
-      };
-    };
-    server: {
-      error: {
-        statuses: number[];
-      };
-    };
-  };
   headerTags: string[];
-  heapSnapshot: {
-    count: number;
-    destination: string;
-    interval: number;
-  };
   hostname: string;
   iast: {
     dbRowsToTaint: number;
@@ -444,21 +450,11 @@ export interface GeneratedConfig {
     telemetryVerbosity: string;
   };
   inferredProxyServicesEnabled: boolean;
-  injectForce: boolean;
-  injectionEnabled: string | undefined;
-  installSignature: {
-    id: string | undefined;
-    time: string | undefined;
-    type: string | undefined;
-  };
-  instrumentation_config_id: string | undefined;
   isEarlyFlakeDetectionEnabled: boolean;
   isFlakyTestRetriesEnabled: boolean;
   isGitUploadEnabled: boolean;
   isImpactedTestsEnabled: boolean;
   isIntelligentTestRunnerEnabled: boolean;
-  isKeepingCoverageConfiguration: boolean;
-  isManualApiEnabled: boolean;
   isTestDynamicInstrumentationEnabled: boolean;
   isTestManagementEnabled: boolean;
   langchain: {
@@ -473,51 +469,44 @@ export interface GeneratedConfig {
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
-  memcachedCommandEnabled: boolean;
   middlewareTracingEnabled: boolean;
   openai: {
     spanCharLimit: number;
   };
   openAiLogsEnabled: boolean;
+  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
+  OTEL_BSP_MAX_QUEUE_SIZE: number;
+  OTEL_BSP_SCHEDULE_DELAY: number;
   OTEL_EXPORTER_OTLP_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_LOGS_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: number;
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_METRICS_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
+  OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: number;
+  OTEL_EXPORTER_OTLP_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
   OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: number;
   OTEL_LOGS_EXPORTER: "none" | "otlp" | undefined;
+  OTEL_METRIC_EXPORT_INTERVAL: number;
+  OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
-  otelBatchTimeout: number;
-  otelLogsEnabled: boolean;
-  otelLogsProtocol: string;
-  otelLogsTimeout: number;
-  otelLogsUrl: string;
-  otelMaxExportBatchSize: number;
-  otelMaxQueueSize: number;
-  otelMetricsEnabled: boolean;
-  otelMetricsExportInterval: number;
-  otelMetricsExportTimeout: number;
-  otelMetricsProtocol: string;
-  otelMetricsTemporalityPreference: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
-  otelMetricsTimeout: number;
-  otelMetricsUrl: string;
-  otelProtocol: string;
-  otelTimeout: number;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
     enabled: 'true' | 'false' | 'auto';
-    longLivedThreshold: number;
-  };
-  propagateProcessTags: {
-    enabled: boolean;
   };
   protocolVersion: string;
   queryStringObfuscation: string;
@@ -543,7 +532,6 @@ export interface GeneratedConfig {
   site: string;
   spanAttributeSchema: "v0" | "v1";
   spanComputePeerService: boolean;
-  spanLeakDebug: number;
   spanRemoveIntegrationFromService: boolean;
   spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined;
   startupLogs: boolean;
@@ -551,7 +539,6 @@ export interface GeneratedConfig {
     enabled: boolean;
   };
   tags: Record<string, string>;
-  tagsHeaderMaxLength: number;
   telemetry: {
     debug: boolean;
     dependencyCollection: boolean;
@@ -562,19 +549,8 @@ export interface GeneratedConfig {
     metrics: boolean;
   };
   testManagementAttemptToFixRetries: number;
-  trace: {
-    aws: {
-      addSpanPointers: boolean;
-    };
-    dynamoDb: {
-      tablePrimaryKeys: string | undefined;
-    };
-    nativeSpanEvents: boolean;
-  };
   traceId128BitGenerationEnabled: boolean;
   traceId128BitLoggingEnabled: boolean;
-  tracePropagationBehaviorExtract: "continue" | "restart" | "ignore";
-  tracePropagationExtractFirst: boolean;
   tracePropagationStyle: {
     extract: string[];
     inject: string[];

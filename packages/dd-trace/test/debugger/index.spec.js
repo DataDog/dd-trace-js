@@ -232,7 +232,7 @@ describe('debugger/index', () => {
         inputPath: '/debugger/v2/input',
         logLevel: 'info',
         port: 8126,
-        propagateProcessTags: undefined,
+        propagateProcessTags: { enabled: undefined },
         repositoryUrl: 'https://github.com/test/repo',
         runtimeId: 'test-runtime-id',
         service: 'test-service',
