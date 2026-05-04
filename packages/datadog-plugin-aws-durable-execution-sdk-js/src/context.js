@@ -29,7 +29,6 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_step'
   static spanName = 'aws.durable.step'
-  static includeReplayedTag = true
 
   bindStart (ctx) {
     const spanName = this.constructor.spanName
@@ -38,14 +37,10 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
       ? undefined
       : this.getOperationName(ctx)
 
-    const meta = this.constructor.includeReplayedTag
-      ? { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) }
-      : {}
-
     this.startSpan(spanName, {
       resource: operationName,
       kind: this.constructor.kind,
-      meta,
+      meta: { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) },
     }, ctx)
 
     return ctx.currentStore
@@ -127,9 +122,6 @@ class DurableContextImplWaitForConditionPlugin extends BaseAwsDurableExecutionSd
 class DurableContextImplWaitForCallbackPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCallback'
   static spanName = 'aws.durable.wait_for_callback'
-  // Per spec §4.2: wait_for_callback represents an open-ended external callback,
-  // not a deterministic checkpointed step, so the replayed tag is intentionally omitted.
-  static includeReplayedTag = false
 }
 
 class DurableContextImplCreateCallbackPlugin extends BaseAwsDurableExecutionSdkJsContextPlugin {
