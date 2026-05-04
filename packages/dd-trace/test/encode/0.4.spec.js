@@ -28,7 +28,7 @@ describe('encode', () => {
       logger = {
         debug: sinon.stub(),
       }
-      const getConfig = () => ({ trace: { nativeSpanEvents: false } })
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger,
         '../config': getConfig,
@@ -489,7 +489,7 @@ describe('encode', () => {
         debug: sinon.spy(),
       }
 
-      const getConfig = () => ({ trace: { nativeSpanEvents: true } })
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: true })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger,
         '../config': getConfig,
