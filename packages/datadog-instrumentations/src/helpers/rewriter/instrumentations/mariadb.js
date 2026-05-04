@@ -4,9 +4,9 @@ module.exports = [
   // -------------------------------------------------------------------------
   // Orchestrion entries — these hooks are loaded via getHooks('mariadb')
   // -------------------------------------------------------------------------
-  // Pool.getConnection(callback) — callback-based; NOT returning a promise.
-  // Using kind: 'Callback' so the connection is available via ctx.result in
-  // asyncStart.runStores, enabling correct conf propagation and context restore.
+  // Pool.getConnection(callback?) — supports both callback and promise call
+  // shapes; kind: 'Auto' picks the right wrapper at runtime based on whether
+  // a callback function was passed.
   {
     module: {
       name: 'mariadb',
@@ -16,8 +16,7 @@ module.exports = [
     functionQuery: {
       methodName: 'getConnection',
       className: 'Pool',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      kind: 'Auto',
     },
     channelName: 'Pool_getConnection',
   },
@@ -50,8 +49,9 @@ module.exports = [
   },
 
   // -------------------------------------------------------------------------
-  // v2 query hooks — use thisPropertyName to target arrow-function instance
-  // properties set inside function constructors.
+  // v2 query hooks — use objectName: 'this' + propertyName to target
+  // arrow-function instance properties set inside function constructors
+  // (orchestrion-js #58).
   // -------------------------------------------------------------------------
 
   // v>=2.5.2 <3: _queryPromise (promise API)
@@ -62,7 +62,8 @@ module.exports = [
       filePath: 'lib/connection.js',
     },
     functionQuery: {
-      thisPropertyName: '_queryPromise',
+      objectName: 'this',
+      propertyName: '_queryPromise',
       kind: 'Async',
     },
     channelName: 'v2Connection_queryPromise',
@@ -75,12 +76,13 @@ module.exports = [
       filePath: 'lib/connection.js',
     },
     functionQuery: {
-      thisPropertyName: 'query',
+      objectName: 'this',
+      propertyName: 'query',
       kind: 'Async',
     },
     channelName: 'v2Connection_query',
   },
-  // All v2: _queryCallback (callback API)
+  // All v2: _queryCallback (callback API; Auto handles the no-callback case)
   {
     module: {
       name: 'mariadb',
@@ -88,9 +90,9 @@ module.exports = [
       filePath: 'lib/connection.js',
     },
     functionQuery: {
-      thisPropertyName: '_queryCallback',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      objectName: 'this',
+      propertyName: '_queryCallback',
+      kind: 'Auto',
     },
     channelName: 'v2Connection_queryCallback',
   },
@@ -102,7 +104,8 @@ module.exports = [
       filePath: 'lib/pool-base.js',
     },
     functionQuery: {
-      thisPropertyName: 'getConnection',
+      objectName: 'this',
+      propertyName: 'getConnection',
       kind: 'Async',
     },
     channelName: 'v2PoolBase_getConnection',
@@ -115,7 +118,8 @@ module.exports = [
       filePath: 'lib/pool-base.js',
     },
     functionQuery: {
-      thisPropertyName: 'query',
+      objectName: 'this',
+      propertyName: 'query',
       kind: 'Async',
     },
     channelName: 'v2PoolBase_query',
@@ -212,8 +216,8 @@ module.exports = [
     },
     channelName: 'createPool',
   },
-  // ConnectionCallback.prototype.query (callback-based — callback is last arg)
-  // noCallbackFallback: query() may be called without a callback (event-emitter usage)
+  // ConnectionCallback.prototype.query — callback API; query() may be invoked
+  // without a callback (event-emitter usage), so use kind: 'Auto'.
   {
     module: {
       name: 'mariadb',
@@ -223,12 +227,12 @@ module.exports = [
     functionQuery: {
       methodName: 'query',
       className: 'ConnectionCallback',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      kind: 'Auto',
     },
     channelName: 'ConnectionCallback_query',
   },
-  // ConnectionCallback.prototype.execute (callback-based — callback is last arg)
+  // ConnectionCallback.prototype.execute — callback API; may be invoked
+  // without a callback, so use kind: 'Auto'.
   {
     module: {
       name: 'mariadb',
@@ -238,8 +242,7 @@ module.exports = [
     functionQuery: {
       methodName: 'execute',
       className: 'ConnectionCallback',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      kind: 'Auto',
     },
     channelName: 'ConnectionCallback_execute',
   },
@@ -271,8 +274,8 @@ module.exports = [
     },
     channelName: 'ConnectionPromise_execute',
   },
-  // PoolCallback.prototype.query (callback-based — callback is last arg)
-  // noCallbackFallback: pool.query() is often called without a callback (fire-and-forget)
+  // PoolCallback.prototype.query — pool.query() is often invoked without a
+  // callback (fire-and-forget); kind: 'Auto' falls back to the promise path.
   {
     module: {
       name: 'mariadb',
@@ -282,12 +285,11 @@ module.exports = [
     functionQuery: {
       methodName: 'query',
       className: 'PoolCallback',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      kind: 'Auto',
     },
     channelName: 'PoolCallback_query',
   },
-  // PoolCallback.prototype.execute (callback-based — callback is last arg)
+  // PoolCallback.prototype.execute — same fire-and-forget shape as query.
   {
     module: {
       name: 'mariadb',
@@ -297,8 +299,7 @@ module.exports = [
     functionQuery: {
       methodName: 'execute',
       className: 'PoolCallback',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      kind: 'Auto',
     },
     channelName: 'PoolCallback_execute',
   },
@@ -330,9 +331,10 @@ module.exports = [
     },
     channelName: 'PoolPromise_execute',
   },
-  // PrepareResultPacket.prototype.execute — used via PrepareWrapper (statement.execute)
-  // ctx.self is PrepareWrapper: .query = SQL, .conn.opts = connection options
-  // noCallbackFallback: execute() may be called without callback (promise mode)
+  // PrepareResultPacket.prototype.execute — used via PrepareWrapper
+  // (statement.execute). ctx.self is PrepareWrapper: .query = SQL,
+  // .conn.opts = connection options. execute() may be called without a
+  // callback (promise mode); kind: 'Auto' covers both paths.
   {
     module: {
       name: 'mariadb',
@@ -342,8 +344,7 @@ module.exports = [
     functionQuery: {
       methodName: 'execute',
       className: 'PrepareResultPacket',
-      kind: 'Callback',
-      noCallbackFallback: true,
+      kind: 'Auto',
     },
     channelName: 'PrepareResultPacket_execute',
   },
