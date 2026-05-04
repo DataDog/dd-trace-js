@@ -21,6 +21,9 @@ const {
   isModifiedTest,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -107,6 +110,7 @@ const wrappedWorkerChannels = new WeakMap()
 // New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
 // Populated in-process for runInBand, and via worker-report:trace for parallel mode.
 const newTestsWithDynamicNames = new Set()
+const loggedAttemptToFixTests = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
@@ -193,64 +197,88 @@ function getTestStats (testStatuses) {
 }
 
 /**
- * @param {string[]} efdNames
- * @param {string[]} quarantineNames
- * @param {number} totalCount
- */
-/**
- * Renders a truncated bullet list from an array of items.
+ * Formats the ignored-failure section for the Test Optimization summary.
  *
- * @param {Array<{ text: string, suffix?: string }>} items
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  * @returns {string}
  */
-function formatList (items) {
+function formatIgnoredFailuresSummary (ignoredFailures) {
+  if (!ignoredFailures) return ''
+
+  const items = []
+
+  for (const n of ignoredFailures.efdNames) {
+    items.push({ text: n, suffix: 'Early Flake Detection' })
+  }
+  for (const n of ignoredFailures.quarantineNames) {
+    items.push({ text: n, suffix: 'Quarantine' })
+  }
+
+  if (items.length === 0 || ignoredFailures.totalCount <= 0) return ''
+
   const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+  const formattedItems = shown
+    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
+    .join('\n') + moreSuffix
+
+  return `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
 
 /**
- * Logs a single "Datadog Test Optimization" summary at session end,
- * combining all relevant sections (ignored failures, dynamic names).
+ * Logs a single "Datadog Test Optimization" summary at session end.
  *
  * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  */
-function logSessionSummary (ignoredFailures) {
-  const sections = []
+function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
+  logTestOptimizationSummary({
+    attemptToFixExecutions,
+    extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
+    newTestsWithDynamicNames,
+  })
+  loggedAttemptToFixTests.clear()
+}
 
-  if (ignoredFailures) {
-    const items = []
-    for (const n of ignoredFailures.efdNames) {
-      items.push({ text: n, suffix: 'Early Flake Detection' })
+function getTestStatusFromJestResult (status) {
+  if (status === 'failed') return 'fail'
+  if (status === 'passed') return 'pass'
+}
+
+function getAttemptToFixExecutionsFromJestResults (result) {
+  const executions = new Map()
+  const rootDir = result.globalConfig?.rootDir || process.cwd()
+
+  for (const { testResults, testFilePath } of result.results.testResults) {
+    const testSuite = getTestSuitePath(testFilePath, rootDir)
+    const testManagementTestsForSuite = testManagementTests
+      ?.jest
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+    if (!testManagementTestsForSuite) continue
+
+    for (const { fullName, status } of testResults) {
+      const testName = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
+        ? fullName.replace(SEED_SUFFIX_RE, '')
+        : fullName
+      const testStatus = getTestStatusFromJestResult(status)
+      if (!testStatus) continue
+
+      const testManagementTest = testManagementTestsForSuite[testName]?.properties
+      if (!testManagementTest?.attempt_to_fix) continue
+
+      recordAttemptToFixExecution(executions, {
+        testSuite,
+        testName,
+        status: testStatus,
+        isDisabled: testManagementTest.disabled,
+        isQuarantined: testManagementTest.quarantined,
+      })
     }
-    for (const n of ignoredFailures.quarantineNames) {
-      items.push({ text: n, suffix: 'Quarantine' })
-    }
-    sections.push(
-      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-      formatList(items)
-    )
   }
 
-  if (newTestsWithDynamicNames.size > 0) {
-    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
-    sections.push(
-      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
-      'dynamic data (timestamps, UUIDs, etc.).\n' +
-      'Tests with changing names are always treated as new on every run, ' +
-      'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
-      'Consider using stable, deterministic test names.\n\n' +
-      formatList(items)
-    )
-    newTestsWithDynamicNames.clear()
-  }
-
-  if (sections.length === 0) return
-
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing session summary
-  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
+  return executions
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -556,6 +584,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         testContexts.set(event.test, ctx)
 
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(this.testSuite, testName, loggedAttemptToFixTests)
+        }
+
         testStartCh.runStores(ctx, () => {
           let p = event.test.parent
           const hooks = []
@@ -795,7 +827,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
         if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
           const quarantineCtx = testContexts.get(event.test)
-          if (quarantineCtx?.isQuarantined && event.test.errors?.length) {
+          if (quarantineCtx?.isQuarantined && !quarantineCtx.isAttemptToFix && event.test.errors?.length) {
             quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)
             event.test.errors = []
           }
@@ -858,10 +890,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
-          // Do not restore errors for quarantined tests — they should stay suppressed
+          // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
           const ctx = testContexts.get(test)
-          if (ctx?.isQuarantined) {
+          if (ctx?.isQuarantined && !ctx.isAttemptToFix) {
             const testName = getJestTestName(test, this.getShouldStripSeedFromTestName())
             quarantinedFailingTests.add(`${ctx.suite} › ${testName}`)
           } else {
@@ -984,7 +1016,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       // If the test is quarantined, regardless of its actual execution result,
       // the final status of its last execution should be reported as 'skip'.
-      if (this.isTestManagementTestsEnabled &&
+      if (!attemptToFixResult.isAttemptToFixEnabled &&
+        this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.quarantined?.includes(testName)) {
         return 'skip'
       }
@@ -1315,7 +1348,6 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       let numFailedQuarantinedTests = 0
-      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
       let numSuppressedQuarantinedTests = 0
       if (isTestManagementTestsEnabled) {
         const failedTests = result
@@ -1343,11 +1375,7 @@ function getCliWrapper (isNewJestVersion) {
             ?.tests
             ?.[testName]
             ?.properties
-          // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
-          if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
-            numFailedQuarantinedOrDisabledAttemptedToFixTests++
-            quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
-          } else if (testManagementTest?.quarantined) {
+          if (testManagementTest?.quarantined && !testManagementTest?.attempt_to_fix) {
             numFailedQuarantinedTests++
             quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
           }
@@ -1365,13 +1393,11 @@ function getCliWrapper (isNewJestVersion) {
         quarantinedFailingTests.clear()
 
         // If every test that failed was quarantined, we'll consider the suite passed
-        // Note that if a test is attempted to fix,
-        // it's considered quarantined both if it's disabled and if it's quarantined
-        // (it'll run but its status is ignored)
+        // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
         // Skip if EFD block already flipped (to avoid logging twice)
         // Only use visible failures (from Jest results) for the flip check.
         // Suppressed quarantine failures are not in numFailedTests.
-        const visibleQuarantineFailures = numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        const visibleQuarantineFailures = numFailedQuarantinedTests
         if (
           !result.results.success &&
           !mustNotFlipSuccess &&
@@ -1406,7 +1432,7 @@ function getCliWrapper (isNewJestVersion) {
         (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
       ) {
         const visibleIgnoredFailures =
-          numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+          numEfdFailedTestsToIgnore + numFailedQuarantinedTests
         if (
           visibleIgnoredFailures !== 0 &&
           result.results.numFailedTests === visibleIgnoredFailures
@@ -1474,7 +1500,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      logSessionSummary(ignoredFailuresSummary)
+      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
       numSkippedSuites = 0
 
