@@ -34,10 +34,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     }
     meta['aws.durable.replayed'] = String(event?.InitialExecutionState?.Operations?.length > 1)
 
-    this.startSpan('aws.durable.execute', {
-      resource: handler?.name || 'aws.durable.execute',
-      meta,
-    }, ctx)
+    this.startSpan('aws.durable.execute', { resource: handler?.name, meta }, ctx)
 
     // Wrap the user handler so we can capture the DurableContext.
     // _datadog checkpoints are saved only from the termination hook path,

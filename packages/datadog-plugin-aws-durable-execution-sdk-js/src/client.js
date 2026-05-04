@@ -1,54 +1,35 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const { isReplayedOp } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_invoke'
-  static peerServicePrecursors = ['functionname']
 
+  // invoke has two overloads:
+  //   invoke(name, funcId, input?, config?)  — args[1] is a string (funcId)
+  //   invoke(funcId, input?, config?)        — args[1] is an object or undefined
   bindStart (ctx) {
-    const meta = this.getTags(ctx)
+    const args = ctx.arguments || []
+    const hasName = typeof args[0] === 'string' && typeof args[1] === 'string'
+    const operationName = hasName ? args[0] : undefined
+    const functionName = hasName ? args[1] : (typeof args[0] === 'string' ? args[0] : undefined)
 
-    this.startSpan('aws.durable_execution.invoke', {
-      service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_execution',
-      resource: meta.operationname || meta.functionname || 'aws.durable_execution.invoke',
-      meta,
-    }, ctx)
+    const meta = {
+      component: 'aws-durable-execution-sdk-js',
+      'span.kind': 'client',
+      'aws.durable.replayed': String(isReplayedOp(ctx.self)),
+    }
+    if (functionName) {
+      meta['aws.durable.invoke.function_name'] = functionName
+    }
 
+    this.startSpan('aws.durable.invoke', { resource: operationName, meta }, ctx)
     this.injectTraceContextIntoInvokePayload(ctx)
 
     return ctx.currentStore
-  }
-
-  /**
-   * Extracts tags from the invoke method arguments.
-   * invoke has two overloads:
-   *   invoke(name, funcId, input?, config?)  — args[1] is a string (funcId)
-   *   invoke(funcId, input?, config?)        — args[1] is an object or undefined
-   * @param {{ arguments?: ArrayLike<unknown> }} ctx
-   * @returns {Record<string, string>}
-   */
-  getTags (ctx) {
-    const args = ctx.arguments || []
-    const hasName = typeof args[0] === 'string' && typeof args[1] === 'string'
-    const operationname = hasName ? args[0] : undefined
-    const functionname = hasName ? args[1] : (typeof args[0] === 'string' ? args[0] : undefined)
-
-    const tags = {
-      component: 'aws-durable-execution-sdk-js',
-      'span.kind': 'client',
-    }
-
-    if (operationname) {
-      tags.operationname = operationname
-    }
-    if (functionname) {
-      tags.functionname = functionname
-    }
-
-    return tags
   }
 
   /**
@@ -92,15 +73,12 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   }
 
   asyncEnd (ctx) {
-    this.finish(ctx)
+    super.finish(ctx)
   }
 
-  end (ctx) {
-    this.finish(ctx)
-  }
-  // tracingChannel fires both asyncEnd and end; Need to call finish in both cases to ensure the span is finished regardless of how the tracingChannel is configured.
-  finish (ctx) {
-    super.finish(ctx)
+  error (ctxOrError) {
+    super.error(ctxOrError)
+    super.finish(ctxOrError)
   }
 }
 
@@ -117,5 +95,4 @@ function isPlainObject (value) {
   const proto = Object.getPrototypeOf(value)
   return proto === Object.prototype || proto === null
 }
-
 module.exports = AwsDurableExecutionSdkJsClientPlugin
