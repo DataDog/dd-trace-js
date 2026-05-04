@@ -92,6 +92,8 @@ const extraStdout = 'end event: can add event listeners to mocha'
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
 const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
 const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
+const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
+const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
@@ -923,13 +925,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       it('tests with retries', async () => {
         // retry handler was released in mocha@6.0.0
         // so the reported data changes between mocha versions
-        const isLatestMocha = MOCHA_VERSION === 'latest'
-
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(tests.length, 16)
             } else {
               // In old mocha (< 6.0.0), retries.js reports only final results (2 tests).
@@ -941,7 +941,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const eventuallyPassingTests = tests.filter(t =>
               t.meta[TEST_NAME] === 'mocha-test-retries will be retried and pass'
             )
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(eventuallyPassingTests.length, 3)
             } else {
               assert.strictEqual(eventuallyPassingTests.length, 1)
@@ -951,14 +951,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               t.meta[TEST_NAME] === 'mocha-test-retries will be retried and fail' &&
               t.meta[TEST_STATUS] === 'fail'
             )
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(failedTests.length, 5)
             } else {
               assert.strictEqual(failedTests.length, 1)
             }
 
             // With afterEach hooks — retry tags should still be set correctly
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               const hooksPassTests = tests.filter(t =>
                 t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and pass'
               )
@@ -5242,7 +5242,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        if (MOCHA_VERSION === 'latest') {
+        if (supportsMochaRetryEvents) {
           assert.strictEqual(tests.length, 3)
           const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.strictEqual(failedTests.length, 2)
