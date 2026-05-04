@@ -11,10 +11,10 @@ const WHITESPACE = /[ \t]/
  * @param {string} value
  * @param {string} fieldSeparator Between entries.
  * @param {string} pairSeparator Between key and value within an entry.
- * @param {boolean} rejectValueWhitespace Drop entries whose value contains internal whitespace.
+ * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
-function parseEntries (value, fieldSeparator, pairSeparator, rejectValueWhitespace) {
+function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
   const segments = value.split(fieldSeparator)
   segments.length = Math.min(segments.length, MAX_LIST_MEMBERS)
 
@@ -28,7 +28,8 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueWhitespa
     const key = segment.slice(0, splitIndex).trim()
     if (!key || WHITESPACE.test(key)) continue
     const entryValue = segment.slice(splitIndex + 1).trim()
-    if (!entryValue || rejectValueWhitespace && WHITESPACE.test(entryValue)) continue
+    // W3C §3.3.1.3.2: chr = %x20 / nblk-chr; tab is in neither, but space is.
+    if (!entryValue || rejectValueTabs && entryValue.includes('\t')) continue
     entries.push([key, entryValue])
   }
   // Reverse so the Map's insertion order is reverse of wire order. `toString`
@@ -37,11 +38,11 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueWhitespa
   return entries
 }
 
-function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueWhitespace) {
+function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueWhitespace))
+  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {

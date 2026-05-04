@@ -97,6 +97,11 @@ describe('TraceState', () => {
     assert.strictEqual(ts.size, 32)
   })
 
+  it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
+    const ts = TraceState.fromString('a=hello world,b=bye\tworld,c=ok')
+    assert.strictEqual(ts.toString(), 'a=hello world,c=ok')
+  })
+
   it('should ignore non-conformant input that contains no list-members', () => {
     const ts = TraceState.fromString('a'.repeat(16_000))
     assert.strictEqual(ts.size, 0)
