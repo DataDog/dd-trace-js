@@ -501,7 +501,7 @@ describe('Span', () => {
       it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
         tracer = {
           _config: {
-            tracePropagationBehaviorExtract: 'ignore',
+            DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'ignore',
           },
         }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
@@ -511,7 +511,7 @@ describe('Span', () => {
       it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
         tracer = {
           _config: {
-            tracePropagationBehaviorExtract: 'restart',
+            DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart',
           },
         }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })

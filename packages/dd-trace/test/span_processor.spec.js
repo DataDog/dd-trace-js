@@ -195,7 +195,7 @@ describe('SpanProcessor', () => {
 
   it('should add span tags to first span in a chunk', () => {
     config.flushMinSpans = 2
-    config.propagateProcessTags = { enabled: true }
+    config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan, finishedSpan, finishedSpan]
