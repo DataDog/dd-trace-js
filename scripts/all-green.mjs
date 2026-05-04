@@ -101,6 +101,20 @@ async function getRuns () {
 async function pollUntilDone () {
   const runs = await getRuns()
 
+  // Check before modifying retriedRunIds to avoid false positives on freshly requeued runs.
+  const retryFailed = runs.filter(r =>
+    r.status === 'completed' &&
+    failureConclusions.has(r.conclusion) &&
+    retriedRunIds.has(r.id)
+  )
+
+  if (retryFailed.length > 0) {
+    for (const run of retryFailed) {
+      console.error(`Workflow run ${run.id} (${run.name}) failed after retry, failing immediately.`)
+    }
+    return { runs, done: true }
+  }
+
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
     failureConclusions.has(r.conclusion) &&
