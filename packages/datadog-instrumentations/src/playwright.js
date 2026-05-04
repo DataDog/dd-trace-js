@@ -287,7 +287,12 @@ function getChannelPromise (channelToPublishTo, params) {
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
 function testWillRetry (test, testStatus) {
-  return testStatus === 'fail' && test.results.length <= test.retries
+  // In serial mode, a test can be skipped because a preceding test failed and then
+  // re-run in the next retry cycle. Treat those skipped attempts as non-final too,
+  // but leave intentionally-skipped tests (expectedStatus === 'skipped') unaffected.
+  const willBeRerun = testStatus === 'fail' ||
+    (testStatus === 'skip' && test.expectedStatus !== 'skipped')
+  return willBeRerun && test.results.length <= test.retries
 }
 
 function getTestFullname (test) {
