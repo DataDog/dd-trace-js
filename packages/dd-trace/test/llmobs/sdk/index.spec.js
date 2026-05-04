@@ -368,6 +368,59 @@ describe('sdk', () => {
           '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
+
+      describe('bridge tags for otel correlation', () => {
+        it('writes llmobs_trace_id and llmobs_parent_id to _trace.tags on first sdk activate', () => {
+          llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+            const traceTags = span.context()._trace.tags
+            assert.strictEqual(traceTags.llmobs_trace_id, span.context().toTraceId(true))
+            assert.strictEqual(traceTags.llmobs_parent_id, span.context().toSpanId())
+          })
+        })
+
+        it('does not overwrite bridge tags on nested sdk activates', () => {
+          llmobs.trace({ kind: 'workflow', name: 'outer' }, outer => {
+            const outerTraceId = outer.context()._trace.tags.llmobs_trace_id
+            const outerParentId = outer.context()._trace.tags.llmobs_parent_id
+
+            llmobs.trace({ kind: 'task', name: 'inner' }, inner => {
+              assert.strictEqual(inner.context()._trace.tags.llmobs_trace_id, outerTraceId)
+              assert.strictEqual(inner.context()._trace.tags.llmobs_parent_id, outerParentId)
+              // sanity: the inner sdk span is NOT the bridge parent
+              assert.notStrictEqual(outerParentId, inner.context().toSpanId())
+            })
+          })
+        })
+
+        it('does not overwrite bridge tags on sibling workflows under the same apm root', () => {
+          tracer.trace('apmRoot', () => {
+            let firstTraceId, firstParentId
+            llmobs.trace({ kind: 'workflow', name: 'first' }, span => {
+              firstTraceId = span.context()._trace.tags.llmobs_trace_id
+              firstParentId = span.context()._trace.tags.llmobs_parent_id
+            })
+            llmobs.trace({ kind: 'workflow', name: 'second' }, span => {
+              // sibling workflow keeps the first workflow's bridge tags
+              assert.strictEqual(span.context()._trace.tags.llmobs_trace_id, firstTraceId)
+              assert.strictEqual(span.context()._trace.tags.llmobs_parent_id, firstParentId)
+            })
+          })
+        })
+
+        it('writes bridge tags only when an llmobs span starts (not on plain apm spans)', () => {
+          tracer.trace('plainApm', span => {
+            assert.strictEqual(span.context()._trace.tags.llmobs_trace_id, undefined)
+            assert.strictEqual(span.context()._trace.tags.llmobs_parent_id, undefined)
+          })
+        })
+
+        it('writes the trace id as a 32-char hex string', () => {
+          llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+            const traceId = span.context()._trace.tags.llmobs_trace_id
+            assert.match(traceId, /^[0-9a-f]{32}$/)
+          })
+        })
+      })
     })
 
     describe('wrap', () => {

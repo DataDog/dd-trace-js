@@ -64,6 +64,7 @@ const tracestateTagValueFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
+const percentByte = /%([0-9A-Fa-f]{2})/g
 
 class TextMapPropagator {
   #extractB3Context
@@ -173,15 +174,15 @@ class TextMapPropagator {
       const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
       for (const [key, value] of Object.entries(baggageItems)) {
-        const baggageKey = String(key).trim()
-        if (!baggageKey || !baggageTokenExpr.test(baggageKey)) continue
+        const baggageKey = key.trim()
+        if (!baggageTokenExpr.test(baggageKey)) continue
 
         // Do not trim values. If callers include leading/trailing whitespace, it must be percent-encoded.
         // W3C list-member allows optional properties after ';'.
         // https://www.w3.org/TR/baggage/#header-content
-        const item = `${baggageKey}=${encodeURIComponent(String(value))},`
+        const item = `${baggageKey}=${encodeURIComponent(value)},`
         itemCounter += 1
-        byteCounter += Buffer.byteLength(item)
+        byteCounter += item.length
 
         // Check for item count limit exceeded
         if (itemCounter > this._config.baggageMaxItems) {
@@ -209,7 +210,7 @@ class TextMapPropagator {
   _injectTags (spanContext, carrier) {
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping injection.')
       return
     }
@@ -228,7 +229,7 @@ class TextMapPropagator {
 
     const header = tags.join(',')
 
-    if (header.length > this._config.tagsHeaderMaxLength) {
+    if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from span are too large, skipping injection.')
     } else if (header) {
       carrier[tagsKey] = header
@@ -387,7 +388,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         style = extractor
-        if (this._config.tracePropagationExtractFirst) {
+        if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) {
           break
         }
       } else {
@@ -436,7 +437,7 @@ class TextMapPropagator {
     this._extractSamplingPriority(carrier, spanContext)
     this._extractTags(carrier, spanContext)
 
-    if (this._config.tracePropagationExtractFirst) return spanContext
+    if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) return spanContext
 
     const tc = this._extractTraceparentContext(carrier)
 
@@ -706,9 +707,8 @@ class TextMapPropagator {
       try {
         value = decodeURIComponent(value)
       } catch {
-        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-        removeAllBaggageItems()
-        return
+        const bytes = value.replaceAll(percentByte, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+        value = Buffer.from(bytes, 'binary').toString('utf8')
       }
 
       if (spanContext && (tagAllKeys || baggageTagKeys.has(key))) {
@@ -734,9 +734,9 @@ class TextMapPropagator {
 
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
-    } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
+    } else if (carrier[tagsKey].length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
     } else {
       const pairs = carrier[tagsKey].split(',')

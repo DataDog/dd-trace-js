@@ -51,7 +51,6 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
-    this.retries(2)
     this.timeout(80000)
 
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
