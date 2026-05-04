@@ -166,12 +166,12 @@
     "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
-    "@datadog/openfeature-node-server": "^1.1.1",
+    "@datadog/openfeature-node-server": "^1.1.2",
     "@datadog/pprof": "5.14.1",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
-    "oxc-parser": "^0.127.0"
+    "oxc-parser": "^0.128.0"
   },
   "devDependencies": {
     "@actions/core": "^3.0.1",
