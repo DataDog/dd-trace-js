@@ -113,22 +113,22 @@ const uniq = (items) => [...new Set(items)]
  * This is much more robust than relying on hardcoded paths, especially on self-hosted runners
  * and GHES environments where the runner may be installed under arbitrary directories/users.
  */
-function getGithubDiagnosticDirsFromEnv () {
+function getGithubDiagnosticDirsFromEnv (runnerTemp) {
   const dirs = []
 
-  const runnerTemp = getValueFromEnvSources('RUNNER_TEMP')
   if (runnerTemp) {
     // RUNNER_TEMP is typically: <runnerRoot>/_work/_temp
-    const runnerRoot = path.resolve(runnerTemp, '..', '..')
+    const runnerRoot = path.resolve(runnerTemp, '..', '..').replaceAll(path.sep, '/')
     // Bounded-depth patterns cover every runner layout we've observed
     // (including cached/<version>/_diag) without assuming a `cached` wrapper
     // and without walking the whole tree.
     dirs.push(
-      `${runnerRoot}/*/_diag`, `${runnerRoot}/*/*/_diag`,
-      path.join(runnerRoot, '_diag'),
+      path.posix.join(runnerRoot, 'actions-runner', '_diag'),
       `${runnerRoot}/actions-runner/*/_diag`,
       `${runnerRoot}/actions-runner/*/*/_diag`,
-      path.join(runnerRoot, 'actions-runner', '_diag')
+      path.posix.join(runnerRoot, '_diag'),
+      `${runnerRoot}/*/_diag`,
+      `${runnerRoot}/*/*/_diag`
     )
   }
 
@@ -214,26 +214,18 @@ const githubWellKnownDiagnosticDirPatternsUnix = [
 ]
 const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
 
-const githubJodIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
   const runnerTemp = getValueFromEnvSources('RUNNER_TEMP')
   if (!runnerTemp || !existsSync(runnerTemp)) { return null }
 
   const isWin = process.platform === 'win32'
-
-  let possibleDiagsPaths = expandDiagnosticDirCandidates([
-    ...getGithubDiagnosticDirsFromEnv(),
-    ...githubWellKnownDiagnosticDirPatternsUnix,
-    ...githubWellKnownDiagnosticDirsUnix,
+  const patterns = isWin ? githubWellKnownDiagnosticDirPatternsWin : githubWellKnownDiagnosticDirPatternsUnix
+  const literals = isWin ? githubWellKnownDiagnosticDirsWin : githubWellKnownDiagnosticDirsUnix
+  const possibleDiagsPaths = expandDiagnosticDirCandidates([
+    ...getGithubDiagnosticDirsFromEnv(runnerTemp), ...patterns, ...literals,
   ])
-  if (isWin) {
-    possibleDiagsPaths = expandDiagnosticDirCandidates([
-      ...getGithubDiagnosticDirsFromEnv(),
-      ...githubWellKnownDiagnosticDirPatternsWin,
-      ...githubWellKnownDiagnosticDirsWin,
-    ])
-  }
 
   // This will hold the names of the worker log files that (potentially) contain the Job ID
   let workerLogFiles = []
@@ -272,7 +264,7 @@ function getJobIDFromDiagFile () {
     const filePath = path.posix.join(chosenDiagPath, logFile)
     const content = readFileSync(filePath, 'utf8')
 
-    const match = content.match(githubJodIDRegex)
+    const match = content.match(githubJobIDRegex)
 
     // match[1] is the captured group with the display name
     if (match && match[1]) { return match[1] }
@@ -283,6 +275,7 @@ function getJobIDFromDiagFile () {
 
 module.exports = {
   normalizeRef,
+  expandGlobPattern,
   getJobIDFromDiagFile,
   getCIMetadata () {
     const env = getEnvironmentVariables()
