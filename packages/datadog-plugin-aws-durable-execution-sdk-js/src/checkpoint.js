@@ -47,12 +47,9 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
     const span = storage('legacy').getStore()?.span
     if (!span) return
     if (span._spanContext?._tags?.error) return
-
-    const err = data.Error
-    const stackRaw = err.StackTrace ?? err.stackTrace
-    const stack = Array.isArray(stackRaw) ? stackRaw.join('\n') : (typeof stackRaw === 'string' ? stackRaw : undefined)
-    const message = err.ErrorMessage ?? err.errorMessage
-    const type = err.ErrorType ?? err.errorType
+    
+    const { ErrorMessage: message, ErrorType: type, StackTrace } = data.Error
+    const stack = Array.isArray(StackTrace) ? StackTrace.join('\n') : undefined
 
     span.setTag('error', 1)
     if (message) span.setTag('error.message', message)
