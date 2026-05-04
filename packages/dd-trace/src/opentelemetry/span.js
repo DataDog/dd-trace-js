@@ -9,12 +9,18 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
 const SpanContext = require('./span_context')
+const {
+  addOtelLink,
+  recordException,
+  setOtelAttribute,
+  setOtelAttributes,
+  setStatus,
+} = require('./span-helpers')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -195,33 +201,17 @@ class Span {
   }
 
   setAttribute (key, value) {
-    if (key === 'http.response.status_code') {
-      this._ddSpan.setTag('http.status_code', value.toString())
-    }
-
-    this._ddSpan.setTag(key, value)
+    setOtelAttribute(this._ddSpan, key, value)
     return this
   }
 
   setAttributes (attributes) {
-    if ('http.response.status_code' in attributes) {
-      attributes['http.status_code'] = attributes['http.response.status_code'].toString()
-    }
-
-    this._ddSpan.addTags(attributes)
+    setOtelAttributes(this._ddSpan, attributes)
     return this
   }
 
   addLink (link, attrs) {
-    // TODO: Remove this once we remove addLink(context, attrs) in v6.0.0
-    if (link instanceof SpanContext) {
-      link = { context: link, attributes: attrs ?? {} }
-    }
-
-    const { context, attributes } = link
-    // Extract dd context
-    const ddSpanContext = context._ddContext
-    this._ddSpan.addLink({ context: ddSpanContext, attributes })
+    addOtelLink(this._ddSpan, link, attrs)
     return this
   }
 
@@ -244,16 +234,8 @@ class Span {
     return this.addLink(zeroContext, attributes)
   }
 
-  setStatus ({ code, message }) {
-    if (!this.ended && !this._hasStatus && code) {
-      this._hasStatus = true
-      if (code === 2) {
-        this._ddSpan.addTags({
-          [ERROR_MESSAGE]: message,
-          [IGNORE_OTEL_ERROR]: false,
-        })
-      }
-    }
+  setStatus (status) {
+    setStatus(this._ddSpan, this, status)
     return this
   }
 
@@ -291,18 +273,8 @@ class Span {
   }
 
   recordException (exception, timeInput) {
-    this._ddSpan.addTags({
-      [ERROR_TYPE]: exception.name,
-      [ERROR_MESSAGE]: exception.message,
-      [ERROR_STACK]: exception.stack,
-      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true,
-    })
-    const attributes = {}
-    if (exception.message) attributes['exception.message'] = exception.message
-    if (exception.type) attributes['exception.type'] = exception.type
-    if (exception.escaped) attributes['exception.escaped'] = exception.escaped
-    if (exception.stack) attributes['exception.stacktrace'] = exception.stack
-    this.addEvent(exception.name, attributes, timeInput)
+    // Route through `this.addEvent` so its time-input conversion applies.
+    recordException(this._ddSpan, this, exception, timeInput)
   }
 
   get duration () {
