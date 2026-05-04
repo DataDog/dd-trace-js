@@ -142,7 +142,7 @@ describe('expandGlobPattern', () => {
     )
   })
 
-  it('expands env-derived ${runnerRoot}/*/_diag (legacy flat layout)', () => {
+  it('expands env-derived runnerRoot/*/_diag (legacy flat layout)', () => {
     // runner_legacy has _diag directly under actions-runner/ — no cached/<version> wrapper.
     // Covers the root-level single-* candidate that getGithubDiagnosticDirsFromEnv emits.
     // * matches every direct child (actions-runner and work), so both appear; existence
