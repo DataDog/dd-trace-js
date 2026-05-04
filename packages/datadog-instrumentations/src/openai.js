@@ -41,6 +41,22 @@ function wrapAsResponseForAIGuard (apiProm, getInputEval) {
 }
 
 /**
+ * Extracts OpenAI input messages from a method call's first argument.
+ *
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {object} callArgs - First argument passed to the wrapped OpenAI method
+ * @returns {Array<object>|undefined}
+ */
+function getInputMessages (baseResource, callArgs) {
+  if (baseResource === 'chat.completions') {
+    return callArgs?.messages?.length ? callArgs.messages : undefined
+  }
+
+  const messages = convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
+  return messages.length ? messages : undefined
+}
+
+/**
  * Extracts OpenAI output messages from parsed response bodies.
  *
  * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
@@ -300,6 +316,9 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function () {
+          if (!ch.start.hasSubscribers && !evaluateCh.hasSubscribers) {
+            return methodFn.apply(this, arguments)
+          }
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
@@ -325,14 +344,7 @@ for (const extension of extensions) {
 
           // Compute AI Guard input messages before we start the LLM call so Before Model
           // evaluation can run in parallel with it once the caller awaits the APIPromise.
-          let aiguardInputMessages
-          if (aiguardApplicable) {
-            const callArgs = arguments[0]
-            const messages = baseResource === 'chat.completions'
-              ? Array.isArray(callArgs?.messages) ? callArgs.messages : undefined
-              : convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
-            if (messages?.length) aiguardInputMessages = messages
-          }
+          const aiguardInputMessages = aiguardApplicable ? getInputMessages(baseResource, arguments[0]) : undefined
 
           return ch.start.runStores(ctx, () => {
             const apiProm = methodFn.apply(this, arguments)
