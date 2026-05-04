@@ -6856,7 +6856,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testsToRun: 'test-management/test-quarantine',
           attemptingToFixMessage:
             /Datadog Test Optimization: attempting to fix .*quarantine tests can quarantine a test/,
-          executionLogMessage: /console\.log\s+I am running when quarantined/g,
+          executionLogMessage:
+            /(?:console\.log\s+I am running when quarantined|console\.log [^\n]*test-quarantine-1\.js:7)/g,
         },
         {
           label: 'disabled',
@@ -6866,7 +6867,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testsToRun: 'test-management/test-disabled',
           attemptingToFixMessage:
             /Datadog Test Optimization: attempting to fix .*disable tests can disable a test/,
-          executionLogMessage: /console\.log\s+I am running/g,
+          executionLogMessage:
+            /(?:console\.log\s+I am running|console\.log [^\n]*test-disabled-1\.js:7)/g,
         },
       ]
 
