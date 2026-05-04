@@ -2,7 +2,7 @@
 
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
-const { getAllBaggageItems, setAllBaggageItems } = require('../baggage')
+const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
 
 const SpanContext = require('./span_context')
 
@@ -72,6 +72,8 @@ class ContextManager {
         items[key] = entry.value
       }
       setAllBaggageItems(items)
+    } else {
+      removeAllBaggageItems()
     }
     if (span && span._ddSpan) {
       const ddSpan = span._ddSpan
