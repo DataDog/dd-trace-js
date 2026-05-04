@@ -12,16 +12,6 @@ const SPAN_KIND_BY_TYPE = {
 }
 
 /**
- * @typedef {{
- *   spanId: string,
- *   traceId: string,
- *   currentTopLevelAgentSpanId?: string,
- *   inputOaiSpan?: object,
- *   outputOaiSpan?: object,
- * }} LLMObsTraceInfo
- */
-
-/**
  * dd-trace-js implementation of the agents-core `TracingProcessor` interface.
  * Registered via `addTraceProcessor(new DDOpenAIAgentsProcessor(integration))` inside
  * the `@openai/agents-core` module load hook. Mirrors Python's LLMObsTraceProcessor.
@@ -30,16 +20,15 @@ const SPAN_KIND_BY_TYPE = {
  * (APM + LLMObs-annotated) keyed off the agents-core spanId / traceId. Parent
  * hierarchy is resolved through the agents-core parentId chain, which gives us
  * correct multi-agent handoff nesting that ctx-argument capture cannot provide.
+ *
+ * agents-core awaits the lifecycle methods, so each one returns a settled
+ * Promise even though the work is synchronous.
  */
 class DDOpenAIAgentsProcessor {
   constructor (integration) {
     this._integration = integration
   }
 
-  /**
-   * @param {object} oaiTrace agents-core Trace instance.
-   * @returns {Promise<void>}
-   */
   onTraceStart (oaiTrace) {
     if (!this._integration.enabled) return Promise.resolve()
     try {
@@ -50,10 +39,6 @@ class DDOpenAIAgentsProcessor {
     return Promise.resolve()
   }
 
-  /**
-   * @param {object} oaiTrace agents-core Trace instance.
-   * @returns {Promise<void>}
-   */
   onTraceEnd (oaiTrace) {
     if (!this._integration.enabled) return Promise.resolve()
     try {
@@ -64,10 +49,6 @@ class DDOpenAIAgentsProcessor {
     return Promise.resolve()
   }
 
-  /**
-   * @param {object} oaiSpan agents-core Span instance.
-   * @returns {Promise<void>}
-   */
   onSpanStart (oaiSpan) {
     if (!this._integration.enabled) return Promise.resolve()
     if (!oaiSpan?.spanData) return Promise.resolve() // guard NoopSpan
@@ -81,10 +62,6 @@ class DDOpenAIAgentsProcessor {
     return Promise.resolve()
   }
 
-  /**
-   * @param {object} oaiSpan agents-core Span instance.
-   * @returns {Promise<void>}
-   */
   onSpanEnd (oaiSpan) {
     if (!this._integration.enabled) return Promise.resolve()
     if (!oaiSpan?.spanData) return Promise.resolve()
@@ -111,4 +88,4 @@ class DDOpenAIAgentsProcessor {
   }
 }
 
-module.exports = { DDOpenAIAgentsProcessor, SPAN_KIND_BY_TYPE }
+module.exports = { DDOpenAIAgentsProcessor }
