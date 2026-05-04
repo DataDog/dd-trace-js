@@ -1388,3 +1388,34 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+
+  ws-stress:
+    if: |
+      github.head_ref == 'conti/fix-ws-test-timing-race' ||
+      github.ref == 'refs/heads/conti/fix-ws-test-timing-race'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runner: [1, 2, 3, 4, 5]
+      fail-fast: false
+    env:
+      PLUGINS: ws
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - name: Start services
+        run: yarn services
+        shell: bash
+      - name: Stress test ws (runner ${{ matrix.runner }}/5, 20 iterations)
+        run: |
+          for i in $(seq 1 20); do
+            echo "=== Iteration $i/20 ==="
+            node scripts/run-plugin-tests.js -- npm run test:plugins || exit 1
+          done
+        shell: bash
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: ws-stress-${{ matrix.runner }}
