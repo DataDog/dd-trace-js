@@ -298,7 +298,7 @@ function getFinalStatus ({
   isDisabled,
   isQuarantined,
   isAtrRetry,
-  isEfdRetry,
+  isEfdManagedTest,
   isAttemptToFix,
   hasFailedAllRetries,
   hasFailedAttemptToFixRetries,
@@ -310,7 +310,7 @@ function getFinalStatus ({
   if (isDisabled || isQuarantined || testStatus === 'skip') {
     return 'skip'
   }
-  if (isAtrRetry || isEfdRetry) {
+  if (isAtrRetry || isEfdManagedTest) {
     return hasFailedAllRetries ? 'fail' : 'pass'
   }
   if (isAttemptToFix) {
@@ -479,6 +479,9 @@ function testEndHandler ({
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
+    const isEfdManagedTest = (test._ddIsNew || test._ddIsModified) &&
+      !test._ddIsAttemptToFix &&
+      isEarlyFlakeDetectionEnabled
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
@@ -489,7 +492,7 @@ function testEndHandler ({
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry,
-      isEfdRetry: test._ddIsEfdRetry,
+      isEfdManagedTest,
       isAttemptToFix: test._ddIsAttemptToFix,
       hasFailedAllRetries: test._ddHasFailedAllRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
@@ -683,8 +686,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       // above) and mark the execution final once the count reaches the expected total.
       // This mirrors how ATF finality is detected and centralizes the decision in the
       // main process, so workers only need to act on the _ddIsFinalExecution flag.
+      const isEfdManagedTest = (test._ddIsNew || test._ddIsModified) &&
+        !test._ddIsAttemptToFix &&
+        isEarlyFlakeDetectionEnabled
       let isFinalExecution
-      if ((test._ddIsNew || test._ddIsModified) && !test._ddIsAttemptToFix && isEarlyFlakeDetectionEnabled) {
+      if (isEfdManagedTest) {
         const testFqn = getTestFullyQualifiedName(test)
         const efdTestStatuses = testsToTestStatuses.get(testFqn) || []
         isFinalExecution = efdTestStatuses.length === earlyFlakeDetectionNumRetries + 1
@@ -711,6 +717,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddIsAtrRetry: isAtrRetry,
           _ddIsModified: test._ddIsModified,
           _ddIsFinalExecution: isFinalExecution,
+          _ddIsEfdManagedTest: isEfdManagedTest,
         },
       })
     })
@@ -1350,7 +1357,7 @@ addHook({
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry: test._ddIsAtrRetry,
-      isEfdRetry: test._ddIsEfdRetry,
+      isEfdManagedTest: test._ddIsEfdManagedTest,
       isAttemptToFix: test._ddIsAttemptToFix,
       hasFailedAllRetries: test._ddHasFailedAllRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
