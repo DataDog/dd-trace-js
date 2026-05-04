@@ -92,6 +92,8 @@ jobs:
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
+    env:
+      NODE_OPTIONS: --report-on-fatalerror --report-dir=${{ runner.temp }}/node-reports
     permissions:
       id-token: write
     steps:
@@ -103,10 +105,8 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:integration:openfeature:coverage
-      - uses: ./.github/actions/upload-node-reports
+      - uses: ./.github/actions/node-crash-report
         if: failure()
-        with:
-          name: openfeature-windows
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-windows

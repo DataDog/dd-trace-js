@@ -69,6 +69,8 @@ jobs:
 
   tracing-windows:
     runs-on: windows-latest
+    env:
+      NODE_OPTIONS: --report-on-fatalerror --report-dir=${{ runner.temp }}/node-reports
     permissions:
       id-token: write
     steps:
@@ -80,10 +82,8 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/upload-node-reports
+      - uses: ./.github/actions/node-crash-report
         if: failure()
-        with:
-          name: apm-capabilities-tracing-windows
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-windows
