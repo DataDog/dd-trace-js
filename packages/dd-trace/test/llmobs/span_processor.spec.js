@@ -103,7 +103,7 @@ describe('span processor', () => {
           output: {
             messages: [{ role: 'assistant', content: 'world' }],
           },
-          metadata: { _dd: {}, foo: 'bar' },
+          metadata: { foo: 'bar' },
         },
         metrics: {},
         _dd: {
@@ -145,7 +145,6 @@ describe('span processor', () => {
       const payload = writer.append.getCall(0).firstArg
 
       assert.deepStrictEqual(payload.meta.metadata, {
-        _dd: {},
         bar: 'baz',
         bigint: 'Unserializable value',
         circular: 'Unserializable value',
