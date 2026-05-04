@@ -7,6 +7,10 @@ const {
   channel,
   addHook,
 } = require('./helpers/instrument')
+const {
+  brokerSupportsMessageHeaders,
+  cloneMessagesForInjection,
+} = require('./helpers/kafka')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')
@@ -22,7 +26,30 @@ const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
-const disabledHeaderWeakSet = new WeakSet()
+// Capture the cluster instance kafkajs creates per producer/consumer so the
+// boundary can read `cluster.brokerPool.metadata.clusterId` lazily instead of
+// opening a parallel admin connection.
+const kCluster = Symbol('dd-trace.kafkajs.cluster')
+
+addHook({ name: 'kafkajs', file: 'src/producer/index.js', versions: ['>=1.4'] }, (createProducer) =>
+  shimmer.wrapFunction(createProducer, original => function wrappedCreateProducer (params) {
+    const producer = original(params)
+    if (params?.cluster) {
+      producer[kCluster] = params.cluster
+    }
+    return producer
+  })
+)
+
+addHook({ name: 'kafkajs', file: 'src/consumer/index.js', versions: ['>=1.4'] }, (createConsumer) =>
+  shimmer.wrapFunction(createConsumer, original => function wrappedCreateConsumer (params) {
+    const consumer = original(params)
+    if (params?.cluster) {
+      consumer[kCluster] = params.cluster
+    }
+    return consumer
+  })
+)
 
 addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
   class Kafka extends BaseKafka {
@@ -36,77 +63,108 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
-    const send = producer.send
+    const originalSend = producer.send
     const bootstrapServers = this._brokers
+    const cluster = producer[kCluster]
 
-    const kafkaClusterIdPromise = getKafkaClusterId(this)
+    let disableHeaderInjection = false
 
-    producer.send = function () {
-      const wrappedSend = (clusterId) => {
-        const { topic, messages = [] } = arguments[0]
-
-        const ctx = {
-          bootstrapServers,
-          clusterId,
-          disableHeaderInjection: disabledHeaderWeakSet.has(producer),
-          messages,
-          topic,
-        }
-
-        for (const message of messages) {
-          if (message !== null && typeof message === 'object' && !ctx.disableHeaderInjection) {
-            message.headers = message.headers || {}
-          }
-        }
-
-        return producerStartCh.runStores(ctx, () => {
-          try {
-            const result = send.apply(this, arguments)
-            result.then(
-              (res) => {
-                ctx.result = res
-                producerFinishCh.publish(ctx)
-                producerCommitCh.publish(ctx)
-              },
-              (err) => {
-                ctx.error = err
-                if (err) {
-                  // Fixes bug where we would inject message headers for kafka brokers that don't support headers
-                  // (version <0.11). On the error, we disable header injection.
-                  // Unfortunately the error name / type is not more specific.
-                  // This approach is implemented by other tracers as well.
-                  if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
-                    disabledHeaderWeakSet.add(producer)
-                    log.error(
-                      // eslint-disable-next-line @stylistic/max-len
-                      'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
-                    )
-                  }
-                  producerErrorCh.publish(err)
-                }
-                producerFinishCh.publish(ctx)
-              })
-
-            return result
-          } catch (e) {
-            ctx.error = e
-            producerErrorCh.publish(ctx)
-            producerFinishCh.publish(ctx)
-            throw e
-          }
-        })
+    const refreshHeaderSupport = () => {
+      if (!disableHeaderInjection && !brokerSupportsMessageHeaders(cluster?.brokerPool)) {
+        disableHeaderInjection = true
+        log.info('kafkajs broker negotiated Produce <v3; tracer header injection disabled.')
       }
-
-      if (isPromise(kafkaClusterIdPromise)) {
-        // promise is not resolved
-        return kafkaClusterIdPromise.then((clusterId) => {
-          return wrappedSend(clusterId)
-        })
-      }
-
-      // promise is already resolved
-      return wrappedSend(kafkaClusterIdPromise)
     }
+
+    producer.send = function (...args) {
+      if (!producerStartCh.hasSubscribers) {
+        return originalSend.apply(this, args)
+      }
+
+      // Fast path: kafkajs has fetched metadata, so versions and clusterId are
+      // already on the broker pool.
+      const metadata = cluster?.brokerPool?.metadata
+      if (metadata) {
+        refreshHeaderSupport()
+        return runSend.call(this, args, metadata.clusterId)
+      }
+
+      // Slow path, taken at most once per producer connect cycle. Prime the
+      // metadata fetch kafkajs's send would do internally a few stack frames
+      // later. `sharedPromiseTo` collapses our call and kafkajs's call into a
+      // single round trip, so total latency is unchanged.
+      if (typeof cluster?.refreshMetadataIfNecessary !== 'function') {
+        return runSend.call(this, args)
+      }
+      return cluster.refreshMetadataIfNecessary().then(
+        () => {
+          refreshHeaderSupport()
+          return runSend.call(this, args, cluster.brokerPool?.metadata?.clusterId)
+        },
+        () => runSend.call(this, args)
+      )
+    }
+
+    function runSend (args, clusterId) {
+      const arg0 = args[0]
+      const topic = arg0?.topic
+      const inputMessages = Array.isArray(arg0?.messages) ? arg0.messages : []
+
+      // Hand kafkajs and the plugin a shallow clone so injection writes to a
+      // tracer-owned object instead of the caller's. Skip the clone when
+      // injection is off; nothing downstream mutates the array.
+      let messages = inputMessages
+      if (!disableHeaderInjection && inputMessages.length > 0) {
+        messages = cloneMessagesForInjection(inputMessages)
+        args[0] = { ...arg0, messages }
+      }
+
+      const ctx = {
+        bootstrapServers,
+        clusterId,
+        disableHeaderInjection,
+        messages,
+        topic,
+      }
+
+      return producerStartCh.runStores(ctx, () => {
+        try {
+          const result = originalSend.apply(this, args)
+          result.then(
+            (res) => {
+              ctx.result = res
+              producerFinishCh.publish(ctx)
+              producerCommitCh.publish(ctx)
+            },
+            (error) => {
+              ctx.error = error
+              if (error) {
+                // Safety net for mixed-version clusters where the seed broker
+                // advertised Produce v3+ but the leader we shipped to could
+                // not parse the headers, surfacing as KafkaJSProtocolError
+                // UNKNOWN (server error code -1).
+                if (error.name === 'KafkaJSProtocolError' && error.type === 'UNKNOWN') {
+                  disableHeaderInjection = true
+                  log.error(
+                    // eslint-disable-next-line @stylistic/max-len
+                    'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                  )
+                }
+                producerErrorCh.publish(error)
+              }
+              producerFinishCh.publish(ctx)
+            }
+          )
+          return result
+        } catch (error) {
+          ctx.error = error
+          producerErrorCh.publish(ctx)
+          producerFinishCh.publish(ctx)
+          throw error
+        }
+      })
+    }
+
     return producer
   })
 
@@ -115,24 +173,26 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       return createConsumer.apply(this, arguments)
     }
 
-    const kafkaClusterIdPromise = getKafkaClusterId(this)
-    let resolvedClusterId = null
+    const consumer = createConsumer.apply(this, arguments)
+    const cluster = consumer[kCluster]
+    const groupId = arguments[0].groupId
 
-    const eachMessageExtractor = (args, clusterId) => {
+    const readClusterId = () => cluster?.brokerPool?.metadata?.clusterId
+
+    const eachMessageExtractor = (args) => {
       const { topic, partition, message } = args[0]
-      return { topic, partition, message, groupId, clusterId }
+      return { topic, partition, message, groupId, clusterId: readClusterId() }
     }
 
-    const eachBatchExtractor = (args, clusterId) => {
+    const eachBatchExtractor = (args) => {
       const { batch } = args[0]
       const { topic, partition, messages } = batch
-      return { topic, partition, messages, groupId, clusterId }
+      return { topic, partition, messages, groupId, clusterId: readClusterId() }
     }
-
-    const consumer = createConsumer.apply(this, arguments)
 
     consumer.on(consumer.events.COMMIT_OFFSETS, (event) => {
       const { payload: { groupId: commitGroupId, topics } } = event
+      const clusterId = readClusterId()
       const commitList = []
       for (const { topic, partitions } of topics) {
         for (const { partition, offset } of partitions) {
@@ -141,7 +201,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             partition,
             offset,
             topic,
-            clusterId: resolvedClusterId,
+            clusterId,
           })
         }
       }
@@ -149,118 +209,67 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     })
 
     const run = consumer.run
-    const groupId = arguments[0].groupId
 
     consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
-      const wrapConsume = (clusterId) => {
-        // In kafkajs COMMIT_OFFSETS always happens in the context of one synchronous run
-        // So this will always reference a correct cluster id
-        resolvedClusterId = clusterId
-        return run({
-          eachMessage: wrappedCallback(
-            eachMessage,
-            consumerStartCh,
-            consumerFinishCh,
-            consumerErrorCh,
-            eachMessageExtractor,
-            clusterId
-          ),
-          eachBatch: wrappedCallback(
-            eachBatch,
-            batchConsumerStartCh,
-            batchConsumerFinishCh,
-            batchConsumerErrorCh,
-            eachBatchExtractor,
-            clusterId
-          ),
-          ...runArgs,
-        })
-      }
-
-      if (isPromise(kafkaClusterIdPromise)) {
-        // promise is not resolved
-        return kafkaClusterIdPromise.then((clusterId) => {
-          return wrapConsume(clusterId)
-        })
-      }
-
-      // promise is already resolved
-      return wrapConsume(kafkaClusterIdPromise)
+      return run({
+        eachMessage: wrappedCallback(
+          eachMessage,
+          consumerStartCh,
+          consumerFinishCh,
+          consumerErrorCh,
+          eachMessageExtractor
+        ),
+        eachBatch: wrappedCallback(
+          eachBatch,
+          batchConsumerStartCh,
+          batchConsumerFinishCh,
+          batchConsumerErrorCh,
+          eachBatchExtractor
+        ),
+        ...runArgs,
+      })
     }
+
     return consumer
   })
+
   return Kafka
 })
 
-const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId) => {
-  return typeof fn === 'function'
-    ? function (...args) {
-      const extractedArgs = extractArgs(args, clusterId)
-      const ctx = {
-        extractedArgs,
-      }
-
-      return startCh.runStores(ctx, () => {
-        try {
-          const result = fn.apply(this, args)
-          if (result && typeof result.then === 'function') {
-            result.then(
-              (res) => {
-                ctx.result = res
-                finishCh.publish(ctx)
-              },
-              (err) => {
-                ctx.error = err
-                if (err) {
-                  errorCh.publish(ctx)
-                }
-                finishCh.publish(ctx)
-              })
-          } else {
-            finishCh.publish(ctx)
-          }
-          return result
-        } catch (e) {
-          ctx.error = e
-          errorCh.publish(ctx)
-          finishCh.publish(ctx)
-          throw e
-        }
-      })
+const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs) => {
+  if (typeof fn !== 'function') return fn
+  return function (...args) {
+    const ctx = {
+      extractedArgs: extractArgs(args),
     }
-    : fn
-}
 
-const getKafkaClusterId = (kafka) => {
-  if (kafka._ddKafkaClusterId) {
-    return kafka._ddKafkaClusterId
-  }
-
-  if (!kafka.admin) {
-    return null
-  }
-
-  const admin = kafka.admin()
-
-  if (!admin.describeCluster) {
-    return null
-  }
-
-  return admin.connect()
-    .then(() => {
-      return admin.describeCluster()
+    return startCh.runStores(ctx, () => {
+      try {
+        const result = fn.apply(this, args)
+        if (result && typeof result.then === 'function') {
+          result.then(
+            (res) => {
+              ctx.result = res
+              finishCh.publish(ctx)
+            },
+            (error) => {
+              ctx.error = error
+              if (error) {
+                errorCh.publish(ctx)
+              }
+              finishCh.publish(ctx)
+            }
+          )
+        } else {
+          finishCh.publish(ctx)
+        }
+        return result
+      } catch (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
+        finishCh.publish(ctx)
+        throw error
+      }
     })
-    .then((clusterInfo) => {
-      const clusterId = clusterInfo?.clusterId
-      kafka._ddKafkaClusterId = clusterId
-      admin.disconnect()
-      return clusterId
-    })
-    .catch((error) => {
-      throw error
-    })
-}
-
-function isPromise (obj) {
-  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
+  }
 }

@@ -1112,6 +1112,28 @@ function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
 }
 
+/**
+ * Recursively `Object.freeze` an object plus everything reachable from it. Use
+ * in tests when an instrumentation contract says "we won't mutate this": any
+ * accidental write to the value or its nested structures throws synchronously
+ * under strict mode, so the test fails at the offending assignment instead of
+ * far downstream via deep-equality.
+ *
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze (value) {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value
+  }
+  Object.freeze(value)
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze(value[key])
+  }
+  return value
+}
+
 module.exports = {
   ANY_NUMBER,
   ANY_STRING,
@@ -1120,6 +1142,7 @@ module.exports = {
   hookFile,
   assertObjectContains,
   assertUUID,
+  deepFreeze,
   stopProc,
   spawnProc,
   spawnProcAndExpectExit,
