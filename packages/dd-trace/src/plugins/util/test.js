@@ -360,11 +360,11 @@ module.exports = {
   GIT_REPOSITORY_URL,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logDynamicNamesWarning,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
   formatAttemptToFixSummary,
-  logAttemptToFixSummary,
   logAttemptToFixTestExecution,
   formatDynamicNamesSummary,
   logTestOptimizationSummary,
@@ -1336,36 +1336,10 @@ function getModifiedFilesFromDiff (diff) {
 }
 
 /**
- * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
- * and populates the provided Set. Silently ignores parse errors.
- *
- * @param {string} data - JSON-serialized traces from a worker
- * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
- */
-function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
-  try {
-    const traces = JSON.parse(data)
-    for (const trace of traces) {
-      for (const span of trace) {
-        if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
-          const suite = span.meta[TEST_SUITE]
-          const name = span.meta[TEST_NAME]
-          if (suite && name) {
-            newTestsWithDynamicNames.add(`${suite} › ${name}`)
-          }
-        }
-      }
-    }
-  } catch {
-    // ignore parse errors
-  }
-}
-
-/**
  * @typedef {object} AttemptToFixExecutionResult
  * @property {string} name
  * @property {number} executions
- * @property {number[]} failedExecutions
+ * @property {number} failedCount
  * @property {boolean} isDisabled
  * @property {boolean} isQuarantined
  */
@@ -1428,7 +1402,6 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
  *   testSuite?: string,
  *   testName: string,
  *   status: string,
- *   error?: Error,
  *   isDisabled?: boolean,
  *   isQuarantined?: boolean
  * }} execution
@@ -1444,7 +1417,7 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
     result = {
       name,
       executions: 0,
-      failedExecutions: [],
+      failedCount: 0,
       isDisabled: false,
       isQuarantined: false,
     }
@@ -1456,8 +1429,73 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   result.isQuarantined = result.isQuarantined || !!isQuarantined
 
   if (status === 'fail') {
-    result.failedExecutions.push(result.executions)
+    result.failedCount++
   }
+}
+
+function collectDynamicNameFromTraceSpan (span, newTestsWithDynamicNames) {
+  const meta = span.meta
+  if (meta?.[TEST_HAS_DYNAMIC_NAME] !== 'true') return
+
+  const suite = meta[TEST_SUITE]
+  const name = meta[TEST_NAME]
+  if (suite && name) {
+    newTestsWithDynamicNames.add(`${suite} › ${name}`)
+  }
+}
+
+function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions) {
+  const meta = span.meta
+  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') return
+
+  recordAttemptToFixExecution(attemptToFixExecutions, {
+    testSuite: meta[TEST_SUITE],
+    testName: meta[TEST_NAME],
+    status: meta[TEST_STATUS],
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+  })
+}
+
+/**
+ * Scans serialized worker trace payloads and populates Test Optimization summary data.
+ * Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {{
+ *   newTestsWithDynamicNames?: Set<string>,
+ *   attemptToFixExecutions?: AttemptToFixExecutions
+ * }} summaries
+ */
+function collectTestOptimizationSummariesFromTraces (data, summaries) {
+  const { newTestsWithDynamicNames, attemptToFixExecutions } = summaries
+
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (newTestsWithDynamicNames) {
+          collectDynamicNameFromTraceSpan(span, newTestsWithDynamicNames)
+        }
+        if (attemptToFixExecutions) {
+          collectAttemptToFixExecutionFromTraceSpan(span, attemptToFixExecutions)
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+/**
+ * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
+ * and populates the provided Set. Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
+ */
+function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
+  collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
 }
 
 /**
@@ -1467,25 +1505,7 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
  * @param {AttemptToFixExecutions} attemptToFixExecutions
  */
 function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) {
-  try {
-    const traces = JSON.parse(data)
-    for (const trace of traces) {
-      for (const span of trace) {
-        const meta = span.meta
-        if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') continue
-
-        recordAttemptToFixExecution(attemptToFixExecutions, {
-          testSuite: meta[TEST_SUITE],
-          testName: meta[TEST_NAME],
-          status: meta[TEST_STATUS],
-          isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-          isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
-        })
-      }
-    }
-  } catch {
-    // ignore parse errors
-  }
+  collectTestOptimizationSummariesFromTraces(data, { attemptToFixExecutions })
 }
 
 function getAttemptToFixManagementNotes (result) {
@@ -1499,6 +1519,10 @@ function getAttemptToFixManagementNotes (result) {
   }
 
   return notes
+}
+
+function hasAttemptToFixManagementNotes (result) {
+  return result.isDisabled || result.isQuarantined
 }
 
 function addAttemptToFixResultLine (lines, result) {
@@ -1519,7 +1543,7 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
   if (attemptToFixExecutions.size === 0) return ''
 
   const results = [...attemptToFixExecutions.values()]
-  const failedResults = results.filter(result => result.failedExecutions.length > 0)
+  const failedResults = results.filter(result => result.failedCount > 0)
   const totalExecutions = results.reduce((total, result) => total + result.executions, 0)
 
   if (failedResults.length === 0) {
@@ -1528,7 +1552,7 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
     ]
 
     for (const result of results) {
-      if (getAttemptToFixManagementNotes(result).length > 0) {
+      if (hasAttemptToFixManagementNotes(result)) {
         addAttemptToFixResultLine(lines, result)
       }
     }
@@ -1537,7 +1561,7 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
   }
 
   const totalFailedExecutions = failedResults.reduce(
-    (total, result) => total + result.failedExecutions.length,
+    (total, result) => total + result.failedCount,
     0
   )
   const lines = [
@@ -1547,6 +1571,11 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
 
   for (const result of failedResults) {
     addAttemptToFixResultLine(lines, result)
+  }
+  for (const result of results) {
+    if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+      addAttemptToFixResultLine(lines, result)
+    }
   }
 
   return lines.join('\n')
@@ -1607,15 +1636,6 @@ function logTestOptimizationSummary (summary) {
   if (newTestsWithDynamicNames) {
     newTestsWithDynamicNames.clear()
   }
-}
-
-/**
- * Logs and clears the attempt-to-fix end-of-session summary.
- *
- * @param {AttemptToFixExecutions} attemptToFixExecutions
- */
-function logAttemptToFixSummary (attemptToFixExecutions) {
-  logTestOptimizationSummary({ attemptToFixExecutions })
 }
 
 /**

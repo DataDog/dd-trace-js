@@ -11,10 +11,9 @@ const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   DYNAMIC_NAME_RE,
-  collectDynamicNamesFromTraces,
   getTestSuitePath,
   recordAttemptToFixExecution,
-  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -270,7 +269,7 @@ function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
   return state === 'fail' ? 'fail' : 'pass'
 }
 
-function recordFinalAttemptToFixExecution (task, status, error, providedContext) {
+function recordFinalAttemptToFixExecution (task, status, providedContext) {
   const statuses = attemptToFixTaskToStatuses.get(task)
   if (statuses && statuses.length <= providedContext.testManagementAttemptToFixRetries) {
     statuses.push(status)
@@ -280,7 +279,6 @@ function recordFinalAttemptToFixExecution (task, status, error, providedContext)
     testSuite: getTestSuitePath(task.file.filepath, process.cwd()),
     testName: getTestName(task),
     status,
-    error: status === 'fail' ? error : undefined,
     isDisabled: disabledTasks.has(task),
     isQuarantined: quarantinedTasks.has(task),
   })
@@ -574,8 +572,10 @@ function threadHandler (thread) {
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-        collectDynamicNamesFromTraces(message.data, newTestsWithDynamicNames)
-        collectAttemptToFixExecutionsFromTraces(message.data, attemptToFixExecutions)
+        collectTestOptimizationSummariesFromTraces(message.data, {
+          newTestsWithDynamicNames,
+          attemptToFixExecutions,
+        })
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
@@ -617,8 +617,10 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-          collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
-          collectAttemptToFixExecutionsFromTraces(data, attemptToFixExecutions)
+          collectTestOptimizationSummariesFromTraces(data, {
+            newTestsWithDynamicNames,
+            attemptToFixExecutions,
+          })
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
@@ -1215,7 +1217,7 @@ addHook({
         const testError = errors?.[0]
         if (attemptToFixTasks.has(task)) {
           const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
-          recordFinalAttemptToFixExecution(task, status, testError, providedContext)
+          recordFinalAttemptToFixExecution(task, status, providedContext)
         }
 
         if (state === 'skip') { // programmatic skip

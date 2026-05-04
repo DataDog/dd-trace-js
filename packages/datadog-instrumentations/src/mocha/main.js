@@ -14,8 +14,7 @@ const {
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
-  collectDynamicNamesFromTraces,
-  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
 } = require('../../../dd-trace/src/plugins/util/test')
 
@@ -550,8 +549,10 @@ function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-      collectDynamicNamesFromTraces(payload, newTestsWithDynamicNames)
-      collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
+      collectTestOptimizationSummariesFromTraces(payload, {
+        newTestsWithDynamicNames,
+        attemptToFixExecutions,
+      })
       workerReportTraceCh.publish(payload)
     }
   }

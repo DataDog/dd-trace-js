@@ -21,7 +21,6 @@ const {
   isModifiedTest,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
-  collectAttemptToFixExecutionsFromTraces,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -111,7 +110,6 @@ const wrappedWorkerChannels = new WeakMap()
 // New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
 // Populated in-process for runInBand, and via worker-report:trace for parallel mode.
 const newTestsWithDynamicNames = new Set()
-const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
@@ -233,15 +231,12 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
  *
  * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  */
-function logSessionSummary (ignoredFailures, summaryAttemptToFixExecutions = attemptToFixExecutions) {
+function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
   logTestOptimizationSummary({
-    attemptToFixExecutions: summaryAttemptToFixExecutions,
+    attemptToFixExecutions,
     extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
     newTestsWithDynamicNames,
   })
-  if (summaryAttemptToFixExecutions !== attemptToFixExecutions) {
-    attemptToFixExecutions.clear()
-  }
   loggedAttemptToFixTests.clear()
 }
 
@@ -842,17 +837,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (!ctx) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
           return
-        }
-
-        if (isAttemptToFix) {
-          recordAttemptToFixExecution(attemptToFixExecutions, {
-            testSuite: ctx.suite,
-            testName,
-            status,
-            error: formatJestError(originalError),
-            isDisabled: ctx.isDisabled,
-            isQuarantined: ctx.isQuarantined,
-          })
         }
 
         const finalStatus = this.getFinalStatus(testName,
@@ -1978,7 +1962,6 @@ function onMessageWrapper (onMessage) {
     const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
       collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
-      collectAttemptToFixExecutionsFromTraces(data, attemptToFixExecutions)
       workerReportTraceCh.publish(data)
       return
     }

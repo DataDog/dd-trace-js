@@ -28,8 +28,8 @@ const {
   isModifiedTest,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   formatAttemptToFixSummary,
-  logAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
 } = require('../../../src/plugins/util/test')
@@ -181,8 +181,9 @@ describe('attempt to fix summary', () => {
 
     assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
     assert.match(summary, /suite\.js › fails/)
+    assert.match(summary, /suite\.js › passes/)
     assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
-    assert.doesNotMatch(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
   })
 
   it('reports ignored quarantine and disabled for passing attempt to fix tests', () => {
@@ -265,6 +266,39 @@ describe('attempt to fix summary', () => {
     assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
   })
 
+  it('collects test optimization summaries from worker traces with one parse', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'pass',
+          },
+        },
+        {
+          meta: {
+            '_dd.has_dynamic_name': 'true',
+            'test.suite': 'dynamic-suite.js',
+            'test.name': 'dynamic 123',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, {
+      attemptToFixExecutions: executions,
+      newTestsWithDynamicNames,
+    })
+
+    assert.deepStrictEqual([...newTestsWithDynamicNames], ['dynamic-suite.js › dynamic 123'])
+    assert.match(formatAttemptToFixSummary(executions), /worker-suite\.js › worker test/)
+  })
+
   it('logs and clears the attempt to fix summary', () => {
     const executions = new Map()
     const consoleWarn = sinon.stub(console, 'warn')
@@ -276,7 +310,7 @@ describe('attempt to fix summary', () => {
     })
 
     try {
-      logAttemptToFixSummary(executions)
+      logTestOptimizationSummary({ attemptToFixExecutions: executions })
     } finally {
       consoleWarn.restore()
     }

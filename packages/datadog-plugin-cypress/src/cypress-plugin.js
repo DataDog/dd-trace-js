@@ -280,12 +280,8 @@ function getFinalStatus ({
   isQuarantined,
   isDisabled,
 }) {
-  if (status === 'skip') {
-    return 'skip'
-  }
-
   // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
-  if (retryKind !== FINAL_STATUS_RETRY_KIND.atf && (isQuarantined || isDisabled)) {
+  if (status === 'skip' || (retryKind !== FINAL_STATUS_RETRY_KIND.atf && (isQuarantined || isDisabled))) {
     return 'skip'
   }
 
@@ -1216,7 +1212,6 @@ class CypressPlugin {
             testSuite,
             testName,
             status: testStatus,
-            error,
             isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
             isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           })

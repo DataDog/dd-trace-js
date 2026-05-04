@@ -379,7 +379,6 @@ function getTestFinishInfo (test, status, config, error) {
       testSuite: getTestSuitePath(test.file, process.cwd()),
       testName: test.fullTitle(),
       status,
-      error,
       isDisabled: _ddIsDisabled,
       isQuarantined: _ddIsQuarantined,
     })

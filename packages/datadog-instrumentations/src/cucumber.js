@@ -264,12 +264,8 @@ function getFinalStatus ({
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
-  if (status === 'skip') {
-    return 'skip'
-  }
-
   // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
-  if (!isLastAttemptToFix && (isQuarantined || isDisabled)) {
+  if (status === 'skip' || (!isLastAttemptToFix && (isQuarantined || isDisabled))) {
     return 'skip'
   }
 
@@ -467,10 +463,9 @@ function wrapRun (pl, isLatestVersion, version) {
 
         if (isAttemptToFix) {
           recordAttemptToFixExecution(attemptToFixExecutions, {
-            testSuite: getTestSuitePath(testFileAbsolutePath, process.cwd()),
+            testSuite: testSuitePath,
             testName: this.pickle.name,
             status,
-            error,
             isDisabled,
             isQuarantined,
           })

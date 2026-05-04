@@ -416,7 +416,6 @@ function testEndHandler ({
       testSuite: getTestSuitePath(test._requireFile, rootDir),
       testName: getTestFullname(test),
       status: testStatus,
-      error,
       isDisabled: testProperties.disabled,
       isQuarantined: testProperties.quarantined,
     })
