@@ -311,6 +311,58 @@ function createConfigWrapper (originalConfigFile) {
 }
 
 /**
+ * @param {string} projectRoot
+ * @returns {boolean}
+ */
+function isTypeScript6OrNewer (projectRoot) {
+  try {
+    // eslint-disable-next-line n/no-unpublished-require
+    const packageJsonPath = require.resolve('typescript/package.json', { paths: [projectRoot] })
+    const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+    const major = Number(String(version).split('.')[0])
+    return major >= 6
+  } catch {
+    return false
+  }
+}
+
+/**
+ * @param {string} projectRoot
+ * @param {string} configFilePath
+ * @returns {() => void}
+ */
+function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
+  const configExt = path.extname(configFilePath)
+  if (configExt !== '.ts' && configExt !== '.cts' && configExt !== '.mts') return () => {}
+  if (!isTypeScript6OrNewer(projectRoot)) return () => {}
+
+  /* eslint-disable eslint-rules/eslint-process-env */
+  const previousCompilerOptions = process.env.TS_NODE_COMPILER_OPTIONS
+  let compilerOptions = {}
+  if (previousCompilerOptions) {
+    try {
+      compilerOptions = JSON.parse(previousCompilerOptions)
+    } catch {
+      compilerOptions = {}
+    }
+  }
+
+  process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({
+    ...compilerOptions,
+    ignoreDeprecations: '6.0',
+  })
+
+  return () => {
+    if (previousCompilerOptions === undefined) {
+      delete process.env.TS_NODE_COMPILER_OPTIONS
+    } else {
+      process.env.TS_NODE_COMPILER_OPTIONS = previousCompilerOptions
+    }
+  }
+  /* eslint-enable eslint-rules/eslint-process-env */
+}
+
+/**
  * Wraps the Cypress config file for a CLI start() call. When an explicit
  * configFile is provided, creates a temp wrapper that imports the original
  * and passes it through wrapConfig. This handles ESM configs (.mjs) and
@@ -350,10 +402,12 @@ function wrapCliConfigFileOptions (options) {
 
   try {
     const wrapperFile = createConfigWrapper(configFilePath)
+    const restoreTsNodeCompilerOptions = configureTsNodeForTypeScript6(projectRoot, configFilePath)
 
     return {
       options: { ...options, configFile: wrapperFile },
       cleanup: () => {
+        restoreTsNodeCompilerOptions()
         try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
       },
     }

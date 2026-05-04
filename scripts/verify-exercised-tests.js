@@ -266,6 +266,56 @@ function parseInlineAssignments (prefix) {
 }
 
 /**
+ * Find `**` occurrences in a script string that are NOT inside quotes.
+ *
+ * POSIX sh (which is what `npm run`/`yarn run` invokes) does NOT support globstar, so an
+ * unquoted `**` collapses to `*` (single directory level). For recursive glob matching to
+ * reach mocha/glob intact, the pattern must be quoted so the shell passes it through as a
+ * literal string. This analyzer cannot rely on `globSync` alone for the check because it
+ * expands `**` recursively regardless of quoting — hiding the bug that the shell actually
+ * breaks unquoted patterns.
+ *
+ * @param {string} script
+ * @returns {{ column: number, context: string }[]}
+ */
+function findUnquotedGlobstar (script) {
+  /** @type {{ column: number, context: string }[]} */
+  const out = []
+  /** @type {'"'|"'"|null} */
+  let quote = null
+
+  for (let i = 0; i < script.length; i++) {
+    const ch = script[i]
+
+    if (quote) {
+      // In double-quoted strings, `\` escapes the next character.
+      if (quote === '"' && ch === '\\' && i + 1 < script.length) {
+        i++
+        continue
+      }
+      if (ch === quote) quote = null
+      continue
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+
+    if (ch === '*' && script[i + 1] === '*') {
+      // Capture a short context window so the error message points to the offending token.
+      const start = Math.max(0, i - 20)
+      const end = Math.min(script.length, i + 25)
+      out.push({ column: i, context: script.slice(start, end) })
+      // Skip the second `*` to avoid double-reporting.
+      i++
+    }
+  }
+
+  return out
+}
+
+/**
  * Extract `export NAME=value` assignments from a multi-line `run:` string.
  * @param {string} run
  * @returns {Record<string, string>}
@@ -927,6 +977,31 @@ function main () {
   const knownScripts = new Set(Object.keys(scripts))
   const scriptPrefixes = buildScriptPrefixSet(scripts)
 
+  // Detect `**` globs in scripts that are not wrapped in quotes. POSIX sh drops globstar, so
+  // unquoted `**` degrades to `*` and only a single directory level is passed through to
+  // mocha/globSync — silently missing any spec file deeper than one subdirectory.
+  /** @type {string[]} */
+  const unquotedGlobstar = []
+  for (const scriptName of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
+    const cmd = scripts[scriptName]
+    if (typeof cmd !== 'string') continue
+
+    for (const hit of findUnquotedGlobstar(cmd)) {
+      unquotedGlobstar.push(
+        `package.json: script "${scriptName}" contains an unquoted "**" at column ${hit.column} ` +
+        `(near "${hit.context.trim()}"). Wrap the glob in double quotes so POSIX sh passes ` +
+        'it through to mocha/glob as a literal; otherwise `**` collapses to `*` and specs ' +
+        'deeper than one subdirectory are silently skipped.'
+      )
+    }
+  }
+
+  if (unquotedGlobstar.length) {
+    process.stderr.write('Unquoted `**` globs detected in package.json scripts:\n')
+    for (const msg of unquotedGlobstar) process.stderr.write(`- ${msg}\n`)
+    process.exit(1)
+  }
+
   const testFiles = findTestFiles(repoRoot)
   const { globs, matchedFiles } = expandScriptGlobs(repoRoot, scripts)
 
@@ -964,6 +1039,22 @@ function main () {
 
   const invokedScripts = new Set(invoked.map(i => i.script))
 
+  /**
+   * A script counts as "invoked" when either itself or its `:coverage` sibling (or base, if the
+   * script is the `:coverage` variant) is referenced by CI. Pair-matching keeps duplicate
+   * coverage/non-coverage definitions from each forcing their own CI step.
+   *
+   * @param {string} scriptName
+   * @returns {boolean}
+   */
+  const isInvokedOrCoverageSibling = (scriptName) => {
+    if (invokedScripts.has(scriptName)) return true
+    if (scriptName.endsWith(':coverage')) {
+      return invokedScripts.has(scriptName.slice(0, -':coverage'.length))
+    }
+    return invokedScripts.has(`${scriptName}:coverage`)
+  }
+
   // CI must not invoke missing scripts.
   for (const i of invoked) {
     if (!scripts[i.script]) {
@@ -975,7 +1066,7 @@ function main () {
   // All :ci scripts should be referenced by CI.
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.endsWith(':ci')) continue
-    if (!invokedScripts.has(name)) {
+    if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
   }
@@ -983,11 +1074,11 @@ function main () {
   // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.startsWith('test:integration')) continue
-    // Skip test:integration:plugins - it's a convenience script for running only plugin integration
-    // tests locally, but in CI these are already covered by test:plugins:ci (which runs all plugin
-    // tests including integration tests).
-    if (name === 'test:integration:plugins') continue
-    if (!invokedScripts.has(name)) {
+    // Skip test:integration:plugins (and its coverage sibling) - it's a convenience script for
+    // running only plugin integration tests locally, but in CI these are already covered by
+    // test:plugins:ci (which runs all plugin tests including integration tests).
+    if (name === 'test:integration:plugins' || name === 'test:integration:plugins:coverage') continue
+    if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
   }

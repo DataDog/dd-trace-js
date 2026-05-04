@@ -99,7 +99,7 @@ describe('getTestSessionName', () => {
     process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
     process.env.LAGE_PACKAGE_NAME = 'lage-package'
 
-    const testSessionName = getTestSessionName({ ciVisibilityTestSessionName: 'explicit-session' }, 'jest', {})
+    const testSessionName = getTestSessionName({ DD_TEST_SESSION_NAME: 'explicit-session' }, 'jest', {})
 
     assert.strictEqual(testSessionName, 'explicit-session')
   })
@@ -168,6 +168,128 @@ describe('getCodeOwnersForFilename', () => {
     assert.strictEqual(codeOwners, null)
   })
 
+  it('matches supported GitHub CODEOWNERS patterns', () => {
+    const patternTests = [
+      {
+        pattern: '*',
+        matches: ['index.js', 'packages/dd-trace/src/index.js'],
+      },
+      {
+        pattern: '*.js',
+        matches: ['index.js', 'packages/dd-trace/src/index.js'],
+        misses: ['index.jsx', 'packages/dd-trace/src/index.js.map'],
+      },
+      {
+        pattern: 'README.md',
+        matches: ['README.md', 'packages/dd-trace/README.md'],
+        misses: ['README.txt', 'packages/dd-trace/readme.md'],
+      },
+      {
+        pattern: '/package.json',
+        matches: ['package.json'],
+        misses: ['packages/dd-trace/package.json'],
+      },
+      {
+        pattern: '/docs/',
+        matches: ['docs/README.md', 'docs/api/reference.md'],
+        misses: ['src/docs/README.md'],
+      },
+      {
+        pattern: 'apps/',
+        matches: ['apps/api/index.js', 'packages/apps/api/index.js'],
+        misses: ['applications/api/index.js'],
+      },
+      {
+        pattern: 'docs/*',
+        matches: ['docs/getting-started.md'],
+        misses: ['docs/build-app/troubleshooting.md', 'src/docs/getting-started.md'],
+      },
+      {
+        pattern: '**/logs',
+        matches: ['logs/app.log', 'build/logs/app.log', 'deeply/nested/logs/app.log'],
+        misses: ['build/logs-old/app.log'],
+      },
+      {
+        pattern: 'logs/**',
+        matches: ['logs/app.log', 'logs/deeply/nested/app.log'],
+        misses: ['src/logs/app.log'],
+      },
+      {
+        pattern: '/packages/**/dsm.spec.js',
+        matches: ['packages/dsm.spec.js', 'packages/datadog-plugin-kafkajs/test/dsm.spec.js'],
+        misses: ['src/packages/datadog-plugin-kafkajs/test/dsm.spec.js'],
+      },
+      {
+        pattern: 'file?.js',
+        matches: ['file1.js', 'packages/dd-trace/fileA.js'],
+        misses: ['file10.js', 'packages/dd-trace/file/name.js'],
+      },
+    ]
+
+    for (const { pattern, matches = [], misses = [] } of patternTests) {
+      const entries = [{ pattern, owners: [`@owner-${pattern}`] }]
+      const expectedCodeOwners = JSON.stringify([`@owner-${pattern}`])
+
+      for (const filename of matches) {
+        assert.strictEqual(getCodeOwnersForFilename(filename, entries), expectedCodeOwners)
+      }
+
+      for (const filename of misses) {
+        assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
+      }
+    }
+  })
+
+  it('keeps CODEOWNERS matching case-sensitive', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/Docs/', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(
+      getCodeOwnersForFilename('Docs/reference.md', codeOwnersFileEntries),
+      JSON.stringify(['@datadog-docs'])
+    )
+    assert.strictEqual(getCodeOwnersForFilename('docs/reference.md', codeOwnersFileEntries), null)
+  })
+
+  it('uses the last matching CODEOWNERS entry', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '*.js', owners: ['@datadog-default-js'] },
+      { pattern: '/packages/dd-trace/', owners: ['@datadog-dd-trace-js'] },
+    ].reverse()
+
+    const codeOwners = getCodeOwnersForFilename(
+      'packages/dd-trace/src/index.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwners, JSON.stringify(['@datadog-dd-trace-js']))
+  })
+
+  it('preserves multiple CODEOWNERS owners and email owners', () => {
+    const codeOwnersFileEntries = [
+      {
+        pattern: '*.js',
+        owners: ['@datadog-team-a', '@datadog/team-b', 'user@example.com'],
+      },
+    ]
+
+    const codeOwners = getCodeOwnersForFilename('index.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwners, JSON.stringify(['@datadog-team-a', '@datadog/team-b', 'user@example.com']))
+  })
+
+  it('supports empty owner overrides', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '*', owners: ['@datadog-default'] },
+      { pattern: '/apps/github', owners: [] },
+    ].reverse()
+
+    const codeOwners = getCodeOwnersForFilename('apps/github/index.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwners, JSON.stringify([]))
+  })
+
   it('returns the code owners for a given file path', () => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
@@ -185,6 +307,164 @@ describe('getCodeOwnersForFilename', () => {
     )
 
     assert.strictEqual(codeOwnersForTestSpec, JSON.stringify(['@datadog-ci-app']))
+  })
+
+  it('does not let root-level fallbacks override integration test directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+      { pattern: '/integration-tests/mocha/', owners: ['@datadog-ci-app-libraries'] },
+      { pattern: '/integration-tests/playwright/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForMochaSpec = getCodeOwnersForFilename(
+      'integration-tests/mocha/codeowners-root-pattern.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForPlaywrightSpec = getCodeOwnersForFilename(
+      'integration-tests/playwright/codeowners-root-pattern.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForRootFile = getCodeOwnersForFilename('root-level-codeowners-test.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwnersForMochaSpec, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForPlaywrightSpec, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForRootFile, JSON.stringify(['@datadog-lang-platform-js']))
+  })
+
+  it('matches directory patterns against descendants', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/dd-trace/src/ci-visibility/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForCiVisibilityFile = getCodeOwnersForFilename(
+      'packages/dd-trace/src/ci-visibility/exporters/agentless/writer.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForCiVisibilityFile, JSON.stringify(['@datadog-ci-app-libraries']))
+  })
+
+  it('matches wildcard directory patterns against descendants', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+      { pattern: '/packages/datadog-plugin-*/', owners: ['@datadog-apm-idm-js'] },
+    ]
+
+    const codeOwnersForPluginFile = getCodeOwnersForFilename(
+      'packages/datadog-plugin-http/test/codeowners-wildcard-directory.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForPluginFile, JSON.stringify(['@datadog-apm-idm-js']))
+  })
+
+  it('does not match single-star wildcards across directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/dd-trace/*/standalone', owners: ['@datadog-lang-platform-js'] },
+    ]
+
+    const codeOwnersForDirectMatch = getCodeOwnersForFilename(
+      'packages/dd-trace/src/standalone/codeowners-single-star.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForNestedMismatch = getCodeOwnersForFilename(
+      'packages/dd-trace/src/profiling/standalone/codeowners-single-star.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForDirectMatch, JSON.stringify(['@datadog-lang-platform-js']))
+    assert.strictEqual(codeOwnersForNestedMismatch, null)
+  })
+
+  it('matches double-star patterns across directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/**/dsm.spec.js', owners: ['@datadog-data-streams-monitoring'] },
+      { pattern: '/packages/**/*.dsm.spec.js', owners: ['@datadog-data-streams-monitoring'] },
+    ]
+
+    const codeOwnersForDsmSpec = getCodeOwnersForFilename(
+      'packages/datadog-plugin-kafkajs/test/dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForTopLevelDsmSpec = getCodeOwnersForFilename(
+      'packages/dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForSuffixDsmSpec = getCodeOwnersForFilename(
+      'packages/datadog-plugin-kafkajs/test/codeowners.dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForTopLevelSuffixDsmSpec = getCodeOwnersForFilename(
+      'packages/codeowners.dsm.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForTopLevelDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForSuffixDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForTopLevelSuffixDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+  })
+
+  it('matches slashless patterns in any directory', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'github_event_payload.json', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForNestedFixture = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/fixtures/github_event_payload.json',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForNestedFixture, JSON.stringify(['@datadog-ci-app-libraries']))
+  })
+
+  it('matches patterns with middle slashes from the repository root', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'fixtures/codeowners-middle-slash.json', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForRootFixture = getCodeOwnersForFilename(
+      'fixtures/codeowners-middle-slash.json',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForNestedFixture = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/fixtures/codeowners-middle-slash.json',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForRootFixture, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForNestedFixture, null)
+  })
+
+  it('does not let a root-level wildcard match nested files', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+    ]
+
+    const codeOwnersForNestedFile = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/root-wildcard-check.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForRootFile = getCodeOwnersForFilename(
+      'root-wildcard-check.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForNestedFile, null)
+    assert.strictEqual(codeOwnersForRootFile, JSON.stringify(['@datadog-lang-platform-js']))
+  })
+
+  it('matches paths with Windows separators', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/integration-tests/vitest/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForWindowsPath = getCodeOwnersForFilename(
+      'integration-tests\\vitest\\vitest.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForWindowsPath, JSON.stringify(['@datadog-ci-app-libraries']))
   })
 })
 

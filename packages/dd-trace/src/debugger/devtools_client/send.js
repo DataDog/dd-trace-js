@@ -6,7 +6,6 @@ const { stringify } = require('querystring')
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
-const { getValueFromEnvSources } = require('../../config/helper')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
@@ -23,14 +22,14 @@ const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
 
-const ddtags = [
-  ['env', getValueFromEnvSources('DD_ENV')],
-  ['version', getValueFromEnvSources('DD_VERSION')],
+const ddtags = buildTags([
+  ['env', config.env],
+  ['version', config.version],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
   [GIT_REPOSITORY_URL, config.repositoryUrl],
-].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
+])
 
 let path
 setInputPath(config.inputPath)
@@ -135,4 +134,25 @@ function buildRequestOpts () {
 function setInputPath (newPath) {
   config.inputPath = newPath
   path = `${newPath}?${stringify({ ddtags })}`
+}
+
+/**
+ * @param {Array<[string, unknown]>} tags - The tags to serialize.
+ * @returns {string} The serialized tags.
+ */
+function buildTags (tags) {
+  const serializedTags = []
+
+  for (const [key, rawValue] of tags) {
+    if (rawValue === undefined) continue
+
+    if (String(rawValue).includes(',')) {
+      log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
+      continue
+    }
+
+    serializedTags.push(`${key}:${rawValue}`)
+  }
+
+  return serializedTags.join(',')
 }

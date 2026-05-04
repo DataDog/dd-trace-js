@@ -12,8 +12,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "ciVisAgentlessLogSubmissionEnabled"
+        "default": "false"
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_URL": [
@@ -179,7 +178,8 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "100"
+        "default": "100",
+        "allowed": "\\d+"
       }
     ],
     "DD_APM_TRACING_ENABLED": [
@@ -189,7 +189,10 @@
         "configurationNames": [
           "apmTracingEnabled"
         ],
-        "default": "true"
+        "default": "true",
+        "aliases": [
+          "DD_TRACING_ENABLED"
+        ]
       }
     ],
     "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
@@ -445,9 +448,9 @@
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
       {
-        "implementation": "B",
-        "type": "boolean",
-        "default": "false"
+        "implementation": "A",
+        "type": "string",
+        "default": null
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
@@ -537,8 +540,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true",
-        "internalPropertyName": "isManualApiEnabled"
+        "default": "true"
       }
     ],
     "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
@@ -1101,24 +1103,21 @@
       {
         "implementation": "C",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "injectionEnabled"
+        "default": null
       }
     ],
     "DD_INJECT_FORCE": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "injectForce"
+        "default": "false"
       }
     ],
     "DD_INSTRUMENTATION_CONFIG_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "instrumentation_config_id"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_INSTALL_ID": [
@@ -1236,8 +1235,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "otelLogsEnabled"
+        "default": "false"
       }
     ],
     "DD_TRACE_LOG_LEVEL": [
@@ -1786,16 +1784,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "isKeepingCoverageConfiguration"
+        "default": "false"
       }
     ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "ciVisibilityTestSessionName"
+        "default": null
       }
     ],
     "DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED": [
@@ -2509,10 +2505,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "tracing",
-        "aliases": [
-          "DD_TRACING_ENABLED"
-        ]
+        "internalPropertyName": "tracing"
       }
     ],
     "DD_TRACE_ENCODING_DEBUG": [
@@ -2643,8 +2636,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true",
-        "internalPropertyName": "gitMetadataEnabled"
+        "default": "true"
       }
     ],
     "DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED": [
@@ -2686,8 +2678,7 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": "",
-        "internalPropertyName": "graphqlErrorExtensions"
+        "default": ""
       }
     ],
     "DD_TRACE_GRAPHQL_TAG_ENABLED": [
@@ -3061,8 +3052,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "memcachedCommandEnabled"
+        "default": "false"
       }
     ],
     "DD_TRACE_MEMCACHED_ENABLED": [
@@ -3436,8 +3426,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "tracePropagationExtractFirst"
+        "default": "false"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE": [
@@ -3677,7 +3666,6 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "spanLeakDebug",
         "default": "0"
       }
     ],
@@ -3830,8 +3818,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "512",
-        "internalPropertyName": "tagsHeaderMaxLength"
+        "default": "512"
       }
     ],
     "DD_VERSION": [
@@ -3871,7 +3858,6 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "otelMaxExportBatchSize",
         "default": "512",
         "allowed": "[1-9]\\d*"
       }
@@ -3880,7 +3866,6 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "otelMaxQueueSize",
         "default": "2048",
         "allowed": "[1-9]\\d*"
       }
@@ -3889,7 +3874,6 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "otelBatchTimeout",
         "default": "5000",
         "allowed": "[1-9]\\d*"
       }
@@ -3950,8 +3934,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "otelLogsUrl"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
@@ -3969,7 +3952,6 @@
         "implementation": "D",
         "type": "string",
         "default": "http/protobuf",
-        "internalPropertyName": "otelLogsProtocol",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -3979,7 +3961,6 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "otelLogsTimeout",
         "default": "10000",
         "allowed": "[1-9]\\d*",
         "aliases": [
@@ -3991,8 +3972,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "otelMetricsUrl"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
@@ -4010,7 +3990,6 @@
         "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
-        "internalPropertyName": "otelMetricsProtocol",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4022,7 +4001,6 @@
         "type": "string",
         "allowed": "Delta|Cumulative|LowMemory",
         "transform": "toUpperCase",
-        "internalPropertyName": "otelMetricsTemporalityPreference",
         "default": "delta"
       }
     ],
@@ -4031,7 +4009,6 @@
         "implementation": "B",
         "type": "int",
         "allowed": "[1-9]\\d*",
-        "internalPropertyName": "otelMetricsTimeout",
         "default": "10000",
         "aliases": [
           "OTEL_EXPORTER_OTLP_TIMEOUT"
@@ -4042,8 +4019,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http/protobuf",
-        "internalPropertyName": "otelProtocol"
+        "default": "http/protobuf"
       }
     ],
     "OTEL_EXPORTER_OTLP_TIMEOUT": [
@@ -4051,7 +4027,6 @@
         "implementation": "A",
         "type": "int",
         "allowed": "[1-9]\\d*",
-        "internalPropertyName": "otelTimeout",
         "default": "10000"
       }
     ],
@@ -4078,7 +4053,6 @@
         "implementation": "A",
         "type": "int",
         "allowed": "[1-9]\\d*",
-        "internalPropertyName": "otelMetricsExportInterval",
         "default": "10000"
       }
     ],
@@ -4087,7 +4061,6 @@
         "implementation": "A",
         "type": "int",
         "allowed": "[1-9]\\d*",
-        "internalPropertyName": "otelMetricsExportTimeout",
         "default": "7500"
       }
     ],

@@ -2,7 +2,7 @@
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
-const { storage } = require('../../../datadog-core')
+const { getActiveRequest } = require('../appsec/store')
 const log = require('../log')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const telemetryMetrics = require('../telemetry/metrics')
@@ -154,7 +154,7 @@ class AIGuard extends NoopAIGuard {
 
     if (!needsHttpClientIp && !needsNetworkClientIp) return
 
-    const req = storage('legacy').getStore()?.req
+    const req = getActiveRequest()
 
     if (!req) return
 

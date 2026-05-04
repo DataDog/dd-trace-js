@@ -364,7 +364,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:instrumentations:misc:ci
@@ -382,10 +381,6 @@ jobs:
         with:
           flags: platform-instrumentations-misc
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: test-${{ github.job }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -405,14 +400,24 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:${{ matrix.bundler }}
+      - if: matrix.bundler == 'esbuild'
+        run: yarn test:integration:esbuild:coverage
+      # TODO: Webpack bundles dd-trace into a single file with the customer code, so the
+      # NYC counters end up bundled too and the bootstrap can't find them at the original
+      # paths. Switch to `:coverage` once the harness handles bundled output.
+      - if: matrix.bundler == 'webpack'
+        run: yarn test:integration:webpack
+      - if: matrix.bundler == 'esbuild'
+        uses: ./.github/actions/coverage
+        with:
+          flags: instrumentations-integration-esbuild-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
