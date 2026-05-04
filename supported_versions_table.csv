@@ -31,7 +31,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 aerospike,aerospike,4.0.0,6.5.2,True
 ai,ai,4.0.0,6.0.39,True
 amqp10,amqp10,3.0.0,3.6.0,True
-amqplib,amqplib,0.5.3,0.10.9,True
+amqplib,amqplib,0.5.0,0.10.9,True
 avsc,avsc,5.0.0,5.7.9,True
 aws-sdk,aws-sdk,2.1.35,2.1693.0,True
 bullmq,bullmq,5.66.0,5.66.5,True
