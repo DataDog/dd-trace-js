@@ -26,8 +26,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
       const result = ctx.result
       if (result?.code) span.setTag('http.status_code', result.code)
       if (result?.substatus) span.setTag('http.status_subcode', result.substatus)
+      span.finish()
     }
-    span.finish()
   }
 
   error (ctx) {
@@ -93,7 +93,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const path = requestContext.path
     const parts = path.split('/')
     let modified = false
-    for (let i = 0; i < parts.length; i += 2) {
+    for (let i = 2; i < parts.length; i += 2) {
       if (parts[i].length > 0 && parts[i - 1] !== 'dbs' && parts[i - 1] !== 'colls') {
         parts[i] = '?'
         modified = true
