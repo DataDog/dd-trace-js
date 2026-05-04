@@ -18,6 +18,8 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueWhitespa
   const segments = value.split(fieldSeparator)
   segments.length = Math.min(segments.length, MAX_LIST_MEMBERS)
 
+  // TODO: We should extract dd no matter at what position and move it to the front of the list.
+  // Extract up 31 additional entries.
   const entries = []
   for (let index = 0; index < segments.length; index++) {
     const segment = segments[index]
