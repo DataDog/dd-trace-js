@@ -226,7 +226,7 @@
   {
     "dependency": "amqplib",
     "integration": "amqplib",
-    "minimum_tracer_supported": "0.5.0",
+    "minimum_tracer_supported": "0.5.3",
     "max_tracer_supported": "0.10.9",
     "auto-instrumented": "True"
   },
