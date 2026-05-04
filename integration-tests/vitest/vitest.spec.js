@@ -1821,6 +1821,7 @@ versions.forEach((version) => {
             isAttemptingToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
+            shouldFailFirstOnly,
             isQuarantining,
             isDisabling,
           }) =>
@@ -1871,7 +1872,7 @@ versions.forEach((version) => {
                     if (isLastAttempt) {
                       if (shouldAlwaysPass) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                      } else if (shouldFailSometimes) {
+                      } else if (shouldFailSometimes || shouldFailFirstOnly) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                         assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                       } else {
@@ -1880,8 +1881,6 @@ versions.forEach((version) => {
                       }
                       if (shouldAlwaysPass) {
                         assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                      } else if (isQuarantining || isDisabling) {
-                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
                       } else {
                         assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
                       }
@@ -1904,6 +1903,7 @@ versions.forEach((version) => {
            *   shouldAlwaysPass?: boolean,
            *   isQuarantining?: boolean,
            *   shouldFailSometimes?: boolean,
+           *   shouldFailFirstOnly?: boolean,
            *   isDisabling?: boolean,
            *   extraEnvVars?: Record<string, string>
            * }} [options]
@@ -1922,6 +1922,7 @@ versions.forEach((version) => {
               isAttemptingToFix,
               shouldAlwaysPass,
               shouldFailSometimes,
+              shouldFailFirstOnly,
               isQuarantining,
               isDisabling,
             })
@@ -1945,10 +1946,36 @@ versions.forEach((version) => {
               stdout += data
             })
 
+            childProcess.stderr?.on('data', (data) => {
+              stdout += data
+            })
+
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 assert.match(stdout, /I am running/)
-                if (shouldAlwaysPass || (isAttemptingToFix && isQuarantining) || (isAttemptingToFix && isDisabling)) {
+                if (isAttemptingToFix) {
+                  assert.match(
+                    stdout,
+                    /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
+                  )
+                  assert.strictEqual(
+                    (stdout.match(
+                      /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
+                    ) || []).length,
+                    1
+                  )
+                  assert.match(stdout, /Datadog Test Optimization/)
+                  if (shouldAlwaysPass) {
+                    assert.match(stdout, /Attempt to fix passed/)
+                  } else {
+                    assert.match(stdout, /Attempt to fix failed/)
+                    assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                  }
+                  if (isQuarantining || isDisabling) {
+                    assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+                  }
+                }
+                if (shouldAlwaysPass) {
                   assert.strictEqual(exitCode, 0)
                 } else {
                   assert.strictEqual(exitCode, 1)
@@ -1980,6 +2007,108 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
+          })
+
+          it('records afterEach failures in attempt to fix summary', async () => {
+            const testName = 'attempt to fix tests with failing afterEach ' +
+              'can attempt to fix a test whose afterEach fails on the last attempt'
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs': {
+                    tests: {
+                      [testName]: {
+                        properties: {
+                          attempt_to_fix: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const attemptedToFixTests = tests
+                  .filter(test => test.meta[TEST_NAME] === testName)
+                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                assert.strictEqual(attemptedToFixTests.length, 4)
+
+                attemptedToFixTests.forEach((test, index) => {
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+
+                  if (index < attemptedToFixTests.length - 1) {
+                    assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                    assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+                    assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                  } else {
+                    assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                    assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+                    assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                  }
+                })
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+
+            childProcess.stdout?.on('data', (data) => {
+              stdout += data
+            })
+            childProcess.stderr?.on('data', (data) => {
+              stdout += data
+            })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              eventsPromise,
+            ])
+
+            assert.match(stdout, /Attempt to fix failed: 1 of 4 execution\(s\) failed across 1 of 1 test\(s\)\./)
+            assert.strictEqual(exitCode, 1)
+          })
+
+          it('preserves raw attempt statuses for quarantined attempt to fix tests', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                    tests: {
+                      'attempt to fix tests can attempt to fix a test': {
+                        properties: {
+                          attempt_to_fix: true,
+                          quarantined: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              isQuarantining: true,
+              shouldFailFirstOnly: true,
+            })
           })
 
           it('does not attempt to fix tests if test management is not enabled', (done) => {
@@ -2046,7 +2175,7 @@ versions.forEach((version) => {
             ])
           })
 
-          it('does not fail retry if a test is quarantined', (done) => {
+          it('ignores quarantine when attempting to fix a test', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
             receiver.setTestManagementTests({
               vitest: {
@@ -2068,7 +2197,7 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantining: true })
           })
 
-          it('does not fail retry if a test is disabled', (done) => {
+          it('ignores disabled when attempting to fix a test', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
             receiver.setTestManagementTests({
               vitest: {
@@ -2088,6 +2217,32 @@ versions.forEach((version) => {
             })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabling: true })
+          })
+
+          it('reports passing disabled attempt to fix tests as passed', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                    tests: {
+                      'attempt to fix tests can attempt to fix a test': {
+                        properties: {
+                          attempt_to_fix: true,
+                          disabled: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              isDisabling: true,
+              shouldAlwaysPass: true,
+            })
           })
         })
 
