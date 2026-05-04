@@ -209,18 +209,21 @@ describe('AIGuard SDK integration tests', () => {
 
       await executeRequest(`${url}/allow`, 'GET')
 
-      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
-        if (namespace !== 'ai_guard') return
+      const checkTelemetry = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const series = payload.payload.series
+          const requests = findMetric(series, 'requests')
 
-        const series = payload.payload.series
-        const requests = findMetric(series, 'requests')
-        if (!requests) return
-
-        telemetryReceived = true
-        assert.strictEqual(requests.type, 'count')
-        assertHasTags(requests, ['source:sdk', 'integration:none', 'action:allow', 'error:false'])
-      }, 'generate-metrics', 30_000, 2)
+          assert.ok(requests)
+          telemetryReceived = true
+          assert.strictEqual(requests.type, 'count')
+          assertHasTags(requests, ['source:sdk', 'integration:none', 'action:allow', 'error:false'])
+        },
+        requestType: 'generate-metrics',
+        timeout: 30_000,
+        resolveAtFirstSuccess: true,
+        namespace: 'ai_guard',
+      })
 
       await checkTelemetry
       assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
@@ -231,18 +234,21 @@ describe('AIGuard SDK integration tests', () => {
 
       await executeRequest(`${url}/auto?mode=point1&deny=false`)
 
-      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
-        if (namespace !== 'ai_guard') return
+      const checkTelemetry = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const series = payload.payload.series
+          const requests = findMetric(series, 'requests')
 
-        const series = payload.payload.series
-        const requests = findMetric(series, 'requests')
-        if (!requests) return
-
-        telemetryReceived = true
-        assert.strictEqual(requests.type, 'count')
-        assertHasTags(requests, ['source:auto', 'integration:ai', 'action:allow', 'error:false'])
-      }, 'generate-metrics', 30_000, 2)
+          assert.ok(requests)
+          telemetryReceived = true
+          assert.strictEqual(requests.type, 'count')
+          assertHasTags(requests, ['source:auto', 'integration:ai', 'action:allow', 'error:false'])
+        },
+        requestType: 'generate-metrics',
+        timeout: 30_000,
+        resolveAtFirstSuccess: true,
+        namespace: 'ai_guard',
+      })
 
       await checkTelemetry
       assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
@@ -253,18 +259,21 @@ describe('AIGuard SDK integration tests', () => {
 
       await executeRequest(`${url}/deny`, 'GET', { 'x-blocking-enabled': 'true' })
 
-      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
-        if (namespace !== 'ai_guard') return
+      const checkTelemetry = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const series = payload.payload.series
+          const requests = findMetric(series, 'requests')
 
-        const series = payload.payload.series
-        const requests = findMetric(series, 'requests')
-        if (!requests) return
-
-        telemetryReceived = true
-        assert.strictEqual(requests.type, 'count')
-        assertHasTags(requests, ['source:sdk', 'integration:none', 'action:deny', 'error:false', 'block:true'])
-      }, 'generate-metrics', 30_000, 2)
+          assert.ok(requests)
+          telemetryReceived = true
+          assert.strictEqual(requests.type, 'count')
+          assertHasTags(requests, ['source:sdk', 'integration:none', 'action:deny', 'error:false', 'block:true'])
+        },
+        requestType: 'generate-metrics',
+        timeout: 30_000,
+        resolveAtFirstSuccess: true,
+        namespace: 'ai_guard',
+      })
 
       await checkTelemetry
       assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
@@ -288,22 +297,25 @@ describe('AIGuard SDK integration tests', () => {
         // This will fail because the endpoint is unreachable
         await executeRequest(`${proc2.url}/allow`, 'GET').catch(() => {})
 
-        const checkTelemetry = agent2.assertTelemetryReceived(({ payload }) => {
-          const namespace = payload.payload.namespace
-          if (namespace !== 'ai_guard') return
+        const checkTelemetry = agent2.assertTelemetryReceived({
+          fn: ({ payload }) => {
+            const series = payload.payload.series
+            const errorMetric = findMetric(series, 'error')
 
-          const series = payload.payload.series
-          const errorMetric = findMetric(series, 'error')
-          if (!errorMetric) return
+            assert.ok(errorMetric)
+            telemetryReceived = true
+            assert.strictEqual(errorMetric.type, 'count')
+            assertHasTags(errorMetric, ['type:client_error', 'source:sdk', 'integration:none'])
 
-          telemetryReceived = true
-          assert.strictEqual(errorMetric.type, 'count')
-          assertHasTags(errorMetric, ['type:client_error', 'source:sdk', 'integration:none'])
-
-          const requests = findMetric(series, 'requests')
-          assert.ok(requests)
-          assertHasTags(requests, ['error:true', 'source:sdk', 'integration:none'])
-        }, 'generate-metrics', 30_000, 2)
+            const requests = findMetric(series, 'requests')
+            assert.ok(requests)
+            assertHasTags(requests, ['error:true', 'source:sdk', 'integration:none'])
+          },
+          requestType: 'generate-metrics',
+          timeout: 30_000,
+          resolveAtFirstSuccess: true,
+          namespace: 'ai_guard',
+        })
 
         await checkTelemetry
         assert.ok(telemetryReceived, 'Expected ai_guard error telemetry to be received')
