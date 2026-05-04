@@ -27,8 +27,9 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
     if (splitIndex === -1) continue
     const key = segment.slice(0, splitIndex).trim()
     if (!key || WHITESPACE.test(key)) continue
-    const entryValue = segment.slice(splitIndex + 1).trim()
-    // W3C §3.3.1.3.2: chr = %x20 / nblk-chr; tab is in neither, but space is.
+    // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
+    // Leading 0x20 is part of value; trailing whitespace is OWS.
+    const entryValue = segment.slice(splitIndex + 1).trimEnd()
     if (!entryValue || rejectValueTabs && entryValue.includes('\t')) continue
     entries.push([key, entryValue])
   }
