@@ -14,8 +14,8 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -96,7 +96,7 @@ jobs:
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
@@ -280,7 +280,7 @@ jobs:
         if: "!cancelled()"
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-  
+
   langgraph:
     runs-on: ubuntu-latest
     permissions:
@@ -290,6 +290,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   modelcontextprotocol-sdk:
     runs-on: ubuntu-latest

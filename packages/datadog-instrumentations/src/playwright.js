@@ -12,7 +12,9 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
@@ -76,9 +78,10 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 const newTestsWithDynamicNames = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -342,6 +345,11 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   // We disable retries by default if attemptToFix is true
   if (getTestProperties(test).attemptToFix) {
     test.retries = 0
+    logAttemptToFixTestExecution(
+      getTestSuitePath(testSuiteAbsolutePath, rootDir),
+      getTestFullname(test),
+      loggedAttemptToFixTests
+    )
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)
@@ -403,6 +411,20 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+
+  if (testProperties.attemptToFix) {
+    test._ddHasFailedAttemptToFixRetries = false
+    test._ddHasFailedAllRetries = false
+    test._ddHasPassedAttemptToFixRetries = false
+
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: getTestSuitePath(test._requireFile, rootDir),
+      testName: getTestFullname(test),
+      status: testStatus,
+      isDisabled: testProperties.disabled,
+      isQuarantined: testProperties.quarantined,
+    })
+  }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1 && testProperties.attemptToFix) {
     if (testStatuses.includes('fail')) {
@@ -771,7 +793,6 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
       let totalFailedTestCount = 0
-      let totalAttemptToFixFailedTestCount = 0
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
@@ -785,16 +806,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         }
       }
 
-      for (const test of quarantinedOrDisabledTestsAttemptToFix) {
-        const testFqn = getTestFullyQualifiedName(test)
-        const testStatuses = testsToTestStatuses.get(testFqn)
-        // Only count as failed if the final status (after retries) is 'fail'
-        if (testStatuses && testStatuses[testStatuses.length - 1] === 'fail') {
-          totalAttemptToFixFailedTestCount += 1
-        }
-      }
-
-      const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
+      const totalIgnorableFailures = totalPureQuarantinedFailedTestCount
 
       if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
@@ -802,7 +814,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    logDynamicNamesWarning(newTestsWithDynamicNames)
+    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    loggedAttemptToFixTests.clear()
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
@@ -979,9 +992,6 @@ addHook({
 
           if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {
             fileSuitesWithManagedTestsToProjects.set(fileSuite, getSuiteType(test, 'project'))
-          }
-          if (testProperties.disabled || testProperties.quarantined) {
-            quarantinedOrDisabledTestsAttemptToFix.push(test)
           }
         }
       }

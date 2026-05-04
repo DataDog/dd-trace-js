@@ -8,8 +8,8 @@ on:
     - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -27,16 +27,11 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:openfeature:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: openfeature-${{ github.job }}-${{ matrix.version }}
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-unit-${{ matrix.version }}
@@ -57,7 +52,11 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-macos
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -74,13 +73,17 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/latest
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-ubuntu
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -99,7 +102,11 @@ jobs:
       - uses: ./.github/actions/install
         with:
           cache: "true"
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-windows
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

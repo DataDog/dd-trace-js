@@ -18,7 +18,7 @@ describe('AgentlessWriter', () => {
   let encoderArgs
   let url
   let log
-  let getValueFromEnvSources
+  let apiKey
 
   beforeEach(() => {
     request = sinon.stub().yieldsAsync(null, '{}', 200)
@@ -38,8 +38,6 @@ describe('AgentlessWriter', () => {
       error: sinon.spy(),
     }
 
-    getValueFromEnvSources = sinon.stub().returns('test-api-key')
-
     const AgentlessJSONEncoder = function (...args) {
       encoderArgs = args
       return encoder
@@ -47,12 +45,14 @@ describe('AgentlessWriter', () => {
 
     const requestModule = Object.assign(request, { '@global': true })
 
+    apiKey = 'test-api-key'
+
     Writer = proxyquire('../../../src/exporters/agentless/writer', {
       '../common/request': requestModule,
       '../../encode/agentless-json': { AgentlessJSONEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
-      '../../config/helper': { getValueFromEnvSources },
+      '../../config': () => ({ apiKey }),
     })
   })
 
@@ -149,7 +149,7 @@ describe('AgentlessWriter', () => {
     })
 
     it('should log error at startup when API key is missing', () => {
-      getValueFromEnvSources.returns(undefined)
+      apiKey = undefined
 
       // Error should be logged at constructor time
       writer = new Writer({ url })
@@ -161,7 +161,7 @@ describe('AgentlessWriter', () => {
     })
 
     it('should skip sending when API key is missing', (done) => {
-      getValueFromEnvSources.returns(undefined)
+      apiKey = undefined
       writer = new Writer({ url })
 
       encoder.count.returns(1)

@@ -81,11 +81,8 @@ for (const [name, value] of Object.entries(defaults)) {
  * @param {string} optionName
  */
 function generateTelemetry (value = null, origin, optionName) {
-  const { type, canonicalName = optionName } = configurationsTable[optionName] ?? { type: typeof value }
-  // TODO: Consider adding a preParser hook to the parsers object.
-  if (canonicalName === 'OTEL_RESOURCE_ATTRIBUTES') {
-    value = telemetryTransformers.MAP(value)
-  }
+  const tableEntry = configurationsTable[optionName]
+  const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
@@ -94,9 +91,12 @@ function generateTelemetry (value = null, origin, optionName) {
     if (telemetryTransformers[type]) {
       value = telemetryTransformers[type](value)
     } else if (typeof value === 'object' && value !== null) {
-      value = value instanceof URL
-        ? String(value)
-        : JSON.stringify(value)
+      // Custom optionsTable entries (no `configurationsTable` row, e.g. `logger`)
+      // hold opaque user-supplied references that may carry cycles, so avoid
+      // traversing them via JSON.stringify.
+      value = tableEntry === undefined
+        ? util.inspect(value, { depth: -1 })
+        : value instanceof URL ? String(value) : JSON.stringify(value)
     } else if (typeof value === 'function') {
       value = value.name || 'function'
     }
@@ -250,7 +250,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       option.transformer = transformer
     }
     if (entry.configurationNames) {
-      addOption(option, type, entry.configurationNames)
+      addOption(option, entry.configurationNames)
     }
     configurationsTable[canonicalName] = option
 
@@ -287,7 +287,7 @@ for (const [fullPropertyName, alias] of fallbackConfigurations) {
   }
 }
 
-function addOption (option, type, configurationNames) {
+function addOption (option, configurationNames) {
   for (const name of configurationNames) {
     let index = -1
     let lastNestedProperties

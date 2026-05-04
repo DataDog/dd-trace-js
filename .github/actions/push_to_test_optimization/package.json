@@ -1,0 +1,8 @@
+{
+  "name": "push-to-test-optimization",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@datadog/datadog-ci": "5.15.0"
+  }
+}

@@ -6,7 +6,7 @@ const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const {
   addIntelligentTestRunnerSpanTags,
@@ -117,7 +117,7 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       this.libraryConfig = null

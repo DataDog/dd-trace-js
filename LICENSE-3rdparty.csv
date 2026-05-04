@@ -68,7 +68,6 @@
 "esquery","https://github.com/estools/esquery","['BSD-3-Clause']","['Joel Feenstra']"
 "estraverse","https://github.com/estools/estraverse","['BSD-2-Clause']","['estools']"
 "fast-fifo","https://github.com/mafintosh/fast-fifo","['MIT']","['Mathias Buus']"
-"ignore","https://github.com/kaelzhang/node-ignore","['MIT']","['kael']"
 "import-in-the-middle","https://github.com/nodejs/import-in-the-middle","['Apache-2.0']","['Bryan English']"
 "istanbul-lib-coverage","https://github.com/istanbuljs/istanbuljs","['BSD-3-Clause']","['Krishnan Anantheswaran']"
 "jest-docblock","https://github.com/jestjs/jest","['MIT']","['jestjs']"

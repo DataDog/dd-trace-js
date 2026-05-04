@@ -124,7 +124,7 @@ describe('Plugin', () => {
                   'out.host': '127.0.0.1',
                   component: 'mongodb',
                 },
-              })
+              }, { spanResourceMatch: new RegExp(`^insert test\\.${collectionName}$`) })
               .then(done)
               .catch(done)
 
@@ -777,13 +777,22 @@ describe('Plugin', () => {
         })
 
         describe('when heartbeat tracing is disabled via env var', () => {
-          before(() => {
+          let savedHeartbeatEnv
+
+          before(async () => {
+            savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            return agent.load('mongodb-core', {})
+            agent.wipe()
+            await agent.load('mongodb-core', {})
           })
 
-          after(() => {
-            return agent.close({ ritmReset: false })
+          after(async () => {
+            if (savedHeartbeatEnv === undefined) {
+              delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+            } else {
+              process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
+            }
+            await agent.close({ ritmReset: false, wipe: true })
           })
 
           beforeEach(async () => {
@@ -817,13 +826,22 @@ describe('Plugin', () => {
         })
 
         describe('when heartbeat tracing is enabled via env var', () => {
-          before(() => {
+          let savedHeartbeatEnv
+
+          before(async () => {
+            savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            return agent.load('mongodb-core', {})
+            agent.wipe()
+            await agent.load('mongodb-core', {})
           })
 
-          after(() => {
-            return agent.close({ ritmReset: false })
+          after(async () => {
+            if (savedHeartbeatEnv === undefined) {
+              delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+            } else {
+              process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
+            }
+            await agent.close({ ritmReset: false, wipe: true })
           })
 
           beforeEach(async () => {

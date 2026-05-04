@@ -107,11 +107,7 @@ async function spawnPluginIntegrationTestProc (agentPort) {
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
     PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
   }
-
-  const options = { cwd, env }
-
-  const proc = await spawnProc('func', ['start'], options)
-  return proc
+  return spawnProc('func', ['start'], { cwd, env })
 }
 
 function spawnProc (command, args, options = {}) {

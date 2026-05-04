@@ -6,8 +6,11 @@ const { before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { storage } = require('../../../../datadog-core')
 const { USER_ID } = require('../../../src/appsec/addresses')
 const waf = require('../../../src/appsec/waf')
+const { withRequest } = require('../../../src/appsec/store')
+const web = require('../../../src/plugins/util/web')
 const resultActions = {
   actions: {
     block_request: {
@@ -23,7 +26,7 @@ describe('user_blocking - Internal API', () => {
   const res = { headersSent: false }
   const tracer = {}
 
-  let rootSpan, getRootSpan, block, legacyStorage, log, userBlocking
+  let rootSpan, getRootSpan, block, log, userBlocking
 
   before(() => {
     const runStub = sinon.stub(waf, 'run')
@@ -42,9 +45,8 @@ describe('user_blocking - Internal API', () => {
 
     block = sinon.stub().returns(true)
 
-    legacyStorage = {
-      getStore: sinon.stub().returns({ req, res }),
-    }
+    web.patch(req).res = res
+    storage('legacy').enterWith(withRequest(undefined, req))
 
     log = {
       warn: sinon.stub(),
@@ -53,9 +55,12 @@ describe('user_blocking - Internal API', () => {
     userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
       './utils': { getRootSpan },
       '../blocking': { block },
-      '../../../../datadog-core': { storage: () => legacyStorage },
       '../../log': log,
     })
+  })
+
+  afterEach(() => {
+    storage('legacy').enterWith({})
   })
 
   describe('checkUserAndSetUser', () => {
@@ -112,16 +117,14 @@ describe('user_blocking - Internal API', () => {
     it('should get req and res from local storage when they are not passed', () => {
       const ret = userBlocking.blockRequest(tracer)
       assert.strictEqual(ret, true)
-      sinon.assert.calledOnce(legacyStorage.getStore)
       sinon.assert.calledOnceWithExactly(block, req, res, rootSpan)
     })
 
     it('should log warning when req or res is not available', () => {
-      legacyStorage.getStore.returns(undefined)
+      storage('legacy').enterWith({})
 
       const ret = userBlocking.blockRequest(tracer)
       assert.strictEqual(ret, false)
-      sinon.assert.calledOnce(legacyStorage.getStore)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Requests or response object not available in blockRequest')
       sinon.assert.notCalled(block)
     })

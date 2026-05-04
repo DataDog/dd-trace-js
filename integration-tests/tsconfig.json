@@ -4,7 +4,8 @@
     "module": "commonjs",
     "outDir": "ci-visibility/playwright-tests-ts-out",
     "sourceMap": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node"]
   },
   "include": ["ci-visibility/playwright-tests-ts"],
   "files": ["playwright.config.ts"]

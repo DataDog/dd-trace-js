@@ -51,6 +51,8 @@ module.exports = {
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
 
+    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+
     if (trackGc) {
       startGCObserver()
     }
@@ -71,8 +73,6 @@ module.exports = {
         nativeMetrics = null
       }
     }
-
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     lastTime = performance.now()
 
