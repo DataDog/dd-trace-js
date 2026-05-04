@@ -15,6 +15,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -293,6 +294,40 @@ versions.forEach((version) => {
                   )
                   assert.strictEqual(testsMarkedAsFailed, 1)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
+                }
+
+                // Exactly one ATF run must have TEST_FINAL_STATUS and it must be the last to finish.
+                // The main process marks the execution final based on arrival order of testEnd events,
+                // so the run that completes last is always the one that gets the tag.
+                for (const testName of [
+                  'attempt to fix should attempt to fix failed test',
+                  'attempt to fix should attempt to fix passed test',
+                ]) {
+                  let expectedFinalStatus
+                  if (isDisabled || isQuarantined) {
+                    expectedFinalStatus = 'skip'
+                  } else if (shouldAlwaysPass ||
+                    testName === 'attempt to fix should attempt to fix passed test') {
+                    expectedFinalStatus = 'pass'
+                  } else {
+                    expectedFinalStatus = 'fail'
+                  }
+
+                  const group = attemptedToFixTests.filter(t => t.meta[TEST_NAME] === testName)
+                  group.sort((a, b) => {
+                    const endA = BigInt(a.start) + BigInt(a.duration)
+                    const endB = BigInt(b.start) + BigInt(b.duration)
+                    return endA < endB ? -1 : endA > endB ? 1 : 0
+                  })
+                  group.forEach((t, index) => {
+                    if (index < group.length - 1) {
+                      assert.ok(!(TEST_FINAL_STATUS in t.meta),
+                        `ATF run ${index} of "${testName}" should not have TEST_FINAL_STATUS`)
+                    } else {
+                      assert.strictEqual(t.meta[TEST_FINAL_STATUS], expectedFinalStatus,
+                        `Last ATF run of "${testName}" should have TEST_FINAL_STATUS="${expectedFinalStatus}"`)
+                    }
+                  })
                 }
               } else {
                 assert.strictEqual(countAttemptToFixTests, 0)
