@@ -32,14 +32,21 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
   static includeReplayedTag = true
 
   bindStart (ctx) {
-    const meta = this.getTags(ctx)
     const spanName = this.constructor.spanName
     const parentName = this.activeSpan?.context()._name
     const operationName = HIGH_CARDINALITY_PARENT_SPAN_NAMES.has(parentName)
       ? undefined
       : this.getOperationName(ctx)
 
-    this.startSpan(spanName, { resource: operationName, meta }, ctx)
+    const meta = this.constructor.includeReplayedTag
+      ? { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) }
+      : {}
+
+    this.startSpan(spanName, {
+      resource: operationName,
+      kind: this.constructor.kind,
+      meta,
+    }, ctx)
 
     return ctx.currentStore
   }
@@ -54,19 +61,6 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
   getOperationName (ctx) {
     const args = ctx.arguments || []
     return typeof args[0] === 'string' ? args[0] : undefined
-  }
-
-  getTags (ctx) {
-    const tags = {
-      component: 'aws-durable-execution-sdk-js',
-      'span.kind': 'internal',
-    }
-
-    if (this.constructor.includeReplayedTag) {
-      tags['aws.durable.replayed'] = String(isReplayedOp(ctx.self))
-    }
-
-    return tags
   }
 
   asyncEnd (ctx) {
