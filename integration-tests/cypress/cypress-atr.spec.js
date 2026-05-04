@@ -486,6 +486,7 @@ moduleTypes.forEach(({
 
     it('correctly calculates test code owners when working directory is not repository root', async () => {
       let command
+      let testOutput = ''
 
       if (type === 'commonJS') {
         const commandSuffix = version === '6.7.0'
@@ -502,13 +503,27 @@ moduleTypes.forEach(({
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const test = events.find(event => event.type === 'test').content
-          const testSuite = events.find(event => event.type === 'test_suite_end').content
+          const testEvent = events.find(event => event.type === 'test')
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+          const eventSummary = JSON.stringify(events.map(event => ({
+            type: event.type,
+            resource: event.content.resource,
+            status: event.content.meta?.[TEST_STATUS],
+          })), null, 2)
+
+          assert.ok(testEvent, `expected a test event, got events: ${eventSummary}\nCypress output:\n${testOutput}`)
+          assert.ok(
+            testSuiteEvent,
+            `expected a test_suite_end event, got events: ${eventSummary}\nCypress output:\n${testOutput}`
+          )
+
+          const test = testEvent.content
+          const testSuite = testSuiteEvent.content
           // The test is in a subproject
           assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
           assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-        }, 25000)
+        }, 60000)
 
       childProcess = exec(
         command,
@@ -520,11 +535,18 @@ moduleTypes.forEach(({
           },
         }
       )
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
 
-      await Promise.all([
+      const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise,
       ])
+      assert.strictEqual(exitCode, 0, `cypress process should exit successfully\nCypress output:\n${testOutput}`)
     })
 
     it('tags new tests with dynamic names and logs a warning', async () => {
