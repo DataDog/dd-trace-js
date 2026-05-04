@@ -70,6 +70,10 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       it('should generate exposure events with manual flush', (done) => {
+        if (process.platform === 'win32') {
+          assert.fail('Intentional failure to verify OpenFeature Windows JUnit artifact upload')
+        }
+
         const configId = 'org-42-env-test'
         const exposureEvents = []
         let receivedAckUpdate = false

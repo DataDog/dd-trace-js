@@ -103,6 +103,13 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:integration:openfeature:coverage
+      - name: Upload JUnit report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openfeature-windows-junit
+          path: node-*-junit.xml
+          if-no-files-found: error
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-windows
