@@ -14,17 +14,18 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     const handler = args[5]
 
     const meta = {
-      component: 'aws-durable-execution-sdk-js',
-      'span.kind': 'internal',
+      'aws.durable.replayed': String(event?.InitialExecutionState?.Operations?.length > 1),
     }
-
     const arn = event?.DurableExecutionArn
     if (arn) {
       meta['aws.durable.execution_arn'] = arn
     }
-    meta['aws.durable.replayed'] = String(event?.InitialExecutionState?.Operations?.length > 1)
 
-    this.startSpan('aws.durable.execute', { resource: handler?.name, meta }, ctx)
+    this.startSpan('aws.durable.execute', {
+      resource: handler?.name,
+      kind: this.constructor.kind,
+      meta,
+    }, ctx)
 
     return ctx.currentStore
   }
