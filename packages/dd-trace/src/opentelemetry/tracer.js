@@ -3,6 +3,8 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
+const tracer = require('../../')
+
 const id = require('../id')
 const log = require('../log')
 const DatadogSpanContext = require('../opentracing/span_context')
@@ -138,6 +140,14 @@ class Tracer {
         : this._createSpanContextForNewSpan(parentSpanContext)
     } else {
       spanContext = new SpanContext()
+    }
+
+    // init() didn't finish setting up real tracing (e.g. DD_TRACE_ENABLED=false,
+    // or init() was never called), so the inner tracer is still the noop.
+    // DatadogSpan can't construct without a processor + prioritySampler, so fall
+    // through to a non-recording span; the SpanContext still propagates.
+    if (!tracer._tracingInitialized) {
+      return api.trace.wrapSpanContext(spanContext)
     }
 
     const spanKind = options.kind || api.SpanKind.INTERNAL
