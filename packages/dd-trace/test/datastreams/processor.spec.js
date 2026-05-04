@@ -322,7 +322,7 @@ describe('DataStreamsProcessor', () => {
     processTags.initialize()
 
     // Configure and enable the feature
-    propagationHash.configure({ propagateProcessTags: { enabled: true } })
+    propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
@@ -345,7 +345,7 @@ describe('DataStreamsProcessor', () => {
     const propagationHash = require('../../src/propagation-hash')
 
     // Ensure the feature is disabled
-    propagationHash.configure({ propagateProcessTags: { enabled: false } })
+    propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
 
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()

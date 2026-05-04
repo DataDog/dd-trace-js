@@ -19,8 +19,8 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
 
-const GRPC_CLIENT_ERROR_STATUSES = defaults['grpc.client.error.statuses']
-const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']
+const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
+const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 describe('Config', () => {
   let log
@@ -560,7 +560,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: true,
-      appKey: undefined,
+      DD_APP_KEY: undefined,
       appsec: {
         apiSecurity: {
           enabled: true,
@@ -608,9 +608,7 @@ describe('Config', () => {
           },
         },
       },
-      crashtracking: {
-        enabled: true,
-      },
+      DD_CRASHTRACKING_ENABLED: true,
       debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
@@ -636,11 +634,9 @@ describe('Config', () => {
       },
       flushInterval: 2000,
       flushMinSpans: 1000,
-      heapSnapshot: {
-        count: 0,
-        destination: '',
-        interval: 3600,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 0,
+      DD_HEAP_SNAPSHOT_DESTINATION: '',
+      DD_HEAP_SNAPSHOT_INTERVAL: 3600,
       iast: {
         enabled: false,
         redactionEnabled: true,
@@ -652,11 +648,9 @@ describe('Config', () => {
         },
       },
       DD_INJECT_FORCE: false,
-      installSignature: {
-        id: undefined,
-        time: undefined,
-        type: undefined,
-      },
+      DD_INSTRUMENTATION_INSTALL_ID: undefined,
+      DD_INSTRUMENTATION_INSTALL_TIME: undefined,
+      DD_INSTRUMENTATION_INSTALL_TYPE: undefined,
       instrumentationSource: 'manual',
       DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
@@ -691,12 +685,12 @@ describe('Config', () => {
       spanRemoveIntegrationFromService: false,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'continue',
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
     })
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, [])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
-    assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
-    assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, GRPC_CLIENT_ERROR_STATUSES)
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
@@ -1021,7 +1015,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: false,
-      appKey: 'myAppKey',
+      DD_APP_KEY: 'myAppKey',
       appsec: {
         apiSecurity: {
           enabled: true,
@@ -1071,9 +1065,7 @@ describe('Config', () => {
           },
         },
       },
-      crashtracking: {
-        enabled: false,
-      },
+      DD_CRASHTRACKING_ENABLED: false,
       debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
@@ -1100,11 +1092,9 @@ describe('Config', () => {
         exporter: 'log',
       },
       hostname: 'agent',
-      heapSnapshot: {
-        count: 1,
-        destination: '/tmp',
-        interval: 1800,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 1,
+      DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
+      DD_HEAP_SNAPSHOT_INTERVAL: 1800,
       iast: {
         dbRowsToTaint: 2,
         deduplicationEnabled: false,
@@ -1155,16 +1145,15 @@ describe('Config', () => {
       },
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'restart',
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart',
       tracing: true,
       version: '1.0.0',
     })
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(
-      config.installSignature,
-      { id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', type: 'k8s_single_step', time: '1703188212' }
-    )
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_ID, '68e75c48-57ca-4a12-adfc-575c4b05fcbe')
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TYPE, 'k8s_single_step')
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TIME, '1703188212')
     assert.deepStrictEqual(config.peerServiceMapping, { c: 'cc', d: 'dd' })
     assert.deepStrictEqual(config.sampler, {
       sampleRate: 0.5,
@@ -1421,7 +1410,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking.enabled, true)
+    assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
   })
 
   it('should disable crash tracking for SSI when configured', () => {
@@ -1430,7 +1419,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking.enabled, false)
+    assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
   })
 
   it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
@@ -1869,24 +1858,24 @@ describe('Config', () => {
 
     let config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
 
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '1'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '1'
 
     config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [1])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [1])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [1])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [1])
 
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '2,10,13-15'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '2,10,13-15'
 
     config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [2, 10, 13, 14, 15])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [2, 10, 13, 14, 15])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [2, 10, 13, 14, 15])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [2, 10, 13, 14, 15])
   })
 
   context('peer service tagging', () => {
@@ -3730,12 +3719,10 @@ apm_configuration_default:
       let config = getConfig()
       assertObjectContains(config, {
         apiKey: 'local-api-key',
-        appKey: 'local-app-key',
-        installSignature: {
-          id: 'local-install-id',
-          time: '1234567890',
-          type: 'local_install',
-        },
+        DD_APP_KEY: 'local-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'local-install-id',
+        DD_INSTRUMENTATION_INSTALL_TIME: '1234567890',
+        DD_INSTRUMENTATION_INSTALL_TYPE: 'local_install',
         cloudPayloadTagging: {
           request: [],
           maxDepth: 5,
@@ -3750,10 +3737,8 @@ apm_configuration_default:
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'env-api-key',
-        appKey: 'env-app-key',
-        installSignature: {
-          id: 'env-install-id',
-        },
+        DD_APP_KEY: 'env-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'env-install-id',
         cloudPayloadTagging: {
           maxDepth: 7,
         },
@@ -3782,12 +3767,10 @@ rules:
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'fleet-api-key',
-        appKey: 'fleet-app-key',
-        installSignature: {
-          id: 'fleet-install-id',
-          time: '9999999999',
-          type: 'fleet_install',
-        },
+        DD_APP_KEY: 'fleet-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'fleet-install-id',
+        DD_INSTRUMENTATION_INSTALL_TIME: '9999999999',
+        DD_INSTRUMENTATION_INSTALL_TYPE: 'fleet_install',
         cloudPayloadTagging: {
           request: undefined,
           response: [],

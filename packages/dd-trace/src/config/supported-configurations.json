@@ -421,8 +421,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "appKey"
+        "default": null
       }
     ],
     "DD_AZURE_RESOURCE_GROUP": [
@@ -595,8 +594,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true",
-        "internalPropertyName": "crashtracking.enabled"
+        "default": "true"
       }
     ],
     "DD_CUSTOM_TRACE_ID": [
@@ -770,8 +768,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "default": "true",
-        "internalPropertyName": "propagateProcessTags.enabled"
+        "default": "true"
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE": [
@@ -926,7 +923,6 @@
         "implementation": "C",
         "type": "string",
         "default": "1-16",
-        "internalPropertyName": "grpc.client.error.statuses",
         "transform": "setGRPCRange"
       }
     ],
@@ -935,7 +931,6 @@
         "implementation": "C",
         "type": "string",
         "default": "2-16",
-        "internalPropertyName": "grpc.server.error.statuses",
         "transform": "setGRPCRange"
       }
     ],
@@ -943,24 +938,21 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "0",
-        "internalPropertyName": "heapSnapshot.count"
+        "default": "0"
       }
     ],
     "DD_HEAP_SNAPSHOT_DESTINATION": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "",
-        "internalPropertyName": "heapSnapshot.destination"
+        "default": ""
       }
     ],
     "DD_HEAP_SNAPSHOT_INTERVAL": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "3600",
-        "internalPropertyName": "heapSnapshot.interval"
+        "default": "3600"
       }
     ],
     "DD_IAST_DB_ROWS_TO_TAINT": [
@@ -1124,24 +1116,21 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "installSignature.id"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_INSTALL_TIME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "installSignature.time"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_INSTALL_TYPE": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "installSignature.type"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_TELEMETRY_ENABLED": [
@@ -1159,8 +1148,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "30000",
-        "internalPropertyName": "profiling.longLivedThreshold"
+        "default": "30000"
       }
     ],
     "DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED": [
@@ -1257,8 +1245,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "otelMetricsEnabled"
+        "default": "false"
       }
     ],
     "DD_MINI_AGENT_PATH": [
@@ -1942,8 +1929,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true",
-        "internalPropertyName": "trace.aws.addSpanPointers"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": [
@@ -2475,8 +2461,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "trace.dynamoDb.tablePrimaryKeys"
+        "default": null
       }
     ],
     "DD_TRACE_ELASTICSEARCH_ENABLED": [
@@ -3174,8 +3159,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "trace.nativeSpanEvents"
+        "default": "false"
       }
     ],
     "DD_TRACE_NET_ENABLED": [
@@ -3418,8 +3402,7 @@
         "type": "string",
         "allowed": "continue|restart|ignore",
         "transform": "toLowerCase",
-        "default": "continue",
-        "internalPropertyName": "tracePropagationBehaviorExtract"
+        "default": "continue"
       }
     ],
     "DD_TRACE_PROPAGATION_EXTRACT_FIRST": [

@@ -14,7 +14,7 @@ function storeConfig (config) {
     const { containerId } = require('./exporters/common/docker')
     const processTags = require('./process-tags')
 
-    const processTagsSerialized = config.propagateProcessTags?.enabled
+    const processTagsSerialized = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? (processTags.serialized || null)
       : null
 
