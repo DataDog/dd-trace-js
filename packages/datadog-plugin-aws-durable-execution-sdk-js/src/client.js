@@ -14,7 +14,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     const args = ctx.arguments || []
     const hasName = typeof args[0] === 'string' && typeof args[1] === 'string'
     const operationName = hasName ? args[0] : undefined
-    const functionName = hasName ? args[1] : (typeof args[0] === 'string' ? args[0] : undefined)
+    const functionName = hasName ? args[1] : args[0]
 
     const meta = {
       'aws.durable.replayed': String(isReplayedOp(ctx.self)),

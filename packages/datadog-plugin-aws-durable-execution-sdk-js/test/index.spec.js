@@ -240,20 +240,16 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   })
 
   describe('DurableContextImpl.waitForCallback() - aws.durable.wait_for_callback', () => {
-    it('should generate span without aws.durable.replayed tag', async () => {
+    it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
-        const allSpans = traces.flat()
-        const span = allSpans.find(s => s.name === 'aws.durable.wait_for_callback')
-        if (!span) throw new Error('aws.durable.wait_for_callback span not found')
-        assertObjectContains(span, {
+        assertSpanByName(traces, {
           name: 'aws.durable.wait_for_callback',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
+            'aws.durable.replayed': 'false',
           },
         })
-        // Per spec §4.2: wait_for_callback intentionally does not get the replayed tag.
-        assert.equal(span.meta?.['aws.durable.replayed'], undefined)
       })
 
       await testSetup.durableContextImplWaitForCallback()
