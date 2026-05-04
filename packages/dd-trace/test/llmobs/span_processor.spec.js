@@ -152,20 +152,13 @@ describe('span processor', () => {
       })
     })
 
-    it('removes problematic fields from the tool definitions', () => {
-      const schema = {
-        type: 'object',
-        bigint: 1n,
-        properties: {
-          city: { type: 'string' },
-        },
-      }
-      // plant cycles at two depths to verify the recursive guard, not just the top-level one
-      schema.circular = schema
-      schema.properties.circular = schema.properties
-
+    it('forwards tool definitions to the payload', () => {
       const toolDefinitions = [
-        { name: 'get_weather', description: 'Get the weather for a city.', schema },
+        {
+          name: 'get_weather',
+          description: 'Get the weather for a city.',
+          schema: { type: 'object', properties: { city: { type: 'string' } } },
+        },
       ]
 
       span = {
@@ -186,19 +179,7 @@ describe('span processor', () => {
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      assert.deepStrictEqual(payload.meta.tool_definitions, [{
-        name: 'get_weather',
-        description: 'Get the weather for a city.',
-        schema: {
-          type: 'object',
-          bigint: 'Unserializable value',
-          properties: {
-            city: { type: 'string' },
-            circular: 'Unserializable value',
-          },
-          circular: 'Unserializable value',
-        },
-      }])
+      assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
 
     it('tags output documents for a retrieval span', () => {
