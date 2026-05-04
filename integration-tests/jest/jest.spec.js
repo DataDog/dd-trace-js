@@ -82,7 +82,7 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
 
 const testFile = 'ci-visibility/run-jest.js'
@@ -94,8 +94,11 @@ const expectedCoverageFiles = [
 ]
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
-const JEST_VERSION = process.env.JEST_VERSION || 'latest'
+const requestedJestVersion = process.env.JEST_VERSION || 'latest'
+const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
+const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 // TODO: add ESM tests
 describe(`jest@${JEST_VERSION} commonJS`, () => {
@@ -110,7 +113,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     `jest-jasmine2@${JEST_VERSION}`,
     `babel-jest@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
-    JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
+    shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     '@babel/core',
