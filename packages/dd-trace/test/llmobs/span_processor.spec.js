@@ -160,6 +160,7 @@ describe('span processor', () => {
           city: { type: 'string' },
         },
       }
+      // plant cycles at two depths to verify the recursive guard, not just the top-level one
       schema.circular = schema
       schema.properties.circular = schema.properties
 
