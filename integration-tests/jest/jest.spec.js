@@ -5392,9 +5392,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               )
               assert.match(stdout, /Datadog Test Optimization/)
               if (shouldAlwaysPass) {
-                assert.match(stdout, /Attempt to fix passed/)
+                assert.match(stdout, /Attempt to fix passed: all 4 execution\(s\) passed for 1 test\(s\)\./)
               } else {
-                assert.match(stdout, /Attempt to fix failed/)
+                const numFailedExecutions = shouldFailSometimes ? 2 : 4
+                assert.match(
+                  stdout,
+                  new RegExp(
+                    `Attempt to fix failed: ${numFailedExecutions} of 4 execution\\(s\\) failed ` +
+                    'across 1 of 1 test\\(s\\)\\.'
+                  )
+                )
                 assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
@@ -6849,6 +6856,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testsToRun: 'test-management/test-quarantine',
           attemptingToFixMessage:
             /Datadog Test Optimization: attempting to fix .*quarantine tests can quarantine a test/,
+          executionLogMessage: /console\.log\s+I am running when quarantined/g,
         },
         {
           label: 'disabled',
@@ -6858,6 +6866,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testsToRun: 'test-management/test-disabled',
           attemptingToFixMessage:
             /Datadog Test Optimization: attempting to fix .*disable tests can disable a test/,
+          executionLogMessage: /console\.log\s+I am running/g,
         },
       ]
 
@@ -6925,6 +6934,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const { exitCode, output } = await runJestWithBail(bailCase.testsToRun)
 
           assert.match(output, bailCase.attemptingToFixMessage, bailCase.label)
+          assert.strictEqual((output.match(bailCase.executionLogMessage) || []).length, 3, bailCase.label)
           assert.match(output, /Test Suites:.*1 failed/, bailCase.label)
           assert.strictEqual(exitCode, 1, bailCase.label)
         }
