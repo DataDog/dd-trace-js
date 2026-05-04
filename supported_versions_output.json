@@ -226,7 +226,7 @@
   {
     "dependency": "amqplib",
     "integration": "amqplib",
-    "minimum_tracer_supported": "0.5.3",
+    "minimum_tracer_supported": "0.5.0",
     "max_tracer_supported": "0.10.9",
     "auto-instrumented": "True"
   },
@@ -289,7 +289,7 @@
   {
     "dependency": "cypress",
     "integration": "cypress",
-    "minimum_tracer_supported": "10.2.0",
+    "minimum_tracer_supported": "12.0.0",
     "max_tracer_supported": "15.13.0",
     "auto-instrumented": "True"
   },
