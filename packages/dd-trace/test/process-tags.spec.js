@@ -276,8 +276,7 @@ describe('process-tags', () => {
       const processTagsModule = require('../src/process-tags')
       processTagsModule.initialize()
 
-      assert.ok(config.propagateProcessTags)
-      assert.strictEqual(config.propagateProcessTags.enabled, true)
+      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
@@ -293,8 +292,7 @@ describe('process-tags', () => {
       const processTagsModule = require('../src/process-tags')
       processTagsModule.initialize()
 
-      assert.ok(config.propagateProcessTags)
-      assert.strictEqual(config.propagateProcessTags.enabled, false)
+      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, false)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
@@ -309,8 +307,7 @@ describe('process-tags', () => {
       const processTagsModule = require('../src/process-tags')
       processTagsModule.initialize()
 
-      assert.ok(config.propagateProcessTags)
-      assert.strictEqual(config.propagateProcessTags.enabled, true)
+      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
