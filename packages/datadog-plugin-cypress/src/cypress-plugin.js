@@ -4,6 +4,7 @@
 const { performance } = require('perf_hooks')
 const dateNow = Date.now
 
+const satisfies = require('../../../vendor/dist/semifies')
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -106,6 +107,7 @@ const {
 } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
+let hasWarnedDeprecatedCypressVersion = false
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -132,6 +134,20 @@ function getCypressVersion (details) {
     return details.config.version
   }
   return ''
+}
+
+function warnDeprecatedCypressVersion (version) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedCypressVersion || !version || !satisfies(version, '<12.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedCypressVersion = true
+  // console.warn does not seem to work reliably in Cypress, so use console.log instead.
+  // eslint-disable-next-line no-console
+  console.log(
+    'WARNING: dd-trace support for Cypress<12.0.0 is deprecated' +
+    ' and will not be supported in dd-trace v6. Please upgrade Cypress to >=12.0.0.'
+  )
 }
 
 function getRootDir (details) {
@@ -429,6 +445,7 @@ class CypressPlugin {
     this._isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
+    warnDeprecatedCypressVersion(cypressConfig.version)
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 

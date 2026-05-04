@@ -269,10 +269,10 @@ jobs:
       matrix:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
-        # 10.2.0 is the minimum version we support in >=6
+        # 12.0.0 is the minimum version we support in >=6
         # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in the individual spec files
-        cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
+        cypress-version: [12.0.0, 14.5.4, latest]
         module-type: ["commonJS", "esm"]
         spec:
           - cypress-reporting
@@ -285,9 +285,7 @@ jobs:
         exclude:
           # eol = Node 16: shouldTestsRun() always returns false for DD_MAJOR >= 6
           - version: eol
-          # 6.7.0 is only supported for DD_MAJOR <= 5; never runs on this branch
-          - cypress-version: 6.7.0
-          # Node 18 (oldest) only supports 10.2.0 and 14.5.4, not latest
+          # Node 18 (oldest) only supports 12.0.0 and 14.5.4, not latest
           - version: oldest
             cypress-version: latest
     name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, ${{ matrix.spec }})
@@ -305,7 +303,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      # We cache Cypress binaries for fixed versions (6.7.0, 10.2.0, 14.5.4) but not for "latest"
+      # We cache Cypress binaries for fixed versions (12.0.0, 14.5.4) but not for "latest"
       # as that changes frequently and would have a low cache hit rate
       - name: Cache Cypress binary
         if: matrix.cypress-version != 'latest'
