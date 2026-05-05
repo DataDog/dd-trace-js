@@ -198,6 +198,29 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
+   * Single-tag fast path used by Span#setTag. Avoids the array allocations
+   * (`metaBatch`, `metricBatch`, plus the `[[k,v]]` pair) that syncToNativeOnly
+   * does for the batched case.
+   *
+   * @param {string} key
+   * @param {*} value
+   */
+  syncOneTagToNative (key, value) {
+    if (value === undefined || value === null) return
+    if (typeof key === 'symbol') return
+
+    if (SPECIAL_KEYS.has(key)) {
+      this.#syncTagToNative(key, value)
+    } else if (typeof value === 'number') {
+      this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value]])
+    } else if (typeof value === 'boolean') {
+      this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value ? 1 : 0]])
+    } else {
+      this.#nativeSpans.queueBatchMeta(this._slotIndex, [[key, String(value)]])
+    }
+  }
+
+  /**
    * Sync a tag value to native storage.
    * @param {string} key - Tag key
    * @param {*} value - Tag value

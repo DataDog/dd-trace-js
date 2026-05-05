@@ -245,7 +245,7 @@ class NativeDatadogSpan {
   }
 
   setTag (key, value) {
-    this.#addTags({ [key]: value })
+    this.#addOneTag(key, value)
     return this
   }
 
@@ -543,8 +543,25 @@ class NativeDatadogSpan {
   }
 
   #addTags (keyValuePairs) {
-    // Write to JS tag cache directly (same as JS mode DatadogSpan._addTags),
-    // then sync to native in bulk. Avoids per-tag setTag() dispatch overhead.
+    // Fast path for plain-object input (addTags({k1:v1,k2:v2}) from instrumentations,
+    // which is essentially every caller on the hot path). tagger.add for an
+    // object case is just Object.assign(parsedTags, kv), so we can skip the
+    // parsedTags allocation entirely and walk kv directly. Saves one alloc +
+    // one for-in pass per addTags call.
+    if (keyValuePairs && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
+      const tags = this._spanContext.getTags()
+      for (const key in keyValuePairs) {
+        tags[key] = keyValuePairs[key]
+      }
+      this._spanContext.syncToNativeOnly(keyValuePairs)
+      // Fix #5: skip the dispatch + _getContext when priority is already decided.
+      if (this._spanContext._sampling.priority === undefined) {
+        this._prioritySampler.sample(this, false)
+      }
+      return
+    }
+
+    // Slow path for string ('a:b,c:d') and array inputs.
     const parsedTags = {}
     tagger.add(parsedTags, keyValuePairs)
 
@@ -557,7 +574,31 @@ class NativeDatadogSpan {
     // Sync to native (writes only to WASM, not JS cache since we just did that)
     this._spanContext.syncToNativeOnly(parsedTags)
 
-    this._prioritySampler.sample(this, false)
+    if (this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+  }
+
+  /**
+   * Single-tag fast path used by setTag. Skips the
+   * `{ [key]: value }` literal + `parsedTags = {}` round-trip in #addTags;
+   * for the object-input case tagger.add is just Object.assign so we can
+   * inline it as a direct property write.
+   */
+  #addOneTag (key, value) {
+    if (key === '' || key === undefined || typeof key === 'symbol') return
+
+    // JS cache write (same shape as the body of #addTags' for-in loop)
+    const tags = this._spanContext.getTags()
+    tags[key] = value
+
+    // Sync to native (single-tag fast path)
+    this._spanContext.syncOneTagToNative(key, value)
+
+    // Fix #5: skip the dispatch + _getContext when priority is already decided.
+    if (this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
   }
 
   /**
