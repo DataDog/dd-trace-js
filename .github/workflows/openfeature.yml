@@ -52,7 +52,11 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-macos
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -69,13 +73,17 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/latest
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-ubuntu
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -90,11 +98,19 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node
+        with:
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
         with:
           cache: "true"
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-windows
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

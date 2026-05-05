@@ -118,6 +118,7 @@ module.exports = {
   passport: () => require('../passport'),
   'passport-http': () => require('../passport-http'),
   'passport-local': () => require('../passport-local'),
+  'path-to-regexp': () => require('../path-to-regexp'),
   pg: () => require('../pg'),
   pino: () => require('../pino'),
   'pino-pretty': () => require('../pino'),

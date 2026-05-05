@@ -8,6 +8,7 @@ const {
   sandboxCwd,
   useSandbox,
   getCiVisEvpProxyConfig,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -24,7 +25,9 @@ const {
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 
@@ -35,7 +38,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -45,9 +51,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -82,8 +88,7 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
@@ -91,9 +96,8 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
 
     beforeEach(async function () {

@@ -139,6 +139,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     outputMessages,
     outputValue,
     outputDocuments,
+    toolDefinitions,
   } = expected
 
   if (inputMessages && inputDocuments && inputValue) {
@@ -263,6 +264,8 @@ function assertLlmObsSpanEvent (actual, expected) {
     // span_processor.js always sets meta.input = {} even when no input is tagged
     expectedMeta.input = {}
   }
+
+  if (toolDefinitions) expectedMeta.tool_definitions = toolDefinitions
 
   const expectedSpanEvent = {
     span_id: fromBuffer(span.span_id),

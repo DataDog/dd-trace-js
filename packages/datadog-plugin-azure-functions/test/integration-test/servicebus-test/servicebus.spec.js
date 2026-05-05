@@ -323,16 +323,13 @@ function parseLinks (span) {
 }
 
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
-  let env = {
+  const env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
+    ...additionalEnvArgs,
   }
-  env = { ...env, ...additionalEnvArgs }
-  return spawnProc(command, args, {
-    cwd,
-    env,
-  }, stdioHandler)
+  return spawnProc(command, args, { cwd, env }, stdioHandler)
 }
 
 function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {

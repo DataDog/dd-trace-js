@@ -1,0 +1,9 @@
+name: node-crash-report
+description: Print crash stack traces from Node.js diagnostic reports to the CI log.
+
+runs:
+  using: composite
+  steps:
+    - name: Print crash stack traces
+      shell: bash
+      run: node scripts/node-crash-report.js

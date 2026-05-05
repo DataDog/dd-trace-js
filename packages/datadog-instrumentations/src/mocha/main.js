@@ -1,6 +1,8 @@
 'use strict'
 
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
+const satisfies = require('../../../../vendor/dist/semifies')
+const { DD_MAJOR } = require('../../../../version')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
@@ -14,8 +16,8 @@ const {
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
-  collectDynamicNamesFromTraces,
-  logDynamicNamesWarning,
+  collectTestOptimizationSummariesFromTraces,
+  logTestOptimizationSummary,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -34,14 +36,17 @@ const {
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
-  testsAttemptToFix,
-  testsStatuses,
   newTestsWithDynamicNames,
+  attemptToFixExecutions,
+  loggedAttemptToFixTests,
 } = require('./utils')
 
 require('./common')
 
+const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
+
 const patched = new WeakSet()
+let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
 let suitesToSkip = []
@@ -78,6 +83,20 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+function warnDeprecatedMochaVersion (frameworkVersion) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedMochaVersion || !frameworkVersion ||
+      !satisfies(frameworkVersion, '<8.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedMochaVersion = true
+  // eslint-disable-next-line no-console
+  console.warn(
+    'dd-trace support for Mocha<8.0.0 is deprecated and will be removed in dd-trace v6. ' +
+      'Please upgrade Mocha to >=8.0.0.'
+  )
+}
 
 // Tests from workers do not come with `isFailed` method
 function isTestFailed (test) {
@@ -146,26 +165,17 @@ function getOnEndHandler (isParallel) {
       }
     }
 
-    // We substract the errors of attempt to fix tests (quarantined or disabled) from the total number of failures
-    // We subtract the errors from quarantined tests from the total number of failures
+    // We subtract the errors from quarantined tests from the total number of failures.
+    // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
     if (config.isTestManagementTestsEnabled) {
       let numFailedQuarantinedTests = 0
-      let numFailedRetriedQuarantinedOrDisabledTests = 0
-      for (const test of testsAttemptToFix) {
-        const testName = getTestFullName(test)
-        const testProperties = getTestProperties(test, config.testManagementTests)
-        if (isTestFailed(test) && (testProperties.isQuarantined || testProperties.isDisabled)) {
-          const numFailedTests = testsStatuses.get(testName).filter(status => status === 'fail').length
-          numFailedRetriedQuarantinedOrDisabledTests += numFailedTests
-        }
-      }
       for (const test of testsQuarantined) {
         if (isTestFailed(test)) {
           numFailedQuarantinedTests++
         }
       }
-      this.stats.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
-      this.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
+      this.stats.failures -= numFailedQuarantinedTests
+      this.failures -= numFailedQuarantinedTests
     }
 
     // Recompute status after EFD and quarantine adjustments have reduced failure counts
@@ -211,7 +221,8 @@ function getOnEndHandler (isParallel) {
       isParallel,
     })
 
-    logDynamicNamesWarning(newTestsWithDynamicNames)
+    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    loggedAttemptToFixTests.clear()
   }
 }
 
@@ -353,9 +364,11 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 // It is called but skipped in parallel mode.
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/mocha.js',
 }, (Mocha, frameworkVersion) => {
+  warnDeprecatedMochaVersion(frameworkVersion)
+
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -409,7 +422,7 @@ addHook({
 
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/cli/run-helpers.js',
 }, (run) => {
   // `runMocha` is an async function
@@ -440,7 +453,7 @@ addHook({
 // This hook is used to generate session, module, suite and test events
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/runner.js',
 }, function (Runner, frameworkVersion) {
   if (patched.has(Runner)) return Runner
@@ -467,9 +480,9 @@ addHook({
     this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler())
+    this.on('hook end', getOnHookEndHandler(config))
 
-    this.on('fail', getOnFailHandler(true))
+    this.on('fail', getOnFailHandler(true, config))
 
     this.on('pending', getOnPendingHandler())
 
@@ -549,7 +562,7 @@ addHook({
 // Used to set the correct async resource to the test.
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/runnable.js',
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
@@ -557,7 +570,10 @@ function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-      collectDynamicNamesFromTraces(payload, newTestsWithDynamicNames)
+      collectTestOptimizationSummariesFromTraces(payload, {
+        newTestsWithDynamicNames,
+        attemptToFixExecutions,
+      })
       workerReportTraceCh.publish(payload)
     }
   }
@@ -771,7 +787,8 @@ addHook({
         }
       }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
+      const testProperties = getTestProperties(test, config.testManagementTests)
+      if (config.isTestManagementTestsEnabled && testProperties.isQuarantined && !testProperties.isAttemptToFix) {
         testsQuarantined.add(test)
       }
     }

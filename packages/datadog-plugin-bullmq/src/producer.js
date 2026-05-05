@@ -1,7 +1,21 @@
 'use strict'
 
+const log = require('../../dd-trace/src/log')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+
+// Customer-controlled metadata may be malformed JSON. Returning a fresh `{}`
+// on parse failure keeps the publish path alive instead of throwing into
+// `Queue.add` / `Queue.addBulk`.
+function parseTelemetryMetadata (raw) {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw)
+  } catch (error) {
+    log.warn('bullmq: ignoring malformed telemetry.metadata: %s', error.message)
+    return {}
+  }
+}
 
 class BaseBullmqProducerPlugin extends ProducerPlugin {
   static id = 'bullmq'
@@ -42,12 +56,14 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     throw new Error('injectTraceContext must be implemented by subclass')
   }
 
+  // Returned so setProducerCheckpoint can mutate it without a second parse.
   _injectIntoOpts (span, opts) {
     const carrier = {}
     this.tracer.inject(span, 'text_map', carrier)
-    const existing = opts.telemetry?.metadata ? JSON.parse(opts.telemetry.metadata) : {}
-    existing._datadog = carrier
-    opts.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+    const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
+    metadata._datadog = carrier
+    opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
+    return metadata
   }
 
   setProducerCheckpoint (span, ctx) {
@@ -56,10 +72,10 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
 
     if (optsTarget && typeof optsTarget === 'object') {
-      const existing = optsTarget.telemetry?.metadata ? JSON.parse(optsTarget.telemetry.metadata) : {}
-      DsmPathwayCodec.encode(dataStreamsContext, existing._datadog || existing)
-      if (!existing._datadog) existing._datadog = {}
-      optsTarget.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+      const metadata = ctx._ddMetadata ?? parseTelemetryMetadata(optsTarget.telemetry?.metadata)
+      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
+      if (!metadata._datadog) metadata._datadog = {}
+      optsTarget.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
     }
   }
 
@@ -96,7 +112,7 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
 
   injectTraceContext (span, ctx) {
     const opts = this.#ensureOpts(ctx)
-    this._injectIntoOpts(span, opts)
+    ctx._ddMetadata = this._injectIntoOpts(span, opts)
   }
 
   getDsmData (ctx) {
@@ -132,39 +148,31 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
 
-    for (const job of jobs) {
+    const cache = []
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
       if (!job) continue
       job.opts = job.opts || {}
-      this._injectIntoOpts(span, job.opts)
+      cache[i] = this._injectIntoOpts(span, job.opts)
     }
-  }
-
-  getDsmData (ctx) {
-    const jobs = ctx.arguments?.[0] || []
-    const payloadSize = jobs.reduce((total, job) => {
-      return total + (job?.data ? getMessageSize(job.data) : 0)
-    }, 0)
-    return {
-      queueName: ctx.self?.name || 'bullmq',
-      payloadSize,
-      optsTarget: jobs[0]?.opts,
-    }
+    ctx._ddMetadata = cache
   }
 
   setProducerCheckpoint (span, ctx) {
     const jobs = ctx.arguments?.[0] || []
     const queueName = ctx.self?.name || 'bullmq'
     const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
+    const cache = ctx._ddMetadata
 
-    for (const job of jobs) {
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
       if (!job?.data) continue
       const payloadSize = getMessageSize(job.data)
       const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-      job.opts = job.opts || {}
-      const existing = job.opts.telemetry?.metadata ? JSON.parse(job.opts.telemetry.metadata) : {}
-      DsmPathwayCodec.encode(dataStreamsContext, existing._datadog || existing)
-      if (!existing._datadog) existing._datadog = {}
-      job.opts.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+      const metadata = cache?.[i] ?? parseTelemetryMetadata(job.opts.telemetry?.metadata)
+      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
+      if (!metadata._datadog) metadata._datadog = {}
+      job.opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
     }
   }
 }
@@ -187,7 +195,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
     const flow = ctx.arguments?.[0]
     if (!flow) return
     flow.opts = flow.opts || {}
-    this._injectIntoOpts(span, flow.opts)
+    ctx._ddMetadata = this._injectIntoOpts(span, flow.opts)
   }
 
   getDsmData (ctx) {

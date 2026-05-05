@@ -13,13 +13,23 @@ const {
   RETRIES,
 } = process.env
 
-const maxRerunFailedJobs = 3
-
-const octokit = new Octokit({ auth: GITHUB_TOKEN })
+const octokit = new Octokit({
+  auth: GITHUB_TOKEN,
+  throttle: {
+    onRateLimit: () => {
+      console.error('GitHub API rate limit reached, failing immediately.')
+      return false
+    },
+    onSecondaryRateLimit: () => {
+      console.error('GitHub API secondary rate limit reached, failing immediately.')
+      return false
+    },
+  },
+})
 const owner = 'DataDog'
 const repo = 'dd-trace-js'
 const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
-const params = { owner, repo, ref }
+
 const conclusionEmojis = {
   action_required: '🔶',
   cancelled: '🚫',
@@ -31,190 +41,190 @@ const conclusionEmojis = {
   timed_out: '⌛',
 }
 
-const conclusionSeverity = {
-  failure: 0,
-  timed_out: 1,
-  action_required: 2,
-  cancelled: 3,
-  stale: 4,
-  neutral: 5,
-  skipped: 6,
-  success: 7,
-}
+const failureConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
-let hasRerun = false
+const retriedRunIds = new Set()
 
-async function hasCompleted () {
-  const { data: inProgressRuns } = await octokit.rest.checks.listForRef({
-    ...params,
-    per_page: 1, // Minimum is 1 but we don't need any pages.
-    status: 'in_progress',
-  })
+// ETag cache for the workflow-runs poll. GitHub returns 304 Not Modified when
+// the response is unchanged, and 304 responses don't count against the rate
+// limit. workflow_runs are sorted newest first, so an unchanged first page is
+// a reliable proxy for "no changes since last poll".
+let runsCache
 
-  // If there are any in progress runs it means we're not ready to check
-  // statuses. We will always have minimum 1 for the All Green job.
-  if (inProgressRuns.total_count > 1) return false
-
-  const { data: queuedRuns } = await octokit.rest.checks.listForRef({
-    ...params,
-    per_page: 1, // Minimum is 1 but we don't need any pages.
-    status: 'queued',
-  })
-
-  // Same as above, but jobs that are queued are not even in progress yet.
-  if (queuedRuns.total_count > 0) return false
-
-  return true
-}
-
-async function checkCompleted () {
-  if (!await hasCompleted()) {
-    retries++
-
-    if (RETRIES && retries > RETRIES) {
-      throw new Error(`State is still pending after ${RETRIES} retries.`)
+async function getRuns () {
+  try {
+    const allRuns = []
+    let etag
+    for await (const { data, headers } of octokit.paginate.iterator(
+      octokit.rest.actions.listWorkflowRunsForRepo,
+      {
+        owner,
+        repo,
+        head_sha: ref,
+        per_page: 100,
+        headers: runsCache ? { 'if-none-match': runsCache.etag } : {},
+      }
+    )) {
+      etag ??= headers.etag
+      allRuns.push(...data)
     }
-
-    console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
-    await setTimeout(POLLING_INTERVAL * 60_000)
-    console.log('Retrying.')
-    await checkCompleted()
+    // Isolate per trigger so a parallel all-green run on the same SHA doesn't
+    // see our runs (and we don't see theirs). Filter by event, by PR number
+    // when on a PR (handles two PRs sharing the same head commit), and drop
+    // our own All Green run since it stays in_progress while we poll.
+    const myPR = context.payload.pull_request?.number
+    const filtered = allRuns.filter(r =>
+      r.name !== context.workflow &&
+      r.event === context.eventName &&
+      (myPR == null || r.pull_requests?.some(pr => pr.number === myPR))
+    )
+    runsCache = { etag, runs: filtered }
+    return filtered
+  } catch (err) {
+    if (err.status === 304 && runsCache) return runsCache.runs
+    throw err
   }
 }
 
-async function getLatestRuns () {
-  const checkRuns = await octokit.paginate(
-    'GET /repos/:owner/:repo/commits/:ref/check-runs',
-    {
-      ...params,
-      per_page: 100,
-    }
+async function pollUntilDone () {
+  const runs = await getRuns()
+
+  // Check before modifying retriedRunIds to avoid false positives on freshly requeued runs.
+  const retryFailed = runs.filter(r =>
+    r.status === 'completed' &&
+    failureConclusions.has(r.conclusion) &&
+    retriedRunIds.has(r.id)
   )
 
-  // When a check is re-run, older runs remain with their original conclusions.
-  // Deduplicate by name and evaluate only the latest run for each check.
-  const latestByName = new Map()
-  for (const run of checkRuns) {
-    const existing = latestByName.get(run.name)
-    if (!existing || new Date(run.started_at) >= new Date(existing.started_at)) {
-      latestByName.set(run.name, run)
+  if (retryFailed.length > 0) {
+    for (const run of retryFailed) {
+      console.error(`Workflow run ${run.id} (${run.name}) failed after retry, failing immediately.`)
     }
+    return { runs, done: true }
   }
 
-  return [...latestByName.values()]
-}
-
-async function rerunFailedWorkflows (failedRuns) {
-  const failedCountByCheckSuiteId = new Map()
-  for (const run of failedRuns) {
-    const id = run.check_suite?.id
-    if (id !== undefined) {
-      failedCountByCheckSuiteId.set(id, (failedCountByCheckSuiteId.get(id) ?? 0) + 1)
-    }
-  }
-
-  const eligibleSuiteIds = [...failedCountByCheckSuiteId.entries()]
-    .filter(([, count]) => count <= maxRerunFailedJobs)
-    .map(([id]) => id)
-
-  // If a workflow has many jobs failed, it's unlikely to be flakiness to no
-  // point in re-running.
-  if (eligibleSuiteIds.length < failedCountByCheckSuiteId.size) {
-    console.log(
-      `Skipping rerun for ${failedCountByCheckSuiteId.size - eligibleSuiteIds.length} workflow(s) ` +
-      `with more than ${maxRerunFailedJobs} failed job(s).`
-    )
-  }
-
-  const workflowRunsPerSuite = await Promise.all(
-    eligibleSuiteIds.map(checkSuiteId =>
-      octokit.rest.actions.listWorkflowRunsForRepo({ owner, repo, check_suite_id: checkSuiteId })
-        .then(({ data }) => data.workflow_runs)
-    )
+  const toRetry = runs.filter(r =>
+    r.status === 'completed' &&
+    failureConclusions.has(r.conclusion) &&
+    !retriedRunIds.has(r.id)
   )
 
-  const workflowRuns = workflowRunsPerSuite.flat()
+  if (toRetry.length > 0) {
+    await rerunFailedWorkflows(toRetry)
+    for (const run of toRetry) retriedRunIds.add(run.id)
+    runsCache = undefined
+  }
 
+  const pending = runs.filter(r => r.status !== 'completed').length
+  if (pending === 0 && toRetry.length === 0) return { runs, done: true }
+
+  retries++
+
+  if (RETRIES && retries > RETRIES) return { runs, done: false }
+
+  console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
+  await setTimeout(POLLING_INTERVAL * 60_000)
+  console.log('Retrying.')
+  return pollUntilDone()
+}
+
+async function rerunFailedWorkflows (workflowRuns) {
   await Promise.all(
     workflowRuns.map(workflowRun => {
       console.log(`Rerunning failed jobs for workflow run ${workflowRun.id} (${workflowRun.name}).`)
       return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
     })
   )
-
-  return workflowRuns.length > 0
 }
 
 async function checkAllGreen () {
-  let latestRuns
+  const { runs, done } = await pollUntilDone()
 
-  try {
-    await checkCompleted()
-  } finally {
-    latestRuns = await getLatestRuns()
-  }
+  await printSummary(runs)
 
-  const failedRuns = latestRuns.filter(run =>
-    run.conclusion === 'failure' || run.conclusion === 'timed_out'
-  )
-
-  if (failedRuns.length === 0) {
-    await printSummary(latestRuns)
-    console.log('All jobs were successful.')
+  if (!done) {
+    console.log(`State is still pending after ${RETRIES} retries.`)
+    process.exitCode = 1
     return
   }
 
-  if (!hasRerun) {
-    hasRerun = true
-    console.log(`${failedRuns.length} job(s) failed. Rerunning failed workflows...`)
-    const didRerun = await rerunFailedWorkflows(failedRuns)
-    if (didRerun) {
-      retries = 0
-      console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling for rerun results.`)
-      await setTimeout(POLLING_INTERVAL * 60_000)
-      await checkAllGreen()
-      return
-    }
-  }
+  const failedRuns = runs.filter(r => failureConclusions.has(r.conclusion))
 
-  await printSummary(latestRuns)
-  throw new Error('One or more jobs failed.')
+  if (failedRuns.length === 0) {
+    console.log('All jobs were successful.')
+  } else {
+    console.log('One or more jobs failed.')
+    process.exitCode = 1
+  }
 }
 
-async function printSummary (checkRuns) {
-  const runs = [...checkRuns]
-    .sort((a, b) => (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8))
+function formatConclusion (conclusion) {
+  return conclusion ? `${conclusion} ${conclusionEmojis[conclusion]}` : ' '
+}
+
+function formatTime (timestamp) {
+  if (!timestamp) return ' '
+  const date = new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'America/New_York',
+    timeZoneName: 'short',
+  })
+}
+
+function formatDuration (startedAt, completedAt) {
+  if (!startedAt || !completedAt) return ' '
+  const start = new Date(startedAt)
+  const end = new Date(completedAt)
+  const totalSeconds = Math.floor((end - start) / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+async function printSummary (runs) {
+  const rows = runs
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map(run => ({
       name: run.name,
       status: run.status,
-      conclusion: run.conclusion
-        ? `${run.conclusion} ${conclusionEmojis[run.conclusion]}`
-        : ' ',
-      started_at: run.started_at,
-      completed_at: run.completed_at ?? ' ',
+      conclusion: formatConclusion(run.conclusion),
+      // workflow_run has no completed_at; updated_at reflects the final state
+      // change once status === 'completed', otherwise it's an in-flight tick.
+      started_at: formatTime(run.run_started_at),
+      completed_at: formatTime(run.status === 'completed' ? run.updated_at : null),
+      duration: formatDuration(run.run_started_at, run.status === 'completed' ? run.updated_at : null),
+      url: run.html_url,
     }))
 
-  console.table(runs)
+  // console.table can't render HTML, so the raw URL goes here as its own
+  // column. The GitHub Actions summary below renders the name as a link.
+  console.table(rows)
 
   const header = [
-    { data: 'name', header: true },
+    { data: 'workflow', header: true },
     { data: 'status', header: true },
     { data: 'conclusion', header: true },
     { data: 'started_at', header: true },
     { data: 'completed_at', header: true },
+    { data: 'duration', header: true },
   ]
 
-  const body = runs.map(run => [
-    run.name,
-    run.status,
-    run.conclusion,
-    run.started_at,
-    run.completed_at,
+  const body = rows.map(row => [
+    `<a href="${row.url}">${row.name}</a>`,
+    row.status,
+    row.conclusion,
+    row.started_at,
+    row.completed_at,
+    row.duration,
   ])
 
   await summary
-    .addHeading('Checks Summary')
+    .addHeading('Workflows Summary')
     .addTable([header, ...body])
     .write()
 }

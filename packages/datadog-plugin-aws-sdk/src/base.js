@@ -149,7 +149,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         }
         this.addResponseTags(span, response)
 
-        if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
+        if (this._tracerConfig?.DD_TRACE_AWS_ADD_SPAN_POINTERS) {
           this.addSpanPointers(span, response)
         }
       })

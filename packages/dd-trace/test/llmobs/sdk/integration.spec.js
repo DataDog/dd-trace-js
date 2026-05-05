@@ -160,6 +160,49 @@ describe('end to end sdk integration tests', () => {
     })
   })
 
+  describe('otel correlation bridge tags', () => {
+    it('writes llmobs_trace_id, llmobs_parent_id, and _dd.llmobs.submitted to apm span meta', async () => {
+      let workflowSpanCtx
+      llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+        workflowSpanCtx = { traceId: span.context().toTraceId(true), spanId: span.context().toSpanId() }
+        llmobs.trace({ kind: 'task', name: 'inner' }, () => {})
+      })
+
+      const { apmSpans } = await getEvents(2)
+      assert.equal(apmSpans.length, 2)
+
+      // The first span in the chunk carries _trace.tags, including the bridge tags.
+      const firstSpan = apmSpans[0]
+      assert.equal(firstSpan.meta.llmobs_trace_id, workflowSpanCtx.traceId)
+      assert.equal(firstSpan.meta.llmobs_parent_id, workflowSpanCtx.spanId)
+
+      // Every SDK-tagged apm span carries the submitted marker.
+      for (const apmSpan of apmSpans) {
+        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], '1')
+      }
+    })
+
+    it('does not mark non-llmobs apm spans with _dd.llmobs.submitted', async () => {
+      tracer.trace('plainApm', () => {
+        llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {})
+      })
+
+      const { apmSpans } = await getEvents(1)
+      const plainApmSpan = apmSpans.find(s => s.name === 'plainApm')
+      const sdkSpan = apmSpans.find(s => s.name === 'wf')
+
+      assert.ok(plainApmSpan)
+      assert.ok(sdkSpan)
+      assert.equal(plainApmSpan.meta['_dd.llmobs.submitted'], undefined)
+      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
+
+      // bridge tags still flow to the local trace's chunk meta
+      const firstSpan = apmSpans[0]
+      assert.match(firstSpan.meta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+      assert.ok(firstSpan.meta.llmobs_parent_id)
+    })
+  })
+
   describe('distributed', () => {
     it('injects and extracts the proper llmobs context', async () => {
       const carrier = {}

@@ -1109,7 +1109,7 @@ jobs:
         ports:
           - 5432:5432
       mssql:
-        image: mcr.microsoft.com/mssql/server:2019-latest
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server:2019-latest
         env:
           ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2
@@ -1234,15 +1234,28 @@ jobs:
   # see: https://github.com/restify/node-restify/issues/1984
   restify:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-restify
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   rhea:
     runs-on: ubuntu-latest
@@ -1312,7 +1325,7 @@ jobs:
       id-token: write
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2019-latest
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server:2019-latest
         env:
           ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2
