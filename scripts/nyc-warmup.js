@@ -36,10 +36,13 @@ function walk (dir) {
 
 walk(path.join(repoRoot, 'ext'))
 
+// Walking these package sources during warmup breaks their tests in CI.
+const skipSrc = new Set(['datadog-plugin-ws'])
+
 for (const entry of fs.readdirSync(path.join(repoRoot, 'packages'), { withFileTypes: true })) {
   if (!entry.isDirectory()) continue
   const pkg = path.join(repoRoot, 'packages', entry.name)
-  walk(path.join(pkg, 'src'))
+  if (!skipSrc.has(entry.name)) walk(path.join(pkg, 'src'))
   for (const f of fs.readdirSync(pkg)) {
     if (f.endsWith('.js')) tryRequire(path.join(pkg, f))
   }
