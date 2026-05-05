@@ -425,7 +425,25 @@ describe('openai AI Guard instrumentation', () => {
         .finally(unsubscribe)
     })
 
-    it('skips After Model when assistant message has no content, tool_calls, or refusal', () => {
+    it('After Model includes the assistant message when only deprecated `function_call` is set', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const functionCallMessage = {
+        role: 'assistant',
+        content: null,
+        function_call: { name: 'do_thing', arguments: '{}' },
+      }
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: functionCallMessage }] })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+        .then(() => {
+          assert.strictEqual(calls.length, 2)
+          assert.deepStrictEqual(calls[1].messages.at(-1), functionCallMessage)
+        })
+        .finally(unsubscribe)
+    })
+
+    it('skips After Model when assistant message has no content, tool_calls, refusal, or function_call', () => {
       const { calls, unsubscribe } = subscribeAutoResolve()
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({

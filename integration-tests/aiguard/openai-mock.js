@@ -4,9 +4,10 @@ const express = require('express')
 
 /**
  * Minimal OpenAI-compatible mock for integration tests. Serves `/v1/chat/completions`
- * and `/v1/responses` with canned responses. Does NOT inspect the request body — the
- * AI Guard action is driven by the separate AI Guard API mock, which recognizes the
- * `[deny]` marker the tests inject into user prompts.
+ * and `/v1/responses` with canned responses. The mock inspects `req.body` to pick
+ * the response shape (streaming, tool-call, deny-marker), but it does NOT make any
+ * AI Guard decisions itself — the AI Guard verdict comes from the separate AI Guard
+ * API mock, which recognizes the `[deny]` marker the tests inject into user prompts.
  */
 function startOpenAIMock () {
   return new Promise(resolve => {
