@@ -36,6 +36,7 @@ const {
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+const { storage } = require('./storage')
 
 class LLMObservabilitySpan {
   /**
@@ -185,6 +186,18 @@ class LLMObsSpanProcessor {
 
     const tags = this.#getTags(span, mlApp, sessionId, error)
     llmObsSpan._tags = tags
+
+    // attach parent tags to span processor llmobs span
+    // because this executes on span.finish(), we should have a restored context at this point
+    // so storage.getStore()?.span returns the span who is the parent of the span we're processing
+    const parentSpan = storage.getStore()?.span
+    if (parentSpan) {
+      const parentSpanTags = LLMObsTagger.tagMap.get(parentSpan)[TAGS]
+      llmObsSpan._tags = {
+        ...parentSpanTags,
+        ...llmObsSpan._tags,
+      }
+    }
 
     const processedSpan = this.#runProcessor(llmObsSpan)
     if (processedSpan === undefined) return null
