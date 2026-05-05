@@ -113,11 +113,11 @@ class Tracer extends NoopProxy {
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
 
-      if (config.crashtracking.enabled) {
+      if (config.DD_CRASHTRACKING_ENABLED) {
         require('./crashtracking').start(config)
       }
 
-      if (config.heapSnapshot.count > 0) {
+      if (config.DD_HEAP_SNAPSHOT_COUNT > 0) {
         require('./heap_snapshots').start(config)
       }
 
@@ -229,7 +229,7 @@ class Tracer extends NoopProxy {
         initializeOpenTelemetryLogs(config)
       }
 
-      if (config.otelMetricsEnabled) {
+      if (config.DD_METRICS_OTEL_ENABLED) {
         const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
         initializeOpenTelemetryMetrics(config)
       }

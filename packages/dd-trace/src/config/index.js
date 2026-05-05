@@ -39,6 +39,7 @@ const {
   parseErrors,
   generateTelemetry,
 } = require('./defaults')
+const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
@@ -358,10 +359,10 @@ class Config extends ConfigBase {
     if (this.DD_LOGS_OTEL_ENABLED) {
       setAndTrack(this, 'logInjection', false)
     }
-    if (this.otelMetricsEnabled &&
+    if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
-      setAndTrack(this, 'otelMetricsEnabled', false)
+      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
     if (this.OTEL_TRACES_EXPORTER === 'otlp' && this.protocolVersion && this.protocolVersion !== '0.4') {
@@ -513,7 +514,7 @@ class Config extends ConfigBase {
         const NX_TASK_TARGET_PROJECT = getEnvironmentVariable('NX_TASK_TARGET_PROJECT')
         if (NX_TASK_TARGET_PROJECT) {
           if (this.DD_ENABLE_NX_SERVICE_NAME) {
-            setAndTrack(this, 'service', NX_TASK_TARGET_PROJECT)
+            setAndTrack(this, 'service', normalizeService(NX_TASK_TARGET_PROJECT) || 'node')
             isServiceNameInferred = true
           } else if (DD_MAJOR < 6) {
             log.warn(
@@ -536,7 +537,7 @@ class Config extends ConfigBase {
             )
           : undefined
 
-        setAndTrack(this, 'service', serverlessName || pkg.name || 'node')
+        setAndTrack(this, 'service', normalizeService(serverlessName) || normalizeService(pkg.name) || 'node')
         this.tags.service ??= /** @type {string} */ (this.service)
         isServiceNameInferred = true
       }
@@ -560,7 +561,7 @@ class Config extends ConfigBase {
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.enabled', false)
-      setAndTrack(this, 'crashtracking.enabled', false)
+      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
       setAndTrack(this, 'remoteConfig.enabled', false)
     }
 

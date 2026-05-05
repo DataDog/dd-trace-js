@@ -114,7 +114,7 @@
   {
     "dependency": "@jest/core",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
@@ -128,7 +128,7 @@
   {
     "dependency": "@jest/transform",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
@@ -226,7 +226,7 @@
   {
     "dependency": "amqplib",
     "integration": "amqplib",
-    "minimum_tracer_supported": "0.5.3",
+    "minimum_tracer_supported": "0.5.0",
     "max_tracer_supported": "0.10.9",
     "auto-instrumented": "True"
   },
@@ -289,7 +289,7 @@
   {
     "dependency": "cypress",
     "integration": "cypress",
-    "minimum_tracer_supported": "10.2.0",
+    "minimum_tracer_supported": "12.0.0",
     "max_tracer_supported": "15.13.0",
     "auto-instrumented": "True"
   },
@@ -394,42 +394,42 @@
   {
     "dependency": "jest-circus",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-config",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-environment-jsdom",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-environment-node",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-runtime",
     "integration": "jest",
-    "minimum_tracer_supported": "24.8.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-worker",
     "integration": "jest",
-    "minimum_tracer_supported": "24.9.0",
+    "minimum_tracer_supported": "28.0.0",
     "max_tracer_supported": "30.2.0",
     "auto-instrumented": "True"
   },
@@ -478,7 +478,7 @@
   {
     "dependency": "mocha",
     "integration": "mocha",
-    "minimum_tracer_supported": "5.2.0",
+    "minimum_tracer_supported": "8.0.0",
     "max_tracer_supported": "11.7.5",
     "auto-instrumented": "True"
   },

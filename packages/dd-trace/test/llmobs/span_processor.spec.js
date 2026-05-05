@@ -152,6 +152,36 @@ describe('span processor', () => {
       })
     })
 
+    it('forwards tool definitions to the payload', () => {
+      const toolDefinitions = [
+        {
+          name: 'get_weather',
+          description: 'Get the weather for a city.',
+          schema: { type: 'object', properties: { city: { type: 'string' } } },
+        },
+      ]
+
+      span = {
+        context () {
+          return {
+            _tags: {},
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'tool',
+        '_ml_obs.meta.tool_definitions': toolDefinitions,
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
+    })
+
     it('tags output documents for a retrieval span', () => {
       span = {
         context () {
