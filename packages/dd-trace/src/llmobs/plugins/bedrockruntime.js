@@ -7,12 +7,22 @@ const {
   extractTextAndResponseReason,
   parseModelId,
   extractTextAndResponseReasonFromStream,
+  extractConverseToolDefinitions,
+  extractRequestParamsConverse,
+  extractTextAndResponseReasonConverse,
+  buildConverseStreamGeneration,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 const BaseLLMObsPlugin = require('./base')
 
 const llmobsStore = storage('llmobs')
 
-const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
+const ENABLED_OPERATIONS = new Set([
+  'invokeModel',
+  'invokeModelWithResponseStream',
+  'converse',
+  'converseStream',
+])
+const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 
 const requestIdsToTokens = {}
 
@@ -61,12 +71,19 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName }) {
-    const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
+    this.#registerSpan(span, request)
 
+    if (CONVERSE_OPERATIONS.has(request?.operation)) {
+      this.#tagConverseSpan({ ctx, request, span, response })
+    } else {
+      this.#tagInvokeModelSpan({ ctx, request, span, response, modelProvider, modelName })
+    }
+  }
+
+  #registerSpan (span, request) {
     const parent = llmobsStore.getStore()?.span
     // Use full modelId and unified provider for LLMObs (required for backend cost estimation).
-    // Split modelProvider/modelName from parseModelId() are still used below for response parsing.
     this._tagger.registerLLMObsSpan(span, {
       parent,
       modelName: request.params.modelId.toLowerCase(),
@@ -75,38 +92,41 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       name: 'bedrock-runtime.command',
       integration: 'bedrock',
     })
+  }
 
+  #tagConverseSpan ({ ctx, request, span, response }) {
+    const requestParams = extractRequestParamsConverse(request.params)
+    const generation = request.operation === 'converseStream'
+      ? buildConverseStreamGeneration(ctx.chunks)
+      : extractTextAndResponseReasonConverse(response)
+
+    const toolDefinitions = extractConverseToolDefinitions(request.params)
+    if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
+    if (generation.finishReason) {
+      this._tagger.tagMetadata(span, { stop_reason: generation.finishReason })
+    }
+    this.#tagCommon({ span, requestParams, generation, response })
+  }
+
+  #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName }) {
     const requestParams = extractRequestParams(request.params, modelProvider)
-    // for streamed responses, we'll use the coerced response object we formed in the stream handler
-    const textAndResponseReason = isStream
+    const generation = request.operation === 'invokeModelWithResponseStream'
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
-    // add metadata tags
+    this.#tagCommon({ span, requestParams, generation, response })
+  }
+
+  #tagCommon ({ span, requestParams, generation, response }) {
     this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
       max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
     })
-
-    // add I/O tags
-    this._tagger.tagLLMIO(
-      span,
-      requestParams.prompt,
-      [{ content: textAndResponseReason.message, role: textAndResponseReason.role }]
-    )
-
-    // add token metrics
-    const { inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens } = extractTokens({
+    this._tagger.tagLLMIO(span, requestParams.prompt, generation.messages)
+    this._tagger.tagMetrics(span, extractTokens({
       requestId: response.$metadata.requestId,
-      usage: textAndResponseReason.usage,
-    })
-    this._tagger.tagMetrics(span, {
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-    })
+      usage: generation.usage,
+    }))
   }
 }
 

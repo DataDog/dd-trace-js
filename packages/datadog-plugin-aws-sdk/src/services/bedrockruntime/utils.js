@@ -131,6 +131,7 @@ class Generation {
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
+    messages,
   } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
@@ -143,6 +144,7 @@ class Generation {
       cacheReadTokens,
       cacheWriteTokens,
     }
+    this.messages = messages ?? [{ content: this.message, role: this.role }]
   }
 }
 
@@ -401,10 +403,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
             message: output.message?.content[0]?.text ?? 'Unsupported content type',
             finishReason: body.stopReason,
             role: output.message?.role,
-            inputTokens: body.usage?.inputTokens,
-            outputTokens: body.usage?.outputTokens,
-            cacheReadInputTokenCount: body.usage?.cacheReadInputTokenCount,
-            cacheWriteInputTokenCount: body.usage?.cacheWriteInputTokenCount,
+            ...buildUsage(body.usage),
           })
         }
         break
@@ -476,6 +475,195 @@ function extractTextAndResponseReason (response, provider, modelName) {
   return new Generation()
 }
 
+/**
+ * Convert a Converse content-block array to an LLMObs message array.
+ *
+ * @param {string} role
+ * @param {Array<object>} contentBlocks
+ * @returns {Array<{ content?: string, role: string, toolCalls?: Array, toolResults?: Array }>}
+ */
+function extractMessagesFromConverseContent (role, contentBlocks) {
+  let content = ''
+  const toolCalls = []
+  const toolResults = []
+
+  for (const block of contentBlocks || []) {
+    if (block == null || typeof block !== 'object') continue
+    if (typeof block.text === 'string') {
+      content += block.text
+    } else if (block.toolUse) {
+      toolCalls.push(buildToolCall(block.toolUse))
+    } else if (block.toolResult) {
+      toolResults.push(buildToolResult(block.toolResult))
+    } else {
+      const type = Object.keys(block)[0] || 'unknown'
+      content += `[Unsupported content type: ${type}]`
+    }
+  }
+
+  if (!content && toolCalls.length === 0 && toolResults.length === 0) return []
+
+  const message = { role }
+  if (content) message.content = content
+  if (toolCalls.length > 0) message.toolCalls = toolCalls
+  if (toolResults.length > 0) message.toolResults = toolResults
+  return [message]
+}
+
+// Always emit at least one output message so downstream tagging has a role to attach to.
+function toOutputMessages (role, contentBlocks) {
+  const messages = extractMessagesFromConverseContent(role, contentBlocks)
+  return messages.length > 0 ? messages : [{ role, content: '' }]
+}
+
+function buildToolCall ({ name, input, toolUseId, inputStr }) {
+  const args = inputStr ? parseToolInput(inputStr) : (input ?? {})
+  return { name: name ?? '', arguments: args, toolId: toolUseId ?? '', type: 'toolUse' }
+}
+
+function parseToolInput (inputStr) {
+  try {
+    return JSON.parse(inputStr)
+  } catch {
+    log.warn('Failed to parse Converse stream toolUse.input JSON; emitting empty arguments')
+    return {}
+  }
+}
+
+function buildToolResult ({ toolUseId, content }) {
+  const result = (content || []).map(resolveToolResultItem).join('')
+  return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
+}
+
+function resolveToolResultItem (item) {
+  if (typeof item.text === 'string') return item.text
+  if (item.json != null) return JSON.stringify(item.json)
+  return `[Unsupported content type(s): ${Object.keys(item).join(',')}]`
+}
+
+function buildUsage (usage = {}) {
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadInputTokens ?? usage.cacheReadInputTokenCount,
+    cacheWriteTokens: usage.cacheWriteInputTokens ?? usage.cacheWriteInputTokenCount,
+  }
+}
+
+/**
+ * Extract tool definitions from a Converse request's `toolConfig.tools`,
+ * mapping Bedrock's `toolSpec` shape to LLMObs `ToolDefinition` shape.
+ *
+ * @param {object} params - Converse request params with optional `toolConfig.tools[].toolSpec`.
+ * @returns {Array<{ name: string, description: string, schema: object }>}
+ */
+function extractConverseToolDefinitions (params) {
+  const toolDefinitions = []
+  for (const tool of params.toolConfig?.tools || []) {
+    const toolSpec = tool?.toolSpec
+    if (!toolSpec?.name) continue
+    toolDefinitions.push({
+      name: toolSpec.name,
+      description: toolSpec.description ?? '',
+      schema: toolSpec.inputSchema ?? {},
+    })
+  }
+  return toolDefinitions
+}
+
+/**
+ * Extract request metadata + rendered input messages from a Converse /
+ * ConverseStream request.
+ *
+ * @param {{ modelId?: string, messages?: Array, system?: Array, inferenceConfig?: object, toolConfig?: object }} params
+ * @returns {RequestParams}
+ */
+function extractRequestParamsConverse (params) {
+  const prompt = []
+  for (const block of params.system || []) {
+    if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+  }
+  for (const msg of params.messages || []) {
+    if (msg == null || typeof msg !== 'object') continue
+    prompt.push(...extractMessagesFromConverseContent(msg.role || 'user', msg.content))
+  }
+
+  const { temperature, topP, maxTokens, stopSequences } = params.inferenceConfig || {}
+  return new RequestParams({ prompt, temperature, topP, maxTokens, stopSequences })
+}
+
+/**
+ * Extract output messages + usage from a non-stream Converse response.
+ *
+ * @param {{ output?: { message?: { role?: string, content?: Array } }, stopReason?: string, usage?: object }} response
+ * @returns {Generation}
+ */
+function extractTextAndResponseReasonConverse (response) {
+  const outputMessage = response?.output?.message
+  const role = outputMessage?.role || 'assistant'
+
+  return new Generation({
+    role,
+    finishReason: response?.stopReason || '',
+    ...buildUsage(response?.usage),
+    messages: toOutputMessages(role, outputMessage?.content),
+  })
+}
+
+/**
+ * Aggregate Converse stream events into a single output message + usage.
+ * One messageStart / messageStop pair per response, so one message out.
+ *
+ * Stream events describe the same content-block structure as the non-stream
+ * response, spread across start/delta chunks. We reassemble those chunks
+ * into a normalized content-block array and reuse the non-stream extractor.
+ *
+ * @param {Array<object>} chunks - Ordered ConverseStreamOutput events.
+ * @returns {Generation}
+ */
+function buildConverseStreamGeneration (chunks) {
+  let role = 'assistant'
+  let stopReason = ''
+  let usage = {}
+  const blocksByIdx = new Map()
+
+  for (const chunk of chunks || []) {
+    if (chunk.messageStart?.role) {
+      role = chunk.messageStart.role
+    } else if (chunk.messageStop?.stopReason) {
+      stopReason = chunk.messageStop.stopReason
+    } else if (chunk.metadata?.usage) {
+      usage = chunk.metadata.usage
+    } else if (chunk.contentBlockStart?.start?.toolUse) {
+      const { contentBlockIndex, start: { toolUse } } = chunk.contentBlockStart
+      blocksByIdx.set(contentBlockIndex, {
+        toolUse: { toolUseId: toolUse.toolUseId, name: toolUse.name, inputStr: '' },
+      })
+    } else if (chunk.contentBlockDelta) {
+      const { contentBlockIndex, delta } = chunk.contentBlockDelta
+      if (typeof delta?.text === 'string') {
+        const block = blocksByIdx.get(contentBlockIndex) ?? {}
+        block.text = (block.text ?? '') + delta.text
+        blocksByIdx.set(contentBlockIndex, block)
+      } else if (typeof delta?.toolUse?.input === 'string') {
+        const block = blocksByIdx.get(contentBlockIndex) ?? { toolUse: { inputStr: '' } }
+        block.toolUse ??= { inputStr: '' }
+        block.toolUse.inputStr += delta.toolUse.input
+        blocksByIdx.set(contentBlockIndex, block)
+      }
+    }
+  }
+
+  const contentBlocks = [...blocksByIdx.keys()].sort((a, b) => a - b).map(i => blocksByIdx.get(i))
+
+  return new Generation({
+    role,
+    finishReason: stopReason,
+    ...buildUsage(usage),
+    messages: toOutputMessages(role, contentBlocks),
+  })
+}
+
 module.exports = {
   Generation,
   RequestParams,
@@ -483,5 +671,10 @@ module.exports = {
   parseModelId,
   extractRequestParams,
   extractTextAndResponseReason,
+  extractMessagesFromConverseContent,
+  extractConverseToolDefinitions,
+  extractRequestParamsConverse,
+  extractTextAndResponseReasonConverse,
+  buildConverseStreamGeneration,
   PROVIDER,
 }

@@ -4,12 +4,13 @@ const { describe, it, before } = require('mocha')
 
 const { withVersions } = require('../../../setup/mocha')
 
-const { assertLlmObsSpanEvent, useLlmObs } = require('../../util')
+const { assertLlmObsSpanEvent, useLlmObs, MOCK_STRING } = require('../../util')
 const {
   models,
   modelConfig,
   cacheWriteRequest,
   cacheReadRequest,
+  converseRequest,
 } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
@@ -281,6 +282,71 @@ describe('Plugin', () => {
               max_tokens: cacheReadRequest.requestBody.max_tokens,
             },
             tags: { ml_app: 'test', integration: 'bedrock' },
+          })
+        })
+
+        const converseAssertion = (tokens) => ({
+          spanKind: 'llm',
+          name: 'bedrock-runtime.command',
+          inputMessages: [
+            { content: converseRequest.systemPrompt, role: 'system' },
+            { content: converseRequest.userPrompt, role: 'user' },
+          ],
+          outputMessages: [{
+            role: converseRequest.response.role,
+            tool_calls: [{
+              name: converseRequest.response.toolCall.name,
+              arguments: converseRequest.response.toolCall.arguments,
+              tool_id: MOCK_STRING,
+              type: 'toolUse',
+            }],
+          }],
+          toolDefinitions: converseRequest.request.toolConfig.tools.map(({ toolSpec }) => ({
+            name: toolSpec.name,
+            description: toolSpec.description,
+            schema: toolSpec.inputSchema,
+          })),
+          metrics: {
+            input_tokens: tokens.inputTokens,
+            output_tokens: tokens.outputTokens,
+            total_tokens: tokens.inputTokens + tokens.outputTokens,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
+          },
+          modelName: converseRequest.modelId.toLowerCase(),
+          modelProvider: 'amazon_bedrock',
+          metadata: {
+            temperature: modelConfig.temperature,
+            max_tokens: modelConfig.maxTokens,
+            stop_reason: converseRequest.response.stopReason,
+          },
+          tags: { ml_app: 'test', integration: 'bedrock' },
+        })
+
+        it('should converse', async function () {
+          if (typeof AWS.ConverseCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseCommand({ modelId: converseRequest.modelId, ...converseRequest.request })
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], { ...converseAssertion(converseRequest.response), span: apmSpans[0] })
+        })
+
+        it('should converse-stream', async function () {
+          if (typeof AWS.ConverseStreamCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseStreamCommand({
+            modelId: converseRequest.modelId,
+            ...converseRequest.request,
+          })
+          const result = await bedrockRuntimeClient.send(command)
+          for await (const _event of result.stream) { // eslint-disable-line no-unused-vars
+            // drain
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            ...converseAssertion(converseRequest.streamedResponse),
+            span: apmSpans[0],
           })
         })
 
