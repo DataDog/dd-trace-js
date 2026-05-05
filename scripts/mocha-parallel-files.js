@@ -276,18 +276,18 @@ async function main () {
   const onSignal = (signal) => {
     if (interrupted) return
     interrupted = true
+    process.exitCode = signal === 'SIGINT' ? 130 : 143
     process.stderr.write(
       `\nmocha-parallel-files: received ${signal}, terminating ${liveChildren.size} child(ren)\n`
     )
     for (const child of liveChildren) {
       child.kill(signal)
     }
-    // Force-exit if children don't comply within a second. SIGINT → 130, SIGTERM → 143.
     setTimeout(() => {
       for (const child of liveChildren) {
         child.kill('SIGKILL')
       }
-      process.exit(signal === 'SIGINT' ? 130 : 143)
+      process.exit()
     }, 1000).unref()
   }
   process.once('SIGINT', () => onSignal('SIGINT'))
@@ -390,7 +390,7 @@ async function main () {
     running--
     failures++
     failed.push({ file, code: 1, signal: null })
-    process.exitCode = 1
+    process.exitCode ??= 1
   }
 
   let activeIndex = 0
@@ -640,7 +640,7 @@ async function main () {
           if (code || signal) {
             failures++
             failed.push({ file, code, signal })
-            process.exitCode = 1
+            process.exitCode ??= 1
           }
 
           safeLaunchNext()
@@ -753,7 +753,7 @@ async function main () {
     )
   }
 
-  process.exit(failures ? 1 : 0)
+  process.exit(process.exitCode ?? (failures ? 1 : 0))
 }
 
 main().catch(error => {
