@@ -299,11 +299,14 @@ describe('Plugin', () => {
             // post-conversion shape; we want the bindStart-time injection
             // result instead.
             const headerSnapshots = []
+            const headerPresence = []
             const captureStart = (ctx) => {
-              const snapshot = ctx.messages.map((m) => (
+              headerSnapshots.push(ctx.messages.map((m) => (
                 m && typeof m === 'object' && m.headers ? { ...m.headers } : undefined
-              ))
-              headerSnapshots.push(snapshot)
+              )))
+              headerPresence.push(ctx.messages.map((m) => (
+                m && typeof m === 'object' ? Object.hasOwn(m, 'headers') : null
+              )))
             }
             startCh.subscribe(captureStart)
 
@@ -332,11 +335,14 @@ describe('Plugin', () => {
               // After the broker reports ERR_UNKNOWN the producer skips
               // injection. The boundary still clones, so the underlying
               // client's `headers: null` post-publish mutation lands on the
-              // clone, not on the user's frozen array.
+              // clone, not on the user's frozen array. The clone must not
+              // seed `headers: {}` either: brokers that reject any header
+              // field cannot recover otherwise.
               const injectedAfterError = headerSnapshots
                 .slice(sendsBefore)
                 .filter((snap) => snap[0] && Object.hasOwn(snap[0], 'x-datadog-trace-id'))
               assert.strictEqual(injectedAfterError.length, 0)
+              assert.deepStrictEqual(headerPresence[sendsBefore], [false])
               assert.notStrictEqual(result, undefined)
             } finally {
               startCh.unsubscribe(captureStart)

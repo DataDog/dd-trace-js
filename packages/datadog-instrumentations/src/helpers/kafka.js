@@ -17,6 +17,24 @@ const clientToCluster = new WeakMap()
 /**
  * @param {Array<unknown>} messages
  */
+function cloneMessages (messages) {
+  const result = new Array(messages.length)
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    if (message === null || typeof message !== 'object') {
+      result[i] = message
+    } else {
+      result[i] = message.headers
+        ? { ...message, headers: { ...message.headers } }
+        : { ...message }
+    }
+  }
+  return result
+}
+
+/**
+ * @param {Array<unknown>} messages
+ */
 function cloneMessagesForInjection (messages) {
   const result = new Array(messages.length)
   for (let i = 0; i < messages.length; i++) {
@@ -42,5 +60,6 @@ function brokerSupportsMessageHeaders (brokerPool) {
 module.exports = {
   brokerSupportsMessageHeaders,
   clientToCluster,
+  cloneMessages,
   cloneMessagesForInjection,
 }
