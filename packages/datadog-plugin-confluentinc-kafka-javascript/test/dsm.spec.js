@@ -314,12 +314,10 @@ describe('Plugin', () => {
             const testMessages2 = deepFreeze([{ key: 'key2', value: 'test2' }])
 
             try {
-              try {
-                await producer.send({ topic: testTopic, messages: testMessages })
-                assert.fail('First producer.send() should have thrown an error')
-              } catch (e) {
-                assert.strictEqual(e, error)
-              }
+              await assert.rejects(
+                producer.send({ topic: testTopic, messages: testMessages }),
+                error
+              )
 
               const firstHeaders = headerSnapshots.find(
                 (snapshot) => snapshot[0] && Object.hasOwn(snapshot[0], 'x-datadog-trace-id')
