@@ -79,6 +79,7 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 let quarantinedButNotAttemptToFixFqns = new Set()
+let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -289,12 +290,18 @@ function getChannelPromise (channelToPublishTo, params) {
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
+function skippedBySerial (test, testStatus) {
+  return testStatus === 'skip' &&
+    test.expectedStatus !== 'skipped' &&
+    test.retries > 0 &&
+    test.results.length > 0
+}
+
 function testWillRetry (test, testStatus) {
   // In serial mode, a test can be skipped because a preceding test failed and then
   // re-run in the next retry cycle. Treat those skipped attempts as non-final too,
   // but leave intentionally-skipped tests (expectedStatus === 'skipped') unaffected.
-  const willBeRerun = testStatus === 'fail' ||
-    (testStatus === 'skip' && test.expectedStatus !== 'skipped' && test.retries > 0 && test.results.length > 0)
+  const willBeRerun = testStatus === 'fail' || skippedBySerial(test, testStatus)
   return willBeRerun && test.results.length <= test.retries
 }
 
@@ -666,8 +673,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const test = getTestByTestId(dispatcher, testId)
 
       const isTimeout = status === 'timedOut'
-      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
       const testStatus = STATUS_TO_TEST_STATUS[status]
+      const shouldCreateTestSpan = test.expectedStatus === 'skipped' || skippedBySerial(test, testStatus)
+      if (shouldCreateTestSpan && !testToCtx.has(test)) {
+        testBeginHandler(test, getBrowserNameFromProjects(projects, test), true)
+      }
       testEndHandler(
         {
           test,
@@ -840,6 +850,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
+        if (testsReportedInGenerateSummary.has(test)) continue
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
         testEndHandler({
@@ -899,6 +910,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
     quarantinedButNotAttemptToFixFqns = new Set()
+    testsReportedInGenerateSummary = new Set()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1429,7 +1441,8 @@ function generateSummaryWrapper (generateSummary) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
       const didNotRun = test.outcome() === 'skipped' &&
         (!test.results.length || test.expectedStatus !== 'skipped')
-      if (didNotRun) {
+      if (didNotRun && !testsReportedInGenerateSummary.has(test)) {
+        testsReportedInGenerateSummary.add(test)
         const {
           _requireFile: testSuiteAbsolutePath,
           location: {
