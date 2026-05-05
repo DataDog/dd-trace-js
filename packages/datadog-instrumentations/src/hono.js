@@ -14,9 +14,15 @@ const enterChannel = channel('apm:hono:middleware:enter')
 const exitChannel = channel('apm:hono:middleware:exit')
 const finishChannel = channel('apm:hono:middleware:finish')
 
+// `app.request()` and non-node adapters call `app.fetch` without an `incoming`
+// IncomingMessage; the APM `web` helpers depend on one, so the wrappers below
+// skip publishing whenever it is missing.
 function wrapFetch (fetch) {
   return function (request, env, executionCtx) {
-    handleChannel.publish({ req: env.incoming })
+    const req = env?.incoming
+    if (req) {
+      handleChannel.publish({ req })
+    }
     return fetch.apply(this, arguments)
   }
 }
@@ -31,8 +37,10 @@ function wrapCompose (compose) {
 
     const instrumentedOnError = (...args) => {
       const [error, context] = args
-      const req = context.env.incoming
-      errorChannel.publish({ req, error })
+      const req = context.env?.incoming
+      if (req) {
+        errorChannel.publish({ req, error })
+      }
       return onError(...args)
     }
 
@@ -62,7 +70,10 @@ function wrapMiddleware (middleware, route) {
     middleware,
     (middleware) =>
       function (context, next) {
-        const req = context.env.incoming
+        const req = context.env?.incoming
+        if (!req) {
+          return middleware.apply(this, arguments)
+        }
         routeChannel.publish({ req, route })
         enterChannel.publish({ req, name, route })
         if (typeof next === 'function') {

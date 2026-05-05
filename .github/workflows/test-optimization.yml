@@ -34,6 +34,8 @@ jobs:
         run: yarn bench:e2e:test-optimization
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          TEST_ENVIRONMENT_REF_TO_TEST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          TEST_ENVIRONMENT_REF_NAME: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
 
   integration:
     strategy:
@@ -41,8 +43,12 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -58,7 +64,11 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - run: yarn test:integration:testopt
+      - run: yarn test:integration:testopt:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-testopt-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-playwright:
     strategy:
@@ -114,17 +124,22 @@ jobs:
         # The Playwright job runs in a container where the checkout can be owned by a different UID.
         # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - run: yarn test:integration:playwright
+      - run: yarn test:integration:playwright:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
           SPEC: ${{ matrix.spec }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-playwright-${{ matrix.node-version }}-${{ matrix.playwright-version }}-${{ matrix.spec }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:
       matrix:
         version: [oldest, latest]
-        mocha-version: [5.2.0, latest]
+        # "oldest" is 5.2.0 in <=5 and 8.0.0 in >=6
+        mocha-version: [oldest, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -139,17 +154,22 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:mocha
+      - run: yarn test:integration:mocha:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:
       matrix:
         version: [oldest, latest]
-        jest-version: [24.8.0, latest]
+        # "oldest" is 24.8.0 in <=5 and 28.0.0 in >=6
+        jest-version: [oldest, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -164,11 +184,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:jest
+      - run: yarn test:integration:jest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cucumber:
     strategy:
@@ -189,11 +213,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:cucumber
+      - run: yarn test:integration:cucumber:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-selenium:
     strategy:
@@ -231,20 +259,24 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
-      - run: yarn test:integration:selenium
+      - run: yarn test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-selenium-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
       matrix:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
-        # 10.2.0 is the minimum version we support in >=6
+        # 12.0.0 is the minimum version we support in >=6
         # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in the individual spec files
-        cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
+        cypress-version: [6.7.0, 12.0.0, 14.5.4, latest]
         module-type: ["commonJS", "esm"]
         spec:
           - cypress-reporting
@@ -255,11 +287,22 @@ jobs:
           - cypress-impacted-tests
           - cypress-final-status
         exclude:
-          # eol = Node 16: shouldTestsRun() always returns false for DD_MAJOR >= 6
-          - version: eol
-          # 6.7.0 is only supported for DD_MAJOR <= 5; never runs on this branch
+          # 6.7.0 only runs on DD_MAJOR <= 5 with Node 16/commonJS.
+          # On DD_MAJOR >= 6, shouldTestsRun() skips this remaining matrix entry.
           - cypress-version: 6.7.0
-          # Node 18 (oldest) only supports 10.2.0 and 14.5.4, not latest
+            module-type: esm
+          - version: oldest
+            cypress-version: 6.7.0
+          - version: latest
+            cypress-version: 6.7.0
+          # eol = Node 16 only runs Cypress 6.7.0 for DD_MAJOR <= 5
+          - version: eol
+            cypress-version: 12.0.0
+          - version: eol
+            cypress-version: 14.5.4
+          - version: eol
+            cypress-version: latest
+          # Node 18 (oldest) only supports 12.0.0 and 14.5.4, not latest
           - version: oldest
             cypress-version: latest
     name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, ${{ matrix.spec }})
@@ -277,7 +320,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      # We cache Cypress binaries for fixed versions (6.7.0, 10.2.0, 14.5.4) but not for "latest"
+      # We cache Cypress binaries for fixed versions (6.7.0, 12.0.0, 14.5.4) but not for "latest"
       # as that changes frequently and would have a low cache hit rate
       - name: Cache Cypress binary
         if: matrix.cypress-version != 'latest'
@@ -286,7 +329,7 @@ jobs:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress --ignore-engines
+      - run: yarn test:integration:cypress:coverage --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: "-r ./ci/init"
@@ -294,6 +337,10 @@ jobs:
           OPTIONS_OVERRIDE: 1
           SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -314,7 +361,11 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:vitest
+      - run: yarn test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-vitest-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

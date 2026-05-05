@@ -19,8 +19,8 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
 
-const GRPC_CLIENT_ERROR_STATUSES = defaults['grpc.client.error.statuses']
-const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']
+const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
+const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 describe('Config', () => {
   let log
@@ -53,7 +53,11 @@ describe('Config', () => {
   }
 
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-  const getConfig = (options) => {
+  const getConfig = (options, overrides = {}) => {
+    const {
+      ddMajor = DD_MAJOR,
+    } = overrides
+
     log = proxyquire('../../src/log', {})
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
@@ -77,6 +81,7 @@ describe('Config', () => {
       'node:fs': fs,
       './helper': configHelper,
       '../pkg': pkg,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
   }
 
@@ -385,18 +390,18 @@ describe('Config', () => {
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318',
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/v1/traces',
-      otelLogsUrl: 'http://collector:4318/v1/logs',
-      otelMetricsUrl: 'http://collector:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://collector:4318/v1/logs',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://collector:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
-      otelProtocol: 'grpc',
-      otelLogsProtocol: 'grpc',
-      otelMetricsProtocol: 'grpc',
-      otelTimeout: 1234,
-      otelLogsTimeout: 1234,
-      otelMetricsTimeout: 1234,
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
   })
 
@@ -427,8 +432,8 @@ describe('Config', () => {
     // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
     // so telemetry reports the full URL users will hit.
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
-    assert.strictEqual(config.otelMetricsUrl, 'http://127.0.0.1:4318/v1/metrics')
-    assert.strictEqual(config.otelLogsUrl, 'http://127.0.0.1:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
   })
 
   it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
@@ -441,8 +446,8 @@ describe('Config', () => {
     // In the unified-agent model, OTLP lives on the same host as the DD agent (different port),
     // so DD_AGENT_HOST drives the default OTLP host too.
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://myHostName:4318/v1/traces')
-    assert.strictEqual(config.otelMetricsUrl, 'http://myHostName:4318/v1/metrics')
-    assert.strictEqual(config.otelLogsUrl, 'http://myHostName:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://myHostName:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://myHostName:4318/v1/logs')
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
@@ -560,7 +565,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: true,
-      appKey: undefined,
+      DD_APP_KEY: undefined,
       appsec: {
         apiSecurity: {
           enabled: true,
@@ -608,9 +613,7 @@ describe('Config', () => {
           },
         },
       },
-      crashtracking: {
-        enabled: true,
-      },
+      DD_CRASHTRACKING_ENABLED: true,
       debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
@@ -636,11 +639,9 @@ describe('Config', () => {
       },
       flushInterval: 2000,
       flushMinSpans: 1000,
-      heapSnapshot: {
-        count: 0,
-        destination: '',
-        interval: 3600,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 0,
+      DD_HEAP_SNAPSHOT_DESTINATION: '',
+      DD_HEAP_SNAPSHOT_INTERVAL: 3600,
       iast: {
         enabled: false,
         redactionEnabled: true,
@@ -651,14 +652,12 @@ describe('Config', () => {
           enabled: true,
         },
       },
-      injectForce: false,
-      installSignature: {
-        id: undefined,
-        time: undefined,
-        type: undefined,
-      },
+      DD_INJECT_FORCE: false,
+      DD_INSTRUMENTATION_INSTALL_ID: undefined,
+      DD_INSTRUMENTATION_INSTALL_TIME: undefined,
+      DD_INSTRUMENTATION_INSTALL_TYPE: undefined,
       instrumentationSource: 'manual',
-      instrumentation_config_id: undefined,
+      DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
         agentlessEnabled: undefined,
         enabled: false,
@@ -691,13 +690,13 @@ describe('Config', () => {
       spanRemoveIntegrationFromService: false,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'continue',
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
     })
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, [])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
-    assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
-    assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
-    assert.deepStrictEqual(config.injectionEnabled, undefined)
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, GRPC_CLIENT_ERROR_STATUSES)
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
+    assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
@@ -884,6 +883,24 @@ describe('Config', () => {
     assert.strictEqual(config.tags.service, 'test')
   })
 
+  it('should normalize the inferred service name from package.json', () => {
+    pkg.name = '@Scope/My-Service'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'scope/my-service')
+    assert.strictEqual(config.tags.service, 'scope/my-service')
+  })
+
+  it('should fall back to "node" when the inferred service name normalizes to empty', () => {
+    pkg.name = '@@@'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'node')
+    assert.strictEqual(config.tags.service, 'node')
+  })
+
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
 
@@ -1021,7 +1038,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: false,
-      appKey: 'myAppKey',
+      DD_APP_KEY: 'myAppKey',
       appsec: {
         apiSecurity: {
           enabled: true,
@@ -1071,9 +1088,7 @@ describe('Config', () => {
           },
         },
       },
-      crashtracking: {
-        enabled: false,
-      },
+      DD_CRASHTRACKING_ENABLED: false,
       debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
@@ -1100,11 +1115,9 @@ describe('Config', () => {
         exporter: 'log',
       },
       hostname: 'agent',
-      heapSnapshot: {
-        count: 1,
-        destination: '/tmp',
-        interval: 1800,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 1,
+      DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
+      DD_HEAP_SNAPSHOT_INTERVAL: 1800,
       iast: {
         dbRowsToTaint: 2,
         deduplicationEnabled: false,
@@ -1121,7 +1134,7 @@ describe('Config', () => {
         },
         telemetryVerbosity: 'DEBUG',
       },
-      instrumentation_config_id: 'abcdef123',
+      DD_INSTRUMENTATION_CONFIG_ID: 'abcdef123',
       llmobs: {
         agentlessEnabled: true,
         mlApp: 'myMlApp',
@@ -1155,16 +1168,15 @@ describe('Config', () => {
       },
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'restart',
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart',
       tracing: true,
       version: '1.0.0',
     })
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(
-      config.installSignature,
-      { id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', type: 'k8s_single_step', time: '1703188212' }
-    )
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_ID, '68e75c48-57ca-4a12-adfc-575c4b05fcbe')
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TYPE, 'k8s_single_step')
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TIME, '1703188212')
     assert.deepStrictEqual(config.peerServiceMapping, { c: 'cc', d: 'dd' })
     assert.deepStrictEqual(config.sampler, {
       sampleRate: 0.5,
@@ -1366,7 +1378,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: false,
-      tracePropagationExtractFirst: true,
+      DD_TRACE_PROPAGATION_EXTRACT_FIRST: true,
       runtimeMetrics: {
         enabled: false,
       },
@@ -1421,7 +1433,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking.enabled, true)
+    assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
   })
 
   it('should disable crash tracking for SSI when configured', () => {
@@ -1430,7 +1442,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking.enabled, false)
+    assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
   })
 
   it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
@@ -1869,24 +1881,24 @@ describe('Config', () => {
 
     let config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
 
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '1'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '1'
 
     config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [1])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [1])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [1])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [1])
 
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '2,10,13-15'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '2,10,13-15'
 
     config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [2, 10, 13, 14, 15])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [2, 10, 13, 14, 15])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [2, 10, 13, 14, 15])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [2, 10, 13, 14, 15])
   })
 
   context('peer service tagging', () => {
@@ -3010,21 +3022,21 @@ describe('Config', () => {
       })
       it('should enable manual testing API by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.isManualApiEnabled, true)
+        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, true)
       })
       it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config.isManualApiEnabled, false)
+        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.memcachedCommandEnabled, false)
+        assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, false)
       })
       it('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', () => {
         process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.memcachedCommandEnabled, true)
+        assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, true)
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
@@ -3070,16 +3082,16 @@ describe('Config', () => {
       it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisibilityTestSessionName, 'my-test-session')
+        assert.strictEqual(config.DD_TEST_SESSION_NAME, 'my-test-session')
       })
       it('should not enable agentless log submission by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, false)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       })
       it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
         process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, true)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
       })
       it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = getConfig(options)
@@ -3730,12 +3742,10 @@ apm_configuration_default:
       let config = getConfig()
       assertObjectContains(config, {
         apiKey: 'local-api-key',
-        appKey: 'local-app-key',
-        installSignature: {
-          id: 'local-install-id',
-          time: '1234567890',
-          type: 'local_install',
-        },
+        DD_APP_KEY: 'local-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'local-install-id',
+        DD_INSTRUMENTATION_INSTALL_TIME: '1234567890',
+        DD_INSTRUMENTATION_INSTALL_TYPE: 'local_install',
         cloudPayloadTagging: {
           request: [],
           maxDepth: 5,
@@ -3750,10 +3760,8 @@ apm_configuration_default:
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'env-api-key',
-        appKey: 'env-app-key',
-        installSignature: {
-          id: 'env-install-id',
-        },
+        DD_APP_KEY: 'env-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'env-install-id',
         cloudPayloadTagging: {
           maxDepth: 7,
         },
@@ -3782,12 +3790,10 @@ rules:
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'fleet-api-key',
-        appKey: 'fleet-app-key',
-        installSignature: {
-          id: 'fleet-install-id',
-          time: '9999999999',
-          type: 'fleet_install',
-        },
+        DD_APP_KEY: 'fleet-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'fleet-install-id',
+        DD_INSTRUMENTATION_INSTALL_TIME: '9999999999',
+        DD_INSTRUMENTATION_INSTALL_TYPE: 'fleet_install',
         cloudPayloadTagging: {
           request: undefined,
           response: [],
@@ -3903,7 +3909,7 @@ rules:
       assert.strictEqual(config.service, 'explicit-service')
     })
 
-    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy', () => {
+    it('should use NX_TASK_TARGET_PROJECT by default in v6', () => {
       const cases = ['false', '0', undefined]
 
       for (const ddIsNx of cases) {
@@ -3916,7 +3922,26 @@ rules:
         process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
         pkg.name = 'default-service'
 
-        const config = getConfig()
+        const config = getConfig(undefined, { ddMajor: 6 })
+
+        assert.strictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy in v5', () => {
+      const cases = ['false', '0', undefined]
+
+      for (const ddIsNx of cases) {
+        if (ddIsNx === undefined) {
+          delete process.env.DD_ENABLE_NX_SERVICE_NAME
+        } else {
+          process.env.DD_ENABLE_NX_SERVICE_NAME = ddIsNx
+        }
+
+        process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+        pkg.name = 'default-service'
+
+        const config = getConfig(undefined, { ddMajor: 5 })
 
         assert.strictEqual(config.service, 'default-service')
         assert.notStrictEqual(config.service, 'my-nx-project')
@@ -3943,24 +3968,41 @@ rules:
       }
     })
 
-    it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+    it('should fall back to "node" when NX_TASK_TARGET_PROJECT normalizes to empty', () => {
+      process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+      process.env.NX_TASK_TARGET_PROJECT = '@@@'
+      pkg.name = 'default-service'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.service, 'node')
+    })
+
+    it('should warn about v6 behavior change in v5 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
       delete process.env.DD_ENABLE_NX_SERVICE_NAME
       delete process.env.DD_SERVICE
       pkg.name = 'default-service'
 
-      getConfig()
+      getConfig(undefined, { ddMajor: 5 })
 
-      if (DD_MAJOR < 6) {
-        assert.strictEqual(log.warn.called, true)
-        const warningMessage = log.warn.args[0][0]
-        assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
-        assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
-        assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
-      } else {
-        // In v6+, no warning should be issued
-        assert.strictEqual(log.warn.called, false)
-      }
+      assert.strictEqual(log.warn.called, true)
+      const warningMessage = log.warn.args[0][0]
+      assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
+      assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
+      assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
+    })
+
+    it('should not warn in v6 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      delete process.env.DD_ENABLE_NX_SERVICE_NAME
+      delete process.env.DD_SERVICE
+      pkg.name = 'default-service'
+
+      const config = getConfig(undefined, { ddMajor: 6 })
+
+      assert.strictEqual(config.service, 'my-nx-project')
+      assert.strictEqual(log.warn.called, false)
     })
 
     it('should not warn when DD_ENABLE_NX_SERVICE_NAME is explicitly set', () => {

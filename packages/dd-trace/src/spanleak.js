@@ -85,7 +85,6 @@ module.exports.addSpan = function (span) {
   const expiration = now + LIFETIME
   const wrapped = new WeakRef(span)
   spans.add(wrapped, expiration)
-  // registry.register(span, span._name)
 }
 
 function isEnabled () {

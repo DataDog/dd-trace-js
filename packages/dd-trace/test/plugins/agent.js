@@ -399,8 +399,7 @@ module.exports = {
     /** @type {(this: server, event: string, ...args: unknown[]) => boolean} */
     const originalEmit = emit
     server.emit = function (event, ...args) {
-      storage('legacy').enterWith({ noop: true })
-      return originalEmit.call(this, event, ...args)
+      return storage('legacy').run({ noop: true }, () => originalEmit.call(this, event, ...args))
     }
 
     server.on('connection', socket => sockets.push(socket))

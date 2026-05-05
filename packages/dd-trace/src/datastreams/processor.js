@@ -8,14 +8,20 @@ const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { DsmPathwayCodec } = require('./pathway')
+const { CONTEXT_PROPAGATION_KEY_BASE64, computePathwayHash } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
-const { computePathwayHash } = require('./pathway')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
+
+// A direction:out checkpoint estimates the size cost of the header the
+// producer plugin will inject. The pathway context is always 20 binary
+// bytes, encoded as 28 base64 chars; together with the header key and
+// JSON framing (matching the prior `JSON.stringify({key: value})` byte
+// count minus 1), this is a fixed value.
+const PATHWAY_HEADER_BYTES = CONTEXT_PROPAGATION_KEY_BASE64.length + 28 + 6
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -271,19 +277,19 @@ class DataStreamsProcessor {
 
   recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
-    this.bucketFromTimestamp(checkpoint.currentTimestamp)
-      .forCheckpoint(checkpoint)
-      .addLatencies(checkpoint)
-    // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
+    const statsPoint = this.bucketFromTimestamp(checkpoint.currentTimestamp).forCheckpoint(checkpoint)
+    statsPoint.addLatencies(checkpoint)
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64LE(0).toString())
+      // StatsPoint already converted the 8-byte Buffer hash to a uint64 BigInt.
+      span.setTag(PATHWAY_HASH, statsPoint.hash.toString())
     }
   }
 
-  setCheckpoint (edgeTags, span, ctx = null, payloadSize = 0) {
-    if (!this.enabled) return null
+  setCheckpoint (edgeTags, span, ctx, payloadSize = 0) {
+    if (!this.enabled) return
     const nowNs = Date.now() * 1e6
-    const direction = edgeTags.find(t => t.startsWith('direction:'))
+    // Callers must place the direction tag at index 0.
+    const direction = edgeTags[0]
     let pathwayStartNs = nowNs
     let edgeStartNs = nowNs
     let parentHash = ENTRY_PARENT_HASH
@@ -334,11 +340,7 @@ class DataStreamsProcessor {
       closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
-      // Add the header for this now, as the callee doesn't have access to context when producing
-      // - 1 to account for extra byte for {
-      const ddInfoContinued = {}
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfoContinued)
-      payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
+      payloadSize += PATHWAY_HEADER_BYTES
     }
     const checkpoint = {
       currentTimestamp: nowNs,

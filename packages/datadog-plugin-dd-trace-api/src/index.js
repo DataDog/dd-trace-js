@@ -14,7 +14,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     super(...args)
 
     const tracer = this._tracer
-    const injectionEnabledTag = `injection_enabled:${this._tracerConfig.injectionEnabled ? 'yes' : 'no'}`
+    const injectionEnabledTag = `injection_enabled:${this._tracerConfig.DD_INJECTION_ENABLED ? 'yes' : 'no'}`
 
     this.addSub('datadog-api:v1:tracerinit', ({ proxy }) => {
       const proxyVal = proxy()

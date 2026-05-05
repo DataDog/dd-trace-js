@@ -4,7 +4,7 @@ const { types } = require('util')
 
 function getSizeOrZero (obj) {
   if (typeof obj === 'string') {
-    return Buffer.from(obj, 'utf8').length
+    return Buffer.byteLength(obj, 'utf8')
   }
   if (types.isArrayBuffer(obj)) {
     return obj.byteLength
@@ -32,7 +32,11 @@ function getSizeOrZero (obj) {
 
 function getHeadersSize (headers) {
   if (headers === undefined) return 0
-  return Object.entries(headers).reduce((prev, [key, val]) => getSizeOrZero(key) + getSizeOrZero(val) + prev, 0)
+  let size = 0
+  for (const key of Object.keys(headers)) {
+    size += Buffer.byteLength(key, 'utf8') + getSizeOrZero(headers[key])
+  }
+  return size
 }
 
 function getMessageSize (message) {
