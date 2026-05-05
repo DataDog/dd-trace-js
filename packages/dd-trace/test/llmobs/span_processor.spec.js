@@ -206,6 +206,30 @@ describe('span processor', () => {
         '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
       })
 
+    it('forwards tool definitions to the payload', () => {
+      const toolDefinitions = [
+        {
+          name: 'get_weather',
+          description: 'Get the weather for a city.',
+          schema: { type: 'object', properties: { city: { type: 'string' } } },
+        },
+      ]
+
+      span = {
+        context () {
+          return {
+            _tags: {},
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'tool',
+        '_ml_obs.meta.tool_definitions': toolDefinitions,
+      })
+
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
@@ -249,6 +273,7 @@ describe('span processor', () => {
           cost_tags: ['team', 'feature'],
         },
       })
+      assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
 
     it('tags output documents for a retrieval span', () => {
@@ -454,6 +479,141 @@ describe('span processor', () => {
       const payload = writer.append.getCall(0).firstArg
 
       assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
+    })
+
+    it('marks the apm span with _dd.llmobs.submitted=1 for sdk-tagged spans', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      writer.append.returns(true)
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+    })
+
+    it('does not mark non-llmobs apm spans with _dd.llmobs.submitted', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      // intentionally not registered with the tagger
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+
+    it('does not mark the apm span when format throws (no event submitted)', () => {
+      const apmTags = {}
+      span = {
+        _name: 'broken',
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate format failing — no LLMObs event will be submitted
+      sinon.stub(processor, 'format').throws(new Error('boom'))
+
+      processor.process(span)
+
+      // Without an LLMObs event, dd-go would otherwise reparent OTel children
+      // under a span that produced no event. Tag must stay off.
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+      sinon.assert.notCalled(writer.append)
+    })
+
+    it('does not mark the apm span when format returns null (event dropped)', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate user span processor dropping the event
+      sinon.stub(processor, 'format').returns(null)
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+      sinon.assert.notCalled(writer.append)
+    })
+
+    it('does not mark the apm span when writer.append throws', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate writer.append throwing (e.g. JSON.stringify failure in
+      // byte-length probing on an unsanitized payload)
+      writer.append.throws(new Error('boom'))
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+
+    it('does not mark the apm span when writer.append silently drops (buffer full)', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate writer.append returning false to signal the event was
+      // dropped (e.g. per-routing buffer is full)
+      writer.append.returns(false)
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
     })
   })
 })

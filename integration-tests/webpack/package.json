@@ -15,7 +15,7 @@
   "author": "Thomas Hunter II <tlhunter@datadog.com>",
   "license": "ISC",
   "dependencies": {
-    "axios": "1.15.0",
+    "axios": "1.15.2",
     "express": "4.22.1",
     "knex": "3.1.0"
   }

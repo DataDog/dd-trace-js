@@ -34,18 +34,18 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
   if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
     span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
   }
-  for (let metaKey in span.meta) {
+  for (let metaKey of Object.keys(span.meta)) {
     const val = span.meta[metaKey]
     if (metaKey.length > MAX_META_KEY_LENGTH) {
       delete span.meta[metaKey]
       metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
-      span.metrics[metaKey] = val
+      span.meta[metaKey] = val
     }
     if (val && val.length > MAX_META_VALUE_LENGTH) {
       span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`
     }
   }
-  for (let metricsKey in span.metrics) {
+  for (let metricsKey of Object.keys(span.metrics)) {
     const val = span.metrics[metricsKey]
     if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
       delete span.metrics[metricsKey]

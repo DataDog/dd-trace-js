@@ -14,6 +14,7 @@ const {
   METADATA,
   COST_TAGS,
   METRICS,
+  TOOL_DEFINITIONS,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
@@ -164,6 +165,14 @@ class LLMObsTagger {
   tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
+  }
+
+  tagToolDefinitions (span, toolDefinitions) {
+    if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    } else {
+      this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
+    }
   }
 
   tagMetadata (span, metadata) {
