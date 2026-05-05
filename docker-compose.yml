@@ -10,7 +10,7 @@ services:
       - "127.0.0.1:10001:10001"
       - "127.0.0.1:10002:10002"
   azurecosmosemulator:
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
     ports:
       - "127.0.0.1:8081:8081"
       - "127.0.0.1:8080:8080"

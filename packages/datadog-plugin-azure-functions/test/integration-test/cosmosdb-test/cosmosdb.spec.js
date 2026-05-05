@@ -17,12 +17,12 @@ const {
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
-  let agent
-  let proc
-  let setup
-  let teardown
-
   withVersions('azure-functions', '@azure/functions', version => {
+    let agent
+    let proc
+    let setup
+    let teardown
+
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
@@ -33,28 +33,27 @@ describe('esm', () => {
       './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
     before(async function () {
+      this.timeout(60000)
       const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
       setup = helpers.setup
       teardown = helpers.teardown
-    })
 
-    beforeEach(async () => {
       agent = await new FakeAgent().start()
       await setup()
+
+      const envArgs = {
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+      }
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
     })
 
-    afterEach(async () => {
+    after(async () => {
       await stopProc(proc, { signal: 'SIGINT' })
       await teardown()
       await agent.stop()
     })
 
     it('propagates cosmosdb writes to azure function trigger', async () => {
-      const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-      }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
-
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/writeToCosmos', ({ headers, payload }) => {
         assert.ok(Array.isArray(payload), 'trace payload should be an array of traces')
 

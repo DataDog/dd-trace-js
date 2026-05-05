@@ -24,8 +24,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const span = ctx.currentStore?.span
     if (span) {
       const result = ctx.result
-      if (result?.code) span.setTag('http.status_code', result.code)
-      if (result?.substatus) span.setTag('http.status_subcode', result.substatus)
+      if (result?.code) span.setTag('db.response.status_code', result.code)
+      if (result?.substatus) span.setTag('cosmosdb.response.sub_status_code', result.substatus)
       span.finish()
     }
   }
@@ -36,8 +36,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
     if (span) {
       const error = ctx.error
       this.addError(error, span)
-      if (error?.code) span.setTag('http.status_code', error.code)
-      if (error?.substatus) span.setTag('http.status_subcode', error.substatus)
+      if (error?.code) span.setTag('db.response.status_code', error.code)
+      if (error?.substatus) span.setTag('cosmosdb.response.sub_status_code', error.substatus)
     }
   }
 
