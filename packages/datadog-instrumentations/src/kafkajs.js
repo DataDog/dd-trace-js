@@ -9,6 +9,7 @@ const {
 } = require('./helpers/instrument')
 const {
   brokerSupportsMessageHeaders,
+  clientToCluster,
   cloneMessagesForInjection,
 } = require('./helpers/kafka')
 
@@ -26,16 +27,13 @@ const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
-// Capture the cluster instance kafkajs creates per producer/consumer so the
-// boundary can read `cluster.brokerPool.metadata.clusterId` lazily instead of
-// opening a parallel admin connection.
-const kCluster = Symbol('dd-trace.kafkajs.cluster')
+const noop = () => {}
 
 addHook({ name: 'kafkajs', file: 'src/producer/index.js', versions: ['>=1.4'] }, (createProducer) =>
   shimmer.wrapFunction(createProducer, original => function wrappedCreateProducer (params) {
     const producer = original(params)
     if (params?.cluster) {
-      producer[kCluster] = params.cluster
+      clientToCluster.set(producer, params.cluster)
     }
     return producer
   })
@@ -45,7 +43,7 @@ addHook({ name: 'kafkajs', file: 'src/consumer/index.js', versions: ['>=1.4'] },
   shimmer.wrapFunction(createConsumer, original => function wrappedCreateConsumer (params) {
     const consumer = original(params)
     if (params?.cluster) {
-      consumer[kCluster] = params.cluster
+      clientToCluster.set(consumer, params.cluster)
     }
     return consumer
   })
@@ -65,13 +63,14 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     const producer = createProducer.apply(this, arguments)
     const originalSend = producer.send
     const bootstrapServers = this._brokers
-    const cluster = producer[kCluster]
+    const cluster = clientToCluster.get(producer)
 
     let disableHeaderInjection = false
 
-    const refreshHeaderSupport = () => {
-      if (!disableHeaderInjection && !brokerSupportsMessageHeaders(cluster?.brokerPool)) {
+    let refreshHeaderSupport = () => {
+      if (!brokerSupportsMessageHeaders(cluster?.brokerPool)) {
         disableHeaderInjection = true
+        refreshHeaderSupport = noop
         log.info('kafkajs broker negotiated Produce <v3; tracer header injection disabled.')
       }
     }
@@ -145,6 +144,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                 // UNKNOWN (server error code -1).
                 if (error.name === 'KafkaJSProtocolError' && error.type === 'UNKNOWN') {
                   disableHeaderInjection = true
+                  refreshHeaderSupport = noop
                   log.error(
                     // eslint-disable-next-line @stylistic/max-len
                     'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
@@ -174,7 +174,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     }
 
     const consumer = createConsumer.apply(this, arguments)
-    const cluster = consumer[kCluster]
+    const cluster = clientToCluster.get(consumer)
     const groupId = arguments[0].groupId
 
     const readClusterId = () => cluster?.brokerPool?.metadata?.clusterId

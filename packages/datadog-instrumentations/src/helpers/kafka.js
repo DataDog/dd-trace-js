@@ -5,6 +5,15 @@
 const PRODUCE_API_KEY = 0
 const PRODUCE_VERSION_WITH_HEADERS = 3
 
+// Side-table mapping a kafkajs producer/consumer to the cluster captured at
+// creation time. The boundary uses it to read `cluster.brokerPool` lazily on
+// first send/consume instead of opening a parallel admin connection. A
+// WeakMap keeps the kafkajs object itself untouched: no Symbol-keyed
+// property to leak through `Reflect.ownKeys`, no string-keyed underscore for
+// user serializers to pick up, and the entry drops as soon as the producer
+// is GC'd.
+const clientToCluster = new WeakMap()
+
 /**
  * @param {Array<unknown>} messages
  */
@@ -32,5 +41,6 @@ function brokerSupportsMessageHeaders (brokerPool) {
 
 module.exports = {
   brokerSupportsMessageHeaders,
+  clientToCluster,
   cloneMessagesForInjection,
 }
