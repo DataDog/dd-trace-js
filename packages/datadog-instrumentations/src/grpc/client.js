@@ -176,6 +176,7 @@ function callMethod (client, method, args, path, metadata, type, hasPeer = false
     } catch (e) {
       ctx.error = e
       errorChannel.publish(ctx)
+      throw e
     }
     // No end channel needed
   })
