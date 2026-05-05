@@ -18,7 +18,7 @@ const azureInvokeGroup = (resource) => (group) =>
   group.some(s => s.name === 'azure.functions.invoke' && s.resource === resource)
 
 const azureCreateGroup = (group) =>
-  group.some(s => s.name === 'azure.functions.create')
+  group.some(s => s.name === 'azure.eventhubs.create')
 
 describe('esm', () => {
   withVersions('azure-functions', '@azure/functions', version => {
