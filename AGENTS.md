@@ -95,6 +95,13 @@ yarn services && npm run test:plugins
 
 **ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
 
+**OTEL env vars from instrumented shells:** Plugin tests use a local mock agent for span assertions. If your shell sets `OTEL_TRACES_EXPORTER=otlp` (Claude Code, Cursor, and other Datadog-telemetry-instrumented terminals do), the tracer routes spans through the OTLP exporter and bypasses the test agent — every span-asserting test silently times out. Unset before running:
+
+```bash
+unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
+PLUGINS="<name>" npm run test:plugins
+```
+
 ### Test Coverage
 
 ```bash
