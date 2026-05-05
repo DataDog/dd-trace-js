@@ -154,7 +154,8 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           value = value.replace(sensitiveId, originalValue)
         }
 
-        keysRegex.lastIndex = 0
+        // value was mutated by replace(), so resume from the last match start to avoid a stale lastIndex
+        keysRegex.lastIndex = regexRes.index
         regexRes = keysRegex.exec(value)
       }
     }
