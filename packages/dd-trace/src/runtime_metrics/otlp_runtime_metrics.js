@@ -23,6 +23,7 @@ let meter = null
 let eventLoopHistogram = null
 let lastCpuUsage = null
 let lastTime = 0
+let lastElu = null
 
 module.exports = {
   start (config) {
@@ -51,7 +52,7 @@ module.exports = {
       }
 
       // --- V8 Heap Metrics ---
-      const heapUsed = meter.createObservableGauge('v8js.memory.heap.used', {
+      const heapUsed = meter.createObservableUpDownCounter('v8js.memory.heap.used', {
         unit: 'By',
         description: 'V8 heap memory used.',
       })
@@ -60,7 +61,7 @@ module.exports = {
         result.observe(heapStats.used_heap_size)
       })
 
-      const heapLimit = meter.createObservableGauge('v8js.memory.heap.limit', {
+      const heapLimit = meter.createObservableUpDownCounter('v8js.memory.heap.limit', {
         unit: 'By',
         description: 'V8 heap memory total available size.',
       })
@@ -69,7 +70,7 @@ module.exports = {
         result.observe(heapStats.heap_size_limit)
       })
 
-      const heapSpaceAvailable = meter.createObservableGauge('v8js.memory.heap.space.available_size', {
+      const heapSpaceAvailable = meter.createObservableUpDownCounter('v8js.memory.heap.space.available_size', {
         unit: 'By',
         description: 'V8 heap space available size.',
       })
@@ -79,7 +80,7 @@ module.exports = {
         }
       })
 
-      const heapSpacePhysical = meter.createObservableGauge('v8js.memory.heap.space.physical_size', {
+      const heapSpacePhysical = meter.createObservableUpDownCounter('v8js.memory.heap.space.physical_size', {
         unit: 'By',
         description: 'V8 heap space physical size.',
       })
@@ -90,7 +91,7 @@ module.exports = {
       })
 
       // --- Process Metrics ---
-      const memoryUsage = meter.createObservableGauge('process.memory.usage', {
+      const memoryUsage = meter.createObservableUpDownCounter('process.memory.usage', {
         unit: 'By',
         description: 'Process resident set size (RSS).',
       })
@@ -122,63 +123,70 @@ module.exports = {
       })
 
       // --- Event Loop Metrics ---
+      // Per OTel semconv, nodejs.eventloop.delay.* are reported in seconds.
+      // Node's monitorEventLoopDelay returns histogram values in nanoseconds.
       if (trackEventLoop) {
         const eventLoopDelayMin = meter.createObservableGauge('nodejs.eventloop.delay.min', {
-          unit: 'ns',
+          unit: 's',
           description: 'Event loop minimum delay.',
         })
         eventLoopDelayMin.addCallback((result) => {
-          if (eventLoopHistogram) result.observe(eventLoopHistogram.min * 1e6)
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.min / 1e9)
         })
 
         const eventLoopDelayMax = meter.createObservableGauge('nodejs.eventloop.delay.max', {
-          unit: 'ns',
+          unit: 's',
           description: 'Event loop maximum delay.',
         })
         eventLoopDelayMax.addCallback((result) => {
-          if (eventLoopHistogram) result.observe(eventLoopHistogram.max * 1e6)
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.max / 1e9)
         })
 
         const eventLoopDelayMean = meter.createObservableGauge('nodejs.eventloop.delay.mean', {
-          unit: 'ns',
+          unit: 's',
           description: 'Event loop mean delay.',
         })
         eventLoopDelayMean.addCallback((result) => {
-          if (eventLoopHistogram) result.observe(eventLoopHistogram.mean * 1e6)
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.mean / 1e9)
         })
 
         const eventLoopDelayP50 = meter.createObservableGauge('nodejs.eventloop.delay.p50', {
-          unit: 'ns',
+          unit: 's',
           description: 'Event loop 50th percentile delay.',
         })
         eventLoopDelayP50.addCallback((result) => {
-          if (eventLoopHistogram) result.observe(eventLoopHistogram.percentile(50) * 1e6)
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.percentile(50) / 1e9)
         })
 
         const eventLoopDelayP90 = meter.createObservableGauge('nodejs.eventloop.delay.p90', {
-          unit: 'ns',
+          unit: 's',
           description: 'Event loop 90th percentile delay.',
         })
         eventLoopDelayP90.addCallback((result) => {
-          if (eventLoopHistogram) result.observe(eventLoopHistogram.percentile(90) * 1e6)
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.percentile(90) / 1e9)
         })
 
         const eventLoopDelayP99 = meter.createObservableGauge('nodejs.eventloop.delay.p99', {
-          unit: 'ns',
+          unit: 's',
           description: 'Event loop 99th percentile delay.',
         })
         eventLoopDelayP99.addCallback((result) => {
-          if (eventLoopHistogram) result.observe(eventLoopHistogram.percentile(99) * 1e6)
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.percentile(99) / 1e9)
         })
 
         if (performance.eventLoopUtilization) {
+          // Initialize baseline so the first observation is not always 1.
+          lastElu = performance.eventLoopUtilization()
+
           const eventLoopUtilization = meter.createObservableGauge('nodejs.eventloop.utilization', {
             unit: '1',
-            description: 'Event loop utilization ratio.',
+            description: 'Event loop utilization.',
           })
           eventLoopUtilization.addCallback((result) => {
-            const elu = performance.eventLoopUtilization()
-            result.observe(elu.utilization)
+            const currentElu = performance.eventLoopUtilization()
+            const deltaElu = performance.eventLoopUtilization(currentElu, lastElu)
+            lastElu = currentElu
+            result.observe(deltaElu.utilization)
           })
         }
       }
@@ -197,6 +205,7 @@ module.exports = {
     meter = null
     lastCpuUsage = null
     lastTime = 0
+    lastElu = null
   },
 
   // Noop methods expected by the rest of the tracer (e.g. agent writer)
