@@ -513,7 +513,7 @@ class Config extends ConfigBase {
       } else {
         const NX_TASK_TARGET_PROJECT = getEnvironmentVariable('NX_TASK_TARGET_PROJECT')
         if (NX_TASK_TARGET_PROJECT) {
-          if (this.DD_ENABLE_NX_SERVICE_NAME) {
+          if (DD_MAJOR >= 6 || this.DD_ENABLE_NX_SERVICE_NAME) {
             setAndTrack(this, 'service', normalizeService(NX_TASK_TARGET_PROJECT) || 'node')
             isServiceNameInferred = true
           } else if (DD_MAJOR < 6) {
