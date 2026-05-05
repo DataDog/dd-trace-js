@@ -473,7 +473,7 @@ export default [
           ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
         message:
           'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
-          '(coverage-excluded in `.c8rc.json`) and import it here.',
+          '(coverage-excluded in `.c8rc.json` and `nyc.config.js`) and import it here.',
       }, {
         // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
         // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
