@@ -495,7 +495,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
             },
           }
         )
@@ -547,7 +547,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
                 MAX_FAILURES: '1',
                 PLAYWRIGHT_WORKERS: '1',
               },
