@@ -14,6 +14,7 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   METADATA,
+  TOOL_DEFINITIONS,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -132,6 +133,10 @@ class LLMObsSpanProcessor {
 
     if (mlObsTags[METADATA]) {
       this.#addObject(mlObsTags[METADATA], meta.metadata = {})
+    }
+
+    if (mlObsTags[TOOL_DEFINITIONS]) {
+      this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions = [])
     }
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
