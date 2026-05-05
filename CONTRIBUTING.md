@@ -109,6 +109,9 @@ The `scope` is optional. Valid types are:
 | `chore` | Other changes that don't modify src or test files |
 | `revert` | Reverts a previous commit |
 
+Revert PRs must embed the original commit's type so the semver impact can be
+determined automatically: `revert: <type>(<scope>)?: <description>`.
+
 Examples:
 
 ```
@@ -116,6 +119,7 @@ feat(appsec): add new WAF rule
 fix(redis): handle connection timeout
 docs: update contributing guidelines
 chore(deps): bump express to v5
+revert: fix(redis): handle connection timeout
 ```
 
 ## Sign your commits
