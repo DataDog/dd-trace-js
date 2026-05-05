@@ -1787,6 +1787,45 @@ describe('TextMapPropagator', () => {
 
         assert.deepStrictEqual(getAllBaggageItems(), {})
       })
+
+      it('returns null without throwing when ignore mode has no matching extractors', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['tracecontext', 'datadog'] },
+        })
+        propagator = new TextMapPropagator(config)
+
+        assert.strictEqual(propagator.extract({}), null)
+      })
+
+      it('returns null without throwing when restart mode has no matching extractors', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['tracecontext', 'datadog'] },
+        })
+        propagator = new TextMapPropagator(config)
+
+        assert.strictEqual(propagator.extract({}), null)
+      })
+
+      it('falls back to the SQSD context in ignore mode when no extractors match', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['tracecontext', 'datadog'] },
+        })
+        propagator = new TextMapPropagator(config)
+        const sqsdCarrier = {
+          'x-aws-sqsd-attr-_datadog': JSON.stringify({
+            'x-datadog-trace-id': '123',
+            'x-datadog-parent-id': '456',
+          }),
+        }
+
+        const extracted = propagator.extract(sqsdCarrier)
+
+        assert.strictEqual(extracted.toTraceId(), '123')
+        assert.strictEqual(extracted.toSpanId(), '456')
+      })
     })
   })
 })
