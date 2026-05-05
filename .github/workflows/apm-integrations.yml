@@ -17,9 +17,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
+  DD_TRACE_TEST_AGENT_TEE_URL: http://127.0.0.1:8126
+  DD_TRACE_TEST_AGENT_SITE: datadoghq.com
 
 # TODO: upstream jobs
 

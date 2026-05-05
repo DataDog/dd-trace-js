@@ -1,0 +1,39 @@
+name: Start Trace Forwarding Agent
+description: Start a Datadog Agent for trace payloads teed by plugin tests.
+runs:
+  using: composite
+  steps:
+    - name: Start Datadog Agent
+      if: env.DD_TRACE_TEST_AGENT_TEE_URL != ''
+      shell: bash
+      env:
+        DD_API_KEY: ${{ env.DD_TRACE_TEST_AGENT_API_KEY }}
+        DD_SITE: ${{ env.DD_TRACE_TEST_AGENT_SITE || 'datadoghq.com' }}
+      run: |
+        if [ -z "$DD_API_KEY" ]; then
+          echo "::error::DD_TRACE_TEST_AGENT_API_KEY is required when trace forwarding is enabled."
+          exit 1
+        fi
+
+        docker rm -f dd-trace-forwarding-agent >/dev/null 2>&1 || true
+
+        docker run -d \
+          --name dd-trace-forwarding-agent \
+          --env DD_API_KEY \
+          --env DD_SITE \
+          --env DD_APM_ENABLED=true \
+          --env DD_APM_NON_LOCAL_TRAFFIC=true \
+          --env DD_REMOTE_CONFIGURATION_ENABLED=false \
+          --env DD_HOSTNAME="dd-trace-js-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_JOB}" \
+          --env DD_TAGS="repository:${GITHUB_REPOSITORY} job:${GITHUB_JOB} run_id:${GITHUB_RUN_ID} run_attempt:${GITHUB_RUN_ATTEMPT}" \
+          --publish 127.0.0.1:8126:8126/tcp \
+          gcr.io/datadoghq/agent:7
+
+    - name: Wait for Datadog Agent
+      if: env.DD_TRACE_TEST_AGENT_TEE_URL != ''
+      shell: bash
+      run: |
+        if ! timeout 60 bash -c 'until curl -sf http://127.0.0.1:8126/info >/dev/null; do sleep 1; done'; then
+          docker logs dd-trace-forwarding-agent
+          exit 1
+        fi

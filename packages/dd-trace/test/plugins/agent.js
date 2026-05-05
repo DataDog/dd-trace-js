@@ -2,6 +2,7 @@
 
 const assert = require('assert')
 const http = require('http')
+const https = require('https')
 const path = require('path')
 const util = require('util')
 const { setTimeout: wait } = require('timers/promises')
@@ -30,6 +31,11 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let testAgentTeeWarning = false
+
+const TEST_AGENT_TEE_URL = 'DD_TRACE_TEST_AGENT_TEE_URL'
+const TEST_AGENT_TEE_LOG_PAYLOADS = 'DD_TRACE_TEST_AGENT_TEE_LOG_PAYLOADS'
+const TEST_AGENT_TEE_TIMEOUT_MS = 1000
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -46,6 +52,157 @@ function ciVisRequestHandler (request, response) {
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(request.body, request)
     }
+  })
+}
+
+/**
+ * Preserves the request body before the mock agent decodes it for local assertions.
+ *
+ * @param {http.IncomingMessage & { rawBody?: Buffer }} request
+ * @param {http.ServerResponse} response
+ * @param {Buffer} buffer
+ */
+function preserveRawBody (request, response, buffer) {
+  void response
+
+  request.rawBody = Buffer.from(buffer)
+}
+
+/**
+ * Gets the body to forward to a real agent.
+ *
+ * @param {http.IncomingMessage & { rawBody?: Buffer, body?: unknown }} request
+ * @returns {Buffer}
+ */
+function getForwardBody (request) {
+  if (Buffer.isBuffer(request.rawBody)) {
+    return request.rawBody
+  }
+
+  if (Buffer.isBuffer(request.body)) {
+    return request.body
+  }
+
+  if (typeof request.body === 'string') {
+    return Buffer.from(request.body)
+  }
+
+  return msgpack.encode(request.body)
+}
+
+/**
+ * Builds request headers for forwarding an intake payload.
+ *
+ * @param {http.IncomingHttpHeaders} headers
+ * @param {number} contentLength
+ * @returns {http.OutgoingHttpHeaders}
+ */
+function getForwardHeaders (headers, contentLength) {
+  const forwardedHeaders = {}
+
+  for (const name of Object.keys(headers)) {
+    if (name === 'host' || name === 'connection' || name === 'content-length' || name === 'transfer-encoding') {
+      continue
+    }
+
+    forwardedHeaders[name] = headers[name]
+  }
+
+  forwardedHeaders['content-length'] = contentLength
+
+  return forwardedHeaders
+}
+
+/**
+ * Warns once when trace forwarding fails.
+ *
+ * @param {Error} error
+ */
+function warnTestAgentTeeFailed (error) {
+  if (testAgentTeeWarning) return
+
+  testAgentTeeWarning = true
+  process.emitWarning(`${TEST_AGENT_TEE_URL} failed: ${error.message}`)
+}
+
+/**
+ * Logs forwarded trace payloads when requested.
+ *
+ * @param {URL} url
+ * @param {Buffer} body
+ */
+function logForwardedTracePayload (url, body) {
+  if (!process.env[TEST_AGENT_TEE_LOG_PAYLOADS] || url.pathname !== '/v0.4/traces') {
+    return
+  }
+
+  try {
+    const payload = msgpack.decode(body, { useBigInt64: true })
+    console.log('FORWARDED TRACE PAYLOAD:', util.inspect(payload, { colors: true, depth: null }))
+  } catch (error) {
+    warnTestAgentTeeFailed(error instanceof Error ? error : new Error(String(error)))
+  }
+}
+
+/**
+ * Forwards a mock agent intake request to a real local agent when requested.
+ *
+ * @param {http.IncomingMessage & { rawBody?: Buffer, body?: unknown, originalUrl?: string }} request
+ * @returns {Promise<void>}
+ */
+function teeToTestAgent (request) {
+  const teeUrl = process.env[TEST_AGENT_TEE_URL]
+  if (!teeUrl) return Promise.resolve()
+
+  return new Promise(resolve => {
+    let url
+
+    try {
+      url = new URL(request.originalUrl || request.url || '/', teeUrl)
+    } catch (error) {
+      warnTestAgentTeeFailed(error instanceof Error ? error : new Error(String(error)))
+      resolve()
+      return
+    }
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      warnTestAgentTeeFailed(new Error(`unsupported protocol ${url.protocol}`))
+      resolve()
+      return
+    }
+
+    let body
+
+    try {
+      body = getForwardBody(request)
+    } catch (error) {
+      warnTestAgentTeeFailed(error instanceof Error ? error : new Error(String(error)))
+      resolve()
+      return
+    }
+
+    const client = url.protocol === 'https:' ? https : http
+    const forwardedRequest = client.request(url, {
+      method: request.method,
+      headers: getForwardHeaders(request.headers, body.length),
+      timeout: TEST_AGENT_TEE_TIMEOUT_MS,
+    }, response => {
+      response.resume()
+      response.on('end', resolve)
+    })
+
+    forwardedRequest.on('timeout', () => {
+      forwardedRequest.destroy(new Error('request timed out'))
+    })
+
+    forwardedRequest.on('error', error => {
+      warnTestAgentTeeFailed(error)
+      resolve()
+    })
+
+    logForwardedTracePayload(url, body)
+
+    forwardedRequest.end(body)
   })
 }
 
@@ -137,7 +294,9 @@ function unformatSpanEvents (span) {
  * @param {express.Request} req
  * @param {express.Response} res
  */
-function handleTraceRequest (req, res) {
+async function handleTraceRequest (req, res) {
+  await teeToTestAgent(req)
+
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   traceHandlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
@@ -332,8 +491,8 @@ module.exports = {
     })
 
     agent = express()
-    agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
-    agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
+    agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack', verify: preserveRawBody }))
+    agent.use(bodyParser.text({ limit: Infinity, type: 'application/json', verify: preserveRawBody }))
     agent.use((req, res, next) => {
       if (req.is('application/msgpack')) {
         if (!req.body.length) return res.status(200).send()
@@ -385,7 +544,9 @@ module.exports = {
 
     // DSM Checkpoint endpoint
     dsmStats = []
-    agent.post('/v0.1/pipeline_stats', (req, res) => {
+    agent.post('/v0.1/pipeline_stats', async (req, res) => {
+      await teeToTestAgent(req)
+
       dsmStats.push(req.body)
       statsHandlers.forEach(({ handler }) => {
         handler(dsmStats)
@@ -563,6 +724,7 @@ module.exports = {
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
+    testAgentTeeWarning = false
   },
 
   /**
@@ -593,6 +755,7 @@ module.exports = {
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
+    testAgentTeeWarning = false
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }

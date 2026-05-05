@@ -23,6 +23,15 @@ runs:
       shell: bash
       env:
         _DD_IGNORE_ENGINES: 'true'
+    - uses: ./.github/actions/dd-sts-api-key
+      id: trace-agent-dd-sts
+      if: env.DD_TRACE_TEST_AGENT_TEE_URL != ''
+      with:
+        policy: system-tests
+    - uses: ./.github/actions/trace-agent/start
+      if: env.DD_TRACE_TEST_AGENT_TEE_URL != ''
+      env:
+        DD_TRACE_TEST_AGENT_API_KEY: ${{ steps.trace-agent-dd-sts.outputs.api_key }}
     - run: tar -cf node_modules.tar node_modules
       shell: bash
       if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit != 'true'
