@@ -8,7 +8,6 @@ export interface ConfigProperties extends GeneratedConfig {
     responsesEnabled: boolean
     rules: PayloadTaggingRules
   }
-  commitSHA: string | undefined
   debug: boolean
   instrumentationSource: 'manual' | 'ssi'
   isCiVisibility: boolean
@@ -18,7 +17,6 @@ export interface ConfigProperties extends GeneratedConfig {
   lookup: NonNullable<import('../../../../index').TracerOptions['lookup']>
   readonly parsedDdTags: Record<string, string>
   plugins: boolean
-  repositoryUrl: string | undefined
   sampler: {
     rateLimit: number
     rules: import('../../../../index').SamplingRule[]
