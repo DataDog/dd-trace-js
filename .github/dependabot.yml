@@ -128,6 +128,15 @@ updates:
       - dependency-name: "@rspack/*"
         # 2.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "protobufjs"
+        # 8.0.2 inlined `@protobufjs/inquire` and replaced its eval-based
+        # `require(moduleName)` dodge with a plain dynamic require. rspack
+        # rewrites that as a context module under `protobufjs/src/util/` and
+        # returns `null` for `inquire("fs")`, so the vendored bundle crashes
+        # at `Root.loadSync` (used by the OTLP protobuf loader). Re-enable
+        # once https://github.com/protobufjs/protobuf.js/issues/1754 is
+        # released in a way that survives bundling.
+        update-types: ["version-update:semver-patch"]
     groups:
       vendor-minor-and-patch-dependencies:
         dependency-type: "production"
