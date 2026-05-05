@@ -82,6 +82,8 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:trace:core:ci
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-windows
