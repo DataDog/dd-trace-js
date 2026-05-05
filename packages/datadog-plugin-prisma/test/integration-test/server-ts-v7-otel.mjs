@@ -1,10 +1,9 @@
+import ddTrace from 'dd-trace'
 import assert from 'node:assert/strict'
 
 import { trace } from '@opentelemetry/api'
 // @ts-expect-error
 import { PrismaPg } from '@prisma/adapter-pg'
-// @ts-expect-error
-import ddTrace from 'dd-trace'
 // @ts-expect-error
 import { PrismaClient } from './dist/client.js'
 
