@@ -273,6 +273,9 @@ class AgentEncoder {
 
     const formatSpan = this.#formatSpan
     const stringMap = this._stringMap
+    // Snapshot the string buffer so we can detect a mid-encode resize and
+    // release the old backing store afterwards (see `#refreshStringCache`).
+    const stringBufferAtStart = this._stringBytes.buffer
 
     for (let span of trace) {
       span = formatSpan(span)
@@ -356,6 +359,29 @@ class AgentEncoder {
         bytes.set(KEY_META_STRUCT)
         this.#encodeMetaStruct(bytes, span.meta_struct)
       }
+    }
+
+    if (this._stringBytes.buffer !== stringBufferAtStart) {
+      this.#refreshStringCache()
+    }
+  }
+
+  /**
+   * Rebuild the cached string subarrays in `_stringMap` against the current
+   * `_stringBytes.buffer`. After `MsgpackChunk.reserve()` resizes, the prior
+   * subarrays still reference the old `Buffer`'s `ArrayBuffer` and pin it
+   * until `_reset()` clears the map; for a payload that grows 2 → 4 → 8 MB
+   * that is up to 6 MB of avoidable peak memory. `Buffer.allocUnsafe(>= 2
+   * MB)` bypasses the small-allocation pool and starts at offset 0 in its
+   * `ArrayBuffer`, so the old subarray's `byteOffset` is the entry's start
+   * position in the new buffer.
+   */
+  #refreshStringCache () {
+    const newBuffer = this._stringBytes.buffer
+    const stringMap = this._stringMap
+    for (const key of Object.keys(stringMap)) {
+      const old = stringMap[key]
+      stringMap[key] = newBuffer.subarray(old.byteOffset, old.byteOffset + old.length)
     }
   }
 

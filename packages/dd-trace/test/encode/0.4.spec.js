@@ -197,6 +197,42 @@ describe('encode', () => {
       })
     })
 
+    it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
+      // Force enough unique strings to overflow the 2 MB initial chunk so
+      // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
+      // entry is left pointing at a now-orphaned ArrayBuffer; the public
+      // surface does not expose this retention directly.
+      const longSuffix = 'x'.repeat(80)
+      const dataToEncode = []
+      for (let i = 0; i < 30000; i++) {
+        dataToEncode.push({
+          trace_id: id('1234abcd1234abcd'),
+          span_id: id('1234abcd1234abcd'),
+          parent_id: id('1234abcd1234abcd'),
+          name: 'name',
+          resource: 'resource',
+          service: 'service',
+          type: 'foo',
+          error: 0,
+          meta: { [`k_${i}_${longSuffix}`]: `v_${i}_${longSuffix}` },
+          metrics: {},
+          start: 0,
+          duration: 1,
+        })
+      }
+      const initialBuffer = encoder._stringBytes.buffer
+
+      encoder.encode(dataToEncode)
+
+      const finalBuffer = encoder._stringBytes.buffer
+      assert.notStrictEqual(initialBuffer, finalBuffer, '_stringBytes must have resized for this test to be meaningful')
+      let staleEntries = 0
+      for (const key of Object.keys(encoder._stringMap)) {
+        if (encoder._stringMap[key].buffer !== finalBuffer.buffer) staleEntries++
+      }
+      assert.strictEqual(staleEntries, 0)
+    })
+
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
       const topLevelEvents = [
         { name: 'Something went so wrong', time_unix_nano: 1000000 },
