@@ -12,6 +12,7 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { clientToCluster } = require('../../datadog-instrumentations/src/helpers/kafka')
 const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -127,6 +128,7 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+
           it('should not mutate user-supplied message objects', async () => {
             // Deep-freezing the input means any accidental write to a
             // message, its headers, or the array itself throws synchronously.
@@ -167,10 +169,7 @@ describe('Plugin', () => {
               // Produce version. We can't ask the docker broker to pretend to
               // be <0.11; lying locally is enough to drive the proactive
               // header-support check.
-              const clusterSymbol = Object.getOwnPropertySymbols(producer).find(
-                (sym) => sym.description === 'dd-trace.kafkajs.cluster'
-              )
-              const cluster = producer[clusterSymbol]
+              const cluster = clientToCluster.get(producer)
               cluster.brokerPool.versions[0].maxVersion = 2
 
               const userMessages = [{ key: 'k', value: 'v' }]
