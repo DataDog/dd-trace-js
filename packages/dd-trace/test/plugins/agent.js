@@ -430,8 +430,9 @@ module.exports = {
 
     plugins = pluginNames
 
+    const capturedTracer = tracer
     server.on('close', () => {
-      tracer = null
+      if (tracer === capturedTracer) tracer = null
       dsmStats = []
       currentIntegrationName = null
     })
@@ -608,9 +609,10 @@ module.exports = {
 
     tracer.llmobs.disable()
 
+    const serverToClose = this.server
     return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-      this.server.on('close', () => {
-        this.server = null
+      serverToClose.on('close', () => {
+        if (this.server === serverToClose) this.server = null
 
         resolve()
       })
