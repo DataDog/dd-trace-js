@@ -7,7 +7,7 @@ const {
   addHook,
   channel,
 } = require('./helpers/instrument')
-const { cloneMessages, cloneMessagesForInjection } = require('./helpers/kafka')
+const { cloneMessages } = require('./helpers/kafka')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
@@ -221,9 +221,7 @@ function instrumentKafkaJS (kafkaJS) {
                     if (payload && Array.isArray(payload.messages)) {
                       outgoingPayload = {
                         ...payload,
-                        messages: disableHeaderInjection
-                          ? cloneMessages(payload.messages)
-                          : cloneMessagesForInjection(payload.messages),
+                        messages: cloneMessages(payload.messages, !disableHeaderInjection),
                       }
                     }
 
