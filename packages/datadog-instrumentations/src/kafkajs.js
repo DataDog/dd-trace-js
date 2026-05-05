@@ -11,7 +11,6 @@ const {
   brokerSupportsMessageHeaders,
   clientToCluster,
   cloneMessages,
-  cloneMessagesForInjection,
 } = require('./helpers/kafka')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
@@ -116,9 +115,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       // cannot recover otherwise.
       let messages = inputMessages
       if (inputMessages.length > 0) {
-        messages = disableHeaderInjection
-          ? cloneMessages(inputMessages)
-          : cloneMessagesForInjection(inputMessages)
+        messages = cloneMessages(inputMessages, !disableHeaderInjection)
         args[0] = { ...arg0, messages }
       }
 
