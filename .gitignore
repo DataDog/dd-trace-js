@@ -51,8 +51,8 @@ coverage/
 !integration-tests/coverage/**
 *.lcov
 
-# nyc test coverage
-.nyc_output
+# c8 raw V8 coverage data
+.c8_output
 
 # Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
 .grunt

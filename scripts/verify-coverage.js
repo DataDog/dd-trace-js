@@ -19,7 +19,7 @@ const coverageDir = path.join(cwd, 'coverage')
 /** @type {string[]} */
 const reportDirsAbs = []
 
-// Match `nyc.config.js` and `integration-tests/coverage/runtime.js` (`getMergedReportDir()`),
+// Match `scripts/run-c8.js` and `integration-tests/coverage/runtime.js` (`getMergedReportDir()`),
 // which both emit `coverage/node-${version}${label}` directories so Codecov can attribute each
 // test script/Node.js combination independently.
 try {

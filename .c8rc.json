@@ -1,0 +1,28 @@
+{
+  "reporter": ["text", "lcov"],
+  "include": [
+    "ext/**/*.{js,mjs}",
+    "packages/**/src/**/*.{js,mjs}",
+    "packages/*/*.{js,mjs}",
+    "index.js",
+    "init.js",
+    "initialize.mjs",
+    "loader-hook.mjs",
+    "register.js",
+    "version.js"
+  ],
+  "exclude": [
+    "**/.bun/**",
+    "**/*-browser-scripts.js",
+    "**/datadog-plugin-cypress/src/support.js",
+    "**/*.spec.*",
+    "**/fixtures/**",
+    "**/integration-tests/**",
+    "**/resources/**",
+    "**/test/**",
+    "**/vendor/**",
+    "**/versions/**"
+  ],
+  "all": false,
+  "check-coverage": false
+}
