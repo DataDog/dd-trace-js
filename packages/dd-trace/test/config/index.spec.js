@@ -53,7 +53,11 @@ describe('Config', () => {
   }
 
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-  const getConfig = (options) => {
+  const getConfig = (options, overrides = {}) => {
+    const {
+      ddMajor = DD_MAJOR,
+    } = overrides
+
     log = proxyquire('../../src/log', {})
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
@@ -77,6 +81,7 @@ describe('Config', () => {
       'node:fs': fs,
       './helper': configHelper,
       '../pkg': pkg,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
   }
 
@@ -3904,7 +3909,7 @@ rules:
       assert.strictEqual(config.service, 'explicit-service')
     })
 
-    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy', () => {
+    it('should use NX_TASK_TARGET_PROJECT by default in v6', () => {
       const cases = ['false', '0', undefined]
 
       for (const ddIsNx of cases) {
@@ -3917,7 +3922,26 @@ rules:
         process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
         pkg.name = 'default-service'
 
-        const config = getConfig()
+        const config = getConfig(undefined, { ddMajor: 6 })
+
+        assert.strictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy in v5', () => {
+      const cases = ['false', '0', undefined]
+
+      for (const ddIsNx of cases) {
+        if (ddIsNx === undefined) {
+          delete process.env.DD_ENABLE_NX_SERVICE_NAME
+        } else {
+          process.env.DD_ENABLE_NX_SERVICE_NAME = ddIsNx
+        }
+
+        process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+        pkg.name = 'default-service'
+
+        const config = getConfig(undefined, { ddMajor: 5 })
 
         assert.strictEqual(config.service, 'default-service')
         assert.notStrictEqual(config.service, 'my-nx-project')
@@ -3954,24 +3978,31 @@ rules:
       assert.strictEqual(config.service, 'node')
     })
 
-    it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+    it('should warn about v6 behavior change in v5 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
       delete process.env.DD_ENABLE_NX_SERVICE_NAME
       delete process.env.DD_SERVICE
       pkg.name = 'default-service'
 
-      getConfig()
+      getConfig(undefined, { ddMajor: 5 })
 
-      if (DD_MAJOR < 6) {
-        assert.strictEqual(log.warn.called, true)
-        const warningMessage = log.warn.args[0][0]
-        assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
-        assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
-        assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
-      } else {
-        // In v6+, no warning should be issued
-        assert.strictEqual(log.warn.called, false)
-      }
+      assert.strictEqual(log.warn.called, true)
+      const warningMessage = log.warn.args[0][0]
+      assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
+      assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
+      assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
+    })
+
+    it('should not warn in v6 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      delete process.env.DD_ENABLE_NX_SERVICE_NAME
+      delete process.env.DD_SERVICE
+      pkg.name = 'default-service'
+
+      const config = getConfig(undefined, { ddMajor: 6 })
+
+      assert.strictEqual(config.service, 'my-nx-project')
+      assert.strictEqual(log.warn.called, false)
     })
 
     it('should not warn when DD_ENABLE_NX_SERVICE_NAME is explicitly set', () => {
