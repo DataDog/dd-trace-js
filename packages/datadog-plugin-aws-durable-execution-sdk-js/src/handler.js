@@ -21,10 +21,11 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   bindStart (ctx) {
     const args = ctx.arguments || []
     const event = args[0]
+    const durableExecutionMode = args[3]
     const handler = args[5]
 
     const meta = {
-      'aws.durable.replayed': String(event?.InitialExecutionState?.Operations?.length > 1),
+      'aws.durable.replayed': String(durableExecutionMode === 'ReplayMode'),
     }
     const arn = event?.DurableExecutionArn
     if (arn) {
@@ -75,25 +76,14 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       span.setTag('aws.durable.invocation_status', status.toLowerCase())
     }
 
-    // When the workflow suspends (status=PENDING), the suspended op's DurablePromise
-    // never settles, so op-span asyncEnd never fires. The op span — and every ancestor
-    // that was awaiting it — stays open. The trace processor only flushes a trace when
-    // every started span is finished, so without intervention the whole invocation's
-    // trace (including ops that completed before the suspension) is never sent.
-    // Finish any open siblings/descendants of the execute span so the trace flushes.
+    // When the workflow suspends (status=PENDING), the SDK intentionally leaves the
+    // suspended operations DurablePromise pending, neither resolves nor rejects them.
+    // The operation span asyncEnd therefore never fires and the span stays open.
     if (span && status?.toUpperCase() === 'PENDING') {
       finishOpenChildSpans(span)
     }
 
     super.finish(ctx)
-  }
-
-  // The handler is async, so the normal completion path is asyncEnd. error fires
-  // for sync throws and async rejections; in both cases we still need to finish
-  // the span (default behavior just sets the error tag without finishing).
-  error (ctxOrError) {
-    super.error(ctxOrError)
-    super.finish(ctxOrError)
   }
 }
 
