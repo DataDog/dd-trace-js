@@ -3,49 +3,16 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
+const tracer = require('../../')
+
 const id = require('../id')
 const log = require('../log')
-const DatadogSpanContext = require('../opentracing/span_context')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
-
-function normalizeLinkContext (context) {
-  if (!context) return
-
-  // OTel API bridge SpanContext wrapper
-  if (context._ddContext) return context._ddContext
-
-  // Datadog span context
-  if (typeof context.toTraceId === 'function' && typeof context.toSpanId === 'function') {
-    return context
-  }
-
-  // Standard OTel SpanContext (traceId/spanId)
-  if (typeof context.traceId !== 'string' || typeof context.spanId !== 'string') {
-    // Invalid
-    return
-  }
-
-  let sampling
-  if (typeof context.traceFlags === 'number') {
-    sampling = { priority: context.traceFlags & 1 }
-  }
-
-  let tracestate
-  if (context.traceState?.serialize) {
-    tracestate = TraceState.fromString(context.traceState.serialize())
-  }
-
-  return new DatadogSpanContext({
-    traceId: id(context.traceId, 16),
-    spanId: id(context.spanId, 16),
-    sampling,
-    tracestate,
-  })
-}
+const { normalizeLinkContext } = require('./span-helpers')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -138,6 +105,14 @@ class Tracer {
         : this._createSpanContextForNewSpan(parentSpanContext)
     } else {
       spanContext = new SpanContext()
+    }
+
+    // init() didn't finish setting up real tracing (e.g. DD_TRACE_ENABLED=false,
+    // or init() was never called), so the inner tracer is still the noop.
+    // DatadogSpan can't construct without a processor + prioritySampler, so fall
+    // through to a non-recording span; the SpanContext still propagates.
+    if (!tracer._tracingInitialized) {
+      return api.trace.wrapSpanContext(spanContext)
     }
 
     const spanKind = options.kind || api.SpanKind.INTERNAL

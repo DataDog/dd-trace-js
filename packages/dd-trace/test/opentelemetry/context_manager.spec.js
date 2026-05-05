@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
-const { getAllBaggageItems, setBaggageItem, removeBaggageItem } = require('../../src/baggage')
+const { getAllBaggageItems, removeAllBaggageItems, removeBaggageItem, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
 const ContextManager = require('../../src/opentelemetry/context_manager')
@@ -172,6 +172,30 @@ describe('OTel Context Manager', () => {
     })
     removeBaggageItem('key2')
     assert.deepStrictEqual(propagation.getActiveBaggage(), undefined)
+  })
+
+  it('should clear dd baggage when entering an otel context with no baggage', () => {
+    removeAllBaggageItems()
+    setBaggageItem('outer', 'value')
+    assert.deepStrictEqual(getAllBaggageItems(), { outer: 'value' })
+    api.context.with(ROOT_CONTEXT, () => {
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+  })
+
+  it('should silently drop otel baggage that targets Object.prototype.__proto__', () => {
+    const entries = { foo: { value: 'bar' } }
+    Object.defineProperty(entries, '__proto__', {
+      value: { value: 'poison' }, writable: true, enumerable: true, configurable: true,
+    })
+    const baggage = propagation.createBaggage(entries)
+    const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
+    api.context.with(contextWithBaggage, () => {
+      const baggageItems = getAllBaggageItems()
+      assert.strictEqual(Object.getOwnPropertyDescriptor(baggageItems, '__proto__'), undefined)
+      assert.strictEqual(Object.getPrototypeOf(baggageItems), Object.prototype)
+      assert.deepStrictEqual({ ...baggageItems }, { foo: 'bar' })
+    })
   })
 
   it('should return active span', () => {

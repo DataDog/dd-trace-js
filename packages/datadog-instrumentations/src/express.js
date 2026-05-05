@@ -3,6 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const { createWrapRouterMethod } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { getCompileToRegexp } = require('./path-to-regexp')
 const {
   setRouterMountPath,
   markAppMounted,
@@ -25,8 +26,6 @@ function wrapHandle (handle) {
     return handle.apply(this, arguments)
   }
 }
-
-const wrapRouterMethod = createWrapRouterMethod('express')
 
 const responseJsonChannel = channel('datadog:express:response:json:start')
 
@@ -163,6 +162,8 @@ addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express 
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
+  const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp())
+
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 

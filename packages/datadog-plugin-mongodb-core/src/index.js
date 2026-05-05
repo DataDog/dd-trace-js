@@ -160,10 +160,9 @@ function limitDepth (input) {
       input, output, depth,
     } = queue.pop()
     const nextDepth = depth + 1
-    for (const key in input) {
-      if (typeof input[key] === 'function') continue
-
+    for (const key of Object.keys(input)) {
       let child = input[key]
+      if (typeof child === 'function') continue
 
       if (isBSON(child)) {
         child = typeof child.toJSON === 'function' ? child.toJSON() : '?'

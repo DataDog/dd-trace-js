@@ -90,4 +90,27 @@ describe('TraceState', () => {
     // Vendor key should move to the front on modification
     assert.strictEqual(ts.toString(), 'other=bleh')
   })
+
+  it('should cap parsing at 32 list-members per W3C Trace Context §3.3.1.2', () => {
+    const header = Array.from({ length: 33 }, (_, index) => `k${index}=v${index}`).join(',')
+    const ts = TraceState.fromString(header)
+    assert.strictEqual(ts.size, 32)
+  })
+
+  it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
+    const ts = TraceState.fromString('a=hello world,b=bye\tworld,c=ok')
+    assert.strictEqual(ts.toString(), 'a=hello world,c=ok')
+  })
+
+  it('should preserve leading 0x20 but strip trailing whitespace per W3C Trace Context §3.3.1.3.2', () => {
+    // value = 0*255(chr) nblk-chr; chr includes 0x20, so the first character can be a space.
+    // Trailing whitespace is OWS around the comma (or header end), not part of the value.
+    const ts = TraceState.fromString('a= leading,b=trailing ,c=ok')
+    assert.strictEqual(ts.toString(), 'a= leading,b=trailing,c=ok')
+  })
+
+  it('should ignore non-conformant input that contains no list-members', () => {
+    const ts = TraceState.fromString('a'.repeat(16_000))
+    assert.strictEqual(ts.size, 0)
+  })
 })
