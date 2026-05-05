@@ -79,6 +79,8 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:aiguard:ci
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-windows

@@ -86,6 +86,8 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows

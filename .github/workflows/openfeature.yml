@@ -105,6 +105,8 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-windows
