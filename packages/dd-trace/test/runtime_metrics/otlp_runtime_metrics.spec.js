@@ -8,27 +8,36 @@ describe('otlp_runtime_metrics', () => {
   let otlpMetrics
   let mockMeter
   let mockMeterProvider
-  let createdGauges
+  let createdInstruments
+  let createdGauges // alias for backwards compat with test assertions
   let callbacks
 
   beforeEach(() => {
-    createdGauges = {}
+    createdInstruments = {}
     callbacks = {}
 
-    mockMeter = {
-      createObservableGauge (name, opts) {
-        const gauge = {
+    function makeInstrumentFactory (type) {
+      return (name, opts) => {
+        const instrument = {
           name,
+          type,
           opts,
           addCallback (cb) {
             if (!callbacks[name]) callbacks[name] = []
             callbacks[name].push(cb)
           },
         }
-        createdGauges[name] = gauge
-        return gauge
-      },
+        createdInstruments[name] = instrument
+        return instrument
+      }
     }
+
+    mockMeter = {
+      createObservableGauge: makeInstrumentFactory('gauge'),
+      createObservableUpDownCounter: makeInstrumentFactory('updowncounter'),
+    }
+
+    createdGauges = createdInstruments
 
     mockMeterProvider = {
       getMeter (name) {
@@ -87,11 +96,44 @@ describe('otlp_runtime_metrics', () => {
   })
 
   it('should use correct units on instruments', () => {
-    otlpMetrics.start({ runtimeMetrics: {} })
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
 
     assert.equal(createdGauges['v8js.memory.heap.used'].opts.unit, 'By')
     assert.equal(createdGauges['process.memory.usage'].opts.unit, 'By')
     assert.equal(createdGauges['process.cpu.utilization'].opts.unit, '1')
+    // Per OTel semconv, nodejs.eventloop.delay.* are reported in seconds, not nanoseconds.
+    assert.equal(createdGauges['nodejs.eventloop.delay.min'].opts.unit, 's')
+    assert.equal(createdGauges['nodejs.eventloop.delay.p99'].opts.unit, 's')
+    assert.equal(createdGauges['nodejs.eventloop.utilization'].opts.unit, '1')
+  })
+
+  // Per OTel semantic conventions:
+  //   v8js.memory.heap.* and process.memory.usage are UpDownCounter
+  //   process.cpu.utilization and nodejs.eventloop.* are Gauge
+  it('should use OTel-spec instrument types', () => {
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    const expectedTypes = {
+      'v8js.memory.heap.used': 'updowncounter',
+      'v8js.memory.heap.limit': 'updowncounter',
+      'v8js.memory.heap.space.available_size': 'updowncounter',
+      'v8js.memory.heap.space.physical_size': 'updowncounter',
+      'process.memory.usage': 'updowncounter',
+      'process.cpu.utilization': 'gauge',
+      'nodejs.eventloop.delay.min': 'gauge',
+      'nodejs.eventloop.delay.max': 'gauge',
+      'nodejs.eventloop.delay.mean': 'gauge',
+      'nodejs.eventloop.delay.p50': 'gauge',
+      'nodejs.eventloop.delay.p90': 'gauge',
+      'nodejs.eventloop.delay.p99': 'gauge',
+      'nodejs.eventloop.utilization': 'gauge',
+    }
+
+    for (const [name, expectedType] of Object.entries(expectedTypes)) {
+      const instrument = createdGauges[name]
+      assert.ok(instrument, `${name} should exist`)
+      assert.equal(instrument.type, expectedType, `${name} should be ${expectedType}, got ${instrument.type}`)
+    }
   })
 
   it('should register addCallback on each instrument', () => {
@@ -160,8 +202,8 @@ describe('otlp_runtime_metrics', () => {
     assert.ok(Object.keys(createdGauges).length > 0)
 
     otlpMetrics.stop()
-    createdGauges = {}
-    callbacks = {}
+    for (const k of Object.keys(createdInstruments)) delete createdInstruments[k]
+    for (const k of Object.keys(callbacks)) delete callbacks[k]
     otlpMetrics.start({ runtimeMetrics: {} })
     assert.ok(Object.keys(createdGauges).length > 0, 'should be able to restart')
   })
