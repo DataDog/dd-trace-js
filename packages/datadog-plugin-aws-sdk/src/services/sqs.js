@@ -3,7 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { extractQueueMetadata, hasAtLeast, isEmpty } = require('../util')
+const { extractQueueMetadata, isEmpty } = require('../util')
 
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
@@ -268,7 +268,7 @@ class Sqs extends BaseAwsSdkPlugin {
     }
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
-    } else if (hasAtLeast(params.MessageAttributes, 10)) { // SQS quota
+    } else if (Object.keys(params.MessageAttributes).length >= 10) { // SQS quota
       // TODO: add test when the test suite is fixed
       return
     }
@@ -280,10 +280,20 @@ class Sqs extends BaseAwsSdkPlugin {
     }
 
     if (this.config.dsmEnabled) {
+      // Attach `_datadog` before measuring so the DSM payload size metric
+      // matches the on-wire payload, then update with the encoded context.
+      params.MessageAttributes._datadog = {
+        DataType: 'String',
+        StringValue: JSON.stringify(ddInfo),
+      }
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
       if (dataStreamsContext) {
         DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+        params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
+      } else if (isEmpty(ddInfo)) {
+        delete params.MessageAttributes._datadog
       }
+      return
     }
 
     if (isEmpty(ddInfo)) return

@@ -38,8 +38,7 @@ class Stepfunctions extends BaseAwsSdkPlugin {
 
   requestInject (span, request) {
     const operation = request.operation
-    if (operation !== 'startExecution' && operation !== 'startSyncExecution') return
-    if (!request.params || !request.params.input) return
+    if ((operation !== 'startExecution' && operation !== 'startSyncExecution') || !request.params?.input) return
 
     const input = request.params.input
     // Cheap object-shape gate: only inject into JSON object payloads,

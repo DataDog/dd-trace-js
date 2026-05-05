@@ -150,6 +150,11 @@ const extractQueueMetadata = queueURL => {
  * `Object.keys(obj).length === 0` across small / medium / large
  * objects, and this is the hot path on every AWS messaging send.
  *
+ * Callers in this package only pass plain objects they construct
+ * locally, so prototype-enumerable keys are not a concern here. Do not
+ * reuse this helper on caller-supplied objects without revisiting that
+ * assumption.
+ *
  * @param {object} obj
  * @returns {boolean}
  */
@@ -159,30 +164,10 @@ const isEmpty = obj => {
   return true
 }
 
-/**
- * Returns true when `obj` has at least `n` own enumerable properties.
- * Same `for-in` motivation as {@link isEmpty}; the early return stops
- * counting after the threshold is reached so per-message work is
- * bounded by `n`, not the full key set.
- *
- * @param {object} obj
- * @param {number} n
- * @returns {boolean}
- */
-const hasAtLeast = (obj, n) => {
-  let count = 0
-  // eslint-disable-next-line no-unused-vars
-  for (const _ in obj) {
-    if (++count >= n) return true
-  }
-  return false
-}
-
 module.exports = {
   generatePointerHash,
   encodeValue,
   extractPrimaryKeys,
   extractQueueMetadata,
-  hasAtLeast,
   isEmpty,
 }

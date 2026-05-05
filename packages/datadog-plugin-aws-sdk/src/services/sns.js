@@ -2,7 +2,7 @@
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { hasAtLeast, isEmpty } = require('../util')
+const { isEmpty } = require('../util')
 
 class Sns extends BaseAwsSdkPlugin {
   static id = 'sns'
@@ -74,7 +74,7 @@ class Sns extends BaseAwsSdkPlugin {
   injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
-    } else if (hasAtLeast(params.MessageAttributes, 10)) { // SNS quota
+    } else if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
       log.info('Message attributes full, skipping trace context injection')
       return
     }
