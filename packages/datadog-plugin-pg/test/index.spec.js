@@ -867,6 +867,10 @@ describe('Plugin', () => {
 
       describe('with DBM propagation enabled with append comment using tracer configuration', () => {
         before(async () => {
+          // Tracer-level config (third arg) only takes effect if the global
+          // tracer is wiped first; tracer.init() short-circuits once the
+          // process-wide singleton has been initialized by an earlier load.
+          agent.wipe()
           await agent.load('pg', {
             appendComment: true,
             service: () => 'serviced',
@@ -877,7 +881,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close({ ritmReset: false, wipe: true })
         })
 
         beforeEach((done) => {

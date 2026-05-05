@@ -525,6 +525,10 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full from tracer configuration', () => {
         before(() => {
+          // Tracer-level config (third arg) only takes effect if the global
+          // tracer is wiped first; tracer.init() short-circuits once the
+          // process-wide singleton has been initialized by an earlier load.
+          agent.wipe()
           return agent.load('mongodb-core', {}, {
             dbmPropagationMode: 'full',
             sampler: { sampleRate: 1 },
@@ -532,7 +536,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close({ ritmReset: false, wipe: true })
         })
 
         beforeEach(done => {

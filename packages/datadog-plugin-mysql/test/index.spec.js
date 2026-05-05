@@ -432,6 +432,10 @@ describe('Plugin', () => {
         let connection
 
         before(async () => {
+          // Tracer-level config (third arg) only takes effect if the global
+          // tracer is wiped first; tracer.init() short-circuits once the
+          // process-wide singleton has been initialized by an earlier load.
+          agent.wipe()
           await agent.load('mysql', { service: 'serviced' }, { dbmPropagationMode: 'service' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
@@ -445,7 +449,7 @@ describe('Plugin', () => {
 
         after((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close({ ritmReset: false, wipe: true }).then(done)
           })
         })
 
