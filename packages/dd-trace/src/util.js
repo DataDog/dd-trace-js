@@ -18,24 +18,6 @@ function isEmpty (obj) {
   return true
 }
 
-/**
- * Same `for-in` motivation as {@link isEmpty}; the early return stops
- * counting once the threshold is reached so per-call work is bounded by
- * `n` instead of the full key set.
- *
- * @param {object | undefined} obj
- * @param {number} n
- * @returns {boolean}
- */
-function hasAtLeast (obj, n) {
-  let count = 0
-  // eslint-disable-next-line no-unused-vars
-  for (const _ in obj) {
-    if (++count >= n) return true
-  }
-  return false
-}
-
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -110,7 +92,6 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
 }
 
 module.exports = {
-  hasAtLeast,
   isEmpty,
   isTrue,
   isFalse,
