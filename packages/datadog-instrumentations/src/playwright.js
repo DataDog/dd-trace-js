@@ -293,8 +293,7 @@ function getChannelPromise (channelToPublishTo, params) {
 function skippedBySerial (test, testStatus) {
   return testStatus === 'skip' &&
     test.expectedStatus !== 'skipped' &&
-    test.retries > 0 &&
-    test.results.length > 0
+    test.retries > 0
 }
 
 function testWillRetry (test, testStatus) {
