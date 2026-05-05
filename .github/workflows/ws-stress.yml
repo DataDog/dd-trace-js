@@ -1,0 +1,48 @@
+name: WS Stress Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Number of test iterations per runner"
+        required: false
+        default: "20"
+        type: string
+      runners:
+        description: "Number of parallel runners"
+        required: false
+        default: "5"
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  ws-stress:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runner: [1, 2, 3, 4, 5]
+      fail-fast: false
+    env:
+      PLUGINS: ws
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - name: Start services
+        run: yarn services
+        shell: bash
+      - name: Stress test ws (runner ${{ matrix.runner }}, ${{ inputs.iterations }} iterations)
+        run: |
+          for i in $(seq 1 ${{ inputs.iterations }}); do
+            echo "=== Iteration $i/${{ inputs.iterations }} ==="
+            node scripts/run-plugin-tests.js -- npm run test:plugins || exit 1
+          done
+        shell: bash
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: ws-stress-${{ matrix.runner }}
