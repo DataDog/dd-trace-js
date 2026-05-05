@@ -48,13 +48,19 @@ addHook({ name: 'net' }, (net) => {
       setupListeners(this, protocol, ctx, finishCh, errorCh)
 
       const emit = this.emit
+      let pendingReadyEvents = 2
       this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
+            if (--pendingReadyEvents === 0) this.emit = emit
             return readyCh.runStores(ctx, () => {
               return emit.apply(this, arguments)
             })
+          case 'error':
+          case 'close':
+            this.emit = emit
+            return emit.apply(this, arguments)
           default:
             return emit.apply(this, arguments)
         }
