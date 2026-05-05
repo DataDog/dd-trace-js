@@ -836,16 +836,17 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
-        if (testsReportedInGenerateSummary.has(test)) continue
-        const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser, true)
+        const alreadyReported = testsReportedInGenerateSummary.has(test)
+        if (!alreadyReported) {
+          testBeginHandler(test, getBrowserNameFromProjects(projects, test), true)
+        }
         testEndHandler({
           test,
           annotations: [],
           testStatus: 'skip',
           error: null,
           isTimeout: false,
-          shouldCreateTestSpan: true,
+          shouldCreateTestSpan: !alreadyReported,
           projects,
         })
       }
