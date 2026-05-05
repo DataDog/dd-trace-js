@@ -387,6 +387,97 @@ describe('end to end sdk integration tests', () => {
         assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
         assert.equal(llmobsSpans[1].meta.output.messages[0].content, 'REDACTED')
       })
+
+      it('redacts embedding input document content while preserving other document fields', async () => {
+        llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+          llmobs.annotate({
+            tags: { redact_input: true },
+            inputData: [{ text: 'sensitive text', name: 'doc1', id: '1', score: 0.9 }],
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].meta.input.documents[0].text, 'REDACTED')
+        assert.equal(llmobsSpans[0].meta.input.documents[0].name, 'doc1')
+        assert.equal(llmobsSpans[0].meta.input.documents[0].id, '1')
+        assert.equal(llmobsSpans[0].meta.input.documents[0].score, 0.9)
+      })
+
+      it('redacts retrieval output document content while preserving other document fields', async () => {
+        llmobs.trace({ kind: 'retrieval', name: 'retrieve' }, () => {
+          llmobs.annotate({
+            tags: { redact_output: true },
+            outputData: [{ text: 'sensitive result', name: 'doc2', id: '2', score: 0.7 }],
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].meta.output.documents[0].text, 'REDACTED')
+        assert.equal(llmobsSpans[0].meta.output.documents[0].name, 'doc2')
+        assert.equal(llmobsSpans[0].meta.output.documents[0].id, '2')
+        assert.equal(llmobsSpans[0].meta.output.documents[0].score, 0.7)
+      })
+    })
+
+    describe('with a processor that filters spans by span.kind', () => {
+      before(() => {
+        llmobs.registerProcessor(span => span.kind === 'embedding' ? null : span)
+      })
+
+      after(() => {
+        llmobs.deregisterProcessor()
+      })
+
+      it('drops embedding spans but passes retrieval spans through', async () => {
+        llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+          llmobs.annotate({ inputData: [{ text: 'hello' }] })
+        })
+        llmobs.trace({ kind: 'retrieval', name: 'retrieve' }, () => {
+          llmobs.annotate({ outputData: [{ text: 'world' }] })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].name, 'retrieve')
+      })
+    })
+
+    describe('with a processor that redacts content based on span.kind', () => {
+      before(() => {
+        llmobs.registerProcessor(span => {
+          if (span.kind === 'embedding') {
+            span.input = span.input.map(doc => ({ ...doc, content: 'REDACTED' }))
+          }
+          return span
+        })
+      })
+
+      after(() => {
+        llmobs.deregisterProcessor()
+      })
+
+      it('redacts embedding input documents but leaves the enclosing workflow span unaffected', async () => {
+        llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {
+          llmobs.annotate({ inputData: 'non-sensitive input' })
+          llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+            llmobs.annotate({ inputData: [{ text: 'sensitive text', name: 'doc1', id: '1', score: 0.9 }] })
+          })
+        })
+
+        const { llmobsSpans } = await getEvents(2)
+        assert.equal(llmobsSpans.length, 2)
+
+        const wfSpan = llmobsSpans.find(s => s.name === 'wf')
+        const embedSpan = llmobsSpans.find(s => s.name === 'embed')
+
+        assert.equal(wfSpan.meta.input.value, 'non-sensitive input')
+        assert.equal(embedSpan.meta.input.documents[0].text, 'REDACTED')
+        assert.equal(embedSpan.meta.input.documents[0].name, 'doc1')
+        assert.equal(embedSpan.meta.input.documents[0].id, '1')
+        assert.equal(embedSpan.meta.input.documents[0].score, 0.9)
+      })
     })
   })
 
