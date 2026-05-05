@@ -174,9 +174,21 @@ function spanHasError (span) {
   return !!(tags.error || tags['error.type'])
 }
 
+// LLM SDKs stream tool-call argument JSON across SSE chunks; a malformed
+// accumulation would otherwise throw straight into the chunk subscriber.
+function safeJsonParse (value, fallback) {
+  if (typeof value !== 'string') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback === undefined ? value : fallback
+  }
+}
+
 module.exports = {
   encodeUnicode,
   validateKind,
   getFunctionArguments,
+  safeJsonParse,
   spanHasError,
 }
