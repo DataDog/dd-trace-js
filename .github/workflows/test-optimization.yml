@@ -34,6 +34,8 @@ jobs:
         run: yarn bench:e2e:test-optimization
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          TEST_ENVIRONMENT_REF_TO_TEST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          TEST_ENVIRONMENT_REF_NAME: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
 
   integration:
     strategy:
