@@ -40,7 +40,7 @@ cassandra-driver,cassandra-driver,3.0.0,4.8.0,True
 child_process,child_process,18.0.0,25.9.0,True
 connect,connect,2.2.2,3.7.0,True
 couchbase,couchbase,2.6.12,4.6.0,True
-cypress,cypress,10.2.0,15.13.0,True
+cypress,cypress,12.0.0,15.13.0,True
 dns,dns,18.0.0,25.9.0,True
 durable-functions,azure-durable-functions,3.0.0,3.3.0,True
 elasticsearch,elasticsearch,10.0.0,16.7.3,True
