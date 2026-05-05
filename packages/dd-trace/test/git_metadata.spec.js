@@ -76,16 +76,6 @@ describe('git metadata', () => {
     })
   })
 
-  it('does not crash if git.properties is not available', () => {
-    process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-
-    const { config, getGitMetadata } = load()
-    assert.deepStrictEqual(getGitMetadata(config), {
-      commitSHA: undefined,
-      repositoryUrl: undefined,
-    })
-  })
-
   it('falls through to .git/ when DD_GIT_PROPERTIES_FILE is unreadable', () => {
     process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
     process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
