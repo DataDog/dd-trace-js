@@ -42,7 +42,7 @@ jobs:
         run: |
           for i in $(seq 1 ${{ inputs.iterations }}); do
             echo "=== Iteration $i/${{ inputs.iterations }} ==="
-            node scripts/run-plugin-tests.js -- npm run test:plugins || exit 1
+            npm run test:plugins || exit 1
           done
         shell: bash
       - if: always()
