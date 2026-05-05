@@ -25,10 +25,13 @@ function findSpan (traces, predicate) {
   return undefined
 }
 
-function closeWsServer (server) {
-  for (const client of server.clients) {
-    client.terminate()
+async function closeWsServer (server) {
+  const closing = []
+  for (const ws of server.clients) {
+    closing.push(once(ws, 'close').catch(() => {}))
+    ws.close()
   }
+  await Promise.all(closing)
   return new Promise(resolve => server.close(resolve))
 }
 
