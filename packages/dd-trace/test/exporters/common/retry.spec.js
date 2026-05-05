@@ -33,6 +33,10 @@ describe('retry', () => {
   })
 
   describe('startup grace window', () => {
+    const agent = { hostname: 'agent', port: 8126 }
+    const intake = { hostname: 'intake', port: 443 }
+    const uds = { socketPath: '/var/run/datadog/apm.socket' }
+
     let clock
 
     beforeEach(() => {
@@ -49,11 +53,11 @@ describe('retry', () => {
 
       try {
         assert.deepStrictEqual(
-          [retry.getRetryDelay(1), retry.getRetryDelay(2), retry.getRetryDelay(3), retry.getRetryDelay(4),
-            retry.getRetryDelay(5)],
+          [retry.getRetryDelay(agent, 1), retry.getRetryDelay(agent, 2), retry.getRetryDelay(agent, 3),
+            retry.getRetryDelay(agent, 4), retry.getRetryDelay(agent, 5)],
           [1000, 2000, 4000, 8000, 8000]
         )
-        assert.strictEqual(retry.getMaxAttempts(), 5)
+        assert.strictEqual(retry.getMaxAttempts(agent), 5)
       } finally {
         Math.random.restore()
       }
@@ -64,26 +68,61 @@ describe('retry', () => {
       sinon.stub(Math, 'random').returns(0.5)
 
       try {
-        assert.strictEqual(retry.getRetryDelay(1), 1250)
+        assert.strictEqual(retry.getRetryDelay(agent, 1), 1250)
       } finally {
         Math.random.restore()
       }
     })
 
-    it('exits the grace window once the endpoint has answered', () => {
+    it('exits the grace window for the marked endpoint only', () => {
       const retry = loadRetry()
-      retry.markEndpointReached()
+      retry.markEndpointReached(agent)
 
-      assert.strictEqual(retry.getMaxAttempts(), 2)
-      assertSingleJitteredRange(retry.getRetryDelay(1))
+      assert.strictEqual(retry.getMaxAttempts(agent), 2)
+      assertSingleJitteredRange(retry.getRetryDelay(agent, 1))
+
+      assert.strictEqual(retry.getMaxAttempts(intake), 5)
     })
 
-    it('exits the grace window once the elapsed time passes the threshold', () => {
+    it('scopes the gate by socketPath without collapsing TCP endpoints', () => {
       const retry = loadRetry()
-      clock.tick(30_001)
+      retry.markEndpointReached(uds)
 
-      assert.strictEqual(retry.getMaxAttempts(), 2)
-      assertSingleJitteredRange(retry.getRetryDelay(1))
+      assert.strictEqual(retry.getMaxAttempts(uds), 2)
+      assert.strictEqual(retry.getMaxAttempts(agent), 5)
+    })
+
+    it('falls back to options.host when options.hostname is absent', () => {
+      const retry = loadRetry()
+      const hostOnly = { host: 'agent', port: 8126 }
+      retry.markEndpointReached(hostOnly)
+
+      assert.strictEqual(retry.getMaxAttempts(hostOnly), 2)
+      assert.strictEqual(retry.getMaxAttempts(agent), 2)
+    })
+
+    it('groups bare options without hostname/host/port under a single key', () => {
+      const retry = loadRetry()
+      retry.markEndpointReached({})
+
+      assert.strictEqual(retry.getMaxAttempts({}), 2)
+      assert.strictEqual(retry.getMaxAttempts(agent), 5)
+    })
+
+    it('keeps the grace window open at the last accepted millisecond', () => {
+      const retry = loadRetry()
+      clock.tick(29_999)
+
+      assert.strictEqual(retry.getMaxAttempts(agent), 5)
+    })
+
+    it('exits the grace window for every endpoint once the elapsed time passes the threshold', () => {
+      const retry = loadRetry()
+      clock.tick(30_000)
+
+      assert.strictEqual(retry.getMaxAttempts(agent), 2)
+      assert.strictEqual(retry.getMaxAttempts(intake), 2)
+      assertSingleJitteredRange(retry.getRetryDelay(agent, 1))
     })
   })
 

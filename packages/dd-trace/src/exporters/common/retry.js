@@ -25,7 +25,15 @@ const RETRIABLE_NETWORK_CODES = new Set([
 ])
 
 const startedAtMs = Date.now()
-let endpointReached = false
+const reachedEndpoints = new Set()
+
+/**
+ * @typedef {object} EndpointOptions
+ * @property {string} [socketPath]
+ * @property {string} [hostname]
+ * @property {string} [host]
+ * @property {string|number} [port]
+ */
 
 /**
  * @param {Error & { code?: string }} error
@@ -38,8 +46,24 @@ function singleJitteredDelay () {
   return SINGLE_RETRY_BASE_MS + Math.random() * SINGLE_RETRY_JITTER_MS
 }
 
-function inStartupPhase () {
-  return !endpointReached && (Date.now() - startedAtMs) < STARTUP_GRACE_MS
+/**
+ * Stable key identifying the destination so the startup-phase gate is scoped
+ * per endpoint. UDS path beats host:port because both can coexist on the same
+ * options object after `parseUrl` runs.
+ *
+ * @param {EndpointOptions} options
+ */
+function getEndpointKey (options) {
+  if (options.socketPath) return options.socketPath
+  return `${options.hostname || options.host || ''}:${options.port || ''}`
+}
+
+/**
+ * @param {EndpointOptions} options
+ */
+function inStartupPhase (options) {
+  if ((Date.now() - startedAtMs) >= STARTUP_GRACE_MS) return false
+  return !reachedEndpoints.has(getEndpointKey(options))
 }
 
 /**
@@ -47,20 +71,27 @@ function inStartupPhase () {
  * exponential backoff with small jitter inside the startup grace window;
  * single 5–7.5 s jittered retry afterwards.
  *
+ * @param {EndpointOptions} options
  * @param {number} previousAttempt 1-based index of the attempt that just failed.
  */
-function getRetryDelay (previousAttempt) {
-  if (!inStartupPhase()) return singleJitteredDelay()
+function getRetryDelay (options, previousAttempt) {
+  if (!inStartupPhase(options)) return singleJitteredDelay()
   const exp = Math.min(STARTUP_BACKOFF_MAX_MS, STARTUP_BACKOFF_BASE_MS << (previousAttempt - 1))
   return exp + Math.random() * STARTUP_BACKOFF_JITTER_MS
 }
 
-function getMaxAttempts () {
-  return inStartupPhase() ? STARTUP_MAX_ATTEMPTS : POST_STARTUP_MAX_ATTEMPTS
+/**
+ * @param {EndpointOptions} options
+ */
+function getMaxAttempts (options) {
+  return inStartupPhase(options) ? STARTUP_MAX_ATTEMPTS : POST_STARTUP_MAX_ATTEMPTS
 }
 
-function markEndpointReached () {
-  endpointReached = true
+/**
+ * @param {EndpointOptions} options
+ */
+function markEndpointReached (options) {
+  reachedEndpoints.add(getEndpointKey(options))
 }
 
 module.exports = {

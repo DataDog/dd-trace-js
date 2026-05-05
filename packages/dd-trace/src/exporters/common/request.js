@@ -98,7 +98,7 @@ function request (data, options, callback) {
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = (res, finalize) => {
-    markEndpointReached()
+    markEndpointReached(options)
 
     const chunks = []
 
@@ -176,11 +176,11 @@ function request (data, options, callback) {
 
       req.once('error', error => {
         finalize()
-        if (attemptIndex < getMaxAttempts() && isRetriableNetworkError(error)) {
+        if (attemptIndex < getMaxAttempts(options) && isRetriableNetworkError(error)) {
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(attemptIndex), attemptIndex + 1).unref()
+          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref()
         } else {
           callback(error)
         }

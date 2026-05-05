@@ -43,6 +43,7 @@ describe('request', function () {
   let log
   let docker
   let maxAttempts
+  let retryStubs
 
   beforeEach(() => {
     log = {
@@ -58,14 +59,17 @@ describe('request', function () {
     // deterministic: zero backoff, no startup-phase mutation, attempt count
     // overridable per test.
     maxAttempts = 2
+    retryStubs = {
+      getRetryDelay: sinon.fake.returns(0),
+      getMaxAttempts: sinon.fake(() => maxAttempts),
+      markEndpointReached: sinon.fake(),
+    }
     request = proxyquire('../../../src/exporters/common/request', {
       './docker': docker,
       '../../log': log,
       './retry': {
         ...require('../../../src/exporters/common/retry'),
-        getRetryDelay: () => 0,
-        getMaxAttempts: () => maxAttempts,
-        markEndpointReached: () => {},
+        ...retryStubs,
       },
     })
   })
@@ -251,6 +255,31 @@ describe('request', function () {
     }, (err) => {
       assert.strictEqual(err, error)
       done()
+    })
+  })
+
+  it('passes the per-request options into the retry helpers', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+    nock('http://test:123')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    const options = {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'PUT',
+    }
+
+    request(Buffer.from(''), options, (err) => {
+      sinon.assert.calledWith(retryStubs.getMaxAttempts, options)
+      sinon.assert.calledWith(retryStubs.getRetryDelay, options, 1)
+      sinon.assert.calledWith(retryStubs.markEndpointReached, options)
+      done(err)
     })
   })
 
