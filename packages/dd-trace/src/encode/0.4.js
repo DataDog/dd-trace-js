@@ -3,12 +3,12 @@
 const getConfig = require('../config')
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
 function formatSpan (span, config) {
-  span = normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(span)
   if (span.span_events) {
     // ensure span events are encoded as tags if agent doesn't support native top level span events
     if (config.DD_TRACE_NATIVE_SPAN_EVENTS) {
