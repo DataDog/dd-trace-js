@@ -100,7 +100,10 @@ describe('process-tags', () => {
       assert.strictEqual(typeTag[1], 'script')
 
       assert.ok(workdirTag)
-      assert.strictEqual(workdirTag[1], 'dd-trace-js')
+      // The working directory name is environment-dependent; in CI/main worktree
+      // it's "dd-trace-js" but in a sibling worktree it's the worktree's basename.
+      assert.strictEqual(typeof workdirTag[1], 'string')
+      assert.ok(workdirTag[1].length > 0)
 
       // Package name should exist but may vary depending on test runner
       assert.ok(packageNameTag)
@@ -279,7 +282,11 @@ describe('process-tags', () => {
       assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
+      // Native span_processor reads config.propagateProcessTags.enabled.
+      const processor = new SpanProcessor(undefined, undefined, {
+        ...config,
+        propagateProcessTags: { enabled: config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED },
+      })
 
       assert.ok(typeof processor._processTags === 'string')
       assert.match(processor._processTags, /entrypoint/)
@@ -295,7 +302,10 @@ describe('process-tags', () => {
       assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, false)
 
       SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
+      const processor = new SpanProcessor(undefined, undefined, {
+        ...config,
+        propagateProcessTags: { enabled: config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED },
+      })
 
       assert.strictEqual(processor._processTags, false)
     })
@@ -310,7 +320,10 @@ describe('process-tags', () => {
       assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
+      const processor = new SpanProcessor(undefined, undefined, {
+        ...config,
+        propagateProcessTags: { enabled: config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED },
+      })
 
       assert.ok(typeof processor._processTags === 'string')
       assert.match(processor._processTags, /entrypoint/)

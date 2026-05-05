@@ -328,7 +328,6 @@ export interface GeneratedConfig {
   DD_TRACE_MYSQL_ENABLED: boolean;
   DD_TRACE_MYSQL2_ENABLED: boolean;
   DD_TRACE_NATIVE_SPAN_EVENTS: boolean;
-  DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED: boolean;
   DD_TRACE_NET_ENABLED: boolean;
   DD_TRACE_NEXT_ENABLED: boolean;
   DD_TRACE_NODE_CHILD_PROCESS_ENABLED: boolean;
@@ -426,6 +425,9 @@ export interface GeneratedConfig {
     flaggingProvider: {
       enabled: boolean;
       initializationTimeoutMs: number;
+    };
+    nativeSpans: {
+      enabled: boolean;
     };
   };
   flakyTestRetriesCount: number;

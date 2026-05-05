@@ -4,6 +4,19 @@ require('./mocha-hooks')
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
+// Clear any OTEL_* exporter env vars leaked from the host environment (e.g. an
+// observability tool like Claude Code's telemetry pointing at a real backend).
+// Tests assume an unconfigured exporter so they can stub http.request and route
+// traces to the in-process fake agent.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith('OTEL_EXPORTER_OTLP_') ||
+      key === 'OTEL_LOGS_EXPORTER' ||
+      key === 'OTEL_TRACES_EXPORTER' ||
+      key === 'OTEL_METRICS_EXPORTER') {
+    delete process.env[key]
+  }
+}
+
 // If this is a release PR, set the SSI variables.
 if (/^v\d+\.x$/.test(process.env.GITHUB_BASE_REF || '')) {
   process.env.DD_INJECTION_ENABLED = 'true'

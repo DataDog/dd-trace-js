@@ -34,18 +34,18 @@ describe('DatabasePlugin DBM Hash', () => {
     }
 
     // Create a mock span
+    const contextTags = {
+      'out.host': 'localhost',
+      'db.name': 'testdb',
+    }
     span = {
       context: () => ({
-        _tags: {
-          'out.host': 'localhost',
-          'db.name': 'testdb',
-        },
+        _tags: contextTags,
+        getTags: () => contextTags,
       }),
       _spanContext: {
-        _tags: {
-          'out.host': 'localhost',
-          'db.name': 'testdb',
-        },
+        _tags: contextTags,
+        getTags: () => contextTags,
         toTraceparent: () => 'traceparent-value',
       },
       setTag: function (key, value) {

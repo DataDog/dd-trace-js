@@ -80,8 +80,19 @@ class DatadogTracer {
 
     // If native init failed or not enabled, use standard exporter
     if (!this._nativeSpans) {
-      const Exporter = getExporter(config.experimental.exporter)
-      this._exporter = new Exporter(config, this._prioritySampler)
+      // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
+      // exporter when the tracer is running in Test Optimization mode. Test spans
+      // (test_session/test_module/ test_suite/test) belong on the citestcycle
+      // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
+      // vars set in their environment (e.g. for a separate telemetry integration)
+      // silently lose all test spans.
+      if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
+        const { createOtlpTraceExporter } = require('../opentelemetry/trace')
+        this._exporter = createOtlpTraceExporter(config)
+      } else {
+        const Exporter = getExporter(config.experimental.exporter)
+        this._exporter = new Exporter(config, this._prioritySampler)
+      }
       this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
       this._url = this._exporter._url
     }
