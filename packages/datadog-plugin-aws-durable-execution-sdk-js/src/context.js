@@ -4,18 +4,15 @@ const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { isReplayedOp } = require('./util')
 
-// Span names whose direct children must keep the default resource (the span
-// name) — `map` and `parallel` can iterate over unbounded inputs, so allowing
-// per-iteration user-provided resource names would explode cardinality.
+// Span names whose direct children must keep the default resource.
+// These can have very high cardinality which is undesireable in the resource.
 const HIGH_CARDINALITY_PARENT_SPAN_NAMES = new Set([
   'aws.durable.map',
   'aws.durable.parallel',
 ])
 
-// `OperationSubType` values the SDK passes to `runInChildContext` when it is
-// running map/parallel bookkeeping internally. We don't trace those — they are
-// duplicates of the surrounding map/parallel span (outer wrap) or per-iteration
-// wrappers with high-cardinality names like `map-item-3` / `parallel-branch-7`.
+// The SDK calls intermediate operations for which we don't want to create
+// spans to keep consistency with other tracers' implementations.
 const SUPPRESSED_CHILD_CONTEXT_SUBTYPES = new Set([
   'Map',
   'Parallel',
@@ -46,13 +43,9 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  /**
-   * Extracts the operation name from arguments.
-   * Most SDK methods use the pattern: (name?: string, ...rest) where
-   * args[0] is the user-provided name if it's a string.
-   * @param {{ arguments?: ArrayLike<unknown> }} ctx
-   * @returns {string|undefined}
-   */
+  // Extracts the operation name from arguments.
+  // All context methods have 2 overrides: method(string, other) and method(other)
+  // where args[0] is the name.
   getOperationName (ctx) {
     const args = ctx.arguments || []
     return typeof args[0] === 'string' ? args[0] : undefined
@@ -74,9 +67,8 @@ class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionS
 
   bindStart (ctx) {
     if (SUPPRESSED_CHILD_CONTEXT_SUBTYPES.has(getRunInChildContextSubType(ctx))) {
-      // Pass the active store through unchanged so any nested spans (e.g. user
-      // steps inside a map iteration) remain parented to the surrounding
-      // map/parallel span instead of the suppressed child_context.
+      // Pass the active store through unchanged so any nested spans
+      // remain parented to the surrounding map/parallel span
       ctx._ddSuppressed = true
       const store = storage('legacy').getStore()
       ctx.currentStore = store
@@ -96,13 +88,8 @@ class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionS
   }
 }
 
-/**
- * Extracts `subType` from `runInChildContext` arguments. The SDK supports two
- * shapes: `(name, fn, options)` and `(fn, options)`.
- *
- * @param {{ arguments?: ArrayLike<unknown> }} ctx
- * @returns {string | undefined}
- */
+// Extracts subType from runInChildContext arguments. The SDK has two
+// overrides: `(name, fn, options)` and `(fn, options)`.
 function getRunInChildContextSubType (ctx) {
   const args = ctx.arguments || []
   const opts = typeof args[0] === 'string' ? args[2] : args[1]
