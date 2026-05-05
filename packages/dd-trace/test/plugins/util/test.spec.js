@@ -120,6 +120,22 @@ describe('getTestSessionName', () => {
 
     assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
   })
+
+  it('returns the current Lage package name by default in v6', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package')
+  })
+
+  it('does not return the current Lage package name by default in v5', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+
+    const { getLageTestSessionName } = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+      '../../../../version': { DD_MAJOR: 5 },
+    })
+
+    assert.strictEqual(getLageTestSessionName(), undefined)
+  })
 })
 
 describe('attempt to fix summary', () => {
