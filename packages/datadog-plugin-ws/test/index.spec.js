@@ -105,6 +105,9 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          for (const client of wsServer.clients) {
+            client.terminate()
+          }
           await new Promise(resolve => wsServer.close(resolve))
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -458,6 +461,9 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          for (const client of wsServer.clients) {
+            client.terminate()
+          }
           await new Promise(resolve => wsServer.close(resolve))
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -566,6 +572,9 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          for (const client of wsServer.clients) {
+            client.terminate()
+          }
           await new Promise(resolve => wsServer.close(resolve))
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -611,6 +620,9 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          for (const client of wsServer.clients) {
+            client.terminate()
+          }
           await new Promise(resolve => wsServer.close(resolve))
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -708,6 +720,9 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          for (const client of wsServer.clients) {
+            client.terminate()
+          }
           await new Promise(resolve => wsServer.close(resolve))
           await agent.close({ ritmReset: false, wipe: true })
         })
