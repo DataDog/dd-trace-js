@@ -38,6 +38,23 @@ const map = {
   'resource.name': 'resource',
 }
 
+/**
+ * @typedef {object} FormattedSpan
+ * @property {import('./id').Identifier} trace_id
+ * @property {import('./id').Identifier} span_id
+ * @property {import('./id').Identifier} parent_id
+ * @property {string} name
+ * @property {string} resource
+ * @property {number} error
+ * @property {Record<string, string>} meta
+ * @property {Record<string, number>} metrics
+ * @property {Record<string, unknown> | undefined} meta_struct
+ * @property {number} start
+ * @property {number} duration
+ * @property {Array} links
+ * @property {Array<{ name: string, time_unix_nano: number, attributes?: Record<string, string> }>} [span_events]
+ */
+
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
 
@@ -76,13 +93,15 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
+/**
+ * @param {FormattedSpan} formattedSpan
+ * @param {import('./opentracing/span')} span
+ */
 function extractSpanLinks (formattedSpan, span) {
-  const links = span._links
-  if (!links?.length) return
-
-  const formattedLinks = new Array(links.length)
-  for (let i = 0; i < links.length; i++) {
-    const { context, attributes } = links[i]
+  if (!span._links?.length) {
+    return
+  }
+  const links = span._links.map(({ context, attributes }) => {
     const formattedLink = {
       trace_id: context.toTraceId(true),
       span_id: context.toSpanId(true),
@@ -94,29 +113,30 @@ function extractSpanLinks (formattedSpan, span) {
     if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
     if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
 
-    formattedLinks[i] = formattedLink
-  }
-  let serialized = JSON.stringify(formattedLinks)
+    return formattedLink
+  })
+  let serialized = JSON.stringify(links)
   if (serialized.length > MAX_META_VALUE_LENGTH) {
     serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
   }
   formattedSpan.meta['_dd.span_links'] = serialized
 }
 
+/**
+ * @param {FormattedSpan} formattedSpan
+ * @param {import('./opentracing/span')} span
+ */
 function extractSpanEvents (formattedSpan, span) {
-  const events = span._events
-  if (!events?.length) return
-
-  const formattedEvents = new Array(events.length)
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i]
-    formattedEvents[i] = {
+  if (!span._events?.length) {
+    return
+  }
+  formattedSpan.span_events = span._events.map(event => {
+    return {
       name: event.name,
       time_unix_nano: Math.round(event.startTime * 1e6),
       attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
     }
-  }
-  formattedSpan.span_events = formattedEvents
+  })
 }
 
 function extractTags (formattedSpan, span) {

@@ -38,7 +38,12 @@ const finishCh = channel('dd-trace:span:finish')
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 // Module-scope so we don't allocate a fresh recursive closure on every
-// `addLink` / `addEvent`. The output map is passed in.
+// `addLink` / `addEvent`.
+/**
+ * @param {Record<string, string>} out
+ * @param {string} key
+ * @param {unknown} value
+ */
 function addArrayOrScalarAttribute (out, key, value) {
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
@@ -106,17 +111,10 @@ class DatadogSpan {
 
     this._startTime = fields.startTime || this._getTime()
 
-    this._links = []
-    const inputLinks = fields.links
-    if (inputLinks) {
-      for (let i = 0; i < inputLinks.length; i++) {
-        const link = inputLinks[i]
-        this._links.push({
-          context: link.context._ddContext ?? link.context,
-          attributes: this._sanitizeAttributes(link.attributes),
-        })
-      }
-    }
+    this._links = fields.links?.map(link => ({
+      context: link.context._ddContext ?? link.context,
+      attributes: this._sanitizeAttributes(link.attributes),
+    })) ?? []
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -311,7 +309,11 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
+  /**
+   * @param {Record<string, unknown>} [attributes]
+   */
   _sanitizeAttributes (attributes = {}) {
+    /** @type {Record<string, string>} */
     const out = {}
     for (const key of Object.keys(attributes)) {
       addArrayOrScalarAttribute(out, key, attributes[key])
@@ -319,6 +321,9 @@ class DatadogSpan {
     return out
   }
 
+  /**
+   * @param {Record<string, unknown>} [attributes]
+   */
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
