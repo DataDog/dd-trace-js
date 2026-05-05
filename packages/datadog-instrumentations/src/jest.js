@@ -4,6 +4,8 @@
 const realSetTimeout = setTimeout
 
 const path = require('path')
+const satisfies = require('../../../vendor/dist/semifies')
+const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
@@ -126,7 +128,13 @@ const testSuiteJestObjects = new Map()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
+const MINIMUM_JEST_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=24.8.0'
+const MINIMUM_JEST_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.8.0 <30.0.0'
+const MINIMUM_JEST_WORKER_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.9.0 <30.0.0'
+const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0'
+const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
 const atrSuppressedErrors = new Map()
+let hasWarnedDeprecatedJestVersion = false
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
@@ -175,6 +183,20 @@ function formatJestError (errors) {
     error = errors
   }
   return error
+}
+
+function warnDeprecatedJestVersion (frameworkVersion) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedJestVersion || !frameworkVersion ||
+      !satisfies(frameworkVersion, '<28.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedJestVersion = true
+  // eslint-disable-next-line no-console
+  console.warn(
+    'dd-trace support for Jest<28.0.0 is deprecated and will be removed in dd-trace v6. ' +
+      'Please upgrade Jest to >=28.0.0.'
+  )
 }
 
 function getTestEnvironmentOptions (config) {
@@ -1073,12 +1095,12 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
 addHook({
   name: 'jest-environment-node',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
 addHook({
@@ -1150,6 +1172,8 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
 
 function getCliWrapper (isNewJestVersion) {
   return function cliWrapper (cli, jestVersion) {
+    warnDeprecatedJestVersion(jestVersion)
+
     if (isNewJestVersion) {
       cli = shimmer.wrap(
         cli,
@@ -1536,7 +1560,7 @@ function coverageReporterWrapper (coverageReporter) {
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
-  versions: ['>=27.0.0'],
+  versions: [MINIMUM_JEST_TEST_SCHEDULER_VERSION],
 }, (testSchedulerPackage, frameworkVersion) => {
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
@@ -1552,17 +1576,19 @@ addHook({
   return testSchedulerPackage
 })
 
-addHook({
-  name: '@jest/core',
-  file: 'build/TestScheduler.js',
-  versions: ['>=24.8.0 <27.0.0'],
-}, (testSchedulerPackage, frameworkVersion) => {
-  shimmer.wrap(
-    testSchedulerPackage.default.prototype,
-    'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
-  )
-  return testSchedulerPackage
-})
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/core',
+    file: 'build/TestScheduler.js',
+    versions: ['>=24.8.0 <27.0.0'],
+  }, (testSchedulerPackage, frameworkVersion) => {
+    shimmer.wrap(
+      testSchedulerPackage.default.prototype,
+      'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
+    )
+    return testSchedulerPackage
+  })
+}
 
 addHook({
   name: '@jest/test-sequencer',
@@ -1582,16 +1608,18 @@ addHook({
   return sequencerPackage
 })
 
-addHook({
-  name: '@jest/reporters',
-  file: 'build/coverage_reporter.js',
-  versions: ['>=24.8.0 <26.6.2'],
-}, coverageReporterWrapper)
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/reporters',
+    file: 'build/coverage_reporter.js',
+    versions: ['>=24.8.0 <26.6.2'],
+  }, coverageReporterWrapper)
+}
 
 addHook({
   name: '@jest/reporters',
   file: 'build/CoverageReporter.js',
-  versions: ['>=26.6.2'],
+  versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
 }, coverageReporterWrapper)
 
 addHook({
@@ -1604,7 +1632,7 @@ addHook({
 addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
 }, getCliWrapper(false))
 
 addHook({
@@ -1691,7 +1719,7 @@ addHook({
 addHook({
   name: 'jest-circus',
   file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
@@ -1828,7 +1856,7 @@ function wrapCreateScriptTransformer (createScriptTransformer) {
 
 addHook({
   name: '@jest/transform',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
   file: 'build/ScriptTransformer.js',
 }, transformPackage => {
   transformPackage.createScriptTransformer = wrapCreateScriptTransformer(transformPackage.createScriptTransformer)
@@ -1848,20 +1876,22 @@ addHook({
  */
 addHook({
   name: '@jest/core',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
   file: 'build/SearchSource.js',
 }, searchSourceWrapper)
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
-  versions: ['>=25.1.0'],
+  versions: [MINIMUM_JEST_CONFIG_ASYNC_VERSION],
 }, jestConfigAsyncWrapper)
 
-addHook({
-  name: 'jest-config',
-  versions: ['24.8.0 - 24.9.0'],
-}, jestConfigSyncWrapper)
+if (DD_MAJOR < 6) {
+  addHook({
+    name: 'jest-config',
+    versions: ['24.8.0 - 24.9.0'],
+  }, jestConfigSyncWrapper)
+}
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
@@ -1876,7 +1906,7 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
 
 addHook({
   name: 'jest-runtime',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
 
@@ -2077,7 +2107,7 @@ function enqueueWrapper (enqueue) {
 */
 addHook({
   name: 'jest-worker',
-  versions: ['>=24.9.0 <30.0.0'],
+  versions: [MINIMUM_JEST_WORKER_VERSION_BEFORE_30],
   file: 'build/workers/ChildProcessWorker.js',
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
@@ -2092,7 +2122,7 @@ addHook({
 
 addHook({
   name: 'jest-worker',
-  versions: ['>=24.9.0 <30.0.0'],
+  versions: [MINIMUM_JEST_WORKER_VERSION_BEFORE_30],
   file: 'build/workers/NodeThreadsWorker.js',
 }, (nodeThreadsWorker) => {
   const ExperimentalWorker = nodeThreadsWorker.default
