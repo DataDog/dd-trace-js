@@ -67,11 +67,22 @@ function getOperation (span) {
 }
 
 /**
- * Get the LLM token usage from the span tags
- * Supports both AI SDK v4 (promptTokens/completionTokens) and v5 (inputTokens/outputTokens)
- * @template T extends {inputTokens: number, outputTokens: number, totalTokens: number}
- * @param {T} tags
- * @returns {Pick<T, 'inputTokens' | 'outputTokens' | 'totalTokens'>}
+ * Get the LLM token usage from the span tags.
+ *
+ * Supports both AI SDK v4 (promptTokens/completionTokens) and v5
+ * (inputTokens/outputTokens), and surfaces prompt-cache metrics for providers
+ * that report them. The AI SDK convention is that `inputTokens` already
+ * includes cached tokens, so cache reads are reported as a subset of input
+ * tokens rather than added on top.
+ *
+ * @param {SpanTags} tags
+ * @returns {{
+ *   inputTokens?: number,
+ *   outputTokens?: number,
+ *   totalTokens?: number,
+ *   cacheReadTokens?: number,
+ *   cacheWriteTokens?: number
+ * }}
  */
 function getUsage (tags) {
   const usage = {}
@@ -88,7 +99,60 @@ function getUsage (tags) {
   const totalTokens = tags['ai.usage.totalTokens'] ?? (inputTokens + outputTokens)
   if (!Number.isNaN(totalTokens)) usage.totalTokens = totalTokens
 
+  // Prompt-cache metrics. AI SDK v5 standardizes cache READ tokens via
+  // `ai.usage.cachedInputTokens`; cache WRITE tokens (and older AI SDK versions
+  // / providers that haven't filled `cachedInputTokens` yet) are only available
+  // through provider-specific `ai.response.providerMetadata`.
+  const providerCache = getProviderCacheTokens(tags['ai.response.providerMetadata'])
+
+  const cacheReadTokens = tags['ai.usage.cachedInputTokens'] ?? providerCache.cacheReadTokens
+  if (cacheReadTokens != null) usage.cacheReadTokens = cacheReadTokens
+
+  if (providerCache.cacheWriteTokens != null) usage.cacheWriteTokens = providerCache.cacheWriteTokens
+
   return usage
+}
+
+/**
+ * Extract prompt-cache token counts from the stringified
+ * `ai.response.providerMetadata` attribute.
+ *
+ * The AI SDK does not standardize cache WRITE tokens on the usage object, and
+ * older versions / providers may also omit `ai.usage.cachedInputTokens`, so we
+ * read the provider-specific shape directly. Only Bedrock and Anthropic are
+ * handled here as they are the providers that report cache writes today.
+ *
+ * @see https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock#cache-points
+ * @see https://ai-sdk.dev/providers/ai-sdk-providers/anthropic#cache-control
+ *
+ * @param {string | undefined} providerMetadataJson
+ * @returns {{ cacheReadTokens?: number, cacheWriteTokens?: number }}
+ */
+function getProviderCacheTokens (providerMetadataJson) {
+  if (!providerMetadataJson) return {}
+
+  const metadata = getJsonStringValue(providerMetadataJson, null)
+  if (!metadata || typeof metadata !== 'object') return {}
+
+  const result = {}
+
+  const bedrockUsage = metadata.bedrock?.usage
+  if (bedrockUsage) {
+    if (bedrockUsage.cacheReadInputTokens != null) result.cacheReadTokens = bedrockUsage.cacheReadInputTokens
+    if (bedrockUsage.cacheWriteInputTokens != null) result.cacheWriteTokens = bedrockUsage.cacheWriteInputTokens
+  }
+
+  const anthropic = metadata.anthropic
+  if (anthropic) {
+    if (result.cacheReadTokens == null && anthropic.cacheReadInputTokens != null) {
+      result.cacheReadTokens = anthropic.cacheReadInputTokens
+    }
+    if (result.cacheWriteTokens == null && anthropic.cacheCreationInputTokens != null) {
+      result.cacheWriteTokens = anthropic.cacheCreationInputTokens
+    }
+  }
+
+  return result
 }
 
 /**
