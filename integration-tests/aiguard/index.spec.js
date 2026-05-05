@@ -205,8 +205,6 @@ describe('AIGuard SDK integration tests', () => {
 
   describe('telemetry metrics', () => {
     it('reports requests metric with sdk source on direct SDK call', async () => {
-      let telemetryReceived = false
-
       await executeRequest(`${url}/allow`, 'GET')
 
       const checkTelemetry = agent.assertTelemetryReceived({
@@ -215,7 +213,6 @@ describe('AIGuard SDK integration tests', () => {
           const requests = findMetric(series, 'requests')
 
           assert.ok(requests)
-          telemetryReceived = true
           assert.strictEqual(requests.type, 'count')
           assertHasTags(requests, ['source:sdk', 'integration:none', 'action:allow', 'error:false'])
         },
@@ -226,12 +223,9 @@ describe('AIGuard SDK integration tests', () => {
       })
 
       await checkTelemetry
-      assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
     })
 
     it('reports requests metric with auto source on auto-instrumented call', async () => {
-      let telemetryReceived = false
-
       await executeRequest(`${url}/auto?mode=point1&deny=false`)
 
       const checkTelemetry = agent.assertTelemetryReceived({
@@ -240,7 +234,6 @@ describe('AIGuard SDK integration tests', () => {
           const requests = findMetric(series, 'requests')
 
           assert.ok(requests)
-          telemetryReceived = true
           assert.strictEqual(requests.type, 'count')
           assertHasTags(requests, ['source:auto', 'integration:ai', 'action:allow', 'error:false'])
         },
@@ -251,12 +244,9 @@ describe('AIGuard SDK integration tests', () => {
       })
 
       await checkTelemetry
-      assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
     })
 
     it('reports requests metric with block tag on blocked evaluation', async () => {
-      let telemetryReceived = false
-
       await executeRequest(`${url}/deny`, 'GET', { 'x-blocking-enabled': 'true' })
 
       const checkTelemetry = agent.assertTelemetryReceived({
@@ -265,7 +255,6 @@ describe('AIGuard SDK integration tests', () => {
           const requests = findMetric(series, 'requests')
 
           assert.ok(requests)
-          telemetryReceived = true
           assert.strictEqual(requests.type, 'count')
           assertHasTags(requests, ['source:sdk', 'integration:none', 'action:deny', 'error:false', 'block:true'])
         },
@@ -276,7 +265,6 @@ describe('AIGuard SDK integration tests', () => {
       })
 
       await checkTelemetry
-      assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
     })
 
     it('reports error metric on API failure', async () => {
@@ -292,8 +280,6 @@ describe('AIGuard SDK integration tests', () => {
       })
 
       try {
-        let telemetryReceived = false
-
         // This will fail because the endpoint is unreachable
         await executeRequest(`${proc2.url}/allow`, 'GET').catch(() => {})
 
@@ -303,7 +289,6 @@ describe('AIGuard SDK integration tests', () => {
             const errorMetric = findMetric(series, 'error')
 
             assert.ok(errorMetric)
-            telemetryReceived = true
             assert.strictEqual(errorMetric.type, 'count')
             assertHasTags(errorMetric, ['type:client_error', 'source:sdk', 'integration:none'])
 
@@ -318,7 +303,6 @@ describe('AIGuard SDK integration tests', () => {
         })
 
         await checkTelemetry
-        assert.ok(telemetryReceived, 'Expected ai_guard error telemetry to be received')
       } finally {
         await stopProc(proc2)
         await agent2.stop()
