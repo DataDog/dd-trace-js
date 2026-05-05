@@ -153,13 +153,13 @@ describe('TracerProxy', () => {
           enabled: true,
         },
       },
-      injectionEnabled: undefined,
+      DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
       profiling: {},
       apmTracingEnabled: false,
       appsec: {},
       iast: {},
-      crashtracking: {},
+      DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true,
@@ -169,7 +169,6 @@ describe('TracerProxy', () => {
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
@@ -819,6 +818,15 @@ describe('TracerProxy', () => {
           const baggage = proxy.removeBaggageItem('missing')
           assert.deepStrictEqual(baggage, { key: 'value' })
         })
+
+        it('should not replace the store on invalid keys', () => {
+          proxy.setBaggageItem('key', 'value')
+          const before = proxy.getAllBaggageItems()
+          proxy.removeBaggageItem(null)
+          proxy.removeBaggageItem(123)
+          proxy.removeBaggageItem('')
+          assert.strictEqual(proxy.getAllBaggageItems(), before)
+        })
       })
 
       describe('removeAllBaggageItems', () => {
@@ -827,6 +835,22 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
           assert.deepStrictEqual(baggage, {})
+        })
+      })
+
+      describe('immutability', () => {
+        it('should freeze every store handed out', () => {
+          assert.ok(Object.isFrozen(proxy.getAllBaggageItems()))
+          assert.ok(Object.isFrozen(proxy.setBaggageItem('key', 'value')))
+          assert.ok(Object.isFrozen(proxy.removeBaggageItem('key')))
+          assert.ok(Object.isFrozen(proxy.removeAllBaggageItems()))
+        })
+
+        it('should refuse mutation through the returned reference', () => {
+          const baggage = proxy.setBaggageItem('key', 'value')
+          assert.throws(() => { baggage.key = 'tampered' }, TypeError)
+          assert.throws(() => { baggage.added = 'value' }, TypeError)
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), { key: 'value' })
         })
       })
     })

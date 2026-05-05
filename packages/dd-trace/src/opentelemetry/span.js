@@ -9,31 +9,20 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
 const SpanContext = require('./span_context')
-
-// The one built into OTel rounds so we lose sub-millisecond precision.
-function hrTimeToMilliseconds (time) {
-  return time[0] * 1e3 + time[1] / 1e6
-}
-
-function isTimeInput (startTime) {
-  if (typeof startTime === 'number') {
-    return true
-  }
-  if (startTime instanceof Date) {
-    return true
-  }
-  if (Array.isArray(startTime) && startTime.length === 2 &&
-      typeof startTime[0] === 'number' && typeof startTime[1] === 'number') {
-    return true
-  }
-  return false
-}
+const {
+  addOtelEvent,
+  addOtelLink,
+  addOtelLinks,
+  applyOtelStatus,
+  recordException,
+  setOtelAttribute,
+  setOtelAttributes,
+} = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -41,6 +30,15 @@ const spanKindNames = {
   [api.SpanKind.CLIENT]: kinds.CLIENT,
   [api.SpanKind.PRODUCER]: kinds.PRODUCER,
   [api.SpanKind.CONSUMER]: kinds.CONSUMER,
+}
+
+/**
+ * The OTel-shipped `hrTimeToMilliseconds` rounds, dropping sub-millisecond precision we want.
+ *
+ * @param {[number, number]} hrTime
+ */
+function hrTimeToMilliseconds (hrTime) {
+  return hrTime[0] * 1e3 + hrTime[1] / 1e6
 }
 
 /**
@@ -122,7 +120,24 @@ function spanNameMapper (spanName, kind, attributes) {
   return spanKindNames[kind]
 }
 
+/**
+ * OTel-bridge span backed by a `DatadogSpan`. `Tracer` constructs these on the OTel API
+ * surface; the underlying DD span carries the lifecycle.
+ */
 class Span {
+  // OTel SpanStatusCode: 0 = UNSET, 1 = OK, 2 = ERROR. Tracked for OK-is-final precedence.
+  #statusCode = 0
+
+  /**
+   * @param {import('./tracer')} parentTracer
+   * @param {import('@opentelemetry/api').Context} context
+   * @param {string | undefined} spanName
+   * @param {import('./span_context')} spanContext
+   * @param {import('@opentelemetry/api').SpanKind} kind
+   * @param {Array<import('@opentelemetry/api').Link>} [links]
+   * @param {import('@opentelemetry/api').TimeInput} [timeInput]
+   * @param {import('@opentelemetry/api').Attributes} [attributes]
+   */
   constructor (
     parentTracer,
     context,
@@ -159,8 +174,6 @@ class Span {
     this._parentTracer = parentTracer
     this._context = context
 
-    this._hasStatus = false
-
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
@@ -194,43 +207,49 @@ class Span {
     return new SpanContext(this._ddSpan.context())
   }
 
+  /**
+   * @param {string} key
+   * @param {import('@opentelemetry/api').AttributeValue} value
+   */
   setAttribute (key, value) {
-    if (key === 'http.response.status_code') {
-      this._ddSpan.setTag('http.status_code', value.toString())
-    }
-
-    this._ddSpan.setTag(key, value)
+    setOtelAttribute(this._ddSpan, key, value)
     return this
   }
 
+  /**
+   * @param {import('@opentelemetry/api').Attributes} attributes
+   */
   setAttributes (attributes) {
-    if ('http.response.status_code' in attributes) {
-      attributes['http.status_code'] = attributes['http.response.status_code'].toString()
-    }
-
-    this._ddSpan.addTags(attributes)
+    setOtelAttributes(this._ddSpan, attributes)
     return this
   }
 
+  /**
+   * Accepts the OTel `Link` shape and the deprecated `(SpanContext, Attributes)` form.
+   *
+   * @param {import('@opentelemetry/api').Link | import('@opentelemetry/api').SpanContext} link
+   * @param {import('@opentelemetry/api').Attributes} [attrs]
+   */
   addLink (link, attrs) {
-    // TODO: Remove this once we remove addLink(context, attrs) in v6.0.0
-    if (link instanceof SpanContext) {
-      link = { context: link, attributes: attrs ?? {} }
-    }
-
-    const { context, attributes } = link
-    // Extract dd context
-    const ddSpanContext = context._ddContext
-    this._ddSpan.addLink({ context: ddSpanContext, attributes })
+    addOtelLink(this._ddSpan, link, attrs)
     return this
   }
 
+  /**
+   * @param {import('@opentelemetry/api').Link[]} links
+   */
   addLinks (links) {
-    for (const link of links) this.addLink(link)
+    addOtelLinks(this._ddSpan, links)
     return this
   }
 
+  /**
+   * @param {string} ptrKind
+   * @param {string} ptrDir
+   * @param {string} ptrHash
+   */
   addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    if (this.ended) return this
     const zeroContext = new SpanContext({
       traceId: id('0'),
       spanId: id('0'),
@@ -244,19 +263,17 @@ class Span {
     return this.addLink(zeroContext, attributes)
   }
 
-  setStatus ({ code, message }) {
-    if (!this.ended && !this._hasStatus && code) {
-      this._hasStatus = true
-      if (code === 2) {
-        this._ddSpan.addTags({
-          [ERROR_MESSAGE]: message,
-          [IGNORE_OTEL_ERROR]: false,
-        })
-      }
-    }
+  /**
+   * @param {import('@opentelemetry/api').SpanStatus} status
+   */
+  setStatus (status) {
+    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status)
     return this
   }
 
+  /**
+   * @param {string} name
+   */
   updateName (name) {
     if (!this.ended) {
       this._ddSpan.setOperationName(name)
@@ -264,6 +281,9 @@ class Span {
     return this
   }
 
+  /**
+   * @param {import('@opentelemetry/api').TimeInput} [timeInput]
+   */
   end (timeInput) {
     if (this.ended) {
       api.diag.error('You can only call end() on a span once.')
@@ -281,28 +301,22 @@ class Span {
     return this.ended === false
   }
 
+  /**
+   * @param {string} name
+   * @param {import('@opentelemetry/api').Attributes | import('@opentelemetry/api').TimeInput} [attributesOrStartTime]
+   * @param {import('@opentelemetry/api').TimeInput} [startTime]
+   */
   addEvent (name, attributesOrStartTime, startTime) {
-    startTime = attributesOrStartTime && isTimeInput(attributesOrStartTime) ? attributesOrStartTime : startTime
-    const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
-    startTime = hrTimeToMilliseconds(hrStartTime)
-
-    this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
+    addOtelEvent(this._ddSpan, name, attributesOrStartTime, startTime)
     return this
   }
 
+  /**
+   * @param {import('@opentelemetry/api').Exception} exception
+   * @param {import('@opentelemetry/api').TimeInput} [timeInput]
+   */
   recordException (exception, timeInput) {
-    this._ddSpan.addTags({
-      [ERROR_TYPE]: exception.name,
-      [ERROR_MESSAGE]: exception.message,
-      [ERROR_STACK]: exception.stack,
-      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true,
-    })
-    const attributes = {}
-    if (exception.message) attributes['exception.message'] = exception.message
-    if (exception.type) attributes['exception.type'] = exception.type
-    if (exception.escaped) attributes['exception.escaped'] = exception.escaped
-    if (exception.stack) attributes['exception.stacktrace'] = exception.stack
-    this.addEvent(exception.name, attributes, timeInput)
+    recordException(this._ddSpan, exception, timeInput)
   }
 
   get duration () {

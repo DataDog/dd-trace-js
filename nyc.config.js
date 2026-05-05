@@ -30,7 +30,10 @@ module.exports = {
   ],
   exclude: [
     '**/.bun/**',
-    '**/*-browser-scripts.js', // Serialized into browsers; coverage counters would ReferenceError.
+    // Serialized into browsers; coverage counters would ReferenceError. Also: pre-instrumented
+    // output is compact, which shifts line numbers inside the bundler that consumes them.
+    '**/*-browser-scripts.js',
+    '**/datadog-plugin-cypress/src/support.js',
     '**/*.spec.*',
     '**/fixtures/**',
     '**/integration-tests/**',

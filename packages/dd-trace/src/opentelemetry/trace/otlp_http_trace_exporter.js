@@ -19,7 +19,7 @@ const OtlpTraceTransformer = require('./otlp_transformer')
  * (https://opentelemetry.io/docs/specs/otel/trace/sdk/#batching-processor).
  * Currently each finished trace is sent as its own HTTP request, which is
  * unsuitable for high-traffic production environments. The config values
- * `otelBatchTimeout`, `otelMaxExportBatchSize`, and `otelMaxQueueSize`
+ * `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE`, and `OTEL_BSP_MAX_QUEUE_SIZE`
  * (OTEL_BSP_*) are already defined and should drive that implementation.
  *
  * @class OtlpHttpTraceExporter

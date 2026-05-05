@@ -8,11 +8,13 @@ const {
   wrapConfig,
 } = require('./cypress-config')
 
+const MINIMUM_CYPRESS_VERSION = DD_MAJOR >= 6 ? '>=12.0.0' : '>=10.2.0'
+
 // Wrap defineConfig() so configs are instrumented when loaded in Cypress's
 // config child process. This covers both CLI and programmatic usage with CJS configs.
 addHook({
   name: 'cypress',
-  versions: ['>=10.2.0'],
+  versions: [MINIMUM_CYPRESS_VERSION],
 }, (cypress) => {
   if (typeof cypress.defineConfig === 'function') {
     shimmer.wrap(cypress, 'defineConfig', (defineConfig) => function (config) {
@@ -61,7 +63,7 @@ function wrapStartOnModule (mod) {
 for (const file of ['lib/exec/run.js', 'lib/exec/open.js', 'dist/exec/run.js', 'dist/exec/open.js']) {
   addHook({
     name: 'cypress',
-    versions: ['>=10.2.0'],
+    versions: [MINIMUM_CYPRESS_VERSION],
     file,
   }, wrapStartOnModule)
 }
@@ -70,7 +72,7 @@ for (const file of ['lib/exec/run.js', 'lib/exec/open.js', 'dist/exec/run.js', '
 // The chunk exports runModule and openModule, each with a start() method.
 addHook({
   name: 'cypress',
-  versions: ['>=10.2.0'],
+  versions: [MINIMUM_CYPRESS_VERSION],
   filePattern: 'dist/cli.*',
 }, (cliChunk) => {
   if (cliChunk.runModule?.start) {

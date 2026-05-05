@@ -77,7 +77,7 @@ async function checkWorkflowRuns (id, page = 1) {
     per_page: LIMIT,
     status: 'success',
     created: `${startDate}..${endDate}`,
-    branch: BRANCH,
+    branch: BRANCH || undefined, // avoid empty string
     workflow_id: id,
   }))
 
