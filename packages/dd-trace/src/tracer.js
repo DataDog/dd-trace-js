@@ -1,5 +1,6 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
@@ -131,6 +132,14 @@ class DatadogTracer extends Tracer {
 
   scope () {
     return this._scope
+  }
+
+  runOutsideContext (fn) {
+    if (typeof fn !== 'function') return fn
+
+    const store = storage('legacy').getStore()
+
+    return storage('legacy').run({ ...store, span: null, noop: true }, fn)
   }
 
   getRumData () {

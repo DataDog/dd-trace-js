@@ -14,6 +14,7 @@ const log = {
   info: sinon.stub(),
 }
 
+const Tracer = require('../../src/tracer')
 const Plugin = proxyquire('../../src/plugins/plugin', {
   '../log': log,
 })
@@ -95,5 +96,28 @@ describe('Plugin', () => {
         assert.strictEqual(storage('legacy').getStore(), undefined)
       })
     })
+  })
+
+  it('should skip plugin handlers when run outside context', () => {
+    const tracer = Object.create(Tracer.prototype)
+    const start = sinon.stub()
+
+    class TestPlugin extends Plugin {
+      static id = 'test'
+
+      constructor () {
+        super()
+        this.addSub('apm:test:start', start)
+      }
+    }
+
+    plugin = new TestPlugin()
+    plugin.configure({ enabled: true })
+
+    tracer.runOutsideContext(() => {
+      channel('apm:test:start').publish({ foo: 'bar' })
+    })
+
+    sinon.assert.notCalled(start)
   })
 })

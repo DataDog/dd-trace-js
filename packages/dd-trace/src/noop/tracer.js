@@ -23,6 +23,12 @@ class NoopTracer {
     return this._scope
   }
 
+  runOutsideContext (fn) {
+    if (typeof fn !== 'function') return fn
+
+    return fn()
+  }
+
   getRumData () {
     return ''
   }

@@ -93,6 +93,10 @@ class NoopProxy {
     return this._tracer.scope.apply(this._tracer, arguments)
   }
 
+  runOutsideContext () {
+    return this._tracer.runOutsideContext.apply(this._tracer, arguments)
+  }
+
   getRumData () {
     return this._tracer.getRumData.apply(this._tracer, arguments)
   }

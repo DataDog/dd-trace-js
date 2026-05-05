@@ -469,6 +469,9 @@ span = scope.active()!;
 const activateStringType: string = scope.activate(span, () => 'test');
 const activateVoidType: void = scope.activate(span, () => {});
 
+const runOutsideContextStringType: string = tracer.runOutsideContext(() => 'test');
+const runOutsideContextVoidType: void = tracer.runOutsideContext(() => {});
+
 const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bind((arg1: string, arg2: number): string => 'test');
 const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);

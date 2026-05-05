@@ -303,6 +303,43 @@ describe('Tracer', () => {
     })
   })
 
+  describe('runOutsideContext', () => {
+    it('should return the callback value', () => {
+      const result = tracer.runOutsideContext(() => 'test')
+
+      assert.strictEqual(result, 'test')
+    })
+
+    it('should run without the active span and restore the surrounding scope', () => {
+      const span = tracer.startSpan('parent')
+
+      tracer.scope().activate(span, () => {
+        tracer.runOutsideContext(() => {
+          assert.strictEqual(tracer.scope().active(), null)
+        })
+
+        assert.strictEqual(tracer.scope().active(), span)
+      })
+    })
+
+    it('should persist through asynchronous resources created in the callback', done => {
+      const span = tracer.startSpan('parent')
+
+      tracer.scope().activate(span, () => {
+        tracer.runOutsideContext(() => {
+          setImmediate(() => {
+            assert.strictEqual(tracer.scope().active(), null)
+            done()
+          })
+        })
+      })
+    })
+
+    it('should return unsupported callbacks unchanged', () => {
+      assert.strictEqual(tracer.runOutsideContext('test'), 'test')
+    })
+  })
+
   describe('wrap', () => {
     it('should return a new function that automatically calls tracer.trace()', () => {
       const it = {}

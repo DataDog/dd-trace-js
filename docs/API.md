@@ -366,6 +366,25 @@ scope.activate(outerSpan, () => {
 
 See the [API documentation](./interfaces/scope.html) for more details.
 
+<h3 id="run-outside-context">tracer.runOutsideContext(fn)</h3>
+
+Run a function with automatic instrumentation disabled for asynchronous work
+started within that function. The active span is not available inside the
+function, and auto-instrumented integrations will not create spans or inject
+trace context.
+
+Manual tracing APIs such as `tracer.trace()` and `tracer.startSpan()` remain
+available. Use this API when a section of code starts work that should not be
+connected to the current trace, for example fan-out jobs in a queue.
+
+```javascript
+const tracer = require('dd-trace').init()
+
+tracer.runOutsideContext(() => {
+  queue.add('process-entry', data)
+})
+```
+
 <h2 id="opentracing-api">OpenTracing Compatibility</h2>
 
 This library is OpenTracing compliant. Use the [OpenTracing API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
