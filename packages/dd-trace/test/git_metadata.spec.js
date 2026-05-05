@@ -86,6 +86,17 @@ describe('git metadata', () => {
     })
   })
 
+  it('falls through to .git/ when DD_GIT_PROPERTIES_FILE is unreadable', () => {
+    process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
+    process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+
+    const { config, getGitMetadata } = load()
+    assert.deepStrictEqual(getGitMetadata(config), {
+      commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
+      repositoryUrl: 'git@github.com:DataDog/dd-trace-js.git',
+    })
+  })
+
   it('does not read git.properties if env vars are passed', () => {
     process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
     process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
