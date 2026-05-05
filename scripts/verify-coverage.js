@@ -23,6 +23,7 @@ const coverageDir = path.join(cwd, 'coverage')
 //     `coverage/node-${version}${label}/lcov.info`.
 /** @type {{ lcov: string, dir: string }[]} */
 const lcovEntries = []
+let skippedCount = 0
 
 const flatLcov = path.join(coverageDir, 'lcov.info')
 if (fs.existsSync(flatLcov)) {
@@ -39,12 +40,18 @@ try {
     // instead of failing on an empty report.
     if (fs.existsSync(path.join(dirAbs, '.skipped'))) {
       try { fs.rmSync(dirAbs, { recursive: true, force: true }) } catch {}
+      skippedCount++
       continue
     }
 
     lcovEntries.push({ lcov: path.join(dirAbs, 'lcov.info'), dir: dirAbs })
   }
 } catch {}
+
+if (lcovEntries.length === 0 && skippedCount > 0) {
+  process.stdout.write('All coverage reports were skipped (matrix filters dropped every test). Skipping upload.\n')
+  process.exit(0)
+}
 
 if (lcovEntries.length === 0) {
   throw new Error(
