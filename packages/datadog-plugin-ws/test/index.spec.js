@@ -112,7 +112,10 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) { client.removeAllListeners('error'); client.on('error', () => {}) }
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -467,7 +470,10 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) { client.removeAllListeners('error'); client.on('error', () => {}) }
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -576,7 +582,10 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) { client.removeAllListeners('error'); client.on('error', () => {}) }
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -622,7 +631,10 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) { client.removeAllListeners('error'); client.on('error', () => {}) }
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -720,7 +732,10 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) { client.removeAllListeners('error'); client.on('error', () => {}) }
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
