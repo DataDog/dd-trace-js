@@ -538,8 +538,9 @@ class TextMapPropagator {
       const [, version, traceId, spanId, flags, tail] = matches
       const traceparent = { version }
       // W3C Trace Context §3.3.1.1: multiple tracestate fields MUST be combined per RFC 7230 §3.2.2.
+      // `filter` drops non-string members (Symbol, throwing-toString) that would crash `join`.
       const rawTracestate = Array.isArray(carrier.tracestate)
-        ? carrier.tracestate.join(',')
+        ? carrier.tracestate.filter(item => typeof item === 'string').join(',')
         : carrier.tracestate
       const tracestate = TraceState.fromString(rawTracestate)
       if (invalidSegment.test(traceId)) return null

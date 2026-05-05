@@ -1665,6 +1665,34 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(spanContext._tracestate.get('vendor2'), 'value2')
       })
 
+      it('should ignore non-string members when extracting array-valued tracestate', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = [
+          Symbol('x'),
+          'dd=s:1',
+          { toString () { throw new Error('boom') } },
+        ]
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
+        assert.strictEqual(spanContext._spanId.toString(16), '5555eeee6666ffff')
+        assert.strictEqual(spanContext._sampling.priority, 1)
+        assert.strictEqual(spanContext._tracestate.get('dd'), 's:1')
+      })
+
+      it('should extract a valid context when array-valued tracestate has only non-string members', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = [Symbol('x'), 42, { toString () { throw new Error('nope') } }]
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
+        assert.strictEqual(spanContext._spanId.toString(16), '5555eeee6666ffff')
+        assert.strictEqual(spanContext._sampling.priority, 1)
+        assert.strictEqual(spanContext._tracestate.size, 0)
+      })
+
       it('should ignore non-string traceparent values without crashing', () => {
         config.tracePropagationStyle.extract = ['tracecontext']
         for (const value of [['00-bad'], { foo: 'bar' }, 42, true]) {
