@@ -136,7 +136,8 @@ jobs:
     strategy:
       matrix:
         version: [oldest, latest]
-        mocha-version: [5.2.0, latest]
+        # "oldest" is 5.2.0 in <=5 and 8.0.0 in >=6
+        mocha-version: [oldest, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

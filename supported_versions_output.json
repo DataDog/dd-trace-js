@@ -478,7 +478,7 @@
   {
     "dependency": "mocha",
     "integration": "mocha",
-    "minimum_tracer_supported": "5.2.0",
+    "minimum_tracer_supported": "8.0.0",
     "max_tracer_supported": "11.7.5",
     "auto-instrumented": "True"
   },
