@@ -3935,6 +3935,13 @@ declare namespace tracer {
       tags?: { [key: string]: any },
 
       /**
+       * List of tag keys to propagate to LLM Observability cost and token metrics emitted from this span.
+       * Each key must already be present in `tags` from this call or from a previous annotation on the
+       * same span.
+       */
+      costTags?: string[],
+
+      /**
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
@@ -3945,6 +3952,13 @@ declare namespace tracer {
        * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
        */
       tags?: { [key: string]: any },
+
+      /**
+       * List of tag keys to propagate to LLM Observability cost and token metrics emitted from each span
+       * in the context.
+       * Each key must already be present in `tags` on the span when it starts.
+       */
+      costTags?: string[],
 
       /**
        * Set to override the span name for any spans annotated within the returned context.
