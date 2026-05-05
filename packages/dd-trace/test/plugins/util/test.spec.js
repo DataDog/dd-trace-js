@@ -90,6 +90,16 @@ describe('getTestSuitePath', () => {
 describe('getTestSessionName', () => {
   let originalEnv
 
+  function getTestSessionNameWithMajor (ddMajor) {
+    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+      '../../../../version': { DD_MAJOR: ddMajor },
+    })
+
+    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+      '../../ci-visibility/lage': lage,
+    }).getTestSessionName
+  }
+
   beforeEach(() => {
     originalEnv = { ...process.env }
     delete process.env.DD_ENABLE_LAGE_PACKAGE_NAME
@@ -119,6 +129,20 @@ describe('getTestSessionName', () => {
     process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
 
     assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
+  })
+
+  it('returns the current Lage package name by default in v6', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(6)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package')
+  })
+
+  it('does not return the current Lage package name by default in v5', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(5)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'jest')
   })
 })
 
