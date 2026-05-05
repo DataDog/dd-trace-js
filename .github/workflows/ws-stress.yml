@@ -1,6 +1,9 @@
 name: WS Stress Test
 
 on:
+  push:
+    branches:
+      - conti/fix-ws-test-timing-race
   workflow_dispatch:
     inputs:
       iterations:
