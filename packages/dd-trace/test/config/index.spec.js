@@ -165,10 +165,8 @@ describe('Config', () => {
   describe('property surface', () => {
     // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
     const INTERNAL_RUNTIME_PROPERTIES = [
-      'commitSHA',
       'debug',
       'isServiceNameInferred',
-      'repositoryUrl',
       'sampler',
       'stableConfig',
     ]
