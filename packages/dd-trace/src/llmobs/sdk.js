@@ -42,7 +42,7 @@ class LLMObs extends NoopLLMObs {
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
    */
-  constructor(tracer, llmobsModule, config) {
+  constructor (tracer, llmobsModule, config) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -52,11 +52,11 @@ class LLMObs extends NoopLLMObs {
     this._tagger = new LLMObsTagger(config)
   }
 
-  get enabled() {
+  get enabled () {
     return this._config.llmobs.enabled ?? false
   }
 
-  enable(options = {}) {
+  enable (options = {}) {
     if (this.enabled) {
       logger.debug('LLMObs is already enabled.')
       return
@@ -80,7 +80,7 @@ class LLMObs extends NoopLLMObs {
     this._llmobsModule.enable(this._config)
   }
 
-  disable() {
+  disable () {
     if (!this.enabled) {
       logger.debug('LLMObs is already disabled.')
       return
@@ -94,7 +94,7 @@ class LLMObs extends NoopLLMObs {
     this._llmobsModule.disable()
   }
 
-  trace(options = {}, fn) {
+  trace (options = {}, fn) {
     if (typeof options === 'function') {
       fn = options
       options = {}
@@ -127,7 +127,7 @@ class LLMObs extends NoopLLMObs {
     )
   }
 
-  wrap(options = {}, fn) {
+  wrap (options = {}, fn) {
     if (typeof options === 'function') {
       fn = options
       options = {}
@@ -148,7 +148,7 @@ class LLMObs extends NoopLLMObs {
 
     const llmobs = this
 
-    function wrapped() {
+    function wrapped () {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
       const span = storageCore('legacy').getStore()?.span
@@ -214,7 +214,7 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  annotate(span, options, autoinstrumented = false) {
+  annotate (span, options, autoinstrumented = false) {
     if (!this.enabled) return
 
     if (!span) {
@@ -260,7 +260,7 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  _annotate(span, options) {
+  _annotate (span, options) {
     if (!this.enabled) return
 
     const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
@@ -298,7 +298,7 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  exportSpan(span) {
+  exportSpan (span) {
     span = span ? span._span : this._active()
     let err = ''
     try {
@@ -331,7 +331,7 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  registerProcessor(processor) {
+  registerProcessor (processor) {
     if (!this.enabled) return
 
     if (this.#hasUserSpanProcessor) {
@@ -345,14 +345,14 @@ class LLMObs extends NoopLLMObs {
     registerUserSpanProcessorCh.publish(processor)
   }
 
-  deregisterProcessor() {
+  deregisterProcessor () {
     if (!this.enabled) return
 
     this.#hasUserSpanProcessor = false
     registerUserSpanProcessorCh.publish(null)
   }
 
-  submitEvaluation(llmobsSpanContext, options = {}) {
+  submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) return
 
     let err = ''
@@ -477,7 +477,7 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  annotationContext(options, fn) {
+  annotationContext (options, fn) {
     if (!this.enabled) return fn()
 
     const currentStore = storage.getStore()
@@ -493,7 +493,7 @@ class LLMObs extends NoopLLMObs {
     return storage.run(store, fn)
   }
 
-  routingContext(options, fn) {
+  routingContext (options, fn) {
     if (!this.enabled) return fn()
     if (!options?.ddApiKey) {
       throw new Error('ddApiKey is required for routing context')
@@ -515,13 +515,13 @@ class LLMObs extends NoopLLMObs {
     return storage.run(store, fn)
   }
 
-  flush() {
+  flush () {
     if (!this.enabled) return
 
     flushCh.publish()
   }
 
-  _autoAnnotate(span, kind, input, output) {
+  _autoAnnotate (span, kind, input, output) {
     const annotations = {}
     if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
       annotations.inputData = input
@@ -536,12 +536,12 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  _active() {
+  _active () {
     const store = storage.getStore()
     return store?.span
   }
 
-  _activate(span, options, fn) {
+  _activate (span, options, fn) {
     const parentStore = storage.getStore()
     if (this.enabled) storage.enterWith({ ...parentStore, span })
 
@@ -574,7 +574,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   // bind function to active LLMObs span
-  _bind(fn) {
+  _bind (fn) {
     if (typeof fn !== 'function') return fn
 
     const llmobs = this
@@ -589,7 +589,7 @@ class LLMObs extends NoopLLMObs {
     return bound
   }
 
-  _extractOptions(options) {
+  _extractOptions (options) {
     const {
       modelName,
       modelProvider,
