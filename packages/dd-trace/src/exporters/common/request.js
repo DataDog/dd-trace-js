@@ -13,6 +13,12 @@ const log = require('../../log')
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
+const {
+  getMaxAttempts,
+  getRetryDelay,
+  isRetriableNetworkError,
+  markEndpointReached,
+} = require('./retry')
 
 const maxActiveBufferSize = 1024 * 1024 * 64
 
@@ -92,6 +98,8 @@ function request (data, options, callback) {
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = (res, finalize) => {
+    markEndpointReached(options)
+
     const chunks = []
 
     res.setTimeout(timeout)
@@ -142,7 +150,10 @@ function request (data, options, callback) {
     })
   }
 
-  const makeRequest = onError => {
+  // Retries always run via setTimeout so the AsyncLocalStorage store survives
+  // the gap before socket.connect(); ALS.run() does not call ALS.enterWith()
+  // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
+  const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
       return callback(null)
@@ -163,9 +174,16 @@ function request (data, options, callback) {
       req.once('close', finalize)
       req.once('timeout', finalize)
 
-      req.once('error', err => {
+      req.once('error', error => {
         finalize()
-        onError(err)
+        if (attemptIndex < getMaxAttempts(options) && isRetriableNetworkError(error)) {
+          // Unref so a pending retry never keeps the host process alive past
+          // its natural exit point; long-running apps still retry because the
+          // event loop is held open by their own work.
+          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref()
+        } else {
+          callback(error)
+        }
       })
 
       req.setTimeout(timeout, () => {
@@ -185,14 +203,7 @@ function request (data, options, callback) {
     })
   }
 
-  // The setTimeout is needed to avoid losing the async context in the retry
-  // request before socket.connect() is called. This is a workaround for the
-  // issue that the AsyncLocalStorage.run() method does not call the
-  // AsyncLocalStorage.enterWith() method when not using AsyncContextFrame.
-  //
-  // TODO: Test that this doesn't trace itself on retry when the diagnostics
-  // channel events are available in the agent exporter.
-  makeRequest(() => setTimeout(() => makeRequest(callback)))
+  attempt(1)
 }
 
 function byteLength (data) {
