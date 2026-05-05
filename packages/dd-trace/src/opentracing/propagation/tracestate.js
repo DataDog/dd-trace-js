@@ -15,8 +15,7 @@ const WHITESPACE = /[ \t]/
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
 function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
-  const segments = value.split(fieldSeparator)
-  segments.length = Math.min(segments.length, MAX_LIST_MEMBERS)
+  const segments = value.split(fieldSeparator, MAX_LIST_MEMBERS)
 
   // TODO: We should extract dd no matter at what position and move it to the front of the list.
   // Extract up 31 additional entries.
