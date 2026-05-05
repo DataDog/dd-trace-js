@@ -1,5 +1,7 @@
 {
   "reporter": ["text", "lcov"],
+  "temp-directory": ".c8_output",
+  "reports-dir": "coverage",
   "include": [
     "ext/**/*.{js,mjs}",
     "packages/**/src/**/*.{js,mjs}",
