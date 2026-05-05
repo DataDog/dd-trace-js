@@ -471,15 +471,9 @@ versions.forEach((version) => {
             const seriallySkippedTests = tests.filter(
               test => test.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
             )
-            // cycle 0: skipped (A failed) — cycle 1: pass (A succeeded)
-            assert.strictEqual(seriallySkippedTests.length, 2)
-
-            const skippedExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'skip')
-            assert.ok(skippedExecution, 'Expected a skipped execution')
-            assert.ok(
-              !(TEST_FINAL_STATUS in skippedExecution.meta),
-              'Intermediate skipped execution should not have TEST_FINAL_STATUS'
-            )
+            // playwright never fires testEnd for serial-mode-skipped tests (they don't
+            // run in a worker), so only the final passing execution reaches us.
+            assert.strictEqual(seriallySkippedTests.length, 1)
 
             const passExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'pass')
             assert.ok(passExecution, 'Expected a passing execution on the retry cycle')
@@ -508,7 +502,6 @@ versions.forEach((version) => {
 
       it(
         'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled', async () => {
-          if (version === 'latest') return
           receiver.setSettings({
             itr_enabled: false,
             code_coverage: false,
