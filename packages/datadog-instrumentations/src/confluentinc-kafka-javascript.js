@@ -7,7 +7,7 @@ const {
   addHook,
   channel,
 } = require('./helpers/instrument')
-const { cloneMessagesForInjection } = require('./helpers/kafka')
+const { cloneMessages, cloneMessagesForInjection } = require('./helpers/kafka')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
@@ -214,12 +214,16 @@ function instrumentKafkaJS (kafkaJS) {
                     // Hand the underlying client a shallow clone so neither
                     // injection nor the client's auto-fields (it sets
                     // `headers: null` on messages without headers) ever
-                    // touch caller-owned objects.
+                    // touch caller-owned objects. With injection disabled the
+                    // clone must not seed `headers: {}` either: brokers that
+                    // reject any header field cannot recover otherwise.
                     let outgoingPayload = payload
                     if (payload && Array.isArray(payload.messages)) {
                       outgoingPayload = {
                         ...payload,
-                        messages: cloneMessagesForInjection(payload.messages),
+                        messages: disableHeaderInjection
+                          ? cloneMessages(payload.messages)
+                          : cloneMessagesForInjection(payload.messages),
                       }
                     }
 

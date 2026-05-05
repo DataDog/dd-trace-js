@@ -177,9 +177,14 @@ describe('Plugin', () => {
 
               assert.strictEqual(sentMessageBatches.length, 1)
               assert.strictEqual(sentMessageBatches[0].disableHeaderInjection, true)
-              // Boundary skips the clone when injection is off, so the user's
-              // array reaches the channel untouched.
-              assert.strictEqual(sentMessageBatches[0].messages, userMessages)
+              // Boundary clones with `cloneMessages` when injection is off,
+              // so the channel sees a fresh array whose entries have no
+              // `headers` field at all (no `{}` seeding) and the user's
+              // array stays untouched.
+              const [clonedMessage] = sentMessageBatches[0].messages
+              assert.notStrictEqual(sentMessageBatches[0].messages, userMessages)
+              assert.notStrictEqual(clonedMessage, userMessages[0])
+              assert.strictEqual(Object.hasOwn(clonedMessage, 'headers'), false)
               assert.strictEqual(userMessages[0].headers, undefined)
             } finally {
               await producer.disconnect()
@@ -266,9 +271,13 @@ describe('Plugin', () => {
 
                 const result2 = await producer.send({ topic: testTopic, messages: secondBatch })
 
-                // After UNKNOWN the boundary still clones (so frozen input
-                // stays untouched) but the plugin skips injection.
-                assert.strictEqual(sentMessageBatches[1][0].headers, undefined)
+                // After UNKNOWN the boundary clones with `cloneMessages`
+                // (frozen input stays untouched) and the clone has no
+                // `headers` field at all — brokers that reject any header
+                // field can recover.
+                const [clonedAfterDisable] = sentMessageBatches[1]
+                assert.notStrictEqual(clonedAfterDisable, secondBatch[0])
+                assert.strictEqual(Object.hasOwn(clonedAfterDisable, 'headers'), false)
                 assert.strictEqual(result2[0].errorCode, 0)
               } finally {
                 startCh.unsubscribe(captureStart)

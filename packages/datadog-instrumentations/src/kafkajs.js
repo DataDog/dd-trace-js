@@ -10,6 +10,7 @@ const {
 const {
   brokerSupportsMessageHeaders,
   clientToCluster,
+  cloneMessages,
   cloneMessagesForInjection,
 } = require('./helpers/kafka')
 
@@ -109,12 +110,15 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       const topic = arg0?.topic
       const inputMessages = Array.isArray(arg0?.messages) ? arg0.messages : []
 
-      // Hand kafkajs and the plugin a shallow clone so injection writes to a
-      // tracer-owned object instead of the caller's. Skip the clone when
-      // injection is off; nothing downstream mutates the array.
+      // Hand kafkajs and the plugin a shallow clone so injection never
+      // touches caller-owned objects. With injection disabled the clone must
+      // not seed `headers: {}` either: brokers that reject any header field
+      // cannot recover otherwise.
       let messages = inputMessages
-      if (!disableHeaderInjection && inputMessages.length > 0) {
-        messages = cloneMessagesForInjection(inputMessages)
+      if (inputMessages.length > 0) {
+        messages = disableHeaderInjection
+          ? cloneMessages(inputMessages)
+          : cloneMessagesForInjection(inputMessages)
         args[0] = { ...arg0, messages }
       }
 
