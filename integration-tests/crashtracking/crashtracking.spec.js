@@ -17,7 +17,7 @@ const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
  *
  * @param {string} fixture
  * @param {number} agentPort
- * @returns {{ proc: ChildProcess, exitPromise: Promise<void> }}
+ * @returns {Promise<void>}
  */
 function spawnCrashFixture (fixture, agentPort) {
   const proc = fork(path.join(__dirname, fixture), [], {
@@ -29,11 +29,9 @@ function spawnCrashFixture (fixture, agentPort) {
     },
   })
 
-  const exitPromise = new Promise((resolve) => {
-    proc.once('exit', (code, signal) => resolve({ code, signal }))
+  return new Promise((resolve) => {
+    proc.once('exit', resolve)
   })
-
-  return { proc, exitPromise }
 }
 
 /**
@@ -109,7 +107,7 @@ describeNotWindows('crashtracking integration', () => {
   describe('unix signal crash', () => {
     it('sends a crash report and a ping with a native stack to the telemetry endpoint', async () => {
       const logsPromise = collectCrashLogs(agent)
-      const { exitPromise } = spawnCrashFixture('signal-crash.js', agent.port)
+      const exitPromise = spawnCrashFixture('signal-crash.js', agent.port)
 
       const [{ ping, report }] = await Promise.all([logsPromise, exitPromise])
 
@@ -138,7 +136,7 @@ describeNotWindows('crashtracking integration', () => {
   describe('uncaught exception', () => {
     it('sends a crash report and a ping with a JS stack to the telemetry endpoint', async () => {
       const logsPromise = collectCrashLogs(agent)
-      const { exitPromise } = spawnCrashFixture('uncaught-exception.js', agent.port)
+      const exitPromise = spawnCrashFixture('uncaught-exception.js', agent.port)
 
       const [{ ping, report }] = await Promise.all([logsPromise, exitPromise])
 
@@ -161,8 +159,8 @@ describeNotWindows('crashtracking integration', () => {
         throwFrame.file.includes('uncaught-exception.js'),
         `expected top frame to be uncaught-exception.js, got: ${JSON.stringify(throwFrame)}`
       )
-      assert.ok(typeof throwFrame.line === 'number', 'expected line number in top frame')
-      assert.ok(typeof throwFrame.column === 'number', 'expected column number in top frame')
+      assert.ok(throwFrame.line === 7, 'expected line number in top frame (in signal-crash.js)')
+      assert.ok(throwFrame.column === 7, 'expected column number in top frame (in signal-crash.js)')
     })
   })
 })
