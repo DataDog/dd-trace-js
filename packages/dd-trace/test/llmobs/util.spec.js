@@ -8,6 +8,7 @@ const getConfig = require('../../src/config')
 const {
   encodeUnicode,
   getFunctionArguments,
+  validateCostTags,
   safeJsonParse,
   validateKind,
   spanHasError,
@@ -41,6 +42,37 @@ describe('util', () => {
 
     it('should throw for an undefined kind', () => {
       assert.throws(() => validateKind())
+    })
+  })
+
+  describe('validateCostTags', () => {
+    const span = {}
+
+    it('should return cost tags that reference span tags', () => {
+      const costTags = validateCostTags(span, ['team', 'feature'], 'annotate', {
+        team: 'ml',
+        feature: 'chatbot',
+      })
+
+      assert.deepStrictEqual(costTags, ['team', 'feature'])
+    })
+
+    it('should skip invalid cost tags', () => {
+      const costTags = validateCostTags(span, ['team', 'missing', 123], 'annotate', { team: 'ml' })
+
+      assert.deepStrictEqual(costTags, ['team'])
+    })
+
+    it('should reject non-array cost tags', () => {
+      const costTags = validateCostTags(span, 'team', 'annotate', { team: 'ml' })
+
+      assert.deepStrictEqual(costTags, [])
+    })
+
+    it('should return an empty list for an empty list', () => {
+      const costTags = validateCostTags(span, [], 'annotate', { team: 'ml' })
+
+      assert.deepStrictEqual(costTags, [])
     })
   })
 
