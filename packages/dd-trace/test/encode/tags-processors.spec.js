@@ -23,11 +23,5 @@ describe('tags-processors', () => {
         `${overlong.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
       )
     })
-
-    it('skips resource truncation when shouldTruncateResourceName is false', () => {
-      const overlong = 'a'.repeat(MAX_RESOURCE_NAME_LENGTH + 1)
-
-      assert.strictEqual(truncateSpan({ resource: overlong }, false).resource, overlong)
-    })
   })
 })

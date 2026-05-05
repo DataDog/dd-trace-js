@@ -25,8 +25,8 @@ const MAX_SERVICE_LENGTH = 100
 // MAX_TYPE_LENGTH the maximum length a span type can have
 const MAX_TYPE_LENGTH = 100
 
-function truncateSpan (span, shouldTruncateResourceName = true) {
-  if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
+function truncateSpan (span) {
+  if (span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
     span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
   }
   return span
