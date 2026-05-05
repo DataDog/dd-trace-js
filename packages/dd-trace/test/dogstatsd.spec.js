@@ -29,6 +29,7 @@ describe('dogstatsd', () => {
   let sockets
   let assertData
   let docker
+  let log
 
   beforeEach((done) => {
     udp6 = {
@@ -70,10 +71,12 @@ describe('dogstatsd', () => {
     })
 
     docker = {}
+    log = { debug: sinon.stub(), error: sinon.stub() }
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       './exporters/common/docker': docker,
+      './log': log,
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
@@ -228,6 +231,27 @@ describe('dogstatsd', () => {
     sinon.assert.notCalled(udp4.send)
     sinon.assert.notCalled(udp6.send)
     sinon.assert.notCalled(dns.lookup)
+    sinon.assert.notCalled(log.debug)
+  })
+
+  it('logs the metric count and the UDP transport on a non-empty flush', () => {
+    client = createDogStatsDClient()
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    assert.deepStrictEqual(log.debug.firstCall.args, ['Flushing %s metrics via %s', 1, 'UDP'])
+  })
+
+  it('logs the metric count and the HTTP transport on a non-empty flush', () => {
+    client = createDogStatsDClient({
+      metricsProxyUrl: `http://localhost:${httpPort}`,
+    })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    assert.deepStrictEqual(log.debug.firstCall.args, ['Flushing %s metrics via %s', 1, 'HTTP'])
   })
 
   it('should not flush if the dns lookup fails', () => {
