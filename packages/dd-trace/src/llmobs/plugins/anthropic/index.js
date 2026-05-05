@@ -77,18 +77,11 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             break
           }
           case 'content_block_stop': {
-<<<<<<< sabrenner/anthropic-thinking-fix
             const lastBlock = response.content[response.content.length - 1]
             if (!lastBlock) break
             if (lastBlock.type === 'tool_use') {
               const input = lastBlock.input ?? '{}'
-              lastBlock.input = JSON.parse(input)
-=======
-            const type = response.content[response.content.length - 1].type
-            if (type === 'tool_use') {
-              const input = response.content[response.content.length - 1].input ?? '{}'
-              response.content[response.content.length - 1].input = safeJsonParse(input, {})
->>>>>>> master
+              lastBlock.input = safeJsonParse(input, {})
             }
             break
           }
