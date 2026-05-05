@@ -8,38 +8,20 @@ require('../setup/core')
 
 const {
   truncateSpan,
-  MAX_META_KEY_LENGTH,
-  MAX_METRIC_KEY_LENGTH,
+  MAX_RESOURCE_NAME_LENGTH,
 } = require('../../src/encode/tags-processors')
 
 describe('tags-processors', () => {
   describe('truncateSpan', () => {
-    it('writes a truncated meta key back to span.meta and not span.metrics', () => {
-      const longKey = 'a'.repeat(MAX_META_KEY_LENGTH + 50)
-      const expectedKey = `${'a'.repeat(MAX_META_KEY_LENGTH)}...`
-      const span = {
-        meta: { [longKey]: 'value' },
-        metrics: {},
-      }
+    it('leaves a resource at the limit untouched and truncates one past it', () => {
+      const accepted = 'a'.repeat(MAX_RESOURCE_NAME_LENGTH)
+      const overlong = `${'a'.repeat(MAX_RESOURCE_NAME_LENGTH)}X`
 
-      truncateSpan(span)
-
-      assert.deepStrictEqual(span.meta, { [expectedKey]: 'value' })
-      assert.deepStrictEqual(span.metrics, {})
-    })
-
-    it('writes a truncated metric key back to span.metrics and not span.meta', () => {
-      const longKey = 'b'.repeat(MAX_METRIC_KEY_LENGTH + 50)
-      const expectedKey = `${'b'.repeat(MAX_METRIC_KEY_LENGTH)}...`
-      const span = {
-        meta: {},
-        metrics: { [longKey]: 42 },
-      }
-
-      truncateSpan(span)
-
-      assert.deepStrictEqual(span.meta, {})
-      assert.deepStrictEqual(span.metrics, { [expectedKey]: 42 })
+      assert.strictEqual(truncateSpan({ resource: accepted }).resource, accepted)
+      assert.strictEqual(
+        truncateSpan({ resource: overlong }).resource,
+        `${overlong.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
+      )
     })
   })
 })

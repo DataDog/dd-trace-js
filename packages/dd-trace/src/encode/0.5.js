@@ -1,13 +1,13 @@
 'use strict'
 
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { normalizeSpan } = require('./tags-processors')
 const { AgentEncoder: BaseEncoder } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
 
 function formatSpan (span) {
-  span = normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(span)
   // ensure span events are encoded as tags
   if (span.span_events) {
     span.meta.events = JSON.stringify(span.span_events)
