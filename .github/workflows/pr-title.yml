@@ -36,6 +36,8 @@ jobs:
             echo "Expected: <type>(<scope>)?(!)?: <subject>"
             echo "          revert(!)?: <type>(<scope>)?(!)?: <subject>  (for reverts)"
             echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore"
+            echo "Revert PRs must embed the original commit's type so the semver impact can"
+            echo "be determined (e.g. 'revert: feat(scope): original title')."
             echo "Reverts of reverts re-apply the original change, so use the original"
             echo "title (e.g. 'feat: x', not 'revert: revert: feat: x')."
             exit 1
@@ -94,7 +96,8 @@ jobs:
             const desired = new Set(current)
 
             // Reconcile type labels: title is source of truth, remove any
-            // other known conventional-commit type label.
+            // other known conventional-commit type label. No labelExists check
+            // needed — TYPES is a static list that must be created in the repo.
             for (const name of desired) {
               if (TYPES.includes(name) && name !== next.type) desired.delete(name)
             }
