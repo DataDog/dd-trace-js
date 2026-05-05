@@ -8,10 +8,20 @@ const { spawnSync } = require('child_process')
 const path = require('path')
 
 const env = {}
+const stripped = []
 for (const [key, value] of Object.entries(process.env)) {
-  if (!key.startsWith('OTEL_')) {
+  if (key.startsWith('OTEL_')) {
+    stripped.push(`${key}=${value}`)
+  } else {
     env[key] = value
   }
+}
+if (stripped.length > 0) {
+  // eslint-disable-next-line no-console
+  console.log('[run-plugin-tests] stripped OTEL_* vars:', stripped.join(', '))
+} else {
+  // eslint-disable-next-line no-console
+  console.log('[run-plugin-tests] no OTEL_* vars found in environment')
 }
 
 const nyc = path.join(__dirname, '..', 'node_modules', '.bin', 'nyc')
