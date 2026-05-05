@@ -165,7 +165,8 @@ jobs:
     strategy:
       matrix:
         version: [oldest, latest]
-        jest-version: [24.8.0, latest]
+        # "oldest" is 24.8.0 in <=5 and 28.0.0 in >=6
+        jest-version: [oldest, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
