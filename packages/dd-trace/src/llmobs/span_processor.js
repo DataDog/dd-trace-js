@@ -14,6 +14,7 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   METADATA,
+  TOOL_DEFINITIONS,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -30,6 +31,7 @@ const {
   INPUT_PROMPT,
   ROUTING_API_KEY,
   ROUTING_SITE,
+  LLMOBS_SUBMITTED_TAG_KEY,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -87,7 +89,19 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
-      this.#writer.append(formattedEvent, routing)
+      const enqueued = this.#writer.append(formattedEvent, routing)
+
+      // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
+      // gen_ai.* spans, the parent-chain walk stops at any span carrying this
+      // tag, preserving this span as the immediate LLMObs parent. Set only
+      // when the writer actually buffered the event — format may have dropped
+      // it (user processor returned null), thrown, or the writer may have
+      // dropped it silently when its buffer is full. Leaving this tag off in
+      // those cases avoids dd-go reparenting OTel children under a span that
+      // has no corresponding LLMObs event.
+      if (enqueued) {
+        span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
+      }
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
@@ -119,6 +133,10 @@ class LLMObsSpanProcessor {
 
     if (mlObsTags[METADATA]) {
       this.#addObject(mlObsTags[METADATA], meta.metadata = {})
+    }
+
+    if (mlObsTags[TOOL_DEFINITIONS]) {
+      this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions = [])
     }
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {

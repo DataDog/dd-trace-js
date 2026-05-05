@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('assert')
-const { setup, testBasicInput, testBasicInputWithoutDD } = require('./utils')
+const { setup, testBasicInput } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('DD_TRACE_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=true', function () {
@@ -25,21 +25,6 @@ describe('Dynamic Instrumentation', function () {
 
     describe('input messages', function () {
       it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
-    })
-  })
-
-  describe('DD_TRACE_ENABLED=false', function () {
-    const t = setup({
-      testApp: 'target-app/basic.js',
-      env: { DD_TRACE_ENABLED: 'false' },
-      dependencies: ['fastify'],
-    })
-
-    describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithoutDD.bind(null, t)
-      )
     })
   })
 
@@ -67,7 +52,7 @@ describe('Dynamic Instrumentation', function () {
     })
   })
 
-  describe('DD_TRACING_ENABLED=false', function () {
+  describe('DD_TRACING_ENABLED=false (standalone APM mode)', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_TRACING_ENABLED: 'false' },
@@ -75,10 +60,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithoutDD.bind(null, t)
-      )
+      it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
     })
   })
 
@@ -90,14 +72,13 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it('should include process_tags in snapshot when enabled', function (done) {
+      it('should include process_tags at root level when enabled', function (done) {
         t.agent.on('debugger-input', ({ payload }) => {
-          const snapshot = payload[0].debugger.snapshot
+          const { process_tags: processTags } = payload[0]
 
-          // Check for expected process tags keys
-          assert.ok(snapshot.process_tags['entrypoint.name'])
-          assert.ok(snapshot.process_tags['entrypoint.type'])
-          assert.strictEqual(snapshot.process_tags['entrypoint.type'], 'script')
+          assert.strictEqual(typeof processTags, 'string')
+          assert.ok(processTags.includes('entrypoint.name:'))
+          assert.ok(processTags.includes('entrypoint.type:script'))
 
           done()
         })
@@ -116,12 +97,9 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it('should not include process_tags in snapshot when disabled', function (done) {
+      it('should not include process_tags when disabled', function (done) {
         t.agent.on('debugger-input', ({ payload }) => {
-          const snapshot = payload[0].debugger.snapshot
-
-          // Assert that process_tags are not present
-          assert.strictEqual(snapshot.process_tags, undefined)
+          assert.strictEqual(payload[0].process_tags, undefined)
 
           done()
         })

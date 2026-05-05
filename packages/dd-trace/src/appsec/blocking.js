@@ -1,10 +1,16 @@
 'use strict'
 
+const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const log = require('../log')
+const web = require('../plugins/util/web')
 const blockedTemplates = require('./blocked_templates')
 const { updateBlockFailureMetric } = require('./telemetry')
 
-const detectedSpecificEndpoints = {}
+// Bounded by the LRU as defense-in-depth: getSpecificKey already keys on the
+// resolved route (or the path with the query string stripped) so cardinality
+// follows the routing table, not the URL space.
+const SPECIFIC_ENDPOINT_CACHE_MAX = 16_384
+const detectedSpecificEndpoints = new LRUCache({ max: SPECIFIC_ENDPOINT_CACHE_MAX })
 
 const templateKeyword = '[security_response_id]'
 
@@ -38,12 +44,18 @@ const specificBlockingTypes = {
   GRAPHQL: 'graphqlJson',
 }
 
-function getSpecificKey (method, url) {
-  return `${method}+${url}`
+function getSpecificKey (req) {
+  const route = web.getContext(req)?.paths?.join('')
+  if (route) return `${req.method}+${route}`
+
+  // Strip the query string so unique parameters do not balloon the cache.
+  const url = req.originalUrl || req.url || ''
+  const queryStart = url.indexOf('?')
+  return `${req.method}+${queryStart === -1 ? url : url.slice(0, queryStart)}`
 }
 
-function addSpecificEndpoint (method, url, type) {
-  detectedSpecificEndpoints[getSpecificKey(method, url)] = type
+function addSpecificEndpoint (req, type) {
+  detectedSpecificEndpoints.set(getSpecificKey(req), type)
 }
 
 function getBlockWithRedirectData (actionParameters) {
@@ -65,7 +77,7 @@ function getBlockWithContentData (req, specificType, actionParameters) {
   let type
   let body
 
-  const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
+  const specificBlockingType = specificType || detectedSpecificEndpoints.get(getSpecificKey(req))
   if (specificBlockingType) {
     const specificBlockingContent = getTemplate(specificBlockingType, actionParameters)
     type = specificBlockingContent?.type

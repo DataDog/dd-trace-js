@@ -15,6 +15,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -50,11 +51,9 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
-    this.retries(2)
     this.timeout(80000)
 
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
@@ -260,7 +259,7 @@ versions.forEach((version) => {
 
               const testsMarkedAsFailedAllRetries = attemptedToFixTests.filter(test =>
                 test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-              ).length
+              )
 
               const testsMarkedAsPassedAllRetries = attemptedToFixTests.filter(test =>
                 test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
@@ -275,24 +274,65 @@ versions.forEach((version) => {
                 assert.strictEqual(countAttemptToFixTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
                 assert.strictEqual(countRetriedAttemptToFixTests, 2 * ATTEMPT_TO_FIX_NUM_RETRIES)
                 if (shouldAlwaysPass) {
-                  assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries.length, 0)
                   assert.strictEqual(testsMarkedAsFailed, 0)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 2)
                 } else if (shouldFailSometimes) {
                   // one test failed sometimes, the other always passed
-                  assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries.length, 0)
                   assert.strictEqual(testsMarkedAsFailed, 1)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
                 } else {
                   // one test failed always, the other always passed
-                  assert.strictEqual(testsMarkedAsFailedAllRetries, 1)
+                  assert.strictEqual(
+                    testsMarkedAsFailedAllRetries.length,
+                    1,
+                    JSON.stringify(testsMarkedAsFailedAllRetries.map(test => ({
+                      name: test.meta[TEST_NAME],
+                      status: test.meta[TEST_STATUS],
+                    })))
+                  )
                   assert.strictEqual(testsMarkedAsFailed, 1)
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
+                }
+
+                // Exactly one ATF run must have TEST_FINAL_STATUS and it must be the last to finish.
+                // The main process marks the execution final based on arrival order of testEnd events,
+                // so the run that completes last is always the one that gets the tag.
+                for (const testName of [
+                  'attempt to fix should attempt to fix failed test',
+                  'attempt to fix should attempt to fix passed test',
+                ]) {
+                  let expectedFinalStatus
+                  if (isDisabled || isQuarantined) {
+                    expectedFinalStatus = 'skip'
+                  } else if (shouldAlwaysPass ||
+                    testName === 'attempt to fix should attempt to fix passed test') {
+                    expectedFinalStatus = 'pass'
+                  } else {
+                    expectedFinalStatus = 'fail'
+                  }
+
+                  const group = attemptedToFixTests.filter(t => t.meta[TEST_NAME] === testName)
+                  group.sort((a, b) => {
+                    const endA = BigInt(a.start) + BigInt(a.duration)
+                    const endB = BigInt(b.start) + BigInt(b.duration)
+                    return endA < endB ? -1 : endA > endB ? 1 : 0
+                  })
+                  group.forEach((t, index) => {
+                    if (index < group.length - 1) {
+                      assert.ok(!(TEST_FINAL_STATUS in t.meta),
+                        `ATF run ${index} of "${testName}" should not have TEST_FINAL_STATUS`)
+                    } else {
+                      assert.strictEqual(t.meta[TEST_FINAL_STATUS], expectedFinalStatus,
+                        `Last ATF run of "${testName}" should have TEST_FINAL_STATUS="${expectedFinalStatus}"`)
+                    }
+                  })
                 }
               } else {
                 assert.strictEqual(countAttemptToFixTests, 0)
                 assert.strictEqual(countRetriedAttemptToFixTests, 0)
-                assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                assert.strictEqual(testsMarkedAsFailedAllRetries.length, 0)
                 assert.strictEqual(testsMarkedAsPassedAllRetries, 0)
               }
               if (shouldIncludeFlakyTest) {
@@ -338,6 +378,7 @@ versions.forEach((version) => {
             isQuarantined,
             shouldIncludeFlakyTest,
           })
+          let stdout = ''
 
           childProcess = exec(
             `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
@@ -355,13 +396,40 @@ versions.forEach((version) => {
             }
           )
 
+          childProcess.stdout?.on('data', data => {
+            stdout += data
+          })
+
+          childProcess.stderr?.on('data', data => {
+            stdout += data
+          })
+
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
             testAssertionsPromise,
           ])
 
-          if (isQuarantined || isDisabled || shouldAlwaysPass) {
-            // even though a test fails, the exit code is 0 because the test is quarantined
+          if (isAttemptingToFix) {
+            assert.match(stdout, /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/)
+            assert.strictEqual(
+              (stdout.match(
+                /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/g
+              ) || []).length,
+              1
+            )
+            assert.match(stdout, /Datadog Test Optimization/)
+            if (shouldAlwaysPass) {
+              assert.match(stdout, /Attempt to fix passed/)
+            } else {
+              assert.match(stdout, /Attempt to fix failed/)
+              assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+            }
+            if (isQuarantined || isDisabled) {
+              assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+            }
+          }
+
+          if (shouldAlwaysPass) {
             assert.strictEqual(exitCode, 0)
           } else {
             assert.strictEqual(exitCode, 1)
@@ -461,7 +529,7 @@ versions.forEach((version) => {
           ])
         })
 
-        it('does not fail retry if a test is quarantined', async () => {
+        it('ignores quarantine when attempting to fix a test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
@@ -491,7 +559,7 @@ versions.forEach((version) => {
           await runAttemptToFixTest({ isAttemptingToFix: true, isQuarantined: true })
         })
 
-        it('does not fail retry if a test is disabled', async () => {
+        it('ignores disabled when attempting to fix a test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })

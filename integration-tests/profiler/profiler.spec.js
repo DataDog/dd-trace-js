@@ -27,6 +27,8 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
+const OOM_HEAP_MB = 50
+
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
@@ -227,6 +229,64 @@ async function gatherFilesystemTimelineEvents (cwd, scriptFilePath, agentPort) {
   return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'fs', [], FilesystemEventProcessor)
 }
 
+class ZlibEventProcessor extends TimelineEventProcessor {
+  processLabel () {
+    return false
+  }
+
+  decorateEvent () {}
+}
+
+async function gatherZlibTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'zlib', [], ZlibEventProcessor)
+}
+
+class CryptoEventProcessor extends TimelineEventProcessor {
+  constructor (strings, encoded) {
+    super(strings, encoded)
+
+    this.algorithmKey = strings.dedup('algorithm')
+    this.digestKey = strings.dedup('digest')
+    this.iterationsKey = strings.dedup('iterations')
+    this.keylenKey = strings.dedup('keylen')
+    this.offsetKey = strings.dedup('offset')
+    this.sizeKey = strings.dedup('size')
+    this.typeKey = strings.dedup('type')
+  }
+
+  processLabel (label, processedLabels) {
+    switch (label.key) {
+      case this.algorithmKey: processedLabels.algorithm = label.str; return true
+      case this.digestKey: processedLabels.digest = label.str; return true
+      case this.iterationsKey: processedLabels.iterations = label.num; return true
+      case this.keylenKey: processedLabels.keylen = label.num; return true
+      case this.offsetKey: processedLabels.offset = label.num; return true
+      case this.sizeKey: processedLabels.size = label.num; return true
+      case this.typeKey: processedLabels.type = label.str; return true
+      default: return false
+    }
+  }
+
+  decorateEvent (ev, pl) {
+    ev.algorithm = this.strings.strings[pl.algorithm]
+    ev.digest = this.strings.strings[pl.digest]
+    ev.type = this.strings.strings[pl.type]
+    ev.iterations = pl.iterations
+    ev.keylen = pl.keylen
+    ev.offset = pl.offset
+    ev.size = pl.size
+    for (const [k, v] of Object.entries(ev)) {
+      if (v === undefined) {
+        delete ev[k]
+      }
+    }
+  }
+}
+
+async function gatherCryptoTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'crypto', [], CryptoEventProcessor)
+}
+
 async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
@@ -270,7 +330,6 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
           }
       }
     }
-    // Timestamp must be defined and be between process start and end time
     assert.notStrictEqual(ts, undefined, encoded)
     assert.strictEqual(typeof ts, 'bigint', encoded)
     assert.ok(ts <= procEnd, encoded)
@@ -330,7 +389,7 @@ describe('profiler', () => {
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')
     oomTestFile = path.join(cwd, 'profiler/oom.js')
-    oomExecArgv = ['--max-old-space-size=50']
+    oomExecArgv = [`--max-old-space-size=${OOM_HEAP_MB}`]
   })
 
   beforeEach(async () => {
@@ -513,6 +572,27 @@ describe('profiler', () => {
       ])
     })
 
+    it('zlib timeline events work', async () => {
+      const events = await gatherZlibTimelineEvents(cwd, 'profiler/zlibtest.js', agent.port)
+      const compare = (a, b) => a.operation.localeCompare(b.operation)
+      assertObjectContains(events.sort(compare), [
+        { operation: 'brotliCompress' },
+        { operation: 'deflate' },
+        { operation: 'gunzip' },
+        { operation: 'gzip' },
+      ])
+    })
+
+    it('crypto timeline events work', async () => {
+      const events = await gatherCryptoTimelineEvents(cwd, 'profiler/cryptotest.js', agent.port)
+      const compare = (a, b) => a.operation.localeCompare(b.operation)
+      assertObjectContains(events.sort(compare), [
+        { operation: 'pbkdf2', digest: 'sha256', iterations: 1000, keylen: 32 },
+        { operation: 'randomBytes', size: 16 },
+        { operation: 'randomFill' },
+      ])
+    })
+
     it('net timeline events work', async () => {
       // Simple server that writes a constant message to the socket.
       const msg = 'cya later!\n'
@@ -607,7 +687,7 @@ describe('profiler', () => {
       })
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
+        proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })

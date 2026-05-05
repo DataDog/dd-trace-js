@@ -1,6 +1,7 @@
 'use strict'
 
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
+const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
 const { appendMessage } = require('./util')
 
@@ -76,11 +77,18 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             break
           }
           case 'content_block_stop': {
+<<<<<<< sabrenner/anthropic-thinking-fix
             const lastBlock = response.content[response.content.length - 1]
             if (!lastBlock) break
             if (lastBlock.type === 'tool_use') {
               const input = lastBlock.input ?? '{}'
               lastBlock.input = JSON.parse(input)
+=======
+            const type = response.content[response.content.length - 1].type
+            if (type === 'tool_use') {
+              const input = response.content[response.content.length - 1].input ?? '{}'
+              response.content[response.content.length - 1].input = safeJsonParse(input, {})
+>>>>>>> master
             }
             break
           }
@@ -186,14 +194,9 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       if (typeof text === 'string') {
         outputMessages.push({ content: text, role })
       } else if (block.type === 'tool_use') {
-        let input = block.input
-        if (typeof input === 'string') {
-          input = JSON.parse(input)
-        }
-
         const toolCall = {
           name: block.name,
-          arguments: input,
+          arguments: safeJsonParse(block.input, {}),
           toolId: block.id,
           type: block.type,
         }

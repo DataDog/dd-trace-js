@@ -47,11 +47,9 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
-    this.retries(2)
     this.timeout(80000)
 
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI

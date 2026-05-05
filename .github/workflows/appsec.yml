@@ -79,11 +79,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node
+        with:
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
         with:
           cache: "true"
       - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
@@ -408,16 +412,11 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
@@ -468,7 +467,11 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:appsec
+      - run: yarn test:integration:appsec:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: appsec-integration-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

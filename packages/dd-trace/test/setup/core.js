@@ -1,5 +1,18 @@
 'use strict'
 
+require('./mocha-hooks')
+
+if (process.env.CI) {
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+  const reportDir = path.join(os.tmpdir(), 'node-reports')
+  fs.mkdirSync(reportDir, { recursive: true })
+  process.report.reportOnFatalError = true
+  process.report.reportOnUncaughtException = true
+  process.report.directory = reportDir
+}
+
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.
@@ -64,6 +77,20 @@ temporaryWarningExceptions.add = (warning) => {
   return originalAdd(warning)
 }
 
+// Suppress Node's HTTP keep-alive `socketErrorListener` leak (introduced by
+// https://github.com/nodejs/node/pull/61770; fix at
+// https://github.com/nodejs/node/pull/62872 not yet released in v24.x). Bump
+// the leaking socket's limit and drop the warning before stderr or the
+// `'warning'` event sees it, so real leaks still throw below.
+const originalEmitWarning = process.emitWarning
+process.emitWarning = function patchedEmitWarning (warning, ...args) {
+  if (warning?.name === 'MaxListenersExceededWarning' && isNodeHttpSocketLeak(warning)) {
+    warning.emitter.setMaxListeners(0)
+    return
+  }
+  return originalEmitWarning.call(this, warning, ...args)
+}
+
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning') {
     throw warning
@@ -81,6 +108,28 @@ process.on('warning', (warning) => {
     throw warning
   }
 })
+
+/**
+ * Detect the Node.js HTTP keep-alive socket error listener leak by its only
+ * stable signature: two or more listeners named `socketErrorListener` on the
+ * same emitter for event `error`. Once the upstream fix ships the duplicates
+ * disappear and this returns false again, so real leaks resume throwing.
+ *
+ * @param {Error & { emitter?: NodeJS.EventEmitter, type?: string }} warning
+ * @returns {boolean}
+ */
+function isNodeHttpSocketLeak (warning) {
+  if (warning.type !== 'error' || typeof warning.emitter?.listeners !== 'function') {
+    return false
+  }
+  let count = 0
+  for (const listener of warning.emitter.listeners('error')) {
+    if (listener.name === 'socketErrorListener' && ++count > 1) {
+      return true
+    }
+  }
+  return false
+}
 
 // Make this file a module for type-aware tooling. It is intentionally imported
 // for side effects only.

@@ -50,15 +50,32 @@ function nearNow (ts, now = Date.now(), range = 1000) {
   return delta < range && delta >= 0
 }
 
+// The forked child boots a server on demand; OTEL/SDK init plus dd-trace startup take a
+// non-deterministic amount of time. A fixed pre-request delay is either flaky (too short)
+// or wasteful (too long); polling until the listener accepts is the cheapest robust way.
+async function getWithRetry (url, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  let lastErr
+  while (Date.now() < deadline) {
+    try {
+      return await axios.get(url)
+    } catch (err) {
+      lastErr = err
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+  throw lastErr
+}
+
 describe('opentelemetry', function () {
-  this.timeout(20000)
+  this.timeout(20_000)
 
   let agent = /** @type {FakeAgent | null} */ (null)
   let proc
   let cwd = /** @type {string} */ ('')
   const timeout = 5000
   const dependencies = [
-    '@opentelemetry/api@1.8.0',
+    '@opentelemetry/api',
     '@opentelemetry/instrumentation',
     '@opentelemetry/instrumentation-http',
     '@opentelemetry/instrumentation-express@0.47.1',
@@ -294,10 +311,9 @@ describe('opentelemetry', function () {
         DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
       },
     })
-    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
-    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
 
-    await check(agent, proc, 10000, ({ payload }) => {
+    await check(agent, proc, 10_000, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -366,10 +382,9 @@ describe('opentelemetry', function () {
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
       },
     })
-    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
-    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
 
-    await check(agent, proc, 10000, ({ payload }) => {
+    await check(agent, proc, 10_000, ({ payload }) => {
       assert.strictEqual(payload.length, 2)
       // combine the traces
       const trace = payload.flat()

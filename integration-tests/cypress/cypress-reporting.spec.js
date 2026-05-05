@@ -14,6 +14,7 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -39,10 +40,15 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
-const { resolveSourceLineForTest } = require('../../packages/datadog-plugin-cypress/src/source-map-utils')
+const {
+  resolveOriginalSourceFile,
+  resolveSourceLineForTest,
+} = require('../../packages/datadog-plugin-cypress/src/source-map-utils')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
@@ -59,6 +65,30 @@ function compilePrecompiledTypeScriptSpecs (cwd, env) {
   }
 }
 
+/**
+ * @param {string} cwd
+ * @returns {void}
+ */
+function configureCypressTypeScriptCompilation (cwd) {
+  // Cypress's webpack preprocessor resolves TypeScript config from the spec directory.
+  // Cypress sets inlineSourceMap itself, so setting sourceMap here breaks Cypress 12.
+  const tsconfig = {
+    compilerOptions: {
+      rootDir: '.',
+      target: 'ES2020',
+      module: 'commonjs',
+      skipLibCheck: true,
+    },
+  }
+
+  const typescriptVersion = require(path.join(cwd, 'node_modules/typescript/package.json')).version
+  if (semver.gte(typescriptVersion, '6.0.0')) {
+    tsconfig.compilerOptions.ignoreDeprecations = '6.0'
+  }
+
+  fs.writeFileSync(path.join(cwd, 'cypress/e2e/tsconfig.json'), JSON.stringify(tsconfig, null, 2))
+}
+
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
     if (NODE_MAJOR <= 16) {
@@ -66,7 +96,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -76,9 +109,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -113,21 +146,16 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    // typescript@5 is pinned because typescript@6 emits "use strict" on line 1 for
-    // non-module files, shifting compiled line numbers and breaking source map resolution.
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript@5'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
 
     beforeEach(async function () {
@@ -279,7 +307,7 @@ moduleTypes.forEach(({
       ])
     })
 
-    if (version === '6.7.0') {
+    if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
       it('logs a warning if using a deprecated version of cypress', async () => {
         let stdout = ''
         const {
@@ -308,7 +336,7 @@ moduleTypes.forEach(({
         ])
         assert.match(
           stdout,
-          /WARNING: dd-trace support for Cypress<10.2.0 is deprecated/
+          /WARNING: dd-trace support for Cypress<12.0.0 is deprecated/
         )
       })
     }
@@ -676,6 +704,7 @@ moduleTypes.forEach(({
     )
 
     over10It('reports tests with a TypeScript config file', async () => {
+      let testOutput = ''
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads
@@ -690,7 +719,13 @@ moduleTypes.forEach(({
               [TEST_STATUS]: 'pass',
               [TEST_FRAMEWORK]: 'cypress',
             },
-          })
+          }, `got events: ${JSON.stringify(events.map(event => ({
+            resource: event.content.resource,
+            sourceFile: event.content.meta?.[TEST_SOURCE_FILE],
+            status: event.content.meta?.[TEST_STATUS],
+            framework: event.content.meta?.[TEST_FRAMEWORK],
+            error: event.content.meta?.[ERROR_MESSAGE],
+          })), null, 2)}\nCypress output:\n${testOutput}`)
         }, 20000)
 
       const envVars = getCiVisAgentlessConfig(receiver.port)
@@ -706,6 +741,12 @@ moduleTypes.forEach(({
           },
         }
       )
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
@@ -1294,6 +1335,33 @@ moduleTypes.forEach(({
       }
     })
 
+    over12It('resolves source file when generated first line is unmapped', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-source-map-'))
+      const compiledFilePath = path.join(tempDir, 'spec-prologue.js')
+      const sourceMapPath = `${compiledFilePath}.map`
+
+      try {
+        fs.writeFileSync(compiledFilePath, [
+          '"use strict";',
+          'it("source mapped title", () => {})',
+          '',
+        ].join('\n'))
+
+        fs.writeFileSync(sourceMapPath, JSON.stringify({
+          version: 3,
+          file: 'spec-prologue.js',
+          sourceRoot: '',
+          sources: ['spec-prologue.ts'],
+          names: [],
+          mappings: ';AAEA',
+        }))
+
+        assert.strictEqual(resolveOriginalSourceFile(compiledFilePath), path.join(tempDir, 'spec-prologue.ts'))
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      }
+    })
+
     over12It('uses declaration scanning fallback when invocationDetails line is invalid', async function () {
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
@@ -1340,7 +1408,7 @@ moduleTypes.forEach(({
     })
 
     over12It('keeps original invocationDetails line when no declaration match is found', async function () {
-      this.timeout(140000)
+      this.timeout(140_000)
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
       try {
@@ -1402,7 +1470,7 @@ moduleTypes.forEach(({
           assert.ok(jsInvocationDetailsEvent, 'plain-js invocationDetails test event should exist')
           assert.strictEqual(
             jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START],
-            244,
+            243,
             'should keep invocationDetails line directly for plain JS specs without source maps'
           )
           assert.ok(
@@ -1429,6 +1497,8 @@ moduleTypes.forEach(({
     over12It('reports correct source file and line for typescript test files compiled by cypress', async function () {
       // Remove any pre-compiled dist files to ensure Cypress compiles the .ts file itself
       cleanupPrecompiledSourceLineDist(cwd)
+      configureCypressTypeScriptCompilation(cwd)
+      let testOutput = ''
 
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1438,7 +1508,18 @@ moduleTypes.forEach(({
             event.content.resource.includes('spec source line')
           )
 
-          assert.strictEqual(tsTestEvents.length, 2, 'should have two typescript test events')
+          assert.strictEqual(
+            tsTestEvents.length,
+            2,
+            `should have two typescript test events, got events: ${JSON.stringify(events.map(event => ({
+              type: event.type,
+              resource: event.content.resource,
+              sourceFile: event.content.meta?.[TEST_SOURCE_FILE],
+              sourceStart: event.content.metrics?.[TEST_SOURCE_START],
+              status: event.content.meta?.[TEST_STATUS],
+              error: event.content.meta?.[ERROR_MESSAGE],
+            })), null, 2)}\nCypress output:\n${testOutput}`
+          )
 
           const itTestEvent = tsTestEvents.find(e => e.content.resource.includes('reports correct line number'))
           const testTestEvent = tsTestEvents.find(
@@ -1481,6 +1562,12 @@ moduleTypes.forEach(({
           CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
           SPEC_PATTERN: 'cypress/e2e/spec-source-line.cy.ts',
         },
+      })
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
       })
 
       const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])

@@ -12,6 +12,10 @@ const {
   getTestSuitePath,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
@@ -60,9 +64,12 @@ const atrStatusesByScenarioKey = new Map()
 const numRetriesByPickleId = new Map()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
+const attemptToFixTestsByTestFullname = new Map()
 const modifiedTestsByPickleId = new Map()
 // Pickle IDs for tests that are genuinely new (not in known tests list).
 const newTestPickleIds = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 
 let eventDataCollector = null
 let pickleByFile = {}
@@ -152,6 +159,16 @@ function getTestStatusFromRetries (testStatuses) {
     return 'pass'
   }
   return 'pass'
+}
+
+function getTestStatusFromAttemptToFixExecutions (testStatuses) {
+  if (testStatuses.every(status => status === 'pass')) {
+    return 'pass'
+  }
+  if (testStatuses.every(status => status === 'skip')) {
+    return 'skip'
+  }
+  return 'fail'
 }
 
 function getErrorFromCucumberResult (cucumberResult) {
@@ -247,9 +264,8 @@ function getFinalStatus ({
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
-  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
-  // the final status of its last execution should be reported as 'skip'.
-  if (isQuarantined || isDisabled || status === 'skip') {
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (status === 'skip' || (!isLastAttemptToFix && (isQuarantined || isDisabled))) {
     return 'skip'
   }
 
@@ -282,6 +298,7 @@ function wrapRun (pl, isLatestVersion, version) {
     let numAttempt = 0
 
     const testFileAbsolutePath = this.pickle.uri
+    const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
     const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
@@ -293,6 +310,9 @@ function wrapRun (pl, isLatestVersion, version) {
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
+    if (isTestManagementTestsEnabled && getTestProperties(testSuitePath, this.pickle.name).attemptToFix) {
+      logAttemptToFixTestExecution(testSuitePath, this.pickle.name, loggedAttemptToFixTests)
+    }
     testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
@@ -440,6 +460,16 @@ function wrapRun (pl, isLatestVersion, version) {
         const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
+
+        if (isAttemptToFix) {
+          recordAttemptToFixExecution(attemptToFixExecutions, {
+            testSuite: testSuitePath,
+            testName: this.pickle.name,
+            status,
+            isDisabled,
+            isQuarantined,
+          })
+        }
 
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
@@ -661,6 +691,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     atrStatusesByScenarioKey.clear()
+    attemptToFixTestsByTestFullname.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
@@ -701,6 +732,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isTestManagementTestsEnabled,
       isParallel,
     })
+    logTestOptimizationSummary({ attemptToFixExecutions })
+    loggedAttemptToFixTests.clear()
     eventDataCollector = null
     return success
   }
@@ -811,6 +844,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
     let shouldBePassedByTestManagement = false
+    let shouldBeFailedByAttemptToFix = false
     if ((isNew || isModified) && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -827,7 +861,15 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
 
-    if (isTestManagementTestsEnabled && (isDisabled || isQuarantined)) {
+    if (isAttemptToFix && testStatuses.length === testManagementAttemptToFixRetries + 1) {
+      testStatus = getTestStatusFromAttemptToFixExecutions(testStatuses)
+      if (testStatus === 'fail') {
+        this.success = false
+        shouldBeFailedByAttemptToFix = true
+      }
+    }
+
+    if (isTestManagementTestsEnabled && !isAttemptToFix && (isDisabled || isQuarantined)) {
       this.success = true
       shouldBePassedByTestManagement = true
     }
@@ -863,8 +905,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       return shouldBePassedByEFD
     }
 
-    if (isNewerCucumberVersion && isTestManagementTestsEnabled && (isQuarantined || isDisabled)) {
+    if (isNewerCucumberVersion && isTestManagementTestsEnabled && !isAttemptToFix && (isQuarantined || isDisabled)) {
       return shouldBePassedByTestManagement
+    }
+
+    if (isNewerCucumberVersion && isAttemptToFix && shouldBeFailedByAttemptToFix) {
+      return false
     }
 
     return runTestCaseResult
@@ -882,6 +928,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
       if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
+        collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
         workerReportTraceCh.publish(payload)
         return
       }
@@ -961,6 +1008,23 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
           const newTestFinalStatus = getTestStatusFromRetries(testStatuses)
           // we only push to `finished` if the retries have finished
           finished.push(newTestFinalStatus)
+        }
+      } else if (
+        isTestManagementTestsEnabled &&
+        getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
+      ) {
+        const testFullname = `${pickle.uri}:${pickle.name}`
+        let testStatuses = attemptToFixTestsByTestFullname.get(testFullname)
+        if (testStatuses) {
+          testStatuses.push(status)
+        } else {
+          testStatuses = [status]
+          attemptToFixTestsByTestFullname.set(testFullname, testStatuses)
+        }
+
+        if (status === 'skip' || testStatuses.length === testManagementAttemptToFixRetries + 1) {
+          finished.push(getTestStatusFromAttemptToFixExecutions(testStatuses))
+          attemptToFixTestsByTestFullname.delete(testFullname)
         }
       } else {
         // TODO: can we get error message?

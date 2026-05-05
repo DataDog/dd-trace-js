@@ -30,7 +30,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:lambda:ci
@@ -40,10 +39,6 @@ jobs:
       - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:lambda:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: lambda
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
@@ -140,13 +135,13 @@ jobs:
       id-token: write
     services:
       azurite:
-        image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite:3.35.0
         ports:
           - "127.0.0.1:10000:10000"
           - "127.0.0.1:10001:10001"
           - "127.0.0.1:10002:10002"
       azureeventhubsemulator:
-        image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
         ports:
           - "127.0.0.1:5673:5672"
           - "127.0.0.1:9092:9092"
@@ -159,7 +154,7 @@ jobs:
       SERVICES: azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/integration-test
 
   azure-functions:
     strategy:
@@ -174,13 +169,13 @@ jobs:
       id-token: write
     services:
       azurite:
-        image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite:3.35.0
         ports:
           - "127.0.0.1:10000:10000"
           - "127.0.0.1:10001:10001"
           - "127.0.0.1:10002:10002"
       azureeventhubsemulator:
-        image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
         ports:
           - "127.0.0.1:5673:5672"
           - "127.0.0.1:9092:9092"
@@ -189,14 +184,14 @@ jobs:
           METADATA_SERVER: azurite
           ACCEPT_EULA: "Y"
       azuresqledge:
-        image: mcr.microsoft.com/azure-sql-edge:1.0.7
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge:1.0.7
         ports:
           - "127.0.0.1:1433:1433"
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Localtestpass1!"
       azureservicebusemulator:
-        image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
         ports:
           - "127.0.0.1:5672:5672"
           - "127.0.0.1:5300:5300"
@@ -230,7 +225,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
-      - run: yarn test:plugins:ci
+      - run: yarn test:integration:plugins:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
@@ -246,7 +241,7 @@ jobs:
       id-token: write
     services:
       azureservicebusemulator:
-        image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
         ports:
           - "127.0.0.1:5672:5672"
           - "127.0.0.1:5300:5300"
@@ -255,7 +250,7 @@ jobs:
           MSSQL_SA_PASSWORD: "Localtestpass1!"
           SQL_SERVER: azuresqledge
       azuresqledge:
-        image: mcr.microsoft.com/azure-sql-edge:1.0.7
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge:1.0.7
         ports:
           - "127.0.0.1:1433:1433"
         env:
@@ -274,7 +269,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/integration-test
 
   azure-durable-functions:
     runs-on: ubuntu-latest
@@ -282,7 +277,7 @@ jobs:
       id-token: write
     services:
       azurite:
-        image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite:3.35.0
         ports:
           - "127.0.0.1:10000:10000"
           - "127.0.0.1:10001:10001"
@@ -293,7 +288,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/integration-test
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest

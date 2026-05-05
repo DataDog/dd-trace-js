@@ -54,11 +54,9 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
-    this.retries(2)
     this.timeout(80000)
 
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
@@ -279,10 +277,24 @@ versions.forEach((version) => {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
-        assertObjectContains(testEvents.map(test => test.content.resource).sort(), [
+        const expectedResources = [
           'playwright-tests-ts/one-test.js.playwright should work with passing tests',
           'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
-        ])
+        ]
+        const actualResources = testEvents.map(test => test.content.resource).sort()
+        for (const expectedResource of expectedResources) {
+          assert.ok(
+            actualResources.includes(expectedResource),
+            `expected ${expectedResource}, got events: ${JSON.stringify(events.map(event => ({
+              type: event.type,
+              resource: event.content.resource,
+              sourceFile: event.content.meta?.[TEST_SOURCE_FILE],
+              sourceStart: event.content.metrics?.[TEST_SOURCE_START],
+              status: event.content.meta?.[TEST_STATUS],
+              error: event.content.meta?.[ERROR_MESSAGE],
+            })), null, 2)}\nPlaywright output:\n${testOutput}`
+          )
+        }
         assert.deepStrictEqual(
           testEvents
             .map(test => ({

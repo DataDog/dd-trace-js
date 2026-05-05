@@ -82,7 +82,7 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
 
 const testFile = 'ci-visibility/run-jest.js'
@@ -94,8 +94,11 @@ const expectedCoverageFiles = [
 ]
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
-const JEST_VERSION = process.env.JEST_VERSION || 'latest'
+const requestedJestVersion = process.env.JEST_VERSION || 'latest'
+const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
+const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 // TODO: add ESM tests
 describe(`jest@${JEST_VERSION} commonJS`, () => {
@@ -110,7 +113,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     `jest-jasmine2@${JEST_VERSION}`,
     `babel-jest@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
-    JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
+    shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     '@babel/core',
@@ -635,7 +638,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
+  const envVarSettings = ['DD_TRACE_ENABLED']
 
   envVarSettings.forEach(envVar => {
     context(`when ${envVar}=false`, () => {
@@ -5310,11 +5313,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 } else if (shouldFailSometimes) {
                   assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], isQuarantined ? 'skip' : 'fail')
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
                 } else {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], isQuarantined ? 'skip' : 'fail')
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
                 }
               } else {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
@@ -5379,8 +5382,46 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             assert.match(stdout, /I am running when attempt to fix/)
-            if (isQuarantined || shouldAlwaysPass || isDisabled) {
-              // even though a test fails, the exit code is 0 because the test is quarantined
+            if (isAttemptToFix) {
+              assert.match(
+                stdout,
+                /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
+              )
+              assert.strictEqual(
+                (stdout.match(
+                  /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
+                ) || []).length,
+                1
+              )
+              assert.match(stdout, /Datadog Test Optimization/)
+              if (shouldAlwaysPass) {
+                assert.match(stdout, /Attempt to fix passed: all 4 execution\(s\) passed for 1 test\(s\)\./)
+              } else {
+                const numFailedExecutions = shouldFailSometimes ? 2 : 4
+                assert.match(
+                  stdout,
+                  new RegExp(
+                    `Attempt to fix failed: ${numFailedExecutions} of 4 execution\\(s\\) failed ` +
+                    'across 1 of 1 test\\(s\\)\\.'
+                  )
+                )
+                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+              }
+              if (isQuarantined || isDisabled) {
+                assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+                assert.doesNotMatch(stdout, /test failure\(s\) were ignored/)
+              }
+              if (isQuarantined) {
+                assert.match(
+                  stdout,
+                  /Test was marked as quarantined but was not quarantined because it is attempt to fix\./
+                )
+              }
+              if (isDisabled) {
+                assert.match(stdout, /Test was marked as disabled but was run because it is attempt to fix\./)
+              }
+            }
+            if (shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)
@@ -5731,7 +5772,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode[0], 0)
       })
 
-      it('does not fail retry if a test is quarantined', (done) => {
+      it('ignores quarantine when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           jest: {
@@ -5753,7 +5794,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
       })
 
-      it('does not fail retry if a test is disabled', (done) => {
+      it('ignores disabled when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           jest: {
@@ -5957,6 +5998,40 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             {
               isAttemptToFix: true,
               isParallel: true,
+              extraEnvVars: {
+                // we need to run more than 1 suite for parallel mode to kick in
+                TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
+                RUN_IN_PARALLEL: 'true',
+              },
+            }
+          )
+        })
+
+        it('reports attempt to fix summary when not running in band', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          runAttemptToFixTest(
+            done,
+            {
+              isAttemptToFix: true,
+              isParallel: true,
+              isQuarantined: true,
               extraEnvVars: {
                 // we need to run more than 1 suite for parallel mode to kick in
                 TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
@@ -6772,140 +6847,44 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
         assert.strictEqual(exitCode, 1, 'exit code 1 when suite fails (resolution error)')
       })
+    })
 
-      it('does not bail on quarantined test failures', async () => {
-        receiver.setSettings({ test_management: { enabled: true } })
+    context('jest --bail option', () => {
+      const bailCases = [
+        {
+          label: 'quarantined',
+          testSuite: 'ci-visibility/test-management/test-quarantine-1.js',
+          testName: 'quarantine tests can quarantine a test',
+          propertyName: 'quarantined',
+          testsToRun: 'test-management/test-quarantine',
+          attemptingToFixMessage:
+            /Datadog Test Optimization: attempting to fix .*quarantine tests can quarantine a test/,
+          executionLogMessage:
+            /(?:console\.log\s+I am running when quarantined|console\.log [^\n]*test-quarantine-1\.js:7)/g,
+        },
+        {
+          label: 'disabled',
+          testSuite: 'ci-visibility/test-management/test-disabled-1.js',
+          testName: 'disable tests can disable a test',
+          propertyName: 'disabled',
+          testsToRun: 'test-management/test-disabled',
+          attemptingToFixMessage:
+            /Datadog Test Optimization: attempting to fix .*disable tests can disable a test/,
+          executionLogMessage:
+            /(?:console\.log\s+I am running|console\.log [^\n]*test-disabled-1\.js:7)/g,
+        },
+      ]
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-
-            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-
-            const resourceNames = tests.map(span => span.resource)
-
-            // Both suites must have run — bail should not have stopped execution
-            assertObjectContains(resourceNames, [
-              'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
-              'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can pass normally',
-              'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
-              'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can pass normally',
-            ])
-
-            // The quarantined test should still report as failed with quarantine tag
-            const failedTest = tests.find(
-              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test' &&
-                test.resource.includes('test-quarantine-1')
-            )
-            assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-
-            // The test suite containing the quarantined test should be reported as passed
-            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-            const quarantineSuite = suites.find(
-              s => s.meta[TEST_SUITE]?.includes('test-quarantine-1')
-            )
-            assert.strictEqual(quarantineSuite.meta[TEST_STATUS], 'pass')
-          })
-
-        let stderr = ''
-        childProcess = exec(
-          runTestsCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: 'test-management/test-quarantine',
-              JEST_BAIL: '1',
-              SHOULD_CHECK_RESULTS: '1',
-            },
-          }
-        )
-        childProcess.stderr?.on('data', (chunk) => {
-          stderr += chunk.toString()
-        })
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-
-        // With quarantine suppressing errors, Jest should not see failures,
-        // so bail should not stop the second suite from running
-        assert.match(stderr, /Test Suites:.*2 passed/)
-        assert.strictEqual(exitCode, 0)
-      })
-
-      it('does not bail on quarantined test failures when ATR is enabled', async () => {
-        receiver.setSettings({
-          test_management: { enabled: true },
-          flaky_test_retries_enabled: true,
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-
-            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
-
-            const resourceNames = tests.map(span => span.resource)
-
-            // Both suites must have run — bail should not have stopped execution
-            assertObjectContains(resourceNames, [
-              'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
-              'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
-            ])
-
-            // ATR should have retried the quarantined test
-            const quarantinedTests = tests.filter(
-              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test' &&
-                test.resource.includes('test-quarantine-1')
-            )
-            assert.ok(quarantinedTests.length > 1, 'quarantined test should have been retried by ATR')
-            for (const test of quarantinedTests) {
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            }
-          })
-
-        let stderr = ''
-        childProcess = exec(
-          runTestsCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: 'test-management/test-quarantine',
-              JEST_BAIL: '1',
-              SHOULD_CHECK_RESULTS: '1',
-            },
-          }
-        )
-        childProcess.stderr?.on('data', (chunk) => {
-          stderr += chunk.toString()
-        })
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-
-        assert.match(stderr, /Test Suites:.*2/)
-        assert.strictEqual(exitCode, 0)
-      })
-
-      it('does not bail on quarantined + attempt to fix test failures', async () => {
-        receiver.setSettings({
-          test_management: { enabled: true, attempt_to_fix_retries: 2 },
-        })
-
+      const setManagedTest = ({ testSuite, testName, propertyName }, attemptToFix = false) => {
         receiver.setTestManagementTests({
           jest: {
             suites: {
-              'ci-visibility/test-management/test-quarantine-1.js': {
+              [testSuite]: {
                 tests: {
-                  'quarantine tests can quarantine a test': {
+                  [testName]: {
                     properties: {
-                      quarantined: true,
-                      attempt_to_fix: true,
+                      [propertyName]: true,
+                      ...(attemptToFix ? { attempt_to_fix: true } : {}),
                     },
                   },
                 },
@@ -6913,127 +6892,57 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             },
           },
         })
+      }
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-
-            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
-
-            const resourceNames = tests.map(span => span.resource)
-
-            // Both suites must have run — bail should not have stopped execution
-            assertObjectContains(resourceNames, [
-              'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
-              'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
-            ])
-
-            // ATF should have retried the test
-            const quarantinedTests = tests.filter(
-              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test' &&
-                test.resource.includes('test-quarantine-1')
-            )
-            assert.ok(quarantinedTests.length > 1, 'quarantined test should have been retried by ATF')
-
-            const atfRetries = quarantinedTests.filter(
-              t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf
-            )
-            assert.ok(atfRetries.length > 0, 'should have ATF retries')
-          })
-
-        let stderr = ''
+      const runJestWithBail = async (testsToRun) => {
+        let output = ''
         childProcess = exec(
           runTestsCommand,
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: 'test-management/test-quarantine',
+              TESTS_TO_RUN: testsToRun,
               JEST_BAIL: '1',
               SHOULD_CHECK_RESULTS: '1',
             },
           }
         )
         childProcess.stderr?.on('data', (chunk) => {
-          stderr += chunk.toString()
+          output += chunk.toString()
+        })
+        childProcess.stdout?.on('data', (chunk) => {
+          output += chunk.toString()
         })
 
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        const [exitCode] = await once(childProcess, 'exit')
+        return { exitCode, output }
+      }
 
-        assert.match(stderr, /Test Suites:.*2/)
-        assert.strictEqual(exitCode, 0)
+      it('does not bail if the failing test is quarantined or disabled', async () => {
+        for (const bailCase of bailCases) {
+          receiver.setSettings({ test_management: { enabled: true } })
+          setManagedTest(bailCase)
+
+          const { exitCode, output } = await runJestWithBail(bailCase.testsToRun)
+
+          assert.match(output, /Test Suites:.*2 total/, bailCase.label)
+          assert.strictEqual(exitCode, 0, bailCase.label)
+        }
       })
 
-      it('does not bail when quarantine, ATR, and attempt to fix are all enabled', async () => {
-        receiver.setSettings({
-          test_management: { enabled: true, attempt_to_fix_retries: 2 },
-          flaky_test_retries_enabled: true,
-        })
+      it('bails when attempt to fix makes quarantine and disabled a noop', async () => {
+        for (const bailCase of bailCases) {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
+          setManagedTest(bailCase, true)
 
-        receiver.setTestManagementTests({
-          jest: {
-            suites: {
-              'ci-visibility/test-management/test-quarantine-1.js': {
-                tests: {
-                  'quarantine tests can quarantine a test': {
-                    properties: {
-                      quarantined: true,
-                      attempt_to_fix: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        })
+          const { exitCode, output } = await runJestWithBail(bailCase.testsToRun)
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-
-            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
-
-            const resourceNames = tests.map(span => span.resource)
-
-            // Both suites must have run — bail should not have stopped execution
-            assertObjectContains(resourceNames, [
-              'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
-              'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
-            ])
-
-            // The test should have been retried (by ATF since it takes precedence over ATR)
-            const quarantinedTests = tests.filter(
-              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test' &&
-                test.resource.includes('test-quarantine-1')
-            )
-            assert.ok(quarantinedTests.length > 1, 'quarantined test should have been retried')
-          })
-
-        let stderr = ''
-        childProcess = exec(
-          runTestsCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: 'test-management/test-quarantine',
-              JEST_BAIL: '1',
-              SHOULD_CHECK_RESULTS: '1',
-            },
-          }
-        )
-        childProcess.stderr?.on('data', (chunk) => {
-          stderr += chunk.toString()
-        })
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-
-        assert.match(stderr, /Test Suites:.*2/)
-        assert.strictEqual(exitCode, 0)
+          assert.match(output, bailCase.attemptingToFixMessage, bailCase.label)
+          assert.strictEqual((output.match(bailCase.executionLogMessage) || []).length, 3, bailCase.label)
+          assert.match(output, /Test Suites:.*1 failed/, bailCase.label)
+          assert.strictEqual(exitCode, 1, bailCase.label)
+        }
       })
     })
 

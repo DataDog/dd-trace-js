@@ -12,6 +12,7 @@ module.exports = {
   net: () => require('../net'),
   url: () => require('../url'),
   vm: () => require('../vm'),
+  zlib: () => require('../zlib'),
   // Non Node.js modules
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
@@ -117,6 +118,7 @@ module.exports = {
   passport: () => require('../passport'),
   'passport-http': () => require('../passport-http'),
   'passport-local': () => require('../passport-local'),
+  'path-to-regexp': () => require('../path-to-regexp'),
   pg: () => require('../pg'),
   pino: () => require('../pino'),
   'pino-pretty': () => require('../pino'),
