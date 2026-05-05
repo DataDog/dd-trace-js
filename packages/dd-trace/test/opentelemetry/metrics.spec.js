@@ -102,6 +102,15 @@ describe('OpenTelemetry Meter Provider', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env }
+    // Clear any OTEL_EXPORTER_OTLP_* vars leaked from the host environment so the
+    // exporter falls back to the in-test default (http://<agent>:4318/v1/metrics)
+    // which the http.request stub matches on '/v1/metrics'.
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith('OTEL_EXPORTER_OTLP_') || key.startsWith('OTEL_LOGS_') ||
+          key.startsWith('OTEL_TRACES_') || key.startsWith('OTEL_METRICS_')) {
+        delete process.env[key]
+      }
+    }
   })
 
   afterEach(() => {

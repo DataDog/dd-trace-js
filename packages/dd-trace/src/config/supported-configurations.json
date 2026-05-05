@@ -3172,16 +3172,6 @@
         "default": "false"
       }
     ],
-    "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false",
-        "configurationNames": [
-          "experimental.nativeSpans.enabled"
-        ]
-      }
-    ],
     "DD_TRACE_NET_ENABLED": [
       {
         "implementation": "A",

@@ -12,10 +12,18 @@ const NODE_MODULES_PATTERN_START = `node_modules${sep}`
  * current file path ends with the expected path structure from the repo root.
  * This is needed for local and CI where dd-trace-js is not in node_modules.
  * In production, these frames are already filtered by isNodeModulesFrame.
+ *
+ * Allow the directory name to be an arbitrary "dd-trace-js*" suffix so worktrees
+ * (e.g. dd-trace-js-paullgdc) and forks still get instrumentation frames filtered
+ * out of code-origin output.
  */
-const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = __filename.endsWith(
-  join(sep, 'dd-trace-js', 'packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
-)
+const DD_TRACE_REPO_TAIL = join('packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
+const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = (() => {
+  if (!__filename.endsWith(`${sep}${DD_TRACE_REPO_TAIL}`)) return false
+  const parentSegment = __filename.slice(0, __filename.length - DD_TRACE_REPO_TAIL.length - 1)
+  const repoDirName = parentSegment.slice(parentSegment.lastIndexOf(sep) + 1)
+  return repoDirName === 'dd-trace-js' || repoDirName.startsWith('dd-trace-js-')
+})()
 
 module.exports = {
   getCallSites,
