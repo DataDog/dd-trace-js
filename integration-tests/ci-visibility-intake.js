@@ -55,6 +55,7 @@ let waitingTime = 0
 let knownTestsPageIndex = 0
 let testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
 let testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
+let skippableSuitesResponseStatusCode = 200
 
 class FakeCiVisIntake extends FakeAgent {
   setKnownTestsResponseCode (statusCode) {
@@ -99,6 +100,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setTestManagementTestsResponseCode (newStatusCode) {
     testManagementResponseStatusCode = newStatusCode
+  }
+
+  setSkippableSuitesResponseCode (statusCode) {
+    skippableSuitesResponseStatusCode = statusCode
   }
 
   async start () {
@@ -230,7 +235,11 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/ci/tests/skippable',
       '/evp_proxy/:version/api/v2/ci/tests/skippable',
     ], (req, res) => {
-      res.status(200).send(JSON.stringify({
+      if (skippableSuitesResponseStatusCode < 200 || skippableSuitesResponseStatusCode >= 300) {
+        res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({ errors: ['error'] }))
+        return
+      }
+      res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({
         data: suitesToSkip,
         meta: {
           correlation_id: correlationId,
@@ -351,6 +360,7 @@ class FakeCiVisIntake extends FakeAgent {
     infoResponse = DEFAULT_INFO_RESPONSE
     testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+    skippableSuitesResponseStatusCode = 200
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
       clearTimeout(this.waitingTimeoutId)
