@@ -69,7 +69,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             } else if (delta.type === 'input_json_delta') {
               const partialJson = delta.partial_json
               if (partialJson) lastBlock.input += partialJson
-            } else if (delta.type === 'text_delta') {
+            } else {
               const { text } = delta
               if (text) lastBlock.text += text
             }
