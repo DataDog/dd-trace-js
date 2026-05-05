@@ -221,6 +221,29 @@ describe('encode', () => {
       assert.deepStrictEqual(trace[0].meta.events, encodedLink)
     })
 
+    it('should encode span events whose name is not a string without throwing', () => {
+      // `addEvent` does not type-check `name`. The legacy stringifier must
+      // tolerate the same inputs `JSON.stringify` did before the rewrite.
+      const events = [
+        { name: undefined, time_unix_nano: 1000000 },
+        { name: null, time_unix_nano: 2000000, attributes: { ok: true } },
+        { name: 42, time_unix_nano: 3000000 },
+        { name: true, time_unix_nano: 4000000 },
+        { name: ['array', 'name'], time_unix_nano: 5000000 },
+        { name: { nested: 'object' }, time_unix_nano: 6000000 },
+        { name: Symbol('event'), time_unix_nano: 7000000 },
+        { name: 'plain', time_unix_nano: 8000000 },
+      ]
+
+      data[0].span_events = events
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      assert.strictEqual(decoded[0][0].meta.events, JSON.stringify(events))
+    })
+
     it('should encode spanLinks', () => {
       const traceIdHigh = id('10')
       const traceId = id('1234abcd1234abcd')

@@ -121,6 +121,13 @@ function stringifySpanEvents (spanEvents) {
   for (let index = 0; index < spanEvents.length; index++) {
     if (index > 0) result += ','
     const event = spanEvents[index]
+    // `addEvent` does not type-check `name`; defer the unusual cases to
+    // `JSON.stringify` so non-string names match the prior behaviour
+    // instead of throwing in `escapeJsonString`.
+    if (typeof event.name !== 'string') {
+      result += JSON.stringify(event)
+      continue
+    }
     result += '{"name":' + escapeJsonString(event.name) +
       ',"time_unix_nano":' + jsonNumber(event.time_unix_nano)
     if (event.attributes) {
