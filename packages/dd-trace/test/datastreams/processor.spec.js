@@ -290,6 +290,16 @@ describe('DataStreamsProcessor', () => {
     assert.deepStrictEqual(encoded.PayloadSize, payloadSize.toProto())
   })
 
+  it('should tag the provided span with the pathway hash on recordCheckpoint', () => {
+    const span = { setTag: sinon.stub() }
+    processor.recordCheckpoint(mockCheckpoint, span)
+    sinon.assert.calledOnceWithExactly(
+      span.setTag,
+      'pathway.hash',
+      DEFAULT_CURRENT_HASH.readBigUInt64LE().toString()
+    )
+  })
+
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
