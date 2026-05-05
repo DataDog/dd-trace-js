@@ -277,16 +277,15 @@
 /integration-tests/coverage-fixtures/parent.js @DataDog/lang-platform-js
 /integration-tests/coverage-fixtures/worker.js @DataDog/lang-platform-js
 /integration-tests/coverage-manual-process.spec.js @DataDog/lang-platform-js
-/integration-tests/crashtracking @DataDog/libdatadog
+/integration-tests/crashtracking @DataDog/profiling-runtime
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 
-
 /packages/datadog-core @DataDog/lang-platform-js
 /packages/datadog-shimmer @DataDog/lang-platform-js
-/packages/dd-trace/*/crashtracking @DataDog/lang-platform-js
+/packages/dd-trace/*/crashtracking @DataDog/profiling-runtime
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
