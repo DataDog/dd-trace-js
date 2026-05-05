@@ -14,11 +14,15 @@ const finishChannel = channel('apm:grpc:client:request:finish')
 const emitChannel = channel('apm:grpc:client:request:emit')
 
 function createWrapMakeRequest (type, hasPeer = false) {
+  // `makeUnaryRequest` and `makeServerStreamRequest` carry an extra `argument`
+  // payload before the metadata slot; client_streaming and bidi do not.
+  const metadataIndex = type === types.client_stream || type === types.bidi ? 3 : 4
+
   return function wrapMakeRequest (makeRequest) {
     return function (path) {
-      const args = ensureMetadata(this, arguments, 4)
+      const args = ensureMetadata(this, arguments, metadataIndex)
 
-      return callMethod(this, makeRequest, args, path, args[4], type, hasPeer)
+      return callMethod(this, makeRequest, args, path, args[metadataIndex], type, hasPeer)
     }
   }
 }
@@ -82,9 +86,14 @@ function wrapMethod (method, path, type, hasPeer) {
     return method
   }
 
+  // client_streaming and bidi expose `(metadata?, options?, callback?)` to user
+  // code; unary and server_streaming take a leading request payload, so metadata
+  // sits one slot later.
+  const metadataIndex = type === types.client_stream || type === types.bidi ? 0 : 1
+
   const wrapped = shimmer.wrapFunction(method, method => function () {
-    const args = ensureMetadata(this, arguments, 1)
-    return callMethod(this, method, args, path, args[1], type, hasPeer)
+    const args = ensureMetadata(this, arguments, metadataIndex)
+    return callMethod(this, method, args, path, args[metadataIndex], type, hasPeer)
   })
 
   patched.add(wrapped)
