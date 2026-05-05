@@ -1622,6 +1622,56 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '1111aaaa2222bbbb')
       })
 
+      it('should derive sampled bit from base-16 trace-flags per W3C §3.2.2.5', () => {
+        // Sampled bit is the lower-nibble parity of the byte. Pin every
+        // lower-nibble outcome plus upper nibbles that defeat base-10
+        // parseInt: 1a-1f makes it stop after the leading digit, a-f as
+        // upper nibble makes it return NaN.
+        const cases = [
+          ['00', 0], ['01', 1], ['02', 0], ['03', 1], ['04', 0], ['05', 1],
+          ['06', 0], ['07', 1], ['08', 0], ['09', 1],
+          ['0a', 0], ['0b', 1], ['0c', 0], ['0d', 1], ['0e', 0], ['0f', 1],
+          ['1a', 0], ['1c', 0], ['1e', 0], ['1f', 1],
+          ['ab', 1], ['cd', 1], ['fe', 0], ['ff', 1],
+        ]
+        config.tracePropagationStyle.extract = ['tracecontext']
+        for (const [flags, sampled] of cases) {
+          const carrier = { traceparent: `00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-${flags}` }
+          const spanContext = propagator.extract(carrier)
+          assert.strictEqual(spanContext._sampling.priority, sampled, `flags=${flags}`)
+        }
+      })
+
+      it('should round-trip origin = through tracestate ~ encoding', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = 'dd=o:foo~bar'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._trace.origin, 'foo=bar')
+
+        propagator.inject(spanContext, carrier)
+        assert.match(carrier.tracestate, /o:foo~bar/)
+      })
+
+      it('should combine array-valued tracestate per W3C §3.3.1.1 / RFC 7230 §3.2.2', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = ['vendor1=value1', 'vendor2=value2']
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._tracestate.get('vendor1'), 'value1')
+        assert.strictEqual(spanContext._tracestate.get('vendor2'), 'value2')
+      })
+
+      it('should ignore non-string traceparent values without crashing', () => {
+        config.tracePropagationStyle.extract = ['tracecontext']
+        for (const value of [['00-bad'], { foo: 'bar' }, 42, true]) {
+          assert.strictEqual(propagator.extract({ traceparent: value }), null)
+        }
+      })
+
       it('should skip extracting upper bits for 64-bit trace IDs', () => {
         textMap.traceparent = '00-00000000000000003333cccc4444dddd-5555eeee6666ffff-01'
         config.tracePropagationStyle.extract = ['tracecontext']
@@ -1675,6 +1725,22 @@ describe('TextMapPropagator', () => {
         propagator.inject(spanContext, carrier)
 
         assert.match(carrier.tracestate, /p:4444eeee6666aaaa/)
+      })
+
+      it('should propagate last datadog id from _dd.parent_id when tracestate has no p entry', () => {
+        textMap['x-datadog-trace-id'] = '61185'
+        textMap['x-datadog-parent-id'] = '15'
+        textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
+        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._isRemote, true)
+        assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '000000000000000f')
+
+        propagator.inject(spanContext, carrier)
+
+        assert.match(carrier.tracestate, /dd=[^,]*p:000000000000000f/)
       })
 
       it('should fix _dd.p.dm if invalid (non-hyphenated) input is received', () => {
