@@ -289,7 +289,7 @@
   {
     "dependency": "cypress",
     "integration": "cypress",
-    "minimum_tracer_supported": "10.2.0",
+    "minimum_tracer_supported": "12.0.0",
     "max_tracer_supported": "15.13.0",
     "auto-instrumented": "True"
   },
