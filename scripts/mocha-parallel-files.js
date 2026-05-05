@@ -586,7 +586,7 @@ async function main () {
           handleStderrChunk(entryIndex, data)
         })
 
-        child.once('message', (msg) => {
+        child.on('message', (msg) => {
           if (isMochaRunFileResultMessage(msg)) {
             entry.stats = {
               passes: msg.passes ?? 0,
