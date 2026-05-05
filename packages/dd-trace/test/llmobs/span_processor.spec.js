@@ -206,6 +206,16 @@ describe('span processor', () => {
         '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
       })
 
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assert.deepStrictEqual(payload.meta.metadata, {
+        _dd: {
+          cost_tags: ['team', 'feature'],
+        },
+      })
+    })
+
     it('forwards tool definitions to the payload', () => {
       const toolDefinitions = [
         {
@@ -233,11 +243,7 @@ describe('span processor', () => {
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      assert.deepStrictEqual(payload.meta.metadata, {
-        _dd: {
-          cost_tags: ['team', 'feature'],
-        },
-      })
+      assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
 
     it('preserves existing span event metadata _dd fields when setting cost tags', () => {
@@ -273,7 +279,6 @@ describe('span processor', () => {
           cost_tags: ['team', 'feature'],
         },
       })
-      assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
 
     it('tags output documents for a retrieval span', () => {
