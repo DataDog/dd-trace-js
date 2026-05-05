@@ -157,6 +157,13 @@ class RouterPlugin extends WebPlugin {
 }
 
 function isMoreSpecificThan (routeA, routeB) {
+  // Concrete paths beat catch-all wildcards (`/*splat`, `/api/*`) on the same
+  // request so that `/foo/bar` wins over `/foo/*splat` regardless of length.
+  if (routeA && routeB) {
+    const aWild = hasWildcard(routeA)
+    const bWild = hasWildcard(routeB)
+    if (aWild !== bWild) return !aWild
+  }
   if (!routeIsRegex(routeA) && routeIsRegex(routeB)) {
     return true
   }
@@ -165,6 +172,12 @@ function isMoreSpecificThan (routeA, routeB) {
 
 function routeIsRegex (route) {
   return route.includes('(/')
+}
+
+function hasWildcard (route) {
+  // RegExp routes are encoded as `(/.../)` and may legitimately contain `*`,
+  // so only treat plain string patterns as wildcards.
+  return !routeIsRegex(route) && route.includes('*')
 }
 
 module.exports = RouterPlugin

@@ -3,9 +3,12 @@
 const assert = require('node:assert/strict')
 
 const { before, describe, it } = require('mocha')
+
+const getConfig = require('../../src/config')
 const {
   encodeUnicode,
   getFunctionArguments,
+  safeJsonParse,
   validateKind,
   spanHasError,
 } = require('../../src/llmobs/util')
@@ -145,31 +148,54 @@ describe('util', () => {
     })
   })
 
+  describe('safeJsonParse', () => {
+    it('parses valid JSON strings', () => {
+      assert.deepStrictEqual(safeJsonParse('{"a":1,"b":[2,3]}'), { a: 1, b: [2, 3] })
+    })
+
+    it('returns the explicit fallback on malformed JSON', () => {
+      assert.deepStrictEqual(safeJsonParse('{not json', {}), {})
+    })
+
+    it('returns the input string when no fallback is provided and parsing fails', () => {
+      assert.strictEqual(safeJsonParse('{not json'), '{not json')
+    })
+
+    it('returns non-string inputs unchanged without parsing', () => {
+      const obj = { already: 'parsed' }
+      assert.strictEqual(safeJsonParse(obj), obj)
+      assert.strictEqual(safeJsonParse(undefined), undefined)
+      assert.strictEqual(safeJsonParse(null), null)
+    })
+  })
+
   describe('spanHasError', () => {
     let Span
+    let tracer
     let ps
 
     before(() => {
       Span = require('../../src/opentracing/span')
+      tracer = { _config: getConfig() }
       ps = {
         sample () {},
       }
     })
 
     it('returns false when there is no error', () => {
-      const span = new Span(null, null, ps, {})
+      const span = new Span(tracer, null, ps, {})
       assert.strictEqual(spanHasError(span), false)
     })
 
     it('returns true if the span has an "error" tag', () => {
-      const span = new Span(null, null, ps, {})
+      const span = new Span(tracer, null, ps, {})
       span.setTag('error', true)
       assert.strictEqual(spanHasError(span), true)
     })
 
     it('returns true if the span has the error properties as tags', () => {
       const err = new Error('boom')
-      const span = new Span(null, null, ps, {})
+      const span = new Span(tracer, null, ps, {})
 
       span.setTag('error.type', err.name)
       span.setTag('error.msg', err.message)

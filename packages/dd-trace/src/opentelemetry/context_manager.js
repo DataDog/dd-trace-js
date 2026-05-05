@@ -2,8 +2,9 @@
 
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
-const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
+const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
 
+const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')
 
 class ContextManager {
@@ -48,11 +49,19 @@ class ContextManager {
       ddContext._otelSpanContext = new SpanContext(ddContext)
     }
 
-    if (store && trace.getSpanContext(store) === ddContext._otelSpanContext) {
+    // Cache the active-span proxy next to the bridge span context. This lets
+    // `trace.getActiveSpan()` forward attribute/status/link/exception writes
+    // onto the active Datadog span rather than returning a NonRecordingSpan
+    // whose mutation methods are silent no-ops.
+    if (!ddContext._otelActiveSpan) {
+      ddContext._otelActiveSpan = new ActiveSpanProxy(activeSpan, ddContext._otelSpanContext)
+    }
+
+    if (store && trace.getSpan(store) === ddContext._otelActiveSpan) {
       return otelBaggages ? propagation.setBaggage(store, otelBaggages) : store
     }
 
-    const wrappedContext = trace.setSpanContext(baseContext, ddContext._otelSpanContext)
+    const wrappedContext = trace.setSpan(baseContext, ddContext._otelActiveSpan)
     return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages) : wrappedContext
   }
 
@@ -64,13 +73,16 @@ class ContextManager {
       return this._store.run(context, cb, ...args)
     }
     const baggages = propagation.getBaggage(context)
-    let baggageItems = []
-    if (baggages) {
-      baggageItems = baggages.getAllEntries()
-    }
-    removeAllBaggageItems()
-    for (const baggage of baggageItems) {
-      setBaggageItem(baggage[0], baggage[1].value)
+    const baggageItems = baggages ? baggages.getAllEntries() : []
+    if (baggageItems.length > 0) {
+      /** @type {Record<string, string>} */
+      const items = {}
+      for (const [key, entry] of baggageItems) {
+        items[key] = entry.value
+      }
+      setAllBaggageItems(items)
+    } else {
+      removeAllBaggageItems()
     }
     if (span && span._ddSpan) {
       const ddSpan = span._ddSpan

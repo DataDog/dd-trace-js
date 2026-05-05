@@ -8,6 +8,7 @@ module.exports = {
   INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
   METRICS: '_ml_obs.metrics',
+  TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
   PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',

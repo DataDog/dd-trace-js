@@ -1100,6 +1100,136 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(tracerMetrics.count().inc)
         assert.deepStrictEqual(getAllBaggageItems(), {})
       })
+
+      it('should drop excess baggage items when the carrier has too many pairs', () => {
+        const entries = []
+        for (let index = 0; index < config.baggageMaxItems + 1; index++) {
+          entries.push(`key${index}=${index}`)
+        }
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: entries.join(','),
+        }
+
+        propagator.extract(carrier)
+
+        assert.strictEqual(Object.keys(getAllBaggageItems()).length, config.baggageMaxItems)
+        sinon.assert.calledWith(tracerMetrics.count,
+          'context_header.truncated',
+          ['truncation_reason:baggage_item_count_exceeded']
+        )
+        sinon.assert.calledWith(tracerMetrics.count, 'context_header_style.extracted', ['header_style:baggage'])
+      })
+
+      it('should drop a single carrier baggage item that already exceeds the byte cap', () => {
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: `foo=${'a'.repeat(config.baggageMaxBytes)}`,
+        }
+
+        propagator.extract(carrier)
+
+        assert.deepStrictEqual(getAllBaggageItems(), {})
+        sinon.assert.calledWith(tracerMetrics.count,
+          'context_header.truncated',
+          ['truncation_reason:baggage_byte_count_exceeded']
+        )
+        sinon.assert.neverCalledWith(tracerMetrics.count,
+          'context_header_style.extracted', ['header_style:baggage'])
+      })
+
+      it('should truncate later baggage items when their bytes would exceed the cap', () => {
+        const half = config.baggageMaxBytes / 2
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: `key1=${'a'.repeat(half)},key2=${'b'.repeat(half)}`,
+        }
+
+        propagator.extract(carrier)
+
+        assert.deepStrictEqual(getAllBaggageItems(), { key1: 'a'.repeat(half) })
+        sinon.assert.calledWith(tracerMetrics.count,
+          'context_header.truncated',
+          ['truncation_reason:baggage_byte_count_exceeded']
+        )
+        sinon.assert.calledWith(tracerMetrics.count, 'context_header_style.extracted', ['header_style:baggage'])
+      })
+
+      it('should clear pre-existing baggage when the carrier baggage header is rejected', () => {
+        setBaggageItem('stale', 'leftover')
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: `foo=${'a'.repeat(config.baggageMaxBytes)}`,
+        }
+
+        propagator.extract(carrier)
+
+        assert.deepStrictEqual(getAllBaggageItems(), {})
+      })
+
+      it('should silently drop carrier baggage that targets Object.prototype.__proto__', () => {
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: '__proto__=poison,foo=bar',
+        }
+
+        propagator.extract(carrier)
+
+        const baggageItems = getAllBaggageItems()
+        assert.strictEqual(Object.getOwnPropertyDescriptor(baggageItems, '__proto__'), undefined)
+        assert.strictEqual(Object.getPrototypeOf(baggageItems), Object.prototype)
+        assert.deepStrictEqual({ ...baggageItems }, { foo: 'bar' })
+      })
+
+      it('should join multi-value baggage headers from array carriers', () => {
+        // Lambda hands repeated headers in via `event.multiValueHeaders` as `string[]`.
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: ['userId=alice', 'serverNode=DF%2028,isProduction=false'],
+        }
+
+        propagator.extract(carrier)
+
+        assert.deepStrictEqual(getAllBaggageItems(), {
+          userId: 'alice',
+          serverNode: 'DF 28',
+          isProduction: 'false',
+        })
+      })
+
+      it('should ignore an empty array carrier baggage header', () => {
+        setBaggageItem('stale', 'leftover')
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: [],
+        }
+
+        propagator.extract(carrier)
+
+        assert.deepStrictEqual(getAllBaggageItems(), {})
+      })
+
+      it('should freeze the extracted baggage store so readers cannot mutate it', () => {
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: 'foo=bar',
+        }
+
+        propagator.extract(carrier)
+
+        const baggageItems = getAllBaggageItems()
+        assert.ok(Object.isFrozen(baggageItems))
+        assert.throws(() => { baggageItems.foo = 'tampered' }, TypeError)
+        assert.throws(() => { baggageItems.added = 'value' }, TypeError)
+      })
     })
 
     it('should create span links when traces have inconsistent traceids', () => {

@@ -1,19 +1,49 @@
 'use strict'
 
-const traceStateRegex = /[ \t]*([^=]+)=([ \t]*[^, \t]+)[ \t]*(,|$)/gim
-const traceStateDataRegex = /([^:]+):([^;]+)(;|$)/gim
+// W3C Trace Context §3.3.1.2: max 32 list-members.
+// https://www.w3.org/TR/trace-context/#tracestate-header-field-values
+const MAX_LIST_MEMBERS = 32
+const WHITESPACE = /[ \t]/
 
-function fromString (Type, regex, value) {
+/**
+ * Parse a separator-delimited string into key/value entries.
+ *
+ * @param {string} value
+ * @param {string} fieldSeparator Between entries.
+ * @param {string} pairSeparator Between key and value within an entry.
+ * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
+ * @returns {[string, string][]} Entries in reverse of wire order.
+ */
+function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
+  const segments = value.split(fieldSeparator)
+  segments.length = Math.min(segments.length, MAX_LIST_MEMBERS)
+
+  // TODO: We should extract dd no matter at what position and move it to the front of the list.
+  // Extract up 31 additional entries.
+  const entries = []
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index]
+    const splitIndex = segment.indexOf(pairSeparator)
+    if (splitIndex === -1) continue
+    const key = segment.slice(0, splitIndex).trim()
+    if (!key || WHITESPACE.test(key)) continue
+    // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
+    // Leading 0x20 is part of value; trailing whitespace is OWS.
+    const entryValue = segment.slice(splitIndex + 1).trimEnd()
+    if (!entryValue || rejectValueTabs && entryValue.includes('\t')) continue
+    entries.push([key, entryValue])
+  }
+  // Reverse so the Map's insertion order is reverse of wire order. `toString`
+  // prepends as it iterates, which yields the original wire order back.
+  entries.reverse()
+  return entries
+}
+
+function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-
-  const values = []
-  for (const row of value.matchAll(regex)) {
-    values.unshift(row.slice(1, 3))
-  }
-
-  return new Type(values)
+  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -52,7 +82,7 @@ class TraceStateData extends Map {
   }
 
   static fromString (value) {
-    return fromString(TraceStateData, traceStateDataRegex, value)
+    return fromString(TraceStateData, value, ';', ':', false)
   }
 
   toString () {
@@ -82,7 +112,7 @@ class TraceState extends Map {
     if (state.changed) {
       const value = state.toString()
       if (value) {
-        this.set(vendor, state.toString())
+        this.set(vendor, value)
       } else {
         this.delete(vendor)
       }
@@ -92,7 +122,7 @@ class TraceState extends Map {
   }
 
   static fromString (value) {
-    return fromString(TraceState, traceStateRegex, value)
+    return fromString(TraceState, value, ',', '=', true)
   }
 
   toString () {
