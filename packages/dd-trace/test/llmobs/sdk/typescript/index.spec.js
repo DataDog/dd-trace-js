@@ -59,7 +59,9 @@ const testCases = [
           ml_app: 'test',
           foo: 'bar',
           bar: 'baz',
+          team: 'ml',
         },
+        metadata: { _dd: { cost_tags: ['team'] } },
         inputValue: 'this is a',
         outputValue: 'test',
       }]

@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../log')
 const { SPAN_KINDS } = require('./constants/tags')
 
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
@@ -30,6 +31,57 @@ function validateKind (kind) {
   }
 
   return kind
+}
+
+/**
+ * Validates cost tag keys and records telemetry for the annotation source.
+ * @param {import('../opentracing/span')} span
+ * @param {unknown} costTags
+ * @param {string} source
+ * @param {Record<string, unknown>} spanTags
+ * @returns {string[]}
+ */
+function validateCostTags (span, costTags, source, spanTags) {
+  // Lazy-required to avoid the `index.js -> telemetry -> tagger -> util` module cycle.
+  const telemetry = require('./telemetry')
+
+  telemetry.recordCostTagsAnnotated(span, source)
+
+  if (!Array.isArray(costTags)) {
+    log.warn('costTags must be an array of strings. Ignoring value.')
+    telemetry.recordCostTagsSubmitted(span, 1, source, 'error', 'non_list')
+    return []
+  }
+
+  const validatedCostTags = new Set()
+  let nonStringEntries = 0
+  let missingSpanTags = 0
+
+  for (const costTag of costTags) {
+    if (typeof costTag !== 'string') {
+      log.warn('costTags entries must be strings. Skipping entry %s.', costTag)
+      nonStringEntries++
+      continue
+    }
+    if (!Object.hasOwn(spanTags, costTag)) {
+      log.warn('costTags entry "%s" must reference a key present in span tags. Skipping entry.', costTag)
+      missingSpanTags++
+      continue
+    }
+    validatedCostTags.add(costTag)
+  }
+
+  if (nonStringEntries) {
+    telemetry.recordCostTagsSubmitted(span, nonStringEntries, source, 'error', 'non_string_entry')
+  }
+  if (missingSpanTags) {
+    telemetry.recordCostTagsSubmitted(span, missingSpanTags, source, 'error', 'missing_span_tag')
+  }
+  if (validatedCostTags.size) {
+    telemetry.recordCostTagsSubmitted(span, validatedCostTags.size, source, 'success')
+  }
+
+  return [...validatedCostTags]
 }
 
 // extracts the argument names from a function string
@@ -197,6 +249,7 @@ function safeJsonParse (value, fallback) {
 
 module.exports = {
   encodeUnicode,
+  validateCostTags,
   validateKind,
   getFunctionArguments,
   safeJsonParse,
