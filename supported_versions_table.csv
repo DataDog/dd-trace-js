@@ -67,7 +67,7 @@ koa-router,koa,7.0.0,14.0.0,True
 mariadb,mariadb,2.0.4,3.4.5,True
 memcached,memcached,2.2.0,2.2.2,True
 microgateway-core,microgateway-core,2.1.0,3.3.7,True
-mocha,mocha,5.2.0,11.7.5,True
+mocha,mocha,8.0.0,11.7.5,True
 mocha-each,mocha,2.0.1,2.0.1,True
 moleculer,moleculer,0.14.0,0.14.35,True
 mongodb,mongodb-core,3.3.0,7.0.0,True
