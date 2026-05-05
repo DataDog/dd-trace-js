@@ -29,8 +29,15 @@ function hookFn (http) {
 // `inputURL` may be the user's options object (for the `http.request(options)`
 // shape); never write directly into it. The result is later mutated by
 // `normalizeHeaders` and read by `url.format`, so the merged object must be
-// owned by the tracer.
+// owned by the tracer. Non-object first args (primitives, null, undefined)
+// are returned as-is so `normalizeHeaders` throws and the surrounding
+// try/catch in `instrumentRequest` falls through to the native request;
+// spreading a primitive yields `{}`, which would silently turn an invalid
+// `http.request(123)` into a synthesized localhost request.
 function combineOptions (inputURL, inputOptions) {
+  if (inputURL === null || (typeof inputURL !== 'object' && typeof inputURL !== 'function')) {
+    return inputURL
+  }
   if (inputOptions !== null && typeof inputOptions === 'object') {
     return { ...inputURL, ...inputOptions }
   }

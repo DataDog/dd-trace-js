@@ -2,9 +2,12 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+
+const startChannel = dc.channel('apm:http:client:request:start')
 
 describe('http client option ownership', () => {
   let http
@@ -74,4 +77,37 @@ describe('http client option ownership', () => {
     req.on('error', done)
     req.end()
   })
+
+  // Two inputs cover both legs of the wrapper's invalid-input guard: the
+  // `=== null` branch and the `typeof !== 'object'` branch. Spreading either
+  // would yield `{}` and silently synthesize a localhost request.
+  for (const badInput of [123, null]) {
+    it(`falls through to native http.request when first arg is ${String(badInput)}`, () => {
+      let synthesizedStart = false
+      const onStart = (payload) => {
+        if (payload?.args?.originalUrl === badInput) {
+          synthesizedStart = true
+        }
+      }
+      startChannel.subscribe(onStart)
+
+      let req
+      try {
+        try {
+          req = http.request(badInput)
+        } catch {
+          // Native http.request may surface ERR_INVALID_ARG_TYPE on some Node
+          // versions; either outcome is acceptable as long as the wrapper did
+          // not emit a synthesized start event.
+        }
+        if (req) {
+          req.on('error', () => {})
+          req.destroy()
+        }
+        assert.strictEqual(synthesizedStart, false)
+      } finally {
+        startChannel.unsubscribe(onStart)
+      }
+    })
+  }
 })
