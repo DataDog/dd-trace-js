@@ -25,6 +25,13 @@ function findSpan (traces, predicate) {
   return undefined
 }
 
+function closeWsServer (server) {
+  for (const client of server.clients) {
+    client.terminate()
+  }
+  return new Promise(resolve => server.close(resolve))
+}
+
 describe('Plugin', () => {
   let WebSocket
   let wsServer
@@ -105,10 +112,7 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          for (const client of wsServer.clients) {
-            client.terminate()
-          }
-          await new Promise(resolve => wsServer.close(resolve))
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -461,10 +465,7 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          for (const client of wsServer.clients) {
-            client.terminate()
-          }
-          await new Promise(resolve => wsServer.close(resolve))
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -572,10 +573,7 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          for (const client of wsServer.clients) {
-            client.terminate()
-          }
-          await new Promise(resolve => wsServer.close(resolve))
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -620,10 +618,7 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          for (const client of wsServer.clients) {
-            client.terminate()
-          }
-          await new Promise(resolve => wsServer.close(resolve))
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -720,10 +715,7 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          for (const client of wsServer.clients) {
-            client.terminate()
-          }
-          await new Promise(resolve => wsServer.close(resolve))
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
