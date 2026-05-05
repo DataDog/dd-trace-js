@@ -5,6 +5,7 @@ const { channel } = require('dc-polyfill')
 const log = require('../log')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
+const SpanEnrichmentHook = require('./span-enrichment-hook')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -26,6 +27,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._config = config
 
     this.hooks.push(new EvalMetricsHook(config))
+    this.hooks.push(new SpanEnrichmentHook(tracer))
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.experimental.flaggingProvider.initializationTimeoutMs)
