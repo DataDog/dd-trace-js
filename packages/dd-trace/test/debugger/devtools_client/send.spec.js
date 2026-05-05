@@ -269,6 +269,26 @@ describe('input message http requests', function () {
     done()
   })
 
+  it('should include process_tags at root level when provided', function () {
+    const processTags = 'entrypoint.name:banana,entrypoint.type:script'
+    send(message, logger, dd, snapshot, processTags)
+
+    const writtenJson = jsonBufferWrite.getCall(0).args[0]
+    const written = JSON.parse(writtenJson)
+
+    assert.strictEqual(written.process_tags, processTags)
+    assert.strictEqual(written.debugger.snapshot.process_tags, undefined)
+  })
+
+  it('should not include process_tags when not provided', function () {
+    send(message, logger, dd, snapshot)
+
+    const writtenJson = jsonBufferWrite.getCall(0).args[0]
+    const written = JSON.parse(writtenJson)
+
+    assert.strictEqual(written.process_tags, undefined)
+  })
+
   describe('snapshot pruning', function () {
     const largeSnapshot = {
       id: '123',
