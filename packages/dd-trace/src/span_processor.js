@@ -12,6 +12,19 @@ const {
   DECISION_MAKER_KEY
 } = require('./constants')
 
+// Hoisted out of the per-trace _erase hot path: this env var is process-static
+// and the JS msgpack encoder used to read it once at construction. Keeping it
+// in _erase (called every flushed trace) was burning ~1.4% of CPU on the express
+// hello-world benchmark.
+const STATE_TRACKING_ENABLED = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true'
+
+// Hoisted out of the per-span _syncSamplingToNative hot path: every inline
+// require() goes through the import-in-the-middle Hook.Module.require
+// interceptor, which does env-var checks (DD_TRACE_DISABLED_INSTRUMENTATIONS
+// etc.) on every call. Profile attributed ~1.5% of CPU to this single line.
+// ./native exports `available`, so consumers must still gate on that.
+const { OpCode: NATIVE_OP_CODE } = require('./native')
+
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
@@ -113,11 +126,9 @@ class SpanProcessor {
    * @private
    */
   _syncSamplingToNative (spanContext, slotIndex) {
-    const { OpCode } = require('./native')
-
     // Sync priority as trace metric
     this._nativeSpans.queueOp(
-      OpCode.SetTraceMetricsAttr,
+      NATIVE_OP_CODE.SetTraceMetricsAttr,
       slotIndex,
       '_sampling_priority_v1',
       ['f64', spanContext._sampling.priority]
@@ -126,7 +137,7 @@ class SpanProcessor {
     // Sync mechanism as trace meta if set
     if (spanContext._sampling.mechanism !== undefined) {
       this._nativeSpans.queueOp(
-        OpCode.SetTraceMetaAttr,
+        NATIVE_OP_CODE.SetTraceMetaAttr,
         slotIndex,
         '_dd.p.dm',
         `-${spanContext._sampling.mechanism}`
@@ -237,7 +248,7 @@ class SpanProcessor {
   }
 
   _erase (trace, active) {
-    if (getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
+    if (STATE_TRACKING_ENABLED) {
       const started = new Set()
       const startedIds = new Set()
       const finished = new Set()
