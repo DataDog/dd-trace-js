@@ -1109,7 +1109,7 @@ jobs:
         ports:
           - 5432:5432
       mssql:
-        image: mcr.microsoft.com/mssql/server:2019-latest
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server:2019-latest
         env:
           ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2
@@ -1325,7 +1325,7 @@ jobs:
       id-token: write
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2019-latest
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server:2019-latest
         env:
           ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2

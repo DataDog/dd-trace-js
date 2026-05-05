@@ -72,14 +72,13 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it('should include process_tags in snapshot when enabled', function (done) {
+      it('should include process_tags at root level when enabled', function (done) {
         t.agent.on('debugger-input', ({ payload }) => {
-          const snapshot = payload[0].debugger.snapshot
+          const { process_tags: processTags } = payload[0]
 
-          // Check for expected process tags keys
-          assert.ok(snapshot.process_tags['entrypoint.name'])
-          assert.ok(snapshot.process_tags['entrypoint.type'])
-          assert.strictEqual(snapshot.process_tags['entrypoint.type'], 'script')
+          assert.strictEqual(typeof processTags, 'string')
+          assert.ok(processTags.includes('entrypoint.name:'))
+          assert.ok(processTags.includes('entrypoint.type:script'))
 
           done()
         })
@@ -98,12 +97,9 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it('should not include process_tags in snapshot when disabled', function (done) {
+      it('should not include process_tags when disabled', function (done) {
         t.agent.on('debugger-input', ({ payload }) => {
-          const snapshot = payload[0].debugger.snapshot
-
-          // Assert that process_tags are not present
-          assert.strictEqual(snapshot.process_tags, undefined)
+          assert.strictEqual(payload[0].process_tags, undefined)
 
           done()
         })
