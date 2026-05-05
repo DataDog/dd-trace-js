@@ -19,6 +19,7 @@ describe('tagger', () => {
   let Tagger
   let tagger
   let logger
+  let util
 
   beforeEach(() => {
     spanContext = {
@@ -33,12 +34,17 @@ describe('tagger', () => {
       },
     }
 
+    util = {
+      generateTraceId: sinon.stub().returns('0123'),
+    }
+
     logger = {
       warn: sinon.stub(),
     }
 
     Tagger = proxyquire('../../src/llmobs/tagger', {
       '../log': logger,
+      './util': util,
     })
   })
 
