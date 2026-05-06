@@ -723,6 +723,8 @@ export default [
       'integration-tests/**/*.mjs',
       'packages/*/test/integration-test/**/*.js',
       'packages/*/test/integration-test/**/*.mjs',
+      '.claude/worktrees/*/packages/*/test/integration-test/**/*.js',
+      '.claude/worktrees/*/packages/*/test/integration-test/**/*.mjs',
       // TODO: Move the files in esm-test to integration-test
       'packages/datadog-plugin-graphql/test/esm-test/**/*.mjs',
       'packages/dd-trace/test/appsec/**/resources/**/*.js',
