@@ -206,6 +206,8 @@ services:
       - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
       - PORT=9126
       - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
+      - VCR_PROVIDER_MAP=claude-agent-sdk=https://api.anthropic.com
+      - VCR_JSON_BODY_NORMALIZERS=metadata.user_id
       # - AWS_SECRET_ACCESS_KEY # uncomment this line for generating aws service cassettes
     volumes:
       # when there are other products not using the cassette feature from the test agent,

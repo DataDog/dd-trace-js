@@ -7,6 +7,7 @@
     "@babel/core": "7.29.0",
     "@babel/preset-typescript": "7.28.5",
     "@ai-sdk/openai": "3.0.12",
+    "@anthropic-ai/claude-agent-sdk": "0.2.98",
     "@anthropic-ai/sdk": "0.73.0",
     "@apollo/gateway": "2.12.2",
     "@apollo/server": "5.2.0",

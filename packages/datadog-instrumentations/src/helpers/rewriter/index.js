@@ -25,18 +25,36 @@ const matcher = create(instrumentations, dcPolyfill)
 matcher.addTransform('traceIterator', traceIterator)
 matcher.addTransform('traceAsyncIterator', traceAsyncIterator)
 
+/**
+ * Decide ESM vs CJS for orchestrion `transform()`. Node often omits `format === 'module'`
+ * when ESM (e.g. `.mjs`) is compiled via the `Module._compile` path used for `require()`.
+ * `"type": "module"` in package.json is not consulted here; use explicit ESM extensions.
+ *
+ * @param {string} normalizedFilename Path with `file://` already stripped.
+ * @param {string} [format] Third argument to `Module._compile`.
+ * @param {string} [relativeFilePath] Path inside the package after `node_modules/<pkg>/`.
+ * @returns {'esm' | 'cjs'}
+ */
+function moduleTypeForRewrite (normalizedFilename, format, relativeFilePath) {
+  if (format === 'module') return 'esm'
+  const p = normalizedFilename.replaceAll('\\', '/')
+  const rel = relativeFilePath ? relativeFilePath.replaceAll('\\', '/') : ''
+  if (/\.m[jt]s$/i.test(p) || /\.m[jt]s$/i.test(rel)) return 'esm'
+  return 'cjs'
+}
+
 function rewrite (content, filename, format) {
   if (!content) return content
   if (!filename.includes('node_modules')) return content
 
   filename = filename.replace('file://', '')
 
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
   const [modulePath] = filename.split('/node_modules/').reverse()
   const moduleParts = modulePath.split('/')
   const splitIndex = moduleParts[0].startsWith('@') ? 2 : 1
   const moduleName = moduleParts.slice(0, splitIndex).join('/')
   const filePath = moduleParts.slice(splitIndex).join('/')
+  const moduleType = moduleTypeForRewrite(filename, format, filePath)
   const version = getVersion(filename, filePath)
 
   if (disabled.has(moduleName)) return content
