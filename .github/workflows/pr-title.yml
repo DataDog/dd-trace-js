@@ -82,44 +82,25 @@ jobs:
             const pr = context.payload.pull_request
             const next = parse(pr.title)
 
-            const labelExists = async (name) => {
-              try {
-                await github.rest.issues.getLabel({ ...context.repo, name })
-                return true
-              } catch (e) {
-                if (e.status === 404) return false
-                throw e
-              }
+            // Prefetch all existing repo labels once to avoid per-label API calls.
+            const repoLabels = new Set()
+            for await (const page of github.paginate.iterator(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 })) {
+              for (const label of page.data) repoLabels.add(label.name)
             }
 
-            const current = new Set((pr.labels || []).map(l => l.name))
-            const desired = new Set(current)
+            const ALIAS = { fix: 'bug', feat: 'enhancement' }
 
-            // Reconcile type labels: title is source of truth, remove any
-            // other known conventional-commit type label. No labelExists check
-            // needed — TYPES is a static list that must be created in the repo.
-            for (const name of desired) {
-              if (TYPES.includes(name) && name !== next.type) desired.delete(name)
-            }
-            if (next.type) desired.add(next.type)
-
-            // Reconcile scope/* labels: title is source of truth.
-            const targetScope = next.scope ? `scope/${next.scope}` : undefined
-            for (const name of desired) {
-              if (name.startsWith('scope/') && name !== targetScope) desired.delete(name)
-            }
-            if (targetScope && !desired.has(targetScope) && await labelExists(targetScope)) {
-              desired.add(targetScope)
-            }
-
-            // Reconcile semver-* labels to match the current title. The title
-            // is the source of truth: any other semver-* label is removed.
+            // Build the desired label set from the title.
+            // Type, scope, and alias are only added if they exist in the repo; semver always exists.
+            const desired = new Set()
+            if (next.type && repoLabels.has(next.type)) desired.add(next.type)
+            const alias = ALIAS[next.type]
+            if (alias && repoLabels.has(alias)) desired.add(alias)
+            if (next.scope && repoLabels.has(next.scope)) desired.add(next.scope)
             const targetSemver = semverFor(next)
-            for (const name of desired) {
-              if (name.startsWith('semver-') && name !== targetSemver) desired.delete(name)
-            }
             if (targetSemver) desired.add(targetSemver)
 
+            const current = new Set((pr.labels || []).map(l => l.name))
             const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
             if (!unchanged) {
               await github.rest.issues.setLabels({
