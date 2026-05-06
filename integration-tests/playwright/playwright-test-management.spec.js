@@ -297,8 +297,8 @@ versions.forEach((version) => {
                 }
 
                 // Exactly one ATF run must have TEST_FINAL_STATUS and it must be the last to finish.
-                // The main process marks the execution final based on arrival order of testEnd events,
-                // so the run that completes last is always the one that gets the tag.
+                // Worker testEnd events can arrive out of finish-time order, so final status is normalized
+                // while exporting worker traces in the main process.
                 for (const testName of [
                   'attempt to fix should attempt to fix failed test',
                   'attempt to fix should attempt to fix passed test',

@@ -217,8 +217,8 @@ versions.forEach((version) => {
             assert.strictEqual(knownTest.meta[TEST_FINAL_STATUS], knownTest.meta[TEST_STATUS])
 
             // New tests: exactly one run has TEST_FINAL_STATUS and it must be the last to finish.
-            // The main process marks the execution final based on arrival order of testEnd events,
-            // so the run that completes last is always the one that gets the tag.
+            // Worker testEnd events can arrive out of finish-time order, so final status is normalized
+            // while exporting worker traces in the main process.
             const assertEfdFinalStatus = (testName, expectedFinalStatus) => {
               const group = tests.filter(t => t.meta[TEST_NAME] === testName)
               group.sort((a, b) => {

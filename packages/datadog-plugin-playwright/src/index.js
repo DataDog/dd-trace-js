@@ -51,6 +51,98 @@ const {
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
+function isManagedTestSpan (span) {
+  if (span.name !== 'playwright.test') {
+    return false
+  }
+
+  const meta = span.meta || {}
+  return meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' ||
+    meta[TEST_IS_NEW] === 'true' ||
+    meta[TEST_IS_MODIFIED] === 'true'
+}
+
+function getManagedTestSpanKey (span) {
+  const meta = span.meta || {}
+  const testSuite = meta[TEST_SUITE] || meta.test_suite_absolute_path
+  const testName = meta[TEST_NAME]
+
+  if (!testSuite || !testName) {
+    return
+  }
+
+  return `${testSuite}:${testName}:${meta[TEST_PARAMETERS] || ''}`
+}
+
+function getSpanEndTime (span) {
+  if (typeof span.start !== 'number' || typeof span.duration !== 'number') {
+    return -Infinity
+  }
+
+  return span.start + span.duration
+}
+
+function hasManagedTestSpan (trace) {
+  for (const span of trace) {
+    if (isManagedTestSpan(span)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function moveFinalStatusToLatestManagedTestSpan (traces) {
+  const groups = new Map()
+
+  for (const trace of traces) {
+    for (const span of trace) {
+      if (!isManagedTestSpan(span)) {
+        continue
+      }
+
+      const key = getManagedTestSpanKey(span)
+      if (!key) {
+        continue
+      }
+
+      let group = groups.get(key)
+      if (!group) {
+        group = { spans: [] }
+        groups.set(key, group)
+      }
+
+      group.spans.push(span)
+      if (span.meta[TEST_FINAL_STATUS]) {
+        group.finalStatus = span.meta[TEST_FINAL_STATUS]
+      }
+    }
+  }
+
+  for (const group of groups.values()) {
+    if (!group.finalStatus) {
+      continue
+    }
+
+    let latestSpan
+    let latestEndTime = -Infinity
+
+    for (const span of group.spans) {
+      delete span.meta[TEST_FINAL_STATUS]
+
+      const endTime = getSpanEndTime(span)
+      if (endTime >= latestEndTime) {
+        latestSpan = span
+        latestEndTime = endTime
+      }
+    }
+
+    if (latestSpan) {
+      latestSpan.meta[TEST_FINAL_STATUS] = group.finalStatus
+    }
+  }
+}
+
 class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
 
@@ -58,6 +150,7 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
+    this._deferredManagedTestTraces = []
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
@@ -101,6 +194,7 @@ class PlaywrightPlugin extends CiPlugin {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
+      this._exportDeferredManagedTestTraces()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -262,7 +356,11 @@ class PlaywrightPlugin extends CiPlugin {
       }
 
       for (const trace of formattedTraces) {
-        this.tracer._exporter.export(trace)
+        if (hasManagedTestSpan(trace)) {
+          this._deferredManagedTestTraces.push(trace)
+        } else {
+          this.tracer._exporter.export(trace)
+        }
       }
     })
 
@@ -474,6 +572,19 @@ class PlaywrightPlugin extends CiPlugin {
 
       span.finish()
     })
+  }
+
+  /**
+   * Exports deferred worker traces after putting TEST_FINAL_STATUS on the managed test span that ended last.
+   */
+  _exportDeferredManagedTestTraces () {
+    moveFinalStatusToLatestManagedTestSpan(this._deferredManagedTestTraces)
+
+    for (const trace of this._deferredManagedTestTraces) {
+      this.tracer._exporter.export(trace)
+    }
+
+    this._deferredManagedTestTraces = []
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
