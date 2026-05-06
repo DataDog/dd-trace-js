@@ -139,7 +139,7 @@ class DatadogTracer extends Tracer {
     if (!this._enableGetRumData) {
       return ''
     }
-    const span = this.scope().active().context()
+    const span = storage('legacy').getStore().span.context()
     const traceId = span.toTraceId()
     const traceTime = Date.now()
     return `\

@@ -4,21 +4,25 @@ const { SVC_SRC_KEY } = require('./constants')
 
 const SOURCE_MANUAL = 'm'
 
-const userVisibleSpans = new WeakSet()
+const USER_VISIBLE = Symbol('dd.userVisible')
 
 /**
  * Mark a span as user-visible, i.e. handed out to the user via a public-facing
- * API surface (e.g. tracer.startSpan, tracer.trace, tracer.scope().active(),
- * or a plugin `hooks.*` callback). Internal instrumentation must never call
- * this directly.
+ * API surface (e.g. tracer.startSpan, tracer.trace, an OTel bridge span, or a
+ * plugin `hooks.*` callback). Internal instrumentation must never call this
+ * directly.
+ *
+ * The mark is stored as a non-enumerable Symbol property so the lookup in the
+ * hot path of `_addTags` is a single property read rather than a WeakSet hash
+ * lookup, and so the field is not visible to enumeration or JSON serialization.
  *
  * @template T
  * @param {T} span - The span to mark, or a falsy value (returned untouched).
  * @returns {T} The same span, for chaining.
  */
 function markUserVisible (span) {
-  if (span !== null && (typeof span === 'object' || typeof span === 'function')) {
-    userVisibleSpans.add(span)
+  if (span !== null && (typeof span === 'object' || typeof span === 'function') && !span[USER_VISIBLE]) {
+    Object.defineProperty(span, USER_VISIBLE, { value: true })
   }
   return span
 }
@@ -28,7 +32,7 @@ function markUserVisible (span) {
  * @returns {boolean}
  */
 function isUserVisible (span) {
-  return userVisibleSpans.has(span)
+  return span?.[USER_VISIBLE] === true
 }
 
 /**
@@ -39,13 +43,13 @@ function isUserVisible (span) {
  * @returns {boolean}
  */
 function hasService (blob) {
-  return blob != null && typeof blob === 'object' &&
+  return blob != null &&
     (blob.service !== undefined || blob['service.name'] !== undefined)
 }
 
 /**
  * Apply user-source stamps to a span when a tag write looks like a manual
- * override. The cheap structural check runs first so the WeakSet read is
+ * override. The cheap structural check runs first so the user-visible read is
  * amortized over the rare path. New "stamp X when user sets Y" rules should
  * be added here as additional `if`/`else if` branches; callers stay one-line.
  *

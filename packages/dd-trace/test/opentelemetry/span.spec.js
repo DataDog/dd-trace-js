@@ -18,7 +18,7 @@ const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR, SVC_SRC_KEY } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 const spanFormat = require('../../src/span_format')
@@ -309,6 +309,22 @@ describe('OTel Span', () => {
 
     span.setAttributes({ baz: 'buz' })
     assert.strictEqual(_tags.baz, 'buz')
+  })
+
+  it('stamps _dd.svc_src=m when the user sets service.name via OTel attribute', () => {
+    const span = makeSpan('name')
+    const { _tags } = span._ddSpan.context()
+
+    span.setAttribute('service.name', 'custom')
+    assert.strictEqual(_tags[SVC_SRC_KEY], 'm')
+  })
+
+  it('stamps _dd.svc_src=m when the user sets service.name via OTel attributes batch', () => {
+    const span = makeSpan('name')
+    const { _tags } = span._ddSpan.context()
+
+    span.setAttributes({ 'service.name': 'custom' })
+    assert.strictEqual(_tags[SVC_SRC_KEY], 'm')
   })
 
   describe('should remap http.response.status_code', () => {
