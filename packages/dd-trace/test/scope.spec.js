@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const { Span } = require('../../../vendor/dist/opentracing')
 require('./setup/core')
 const Scope = require('../src/scope')
+const { isUserVisible } = require('../src/user_visibility')
 
 describe('Scope', () => {
   let scope
@@ -21,6 +22,14 @@ describe('Scope', () => {
   describe('active()', () => {
     it('should return null by default', () => {
       assert.strictEqual(scope.active(), null)
+    })
+
+    it('marks the returned span as user-visible', () => {
+      scope.activate(span, () => {
+        const active = scope.active()
+        assert.strictEqual(active, span)
+        assert.equal(isUserVisible(active), true)
+      })
     })
   })
 
@@ -39,6 +48,11 @@ describe('Scope', () => {
 
     it('should support an invalid callback', () => {
       scope.activate(span, 'invalid')
+    })
+
+    it('marks the activated span as user-visible', () => {
+      scope.activate(span, () => {})
+      assert.equal(isUserVisible(span), true)
     })
 
     it('should activate the span on the current scope', () => {
@@ -161,6 +175,11 @@ describe('Scope', () => {
         fn = scope.bind(fn)
 
         assert.strictEqual(fn(), 'test')
+      })
+
+      it('marks the bound span as user-visible', () => {
+        scope.bind(() => {}, span)
+        assert.equal(isUserVisible(span), true)
       })
     })
 

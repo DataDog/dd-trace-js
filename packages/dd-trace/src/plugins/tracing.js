@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
+const { markUserVisible } = require('../user_visibility')
 const Plugin = require('./plugin')
 
 class TracingPlugin extends Plugin {
@@ -62,10 +63,10 @@ class TracingPlugin extends Plugin {
   configure (config) {
     return super.configure({
       ...config,
-      hooks: {
+      hooks: wrapHooksAsUserVisible({
         [this.operation]: () => {},
         ...config.hooks,
-      },
+      }),
     })
   }
 
@@ -234,6 +235,30 @@ class TracingPlugin extends Plugin {
 
     return span
   }
+}
+
+/**
+ * Wrap each user-supplied hook so that the span argument is marked as
+ * user-visible before reaching user code. The hook can mutate the span via
+ * the public API (setTag, addTags, etc.); without the mark, those calls would
+ * be indistinguishable from internal instrumentation.
+ *
+ * @param {Record<string, Function>} hooks
+ * @returns {Record<string, Function>}
+ */
+function wrapHooksAsUserVisible (hooks) {
+  const wrapped = {}
+  for (const name of Object.keys(hooks)) {
+    const hook = hooks[name]
+    if (typeof hook !== 'function') {
+      wrapped[name] = hook
+      continue
+    }
+    wrapped[name] = function (span, ...rest) {
+      return hook.call(this, markUserVisible(span), ...rest)
+    }
+  }
+  return wrapped
 }
 
 module.exports = TracingPlugin

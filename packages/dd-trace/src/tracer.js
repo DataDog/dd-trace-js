@@ -6,6 +6,7 @@ const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
+const { markUserVisible } = require('./user_visibility')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
@@ -60,7 +61,7 @@ class DatadogTracer extends Tracer {
   trace (name, options, fn) {
     options = { childOf: this.scope().active(), ...options }
 
-    const span = this.startSpan(name, options)
+    const span = markUserVisible(this.startSpan(name, options))
 
     addTags(span, options)
 
