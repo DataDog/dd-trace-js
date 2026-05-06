@@ -150,6 +150,14 @@ module.exports = {
           if (eventLoopHistogram) result.observe(eventLoopHistogram.mean / 1e9)
         })
 
+        const eventLoopDelayStddev = meter.createObservableGauge('nodejs.eventloop.delay.stddev', {
+          unit: 's',
+          description: 'Event loop standard deviation delay.',
+        })
+        eventLoopDelayStddev.addCallback((result) => {
+          if (eventLoopHistogram) result.observe(eventLoopHistogram.stddev / 1e9)
+        })
+
         const eventLoopDelayP50 = meter.createObservableGauge('nodejs.eventloop.delay.p50', {
           unit: 's',
           description: 'Event loop 50th percentile delay.',
