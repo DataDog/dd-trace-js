@@ -289,13 +289,7 @@ class NativeSpansInterface {
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, slotIndex, ...args) {
-    // No detach check at function entry: every WASM call that can grow
-    // memory is followed by a #checkDetach() at the call site
-    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
-    // in flushSpans). Plus the inner getStringId resolution loop below
-    // runs BEFORE we capture `this._cqbView` into a local, so any grow
-    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
-
+    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
 
     if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -398,20 +392,6 @@ class NativeSpansInterface {
   }
 
   /**
-   * Ensure WASM memory views are fresh (memory may have grown).
-   * Also checks if Rust drained the queue.
-   */
-  #ensureWasmViews () {
-    if (this._wasmMemory.buffer !== this._cqbView.buffer || this._cqbBytes.buffer.byteLength === 0) {
-      this.#refreshViews()
-    }
-    if (this._cqbView.getUint32(0, true) === 0 && this._cqbCount > 0) {
-      this._cqbIndex = 8
-      this._cqbCount = 0
-    }
-  }
-
-  /**
    * Refresh WASM memory views after memory growth (buffer detach).
    */
   #refreshViews () {
@@ -430,13 +410,7 @@ class NativeSpansInterface {
    * @param {number} startMs Start time in milliseconds
    */
   queueCreateSpan (slotIndex, spanId, traceId, parentId, name, startMs) {
-    // No detach check at function entry: every WASM call that can grow
-    // memory is followed by a #checkDetach() at the call site
-    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
-    // in flushSpans). Plus the inner getStringId resolution loop below
-    // runs BEFORE we capture `this._cqbView` into a local, so any grow
-    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
-
+    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
 
     if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -511,13 +485,7 @@ class NativeSpansInterface {
    * @param {number} startMs Start time in milliseconds
    */
   queueCreateSpanFull (slotIndex, spanId, traceId, parentId, name, service, resource, type, startMs) {
-    // No detach check at function entry: every WASM call that can grow
-    // memory is followed by a #checkDetach() at the call site
-    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
-    // in flushSpans). Plus the inner getStringId resolution loop below
-    // runs BEFORE we capture `this._cqbView` into a local, so any grow
-    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
-
+    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
 
     if (idx + 80 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -593,13 +561,7 @@ class NativeSpansInterface {
   queueBatchMeta (slotIndex, tags) {
     if (tags.length === 0) return
 
-    // No detach check at function entry: every WASM call that can grow
-    // memory is followed by a #checkDetach() at the call site
-    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
-    // in flushSpans). Plus the inner getStringId resolution loop below
-    // runs BEFORE we capture `this._cqbView` into a local, so any grow
-    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
-
+    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 8
 
@@ -646,13 +608,7 @@ class NativeSpansInterface {
   queueBatchMetrics (slotIndex, tags) {
     if (tags.length === 0) return
 
-    // No detach check at function entry: every WASM call that can grow
-    // memory is followed by a #checkDetach() at the call site
-    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
-    // in flushSpans). Plus the inner getStringId resolution loop below
-    // runs BEFORE we capture `this._cqbView` into a local, so any grow
-    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
-
+    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 12
 
