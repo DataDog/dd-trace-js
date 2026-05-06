@@ -9,7 +9,7 @@ const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
 const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 
 // eslint-disable-next-line @stylistic/max-len
-const REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING = new RegExp(String.raw`"${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\d+_([\s0-9.a-zA-Z]*)"`)
+const REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING = new RegExp(String.raw`"${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\d+_([\s\-+0-9.a-zA-Z]*)"`)
 const REGEX_FOR_STRINGIFY_SENSITIVE = new RegExp(String.raw`${STRINGIFY_SENSITIVE_KEY}_\d+_(\d+)_`)
 const REGEX_FOR_STRINGIFY_RANGE = new RegExp(String.raw`(${STRINGIFY_RANGE_KEY}_\d+_)`)
 
@@ -124,7 +124,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           theRest = value.slice(rangeKeyIndex)
           const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING.exec(theRest)
 
-          if (regexRes.index === 0) {
+          if (regexRes?.index === 0) {
             const matchValue = regexRes[0]
             const originalValue = regexRes[1]
             const start = outputLength + cleanLength
@@ -145,7 +145,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           }
         } else if (theRest.startsWith(STRINGIFY_SENSITIVE_KEY)) {
           const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE.exec(theRest)
-          if (regexRes.index === 0) {
+          if (regexRes?.index === 0) {
             const start = outputLength + cleanLength
 
             sensitiveRanges.push({
@@ -164,7 +164,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           }
         } else {
           const regexRes = REGEX_FOR_STRINGIFY_RANGE.exec(theRest)
-          if (regexRes.index === 0) {
+          if (regexRes?.index === 0) {
             const start = outputLength + cleanLength
             const rangesId = regexRes[1]
 
