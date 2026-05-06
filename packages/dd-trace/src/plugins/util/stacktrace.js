@@ -14,7 +14,7 @@ const NODE_MODULES_PATTERN_START = `node_modules${sep}`
  * In production, these frames are already filtered by isNodeModulesFrame.
  */
 const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = __filename.endsWith(
-  join(sep, 'dd-trace-js', 'packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
+  join('packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
 )
 
 module.exports = {
