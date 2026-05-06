@@ -11,12 +11,16 @@ const path = require('node:path')
 
 const inputDir = path.join(os.tmpdir(), 'node-reports')
 
+// Exit silently when there is nothing to print. The action runs on every
+// failure (`if: failure()`) but most failures are unrelated to a Node.js
+// crash, so logging here would add noise that obscures the real upstream
+// error in CI log-surfacing tools.
 if (!fs.existsSync(inputDir)) {
-  process.stdout.write(`No report directory at ${inputDir}, nothing to print.\n`)
   process.exit(0)
 }
 
-let printed = 0
+// If the directory exists but holds no usable reports, the loop simply
+// emits nothing (same rationale as the early-return above).
 for (const file of fs.readdirSync(inputDir)) {
   if (!file.endsWith('.json')) {
     process.stderr.write(`Skipping non-JSON file: ${file}\n`)
@@ -64,9 +68,4 @@ for (const file of fs.readdirSync(inputDir)) {
   ]
 
   process.stdout.write(lines.join('\n') + '\n')
-  printed++
-}
-
-if (printed === 0) {
-  process.stdout.write('No crash reports found.\n')
 }
