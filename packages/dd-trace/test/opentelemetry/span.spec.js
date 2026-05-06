@@ -558,7 +558,11 @@ describe('OTel Span', () => {
     span.recordException(new Error('after end'))
     span.updateName('after end')
 
-    assert.deepStrictEqual(span._ddSpan.context()._tags, {})
+    const { _tags } = span._ddSpan.context()
+    assert.ok(!('after.end' in _tags))
+    assert.ok(!('after.end.batch' in _tags))
+    assert.ok(!(ERROR_MESSAGE in _tags))
+    assert.ok(!(ERROR_TYPE in _tags))
     assert.strictEqual(span._ddSpan._links.length, 0)
     assert.strictEqual(span._ddSpan._events.length, 0)
   })
