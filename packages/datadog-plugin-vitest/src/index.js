@@ -213,12 +213,15 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
@@ -234,6 +237,7 @@ class VitestPlugin extends CiPlugin {
       hasFailedAllRetries,
       attemptToFixFailed,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (!span) {
         return
@@ -261,6 +265,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       if (duration) {
         span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
