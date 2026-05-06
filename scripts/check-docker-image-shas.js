@@ -50,9 +50,9 @@ if (violations.length) {
     console.error(`  ${file}:${line}  ${text}`)
   }
   // eslint-disable-next-line no-console
-  console.error('\nExample: image: redis@sha256:c9d92d...b2 # 7.0-alpine')
+  console.error('\nPin each image using the SHA digest from its registry page, for example:')
   // eslint-disable-next-line no-console
-  console.error('\nRun scripts/pin-docker-images.sh to fetch and apply SHA digests automatically.')
+  console.error('  image: redis@sha256:c9d92d...b2 # 7.0-alpine')
 
-  throw new Error(`Found ${violations.length} unpinned Docker image reference(s).`)
+  process.exitCode = 1
 }
