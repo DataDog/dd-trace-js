@@ -8,7 +8,13 @@ const {
   EVP_PAYLOAD_SIZE_LIMIT,
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
+const log = require('../../log')
 const BaseFFEWriter = require('./base')
+
+// Disabled-state cap. Drops invalidate experiment results because the provider's
+// exposure dedupe cache keeps masking dropped events after recovery. The first
+// drop emits a warning and `droppedEventCount` accumulates the cumulative loss.
+const PENDING_MAX_EVENTS = 1000
 
 /**
  * @typedef {object} ExposureEvent
@@ -42,11 +48,21 @@ const BaseFFEWriter = require('./base')
  * ExposuresWriter is responsible for sending exposure events to the Datadog Agent.
  */
 class ExposuresWriter extends BaseFFEWriter {
+  // Disabled until the agent strategy probe resolves.
+  #enabled = false
+
+  /** @type {ExposureEvent[]} */
+  #pendingEvents = []
+
+  /** @type {ExposureContext} */
+  #context
+
+  #dropWarned = false
+
   /**
    * @param {import('../../config')} config - Tracer configuration object
    */
   constructor (config) {
-    // Build full EVP endpoint path
     const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
     const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
     const fullEndpoint = `${basePath}/${endpoint}`
@@ -60,21 +76,19 @@ class ExposuresWriter extends BaseFFEWriter {
         [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
       },
     })
-    this._enabled = false // Start disabled until agent strategy is set
-    this._pendingEvents = [] // Buffer events until enabled
-    this._context = this._buildContext()
+    this.#context = this.#buildContext()
   }
 
   /**
    * @param {boolean} enabled - Whether to enable the writer
    */
   setEnabled (enabled) {
-    this._enabled = enabled
+    this.#enabled = enabled
 
-    if (enabled && this._pendingEvents.length > 0) {
-      // Flush all pending events as a batch
-      super.append(this._pendingEvents)
-      this._pendingEvents = []
+    if (enabled && this.#pendingEvents.length > 0) {
+      const events = this.#pendingEvents
+      this.#pendingEvents = []
+      super.append(events)
     }
   }
 
@@ -83,24 +97,38 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
    */
   append (events) {
-    if (!this._enabled) {
-      // Buffer events until writer is ready
-      if (Array.isArray(events)) {
-        this._pendingEvents.push(...events)
-      } else {
-        this._pendingEvents.push(events)
-      }
+    if (this.#enabled) {
+      super.append(events)
       return
     }
-    super.append(events)
+
+    const eventArray = Array.isArray(events) ? events : [events]
+    this.#pendingEvents.push(...eventArray)
+    if (this.#pendingEvents.length > PENDING_MAX_EVENTS) {
+      const dropped = this.#pendingEvents.length - PENDING_MAX_EVENTS
+      this.#pendingEvents.splice(0, dropped)
+      this._droppedEvents += dropped
+      if (!this.#dropWarned) {
+        this.#dropWarned = true
+        log.warn(
+          '%s dropped %d exposure event(s) at cap %d. Provider dedupe cache may invalidate experiment results.',
+          this.constructor.name, dropped, PENDING_MAX_EVENTS)
+      }
+    }
+  }
+
+  /**
+   * @returns {number} Cumulative number of exposure events dropped due to buffer overflow.
+   */
+  get droppedEventCount () {
+    return this._droppedEvents
   }
 
   /**
    * Flushes buffered exposure events to the agent
    */
   flush () {
-    if (!this._enabled) {
-      // Don't flush when disabled
+    if (!this.#enabled) {
       return
     }
     super.flush()
@@ -112,25 +140,22 @@ class ExposuresWriter extends BaseFFEWriter {
    * @returns {ExposureEventPayload} Formatted payload with service context
    */
   makePayload (events) {
-    const formattedEvents = events.map(event => this._formatExposureEvent(event))
+    const formattedEvents = events.map(event => this.#formatExposureEvent(event))
 
     return {
-      context: this._context,
+      context: this.#context,
       exposures: formattedEvents,
     }
   }
 
   /**
-   * Builds service context metadata
-   * @private
    * @returns {ExposureContext} Service context
    */
-  _buildContext () {
+  #buildContext () {
     const context = {
       service: this._config.service || 'unknown',
     }
 
-    // Only include version and env if they are defined
     if (this._config.version !== undefined) {
       context.version = this._config.version
     }
@@ -143,13 +168,11 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   /**
-   * @private
    * @param {ExposureEvent} event - Raw exposure event
    * @returns {ExposureEvent} Formatted exposure event
    */
-  _formatExposureEvent (event) {
-    // Ensure the event matches the expected schema
-    const formattedEvent = {
+  #formatExposureEvent (event) {
+    return {
       timestamp: event.timestamp || Date.now(),
       allocation: {
         key: event.allocation?.key || event['allocation.key'],
@@ -166,7 +189,6 @@ class ExposuresWriter extends BaseFFEWriter {
         attributes: event.subject?.attributes,
       },
     }
-    return formattedEvent
   }
 }
 
