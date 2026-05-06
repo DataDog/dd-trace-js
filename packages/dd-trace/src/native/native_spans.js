@@ -726,6 +726,18 @@ class NativeSpansInterface {
       const result = await this._state.sendPreparedChunk()
       return result
     } catch (e) {
+      // prepareChunk may throw partway through, after consuming some of the
+      // change queue or growing WASM memory. Reset both pieces of state so
+      // the next caller starts from a known-good baseline:
+      //   - resetChangeQueue() restores _cqbIndex/_cqbCount and zeroes the
+      //     WASM-side header (any half-consumed entries become unreachable).
+      //   - #checkDetach() refreshes _cqbView/_cqbBytes if memory grew before
+      //     the throw, so subsequent writes don't go through detached views.
+      // Note: chunk slot indices may still be referenced by Rust state but
+      // are returned to the free pool by the caller — this is the original
+      // semantics on rejection and a known footgun.
+      this.resetChangeQueue()
+      this.#checkDetach()
       log.error('Error flushing spans to agent:', e)
       throw e
     }
