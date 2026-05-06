@@ -1,24 +1,38 @@
 'use strict'
 
-const { spawn } = require('child_process')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const { stripVTControlCharacters: stripAnsi } = require('util')
+const { spawn } = require('node:child_process')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { stripVTControlCharacters: stripAnsi } = require('node:util')
 
 const { globSync } = require('glob')
 
 const multiMochaRc = require('../.mochamultireporterrc')
 
+/**
+ * @param {string} openTag
+ * @param {string} name
+ */
 function getTestsuiteAttr (openTag, name) {
-  const m = openTag.match(new RegExp(`${name}="([^"]*)"`))
-  return m ? Number(m[1]) : 0
+  const match = openTag.match(new RegExp(`${name}="([^"]*)"`))
+  if (!match) return 0
+  // `time` is decimal seconds; the rest are integer counts.
+  const value = name === 'time' ? Number.parseFloat(match[1]) : Number.parseInt(match[1], 10)
+  return Number.isFinite(value) ? value : 0
 }
 
+/**
+ * @param {string} line
+ */
 function isFailureStartLine (line) {
-  return /\b\d+\s+failing\b/.test(stripAnsi(line))
+  // Anchored so test names containing "N failing" don't flip stdoutInFailure.
+  return /^\s*\d+\s+failing\b/.test(stripAnsi(line))
 }
 
+/**
+ * @param {string} line
+ */
 function isWarningLine (line) {
   const plain = stripAnsi(line)
   return (
@@ -31,16 +45,20 @@ function isWarningLine (line) {
   )
 }
 
+/**
+ * @param {string} carry
+ * @param {string} chunk
+ */
 function splitLines (carry, chunk) {
   const next = carry + chunk
   const parts = next.split('\n')
-  return { lines: parts.slice(0, -1).map(l => l + '\n'), carry: parts.at(-1) ?? '' }
+  return { lines: parts.slice(0, -1).map(line => line + '\n'), carry: parts.at(-1) }
 }
 
 /**
  * @typedef {{
  *   reporterEnabled: string[],
- *   xunitReporterOptions?: { output: string }
+ *   xunitReporterOptions?: { output: string, showRelativePaths?: boolean }
  * }} ReporterOptions
  *
  * @typedef {{
@@ -51,17 +69,49 @@ function splitLines (carry, chunk) {
  *   tests?: number,
  *   duration?: number
  * }} MochaRunFileResultMessage
+ *
+ * @typedef {{
+ *   jobs?: number,
+ *   timeout?: number,
+ *   exposeGc: boolean,
+ *   require: string[],
+ *   patterns: string[]
+ * }} ParseArgsResult
+ *
+ * @typedef {{
+ *   passes: number,
+ *   failures: number,
+ *   pending: number,
+ *   tests: number,
+ *   duration: number
+ * }} EntryStats
+ *
+ * @typedef {{
+ *   file: string,
+ *   started: boolean,
+ *   exited: boolean,
+ *   stdoutEnded: boolean,
+ *   stderrEnded: boolean,
+ *   code: number|null,
+ *   signal: NodeJS.Signals|null,
+ *   outBuf: {stream: 'stdout'|'stderr', text: string}[],
+ *   stderrErrBuf: string[],
+ *   failureBuf: string[],
+ *   stdoutCarry: string,
+ *   stderrCarry: string,
+ *   stdoutInFailure: boolean,
+ *   stats: EntryStats|null
+ * }} Entry
  */
 
 /**
  * @param {string[]} argv
- * @returns {{jobs?: number, timeout?: number, exposeGc: boolean, require: string[], patterns: string[]}}
+ * @returns {ParseArgsResult}
  */
 function parseArgs (argv) {
-  /** @type {{jobs?: number, timeout?: number, exposeGc: boolean, require: string[], patterns: string[]}} */
+  /** @type {ParseArgsResult} */
   const opts = { exposeGc: false, require: [], patterns: [] }
 
-  /** @type {string[]} */
   const rest = []
   let seenDoubleDash = false
 
@@ -96,7 +146,9 @@ function parseArgs (argv) {
 
     if (arg === '--timeout') {
       const value = argv[++i]
-      opts.timeout = value ? Number.parseInt(value, 10) : undefined
+      if (value !== undefined) {
+        opts.timeout = Number.parseInt(value, 10)
+      }
       continue
     }
 
@@ -111,7 +163,6 @@ function parseArgs (argv) {
       continue
     }
 
-    // Unknown flag; treat it as part of patterns to keep the tool flexible.
     rest.push(arg)
   }
 
@@ -119,14 +170,25 @@ function parseArgs (argv) {
   return opts
 }
 
-function stableUnique (items) {
-  return [...new Set(items)]
+/**
+ * Best-effort filesystem cleanup. On Windows, junit shards can be held open by
+ * AV / editors / a leftover child from a previous run; treating that as a hard
+ * failure aborts the whole test run before mocha even starts.
+ *
+ * @param {string} file
+ */
+function bestEffortRm (file) {
+  try {
+    fs.rmSync(file, { force: true })
+  } catch (error) {
+    process.stderr.write(`mocha-parallel-files: failed to remove ${file}: ${error.message}\n`)
+  }
 }
 
-function ensureDir (dir) {
-  fs.mkdirSync(dir, { recursive: true })
-}
-
+/**
+ * @param {string[]} inputFiles
+ * @param {string} outputFile
+ */
 function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   let totalTests = 0
   let totalErrors = 0
@@ -136,7 +198,14 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   const testcases = []
 
   for (const file of inputFiles) {
-    const xml = fs.readFileSync(file, 'utf8')
+    let xml
+    try {
+      xml = fs.readFileSync(file, 'utf8')
+    } catch (error) {
+      process.stderr.write(`mocha-parallel-files: failed to read ${file}: ${error.message}\n`)
+      continue
+    }
+
     const openTagMatch = xml.match(/<testsuite\s+[^>]*>/)
     if (!openTagMatch) continue
 
@@ -165,7 +234,11 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
     '</testsuite>\n',
   ].join('\n')
 
-  fs.writeFileSync(outputFile, merged)
+  try {
+    fs.writeFileSync(outputFile, merged)
+  } catch (error) {
+    process.stderr.write(`mocha-parallel-files: failed to write ${outputFile}: ${error.message}\n`)
+  }
 }
 
 /**
@@ -178,13 +251,47 @@ function isMochaRunFileResultMessage (msg) {
 }
 
 async function main () {
-  // If output is piped (e.g. to `head`), writes can throw EPIPE. Exit cleanly.
-  process.stdout.on('error', (err) => {
-    if (err && err.code === 'EPIPE') process.exit(0)
-  })
-  process.stderr.on('error', (err) => {
-    if (err && err.code === 'EPIPE') process.exit(0)
-  })
+  /** @type {Set<import('node:child_process').ChildProcess>} */
+  const liveChildren = new Set()
+  let interrupted = false
+
+  /**
+   * @param {NodeJS.ErrnoException} error
+   */
+  const onPipeError = (error) => {
+    if (!error || error.code !== 'EPIPE') return
+    if (interrupted) return
+    interrupted = true
+    for (const child of liveChildren) {
+      child.kill('SIGTERM')
+    }
+    process.exit(process.exitCode ?? 0)
+  }
+  process.stdout.on('error', onPipeError)
+  process.stderr.on('error', onPipeError)
+
+  /**
+   * @param {NodeJS.Signals} signal
+   */
+  const onSignal = (signal) => {
+    if (interrupted) return
+    interrupted = true
+    process.exitCode = signal === 'SIGINT' ? 130 : 143
+    process.stderr.write(
+      `\nmocha-parallel-files: received ${signal}, terminating ${liveChildren.size} child(ren)\n`
+    )
+    for (const child of liveChildren) {
+      child.kill(signal)
+    }
+    setTimeout(() => {
+      for (const child of liveChildren) {
+        child.kill('SIGKILL')
+      }
+      process.exit()
+    }, 1000).unref()
+  }
+  process.once('SIGINT', () => onSignal('SIGINT'))
+  process.once('SIGTERM', () => onSignal('SIGTERM'))
 
   const opts = parseArgs(process.argv.slice(2))
   if (opts.patterns.length === 0) {
@@ -202,9 +309,11 @@ async function main () {
 
   const timeout = typeof opts.timeout === 'number' && Number.isFinite(opts.timeout) ? opts.timeout : 30_000
 
-  const expandedFiles = stableUnique(opts.patterns.flatMap(p =>
-    globSync(p, { nodir: true, windowsPathsNoEscape: true }).sort((a, b) => a.localeCompare(b, 'en'))
-  ))
+  const expandedFiles = [...new Set(
+    opts.patterns
+      .flatMap(pattern => globSync(pattern, { nodir: true, windowsPathsNoEscape: true }))
+      .sort((a, b) => a.localeCompare(b, 'en'))
+  )]
 
   if (expandedFiles.length === 0) {
     process.stderr.write('No test files matched.\n')
@@ -217,18 +326,19 @@ async function main () {
 
   const junitTmpDir = path.join(repoRoot, '.junit-tmp')
   const junitOutFile = path.join(repoRoot, multiMochaRc.scriptsJunitReporterJsReporterOptions.mochaFile)
+  /** @type {string[]} */
   const junitTmpFiles = []
   const emitJunit = Boolean(process.env.CI)
 
   if (emitJunit) {
-    fs.rmSync(junitOutFile, { force: true })
-
-    if (jobs > 1) {
-      ensureDir(junitTmpDir)
-      // Clean up any stale junit shards.
+    bestEffortRm(junitOutFile)
+    fs.mkdirSync(junitTmpDir, { recursive: true })
+    try {
       for (const entry of fs.readdirSync(junitTmpDir)) {
-        if (entry.endsWith('.xml')) fs.rmSync(path.join(junitTmpDir, entry), { force: true })
+        if (entry.endsWith('.xml')) bestEffortRm(path.join(junitTmpDir, entry))
       }
+    } catch (error) {
+      process.stderr.write(`mocha-parallel-files: failed to scan ${junitTmpDir}: ${error.message}\n`)
     }
   }
 
@@ -238,27 +348,50 @@ async function main () {
   /** @type {{file: string, code: number|null, signal: NodeJS.Signals|null}[]} */
   const failed = []
 
+  /** @type {Entry[]} */
   const entries = expandedFiles.map((file) => ({
     file,
     started: false,
     exited: false,
     stdoutEnded: false,
     stderrEnded: false,
-    code: /** @type {number|null} */ (null),
-    signal: /** @type {NodeJS.Signals|null} */ (null),
+    code: null,
+    signal: null,
 
-    // Output buffers (in-memory). For non-active entries, preserve stdout/stderr warning ordering
-    // by buffering a merged stream with per-line ordering.
-    outBuf: /** @type {{stream:'stdout'|'stderr', text:string}[]} */ ([]),
-    stderrErrBuf: /** @type {string[]} */ ([]),
-    failureBuf: /** @type {string[]} */ ([]),
+    // For non-active entries, stdout and stderr-warning lines are buffered into
+    // a single ordered list so the active flush replays them in the order the
+    // child actually emitted them (interleaved warnings + spec output).
+    outBuf: [],
+    stderrErrBuf: [],
+    failureBuf: [],
 
     stdoutCarry: '',
     stderrCarry: '',
     stdoutInFailure: false,
 
-    stats: /** @type {{passes:number, failures:number, pending:number, tests:number, duration:number}|null} */ (null),
+    stats: null,
   }))
+
+  /**
+   * Mark a child as failed without a real exit code (spawn error, missing
+   * stdio, sync spawn throw). Uses `code = 1` so summary accounting and the
+   * crashedFiles bucket pick it up.
+   *
+   * @param {Entry} entry
+   * @param {string} file
+   */
+  const recordSpawnFailure = (entry, file) => {
+    if (entry.exited) return
+    entry.exited = true
+    entry.code = 1
+    entry.signal = null
+    entry.stdoutEnded = true
+    entry.stderrEnded = true
+    running--
+    failures++
+    failed.push({ file, code: 1, signal: null })
+    process.exitCode ??= 1
+  }
 
   let activeIndex = 0
   const isActive = (entryIndex) => entryIndex === activeIndex
@@ -269,8 +402,11 @@ async function main () {
 
     if (entry.outBuf.length) {
       for (const { stream, text } of entry.outBuf) {
-        if (stream === 'stderr') process.stderr.write(text)
-        else process.stdout.write(text)
+        if (stream === 'stderr') {
+          process.stderr.write(text)
+        } else {
+          process.stdout.write(text)
+        }
       }
       entry.outBuf.length = 0
     }
@@ -279,7 +415,6 @@ async function main () {
   const maybeAdvanceActive = () => {
     while (activeIndex < entries.length) {
       const entry = entries[activeIndex]
-      // Only advance when the active entry is fully done and we have flushed what we buffered.
       if (entry.exited && entry.stdoutEnded && entry.stderrEnded) {
         flushActiveBuffers()
         activeIndex++
@@ -290,6 +425,10 @@ async function main () {
     }
   }
 
+  /**
+   * @param {number} entryIndex
+   * @param {string} line
+   */
   const handleStdoutLine = (entryIndex, line) => {
     const entry = entries[entryIndex]
     if (!entry.stdoutInFailure && isFailureStartLine(line)) {
@@ -297,12 +436,17 @@ async function main () {
     }
     if (entry.stdoutInFailure) {
       entry.failureBuf.push(line)
+    } else if (isActive(entryIndex)) {
+      process.stdout.write(line)
     } else {
-      if (isActive(entryIndex)) process.stdout.write(line)
-      else entry.outBuf.push({ stream: 'stdout', text: line })
+      entry.outBuf.push({ stream: 'stdout', text: line })
     }
   }
 
+  /**
+   * @param {number} entryIndex
+   * @param {string} chunk
+   */
   const handleStdoutChunk = (entryIndex, chunk) => {
     const entry = entries[entryIndex]
     const { lines, carry } = splitLines(entry.stdoutCarry, chunk)
@@ -310,16 +454,27 @@ async function main () {
     for (const line of lines) handleStdoutLine(entryIndex, line)
   }
 
+  /**
+   * @param {number} entryIndex
+   * @param {string} line
+   */
   const handleStderrLine = (entryIndex, line) => {
     const entry = entries[entryIndex]
     if (isWarningLine(line)) {
-      if (isActive(entryIndex)) process.stderr.write(line)
-      else entry.outBuf.push({ stream: 'stderr', text: line })
+      if (isActive(entryIndex)) {
+        process.stderr.write(line)
+      } else {
+        entry.outBuf.push({ stream: 'stderr', text: line })
+      }
     } else {
       entry.stderrErrBuf.push(line)
     }
   }
 
+  /**
+   * @param {number} entryIndex
+   * @param {string} chunk
+   */
   const handleStderrChunk = (entryIndex, chunk) => {
     const entry = entries[entryIndex]
     const { lines, carry } = splitLines(entry.stderrCarry, chunk)
@@ -329,17 +484,33 @@ async function main () {
 
   /** @type {Promise<void>} */
   const runPromise = new Promise((resolve) => {
+    const checkDone = () => {
+      if (running === 0 && (idx >= expandedFiles.length || interrupted)) {
+        resolve()
+      }
+    }
+
+    const safeLaunchNext = () => {
+      try {
+        launchNext()
+      } catch (error) {
+        process.stderr.write(`mocha-parallel-files: launchNext failed: ${error.message}\n`)
+        process.exitCode = 1
+        resolve()
+      }
+    }
+
     const launchNext = () => {
       while (running < jobs && idx < expandedFiles.length) {
+        if (interrupted) break
         const entry = entries[idx]
         const file = entry.file
+        const entryIndex = idx
         idx++
         running++
 
         const junitShard = emitJunit
-          ? (jobs > 1
-              ? path.join(junitTmpDir, `node-${process.versions.node}-${process.pid}-${idx}.xml`)
-              : junitOutFile)
+          ? path.join(junitTmpDir, `node-${process.versions.node}-${process.pid}-${entryIndex + 1}.xml`)
           : null
 
         if (junitShard) junitTmpFiles.push(junitShard)
@@ -358,7 +529,7 @@ async function main () {
           reporterOptions,
         }
 
-        if (timeout) {
+        if (timeout !== undefined) {
           options.timeout = timeout
         }
 
@@ -366,7 +537,7 @@ async function main () {
           options.require = opts.require
         }
 
-        // Enable shared tarball caching for parallel runs to avoid redundant packing
+        // Shared tarball cache across siblings so `npm pack` only runs once per run.
         const DD_TEST_SANDBOX_TARBALL_PATH = process.env.DD_TEST_SANDBOX_TARBALL_PATH ||
           (jobs > 1 ? path.join(os.tmpdir(), 'dd-trace-integration-test.tgz') : undefined)
 
@@ -382,19 +553,31 @@ async function main () {
 
         entry.started = true
 
-        const child = spawn(process.execPath, nodeArgs, {
-          stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-          env: childEnv,
-        })
+        let child
+        try {
+          child = spawn(process.execPath, nodeArgs, {
+            stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+            env: childEnv,
+          })
+        } catch (error) {
+          process.stderr.write(`mocha-parallel-files: spawn failed for ${file}: ${error.message}\n`)
+          recordSpawnFailure(entry, file)
+          continue
+        }
 
         if (!child.stdout || !child.stderr) {
-          throw new Error('Expected child stdout/stderr to be piped')
+          process.stderr.write(`mocha-parallel-files: child stdout/stderr not piped for ${file}\n`)
+          try {
+            child.kill('SIGKILL')
+          } catch {}
+          recordSpawnFailure(entry, file)
+          continue
         }
+
+        liveChildren.add(child)
 
         child.stdout.setEncoding('utf8')
         child.stderr.setEncoding('utf8')
-
-        const entryIndex = idx - 1
 
         child.stdout.on('data', (data) => {
           handleStdoutChunk(entryIndex, data)
@@ -404,72 +587,77 @@ async function main () {
         })
 
         child.on('message', (msg) => {
-          const m = /** @type {unknown} */ (msg)
-          if (isMochaRunFileResultMessage(m)) {
-            entries[entryIndex].stats = {
-              passes: m.passes || 0,
-              failures: m.failures || 0,
-              pending: m.pending || 0,
-              tests: m.tests || 0,
-              duration: m.duration || 0,
+          if (isMochaRunFileResultMessage(msg)) {
+            entry.stats = {
+              passes: msg.passes ?? 0,
+              failures: msg.failures ?? 0,
+              pending: msg.pending ?? 0,
+              tests: msg.tests ?? 0,
+              duration: msg.duration ?? 0,
             }
           }
         })
 
-        child.stdout.on('end', () => {
-          const entry = entries[entryIndex]
+        child.stdout.once('end', () => {
           if (entry.stdoutCarry) {
-            const tail = entry.stdoutCarry
+            handleStdoutLine(entryIndex, entry.stdoutCarry + '\n')
             entry.stdoutCarry = ''
-            // process leftover without newline
-            handleStdoutLine(entryIndex, tail)
           }
           entry.stdoutEnded = true
           maybeAdvanceActive()
         })
 
-        child.stderr.on('end', () => {
-          const entry = entries[entryIndex]
+        child.stderr.once('end', () => {
           if (entry.stderrCarry) {
-            const tail = entry.stderrCarry
+            handleStderrLine(entryIndex, entry.stderrCarry + '\n')
             entry.stderrCarry = ''
-            handleStderrLine(entryIndex, tail)
           }
           entry.stderrEnded = true
           maybeAdvanceActive()
         })
 
-        child.on('exit', (code, signal) => {
+        // Async spawn failures (ENOENT, EAGAIN, EMFILE, AV blocking the binary
+        // on Windows) arrive as 'error' instead of 'exit'. Without this handler
+        // the EventEmitter contract turns the failure into an uncaught
+        // exception and the parent crashes with no diagnostic.
+        child.once('error', (error) => {
+          process.stderr.write(`mocha-parallel-files: child error for ${file}: ${error.message}\n`)
+          liveChildren.delete(child)
+          if (entry.exited) return
+          recordSpawnFailure(entry, file)
+          safeLaunchNext()
+          maybeAdvanceActive()
+          checkDone()
+        })
+
+        child.once('exit', (code, signal) => {
+          liveChildren.delete(child)
+          if (entry.exited) return
+          entry.exited = true
+          entry.code = code
+          entry.signal = signal
           running--
           if (code || signal) {
             failures++
             failed.push({ file, code, signal })
+            process.exitCode ??= 1
           }
 
-          entry.exited = true
-          entry.code = code
-          entry.signal = signal
-
-          if (idx >= expandedFiles.length && running === 0) {
-            resolve()
-          } else {
-            launchNext()
-          }
-
+          safeLaunchNext()
           maybeAdvanceActive()
+          checkDone()
         })
       }
+
+      checkDone()
     }
 
-    launchNext()
+    safeLaunchNext()
   })
 
-  // Wait for all children to complete. Output is emitted live via stream handlers above.
   await runPromise
-  // Ensure any remaining buffered output for the last active file is flushed.
   flushActiveBuffers()
 
-  // Print buffered error output (non-warning stderr + mocha failure blocks) after all output has been streamed.
   let globalFailureIndex = 0
   let hasConsolidatedErrors = false
   for (const entry of entries) {
@@ -493,19 +681,17 @@ async function main () {
       for (const line of entry.failureBuf) {
         let out = line
 
-        // Print `n failing in <file>` while ensuring the appended filename stays uncolored.
+        // Append ` in <file>` to mocha's `N failing` header. Reset ANSI first
+        // so the appended filename isn't colored red.
         if (!appendedFilenameToFailingLine && isFailureStartLine(out)) {
           appendedFilenameToFailingLine = true
 
           const hasNewline = out.endsWith('\n')
           const base = hasNewline ? out.slice(0, -1) : out
-          // Ensure `in <file>` is not red by resetting ANSI styles before printing the filename.
-          // Avoid double-resetting if the line already ends with a reset.
           const reset = '\u001B[0m'
           out = (base.endsWith(reset) ? base : base + reset) + ' in ' + entry.file + (hasNewline ? '\n' : '')
         }
 
-        // Prefix local `n)` failure lines with a deterministic global counter `[n]`.
         if (/^\s*\d+\)/.test(stripAnsi(out))) {
           globalFailureIndex++
           out = `[${globalFailureIndex}] ` + out
@@ -519,12 +705,12 @@ async function main () {
     }
   }
 
-  if (emitJunit && // Merge xunit shards (one per file) into the historical output file name expected by CI tooling.
-    jobs > 1) {
-    mergeXunitFilesToSingleTestsuite(junitTmpFiles.filter(f => fs.existsSync(f)), junitOutFile)
+  // Sharding is unconditional: writing to junitOutFile directly would let
+  // later children overwrite earlier ones (e.g. when jobs === 1).
+  if (emitJunit) {
+    mergeXunitFilesToSingleTestsuite(junitTmpFiles.filter(file => fs.existsSync(file)), junitOutFile)
   }
 
-  // Summary (always at the very end)
   let totalPasses = 0
   let totalFailures = 0
   let totalPending = 0
@@ -533,20 +719,20 @@ async function main () {
   let crashedFiles = 0
 
   for (const entry of entries) {
-    // If a child exited non-zero but never reported mocha stats (or reported 0 failures),
-    // treat it as a "crash/harness failure" so summary reflects failure even when Mocha
-    // couldn't produce a failing test count (e.g., hard crash, early process.exit()).
+    // Child exited non-zero but mocha reported nothing usable (hard crash,
+    // early process.exit, spawn error). Counted separately so summary still
+    // reflects failure when the failing-test count would be zero.
     if ((entry.code || entry.signal) && (!entry.stats || (entry.stats.failures || 0) === 0)) {
       crashedFiles++
     }
 
     const result = entry.stats
     if (!result) continue
-    totalPasses += result.passes || 0
-    totalFailures += result.failures || 0
-    totalPending += result.pending || 0
-    totalTests += result.tests || 0
-    totalDuration += result.duration || 0
+    totalPasses += result.passes ?? 0
+    totalFailures += result.failures ?? 0
+    totalPending += result.pending ?? 0
+    totalTests += result.tests ?? 0
+    totalDuration += result.duration ?? 0
   }
 
   process.stdout.write('\n=== Summary ===\n')
@@ -567,10 +753,10 @@ async function main () {
     )
   }
 
-  process.exit(failures ? 1 : 0)
+  process.exit(process.exitCode ?? (failures ? 1 : 0))
 }
 
-main().catch(err => {
-  process.stderr.write(String(err?.stack || err) + '\n')
+main().catch(error => {
+  process.stderr.write(String(error?.stack || error) + '\n')
   process.exitCode = 1
 })

@@ -283,9 +283,13 @@
 /integration-tests/coverage-fixtures/worker.js @DataDog/lang-platform-js
 /integration-tests/coverage-manual-process.spec.js @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
+/integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
+/integration-tests/mocha-parallel-files.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
+
+/scripts/mocha-parallel-files.js @DataDog/lang-platform-js
 
 /packages/datadog-core @DataDog/lang-platform-js
 /packages/datadog-shimmer @DataDog/lang-platform-js
