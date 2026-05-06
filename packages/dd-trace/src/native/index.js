@@ -33,6 +33,9 @@ try {
     // Initialize the WASM module before use
     pipeline.init()
     const legacyStorage = storage('legacy');
+    // Provide libdatadog with a `run(callback)` hook that executes the
+    // callback in a noop async context, so internal HTTP/IO done by the
+    // native exporter doesn't get re-instrumented by our http/fs plugins.
     pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
   }
   // Only mark as available if WasmSpanState is actually present
