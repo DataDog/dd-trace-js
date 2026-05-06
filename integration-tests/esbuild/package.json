@@ -21,11 +21,11 @@
   "license": "ISC",
   "dependencies": {
     "@apollo/server": "5.5.0",
-    "@koa/router": "15.4.0",
+    "@koa/router": "15.5.0",
     "aws-sdk": "2.1693.0",
-    "axios": "1.15.2",
+    "axios": "1.16.0",
     "express": "4.22.1",
-    "knex": "3.2.9",
+    "knex": "3.2.10",
     "koa": "3.2.0",
     "openai": "6.35.0"
   }
