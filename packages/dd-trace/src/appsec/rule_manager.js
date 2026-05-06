@@ -142,12 +142,14 @@ function extractErrors (diagnostics) {
 
   for (const diagnosticKey of DIAGNOSTIC_KEYS) {
     if (diagnostics[diagnosticKey]?.error) {
-      (result[diagnosticKey] ??= {}).error = diagnostics[diagnosticKey]?.error
+      result[diagnosticKey] ??= {}
+      result[diagnosticKey].error = diagnostics[diagnosticKey]?.error
       isResultPopulated = true
     }
 
     if (diagnostics[diagnosticKey]?.errors) {
-      (result[diagnosticKey] ??= {}).errors = diagnostics[diagnosticKey]?.errors
+      result[diagnosticKey] ??= {}
+      result[diagnosticKey].errors = diagnostics[diagnosticKey]?.errors
       isResultPopulated = true
     }
   }

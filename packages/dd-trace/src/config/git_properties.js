@@ -4,8 +4,8 @@ const fs = require('fs')
 const path = require('path')
 
 const gitPropertiesCommitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
-const gitPropertiesRepositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
-const repositoryUrlRegex = /^([\w\d:@/.-]+)$/
+const gitPropertiesRepositoryUrlRegex = /git\.repository_url=([\w:@/.-]+)/
+const repositoryUrlRegex = /^([\w:@/.-]+)$/
 const remoteOriginRegex = /^\[remote\s+"origin"\]/i
 const gitHeadRefRegex = /ref:\s+(refs\/[A-Za-z0-9._/-]+)/
 const commitSHARegex = /^[0-9a-f]{40}$/

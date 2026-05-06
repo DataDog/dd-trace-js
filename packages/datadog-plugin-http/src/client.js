@@ -79,11 +79,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   shouldInjectTraceHeaders (options, uri) {
-    if (!this.config.propagationFilter(uri)) {
-      return false
-    }
-
-    return true
+    return Boolean(this.config.propagationFilter(uri))
   }
 
   bindAsyncStart ({ parentStore }) {

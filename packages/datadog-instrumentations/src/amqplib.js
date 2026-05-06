@@ -35,14 +35,13 @@ addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs 
 addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION] }, x => {
   shimmer.wrap(x.Channel.prototype, 'get', getMessage => function (queue, options) {
     return getMessage.apply(this, arguments).then(message => {
-      if (message === null) {
-        return message
+      if (message !== null) {
+        const ctx = { method: 'basic.get', message, fields: message.fields, queue }
+        consumeStartCh.runStores(ctx, () => {
+          // finish right away
+          consumeFinishCh.publish(ctx)
+        })
       }
-      const ctx = { method: 'basic.get', message, fields: message.fields, queue }
-      consumeStartCh.runStores(ctx, () => {
-        // finish right away
-        consumeFinishCh.publish(ctx)
-      })
       return message
     })
   })

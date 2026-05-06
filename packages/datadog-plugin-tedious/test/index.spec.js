@@ -396,8 +396,8 @@ describe('Plugin', () => {
 
               connection.execBulkLoad(bulkLoad)
               rowStream.write([5], (err) => {
-                if (err) done(err)
                 rowStream.end()
+                if (err) done(err)
               })
             })
           }

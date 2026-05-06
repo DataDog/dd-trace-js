@@ -108,11 +108,9 @@ function calculateHttpEndpoint (url) {
     return element
   })
 
-  const endpoint = normalizedElements.length > 0
+  return normalizedElements.length > 0
     ? '/' + normalizedElements.join('/')
     : '/'
-
-  return endpoint
 }
 
 function filterSensitiveInfoFromRepository (repositoryUrl) {

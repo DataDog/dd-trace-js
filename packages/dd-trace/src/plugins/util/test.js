@@ -922,9 +922,7 @@ function getCoveredFilenamesFromCoverage (coverage) {
     .filter(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
+      return Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
     })
 }
 
@@ -1276,10 +1274,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   let bestScore = Infinity
   for (const branch of Object.keys(metrics)) {
     const score = metrics[branch].ahead
-    if (score < bestScore) {
-      bestScore = score
-      bestBranch = branch
-    } else if (score === bestScore && isDefaultBranch(branch)) {
+    if (score < bestScore || score === bestScore && isDefaultBranch(branch)) {
       bestScore = score
       bestBranch = branch
     }

@@ -18,8 +18,6 @@ const rrtypes = {
   resolveSoa: 'SOA',
 }
 
-const rrtypeMap = new WeakMap()
-
 addHook({ name: 'dns' }, dns => {
   const lookup = createCallbackInstrumentor('apm:dns:lookup', { captureResult: true })
   const lookupService = createCallbackInstrumentor('apm:dns:lookup_service', { captureResult: true })
@@ -46,7 +44,6 @@ addHook({ name: 'dns' }, dns => {
 function patchResolveShorthands (prototype, resolve) {
   for (const method of Object.keys(rrtypes)) {
     if (prototype[method]) {
-      rrtypeMap.set(prototype[method], rrtypes[method])
       shimmer.wrap(prototype, method, resolve(buildArgsContext(rrtypes[method])))
     }
   }

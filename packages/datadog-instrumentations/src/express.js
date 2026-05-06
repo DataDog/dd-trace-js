@@ -56,8 +56,7 @@ function wrapResponseRender (render) {
     return responseRenderChannel.traceSync(
       function () {
         if (abortController.signal.aborted) {
-          const error = abortController.signal.reason || new Error('Aborted')
-          throw error
+          throw abortController.signal.reason || new Error('Aborted')
         }
 
         return render.apply(this, arguments)

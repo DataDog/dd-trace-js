@@ -22,26 +22,22 @@ addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   shimmer.wrap(cursorProto, '_getmore', _getmore => wrapCursor(_getmore, 'getMore', 'getMore'))
   shimmer.wrap(cursorProto, '_find', _find => wrapQuery(_find, '_find'))
   shimmer.wrap(cursorProto, 'kill', kill => wrapCursor(kill, 'killCursors', 'killCursors'))
-  return Server
 })
 
 addHook({ name: 'mongodb', versions: ['>=4 <4.6.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
   shimmer.wrap(proto, 'query', query => wrapConnectionCommand(query, 'query'))
-  return Connection
 })
 
 addHook({ name: 'mongodb', versions: ['>=4.6.0 <6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
-  return Connection
 })
 
 addHook({ name: 'mongodb', versions: ['>=6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', undefined, instrumentPromise))
-  return Connection
 })
 
 addHook({ name: 'mongodb', versions: ['>=3.3 <4'], file: 'lib/core/wireprotocol/index.js' }, wp => wrapWp(wp))
@@ -50,12 +46,10 @@ addHook({ name: 'mongodb-core', versions: ['>=3.2'], file: 'lib/wireprotocol/ind
 
 addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/3_2_support.js' }, WireProtocol => {
   shimmer.wrap(WireProtocol.prototype, 'command', command => wrapUnifiedCommand(command, 'command'))
-  return WireProtocol
 })
 
 addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/2_6_support.js' }, WireProtocol => {
   shimmer.wrap(WireProtocol.prototype, 'command', command => wrapUnifiedCommand(command, 'command'))
-  return WireProtocol
 })
 
 addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }, util => {
@@ -71,7 +65,6 @@ addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }
 
     return maybePromise.apply(this, arguments)
   })
-  return util
 })
 
 function wrapWp (wp) {
@@ -86,17 +79,16 @@ function wrapWp (wp) {
 }
 
 function wrapUnifiedCommand (command, operation, name) {
-  const wrapped = function (server, ns, ops) {
+  return function (server, ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
     return instrument(operation, command, this, arguments, server, ns, ops, { name })
   }
-  return wrapped
 }
 
 function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
-  const wrapped = function (ns, ops) {
+  return function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
@@ -109,11 +101,10 @@ function wrapConnectionCommand (command, operation, name, instrumentFn = instrum
     ns = `${ns.db}.${ns.collection}`
     return instrumentFn(operation, command, this, arguments, topology, ns, ops, { name })
   }
-  return wrapped
 }
 
 function wrapQuery (query, operation, name) {
-  const wrapped = function () {
+  return function () {
     if (!startCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
@@ -122,12 +113,10 @@ function wrapQuery (query, operation, name) {
     const ops = this.cmd
     return instrument(operation, query, this, arguments, pool, ns, ops)
   }
-
-  return wrapped
 }
 
 function wrapCursor (cursor, operation, name) {
-  const wrapped = function () {
+  return function () {
     if (!startCh.hasSubscribers) {
       return cursor.apply(this, arguments)
     }
@@ -135,17 +124,15 @@ function wrapCursor (cursor, operation, name) {
     const ns = this.ns
     return instrument(operation, cursor, this, arguments, pool, ns, {}, { name })
   }
-  return wrapped
 }
 
 function wrapCommand (command, operation, name) {
-  const wrapped = function (ns, ops) {
+  return function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
     return instrument(operation, command, this, arguments, this, ns, ops, { name })
   }
-  return wrapped
 }
 
 function instrument (operation, command, instance, args, server, ns, ops, options = {}) {

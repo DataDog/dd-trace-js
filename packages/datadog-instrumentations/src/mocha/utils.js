@@ -137,8 +137,7 @@ function getTestToContextKey (test) {
   if (!wrappedFunctions.has(test.fn)) {
     return test.fn
   }
-  const originalFn = originalFns.get(test.fn)
-  return originalFn
+  return originalFns.get(test.fn)
 }
 
 function getTestContext (test) {

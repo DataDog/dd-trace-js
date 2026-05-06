@@ -75,7 +75,7 @@ describe('Plugin', () => {
 
         beforeEach(done => {
           Gateway = require(`../../../versions/microgateway-core@${version}`).get()
-          gateway = startGateway(() => done())
+          startGateway(() => done())
         })
 
         it('should do automatic instrumentation', done => {

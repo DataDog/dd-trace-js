@@ -35,7 +35,7 @@ function wrapAddCommand (addCommand) {
 }
 
 function wrapCommandQueueClass (cls) {
-  const ret = class RedisCommandQueue extends cls {
+  return class RedisCommandQueue extends cls {
     constructor (...args) {
       super(...args)
       let url = { host: 'localhost', port: 6379 }
@@ -50,7 +50,6 @@ function wrapCommandQueueClass (cls) {
       instanceInfo.set(this, { connectionName: createClientName, url })
     }
   }
-  return ret
 }
 
 function wrapCreateClient (request) {

@@ -597,12 +597,11 @@ describe('profiler', () => {
       // Simple server that writes a constant message to the socket.
       const msg = 'cya later!\n'
       function createServer () {
-        const server = net.createServer((socket) => {
+        return net.createServer((socket) => {
           socket.end(msg, 'utf8')
         }).on('error', (err) => {
           throw err
         })
-        return server
       }
       // Create two instances of the server
       const server1 = createServer()

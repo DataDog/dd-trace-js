@@ -224,8 +224,6 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     }
     return clear.apply(this, arguments)
   })
-
-  return obj
 })
 
 /**

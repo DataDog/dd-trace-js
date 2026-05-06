@@ -1144,7 +1144,7 @@ addHook({
   }
 
   // We need to proxy the createRootSuite function because the function is not configurable
-  const proxy = new Proxy(loadUtilsPackage, {
+  return new Proxy(loadUtilsPackage, {
     get (target, prop) {
       if (prop === 'createRootSuite') {
         return newCreateRootSuite
@@ -1152,8 +1152,6 @@ addHook({
       return target[prop]
     },
   })
-
-  return proxy
 })
 
 // main process hook

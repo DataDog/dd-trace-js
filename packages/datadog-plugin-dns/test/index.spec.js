@@ -233,8 +233,8 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(() => {
-            done(new Error('Resolve was traced.'))
             clearTimeout(timer)
+            done(new Error('Resolve was traced.'))
           })
 
         storage('legacy').run({ noop: true }, () => {
