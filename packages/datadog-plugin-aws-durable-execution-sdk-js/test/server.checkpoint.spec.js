@@ -21,7 +21,7 @@ describe('server checkpoint hooks', () => {
           active () {
             return {
               context () {
-                return { _parentId: 123n }
+                return { _spanId: 456n }
               },
             }
           },
@@ -33,7 +33,7 @@ describe('server checkpoint hooks', () => {
     plugin.startSpan = (_name, _options, ctx) => {
       const span = {
         context () {
-          return { _parentId: 123n }
+          return { _spanId: 456n }
         },
       }
       if (ctx && typeof ctx === 'object') {
@@ -86,7 +86,7 @@ describe('server checkpoint hooks', () => {
     assert.equal(checkpointSaveCalls.length, 1)
     assert.equal(checkpointSaveCalls[0][0], tracer)
     assert.equal(checkpointSaveCalls[0][2], durableContext)
-    assert.equal(checkpointSaveCalls[0][3], '123')
+    assert.equal(checkpointSaveCalls[0][3], '456')
     assert.equal(checkpointSaveCalls[0][4], invocationEvent)
     assert.equal(checkpointSaveCalls[0][5].Status, 'PENDING')
   })
@@ -108,7 +108,7 @@ describe('server checkpoint hooks', () => {
           active () {
             return {
               context () {
-                return { _parentId: 123n }
+                return { _spanId: 456n }
               },
             }
           },
@@ -120,7 +120,7 @@ describe('server checkpoint hooks', () => {
     plugin.startSpan = (_name, _options, ctx) => {
       const span = {
         context () {
-          return { _parentId: 123n }
+          return { _spanId: 456n }
         },
       }
       if (ctx && typeof ctx === 'object') {
@@ -169,7 +169,7 @@ describe('server checkpoint hooks', () => {
     assert.equal(checkpointSaveCalls.length, 0)
   })
 
-  it('creates a durable root span on first invocation and finishes execute before root', () => {
+  it('starts aws.durable_execution.execute and finishes it once', () => {
     const AwsDurableExecutionSdkJsServerPlugin = proxyquire('../src/server', {
       './trace-checkpoint': {
         maybeSaveTraceContextCheckpoint: async () => {},
@@ -179,28 +179,18 @@ describe('server checkpoint hooks', () => {
     const tracer = {}
     const plugin = new AwsDurableExecutionSdkJsServerPlugin(tracer, {})
     const startCalls = []
-    const finishOrder = []
-
-    const rootSpan = {
-      finish () {
-        finishOrder.push('root')
-      },
-    }
+    let finishCount = 0
     const executeSpan = {
       context () {
-        return { _parentId: 999n }
+        return { _spanId: 999n }
       },
       finish () {
-        finishOrder.push('execute')
+        finishCount++
       },
     }
 
     plugin.startSpan = (name, options, ctx) => {
       startCalls.push({ name, options, ctx })
-      if (name === 'aws.durable-execution') {
-        return rootSpan
-      }
-
       if (ctx && typeof ctx === 'object') {
         ctx.currentStore = { span: executeSpan }
       }
@@ -228,21 +218,18 @@ describe('server checkpoint hooks', () => {
 
     plugin.bindStart(ctx)
 
-    assert.equal(startCalls.length, 2)
-    assert.equal(startCalls[0].name, 'aws.durable-execution')
-    assert.equal(startCalls[0].options.startTime, 1710000000000)
-    assert.equal(startCalls[1].name, 'aws.durable_execution.execute')
-    assert.equal(startCalls[1].options.childOf, rootSpan)
+    assert.equal(startCalls.length, 1)
+    assert.equal(startCalls[0].name, 'aws.durable_execution.execute')
 
     plugin.finish(ctx)
-    assert.deepEqual(finishOrder, ['execute', 'root'])
+    assert.equal(finishCount, 1)
 
     // finish() may be invoked twice by tracingChannel; ensure no double finish.
     plugin.finish(ctx)
-    assert.deepEqual(finishOrder, ['execute', 'root'])
+    assert.equal(finishCount, 1)
   })
 
-  it('does not create a durable root span on replay invocations', () => {
+  it('starts execute span on replay invocations', () => {
     const AwsDurableExecutionSdkJsServerPlugin = proxyquire('../src/server', {
       './trace-checkpoint': {
         maybeSaveTraceContextCheckpoint: async () => {},
@@ -257,7 +244,7 @@ describe('server checkpoint hooks', () => {
       startedSpanNames.push(name)
       const executeSpan = {
         context () {
-          return { _parentId: 123n }
+          return { _spanId: 123n }
         },
       }
       if (ctx && typeof ctx === 'object') {
