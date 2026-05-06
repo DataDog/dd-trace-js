@@ -738,11 +738,11 @@ module.exports = {
         }),
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
-        [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
         [CI_JOB_ID]: BUILDKITE_JOB_ID,
       }
 
-      if (BUILDKITE_PULL_REQUEST) {
+      if (BUILDKITE_PULL_REQUEST && BUILDKITE_PULL_REQUEST !== 'false') {
+        tags[PR_NUMBER] = BUILDKITE_PULL_REQUEST
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = BUILDKITE_PULL_REQUEST_BASE_BRANCH
       }
     }
