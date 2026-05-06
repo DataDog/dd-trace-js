@@ -6,17 +6,36 @@ const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
 const { assertObjectContains, ANY_STRING } = require('../../../../integration-tests/helpers')
+const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, removeAllBaggageItems, removeBaggageItem, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
 const ContextManager = require('../../src/opentelemetry/context_manager')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
-require('../../').init()
+const ddTracer = require('../../')
+
+ddTracer.init()
 
 function getTracer () {
   const tracerProvider = new TracerProvider()
   tracerProvider.register()
   return tracerProvider.getTracer()
+}
+
+// This mimicks tracer.trace but forces a raw span to be activated
+function withActiveDatadogSpan (name, fn) {
+  const span = ddTracer._tracer.startSpan(name)
+  const parentStore = storage('legacy').getStore(span._store) ?? storage('legacy').getStore()
+
+  return storage('legacy').run({ ...parentStore, span }, () => {
+    try {
+      return fn(span)
+    } finally {
+      if (span._duration === undefined) {
+        span.finish()
+      }
+    }
+  })
 }
 
 describe('OTel Context Manager', () => {
@@ -209,10 +228,8 @@ describe('OTel Context Manager', () => {
   })
 
   describe('with an active Datadog span', () => {
-    const ddTracer = require('../../')
-
     it('exposes the active span via trace.getActiveSpan() and forwards writes', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         assert.ok(active)
         assert.strictEqual(active.isRecording(), true)
@@ -262,7 +279,7 @@ describe('OTel Context Manager', () => {
     })
 
     it('addEvent normalizes OTel time/attribute inputs onto the Datadog span', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         assert.ok(active)
 
@@ -286,7 +303,7 @@ describe('OTel Context Manager', () => {
     })
 
     it('recordException forwards a user-supplied hrTime timestamp as ms', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         assert.ok(active)
 
@@ -307,7 +324,7 @@ describe('OTel Context Manager', () => {
     })
 
     it('end() on the proxy does not finish the Datadog span', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         active.end()
         assert.strictEqual(ddSpan._duration, undefined)
@@ -315,7 +332,7 @@ describe('OTel Context Manager', () => {
     })
 
     it('addLinks forwards every valid link and skips invalid contexts', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
 
         active.addLinks([
@@ -361,7 +378,7 @@ describe('OTel Context Manager', () => {
     })
 
     it('addLinks ignores non-array input', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         active.addLinks(undefined)
         active.addLinks('not an array')
@@ -370,13 +387,13 @@ describe('OTel Context Manager', () => {
     })
 
     it('caches the proxy so repeated calls return the same object', () => {
-      ddTracer.trace('dd-active', () => {
+      withActiveDatadogSpan('dd-active', () => {
         assert.strictEqual(trace.getActiveSpan(), trace.getActiveSpan())
       })
     })
 
     it('updateName updates resource.name on the DD span, not the operation name', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         active.updateName('renamed')
 
@@ -388,7 +405,7 @@ describe('OTel Context Manager', () => {
 
     describe('setStatus precedence (OTel spec)', () => {
       it('OK locks subsequent ERROR and UNSET writes', () => {
-        ddTracer.trace('dd-active-ok', (ddSpan) => {
+        withActiveDatadogSpan('dd-active-ok', (ddSpan) => {
           const active = trace.getActiveSpan()
           active.setStatus({ code: 1 })
           active.setStatus({ code: 2, message: 'late error' })
@@ -399,7 +416,7 @@ describe('OTel Context Manager', () => {
       })
 
       it('ERROR can be replaced by a later ERROR with a fresh message', () => {
-        ddTracer.trace('dd-active-error', (ddSpan) => {
+        withActiveDatadogSpan('dd-active-error', (ddSpan) => {
           const active = trace.getActiveSpan()
           active.setStatus({ code: 2, message: 'first error' })
           active.setStatus({ code: 2, message: 'second error' })
@@ -410,7 +427,7 @@ describe('OTel Context Manager', () => {
     })
 
     it('mutation methods are all no-ops once the underlying DD span has finished', () => {
-      ddTracer.trace('dd-active', (ddSpan) => {
+      withActiveDatadogSpan('dd-active', (ddSpan) => {
         const active = trace.getActiveSpan()
         ddSpan.finish()
 
