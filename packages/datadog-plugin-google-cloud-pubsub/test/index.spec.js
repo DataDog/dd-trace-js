@@ -11,6 +11,7 @@ const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mo
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 
+const Nomenclature = require('../../dd-trace/src/service-naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
@@ -367,15 +368,34 @@ describe('Plugin', () => {
       })
 
       // Regression for APMS-19318: DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
-      // must strip the `-pubsub` suffix from consumer-side spans. The pull-consumer
-      // and push-subscription plugins formerly hardcoded the suffix and ignored the
-      // flag; this asserts the plugin-level branch on shouldUseConsistentServiceNaming.
+      // must strip the `-pubsub` suffix from consumer-side spans. With the env var
+      // set, the SchemaManager short-circuits service-name lookups to v1's
+      // identityService so the suffix is dropped without affecting v0 default behavior.
       describe('with DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', () => {
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', { dsmEnabled: false }, {
+        // Configure the Nomenclature singleton directly rather than passing
+        // `spanRemoveIntegrationFromService: true` through `agent.load`'s tracerConfig.
+        // The tracer is cached on `global._ddtrace`, so `tracer.init` short-circuits on
+        // every call after the first (`if (this._initialized) return this`), which means
+        // tracerConfig.spanRemoveIntegrationFromService is silently ignored when other
+        // tests in the suite have already initialized the tracer. `withNamingSchema`'s
+        // short-circuit block uses this same direct-configure pattern for the same reason.
+        let savedConfig
+
+        before(() => {
+          savedConfig = Nomenclature.config
+          Nomenclature.configure({
+            spanAttributeSchema: 'v0',
+            service: 'test',
             spanRemoveIntegrationFromService: true,
-            flushMinSpans: 1,
           })
+        })
+
+        after(() => {
+          Nomenclature.configure(savedConfig)
+        })
+
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
         })
 
         beforeEach(() => {
