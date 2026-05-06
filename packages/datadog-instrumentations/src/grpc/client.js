@@ -20,9 +20,10 @@ function createWrapMakeRequest (type, hasPeer = false) {
 
   return function wrapMakeRequest (makeRequest) {
     return function (path) {
-      const args = ensureMetadata(this, arguments, metadataIndex)
+      if (!startChannel.hasSubscribers) return makeRequest.apply(this, arguments)
 
-      return callMethod(this, makeRequest, args, path, args[metadataIndex], type, hasPeer)
+      const { metadata, args } = resolveMetadata(this, arguments, metadataIndex)
+      return callMethod(this, makeRequest, args, path, metadata, type, hasPeer)
     }
   }
 }
@@ -92,8 +93,10 @@ function wrapMethod (method, path, type, hasPeer) {
   const metadataIndex = type === types.client_stream || type === types.bidi ? 0 : 1
 
   const wrapped = shimmer.wrapFunction(method, method => function () {
-    const args = ensureMetadata(this, arguments, metadataIndex)
-    return callMethod(this, method, args, path, args[metadataIndex], type, hasPeer)
+    if (!startChannel.hasSubscribers) return method.apply(this, arguments)
+
+    const { metadata, args } = resolveMetadata(this, arguments, metadataIndex)
+    return callMethod(this, method, args, path, metadata, type, hasPeer)
   })
 
   patched.add(wrapped)
@@ -149,24 +152,31 @@ function createWrapEmit (ctx, hasPeer = false) {
 }
 
 function callMethod (client, method, args, path, metadata, type, hasPeer = false) {
-  if (!startChannel.hasSubscribers) return method.apply(client, args)
-
-  const length = args.length
-  const callback = args[length - 1]
-
+  // Callers (`wrapMethod`, `createWrapMakeRequest`) gate on
+  // `startChannel.hasSubscribers` before reaching this function, so we always
+  // run the tracing path here.
   const ctx = { metadata, path, type }
 
   return startChannel.runStores(ctx, () => {
     try {
+      let callArgs = args
+
       if (type === types.unary || type === types.client_stream) {
+        // Substituting / appending the callback requires a mutable Array.
+        // `resolveMetadata` returns the original arguments by reference when no
+        // splice is needed; only copy here, lazily, when we actually mutate.
+        if (!Array.isArray(callArgs)) callArgs = [...callArgs]
+
+        const length = callArgs.length
+        const callback = callArgs[length - 1]
         if (typeof callback === 'function') {
-          args[length - 1] = wrapCallback(ctx, callback)
+          callArgs[length - 1] = wrapCallback(ctx, callback)
         } else {
-          args[length] = wrapCallback(ctx)
+          callArgs[length] = wrapCallback(ctx)
         }
       }
 
-      const call = method.apply(client, args)
+      const call = method.apply(client, callArgs)
 
       if (call && typeof call.emit === 'function') {
         shimmer.wrap(call, 'emit', createWrapEmit(ctx, hasPeer))
@@ -182,31 +192,59 @@ function callMethod (client, method, args, path, metadata, type, hasPeer = false
   })
 }
 
-function ensureMetadata (client, args, index) {
-  const grpc = getGrpc(client)
+/**
+ * Resolves the `Metadata` carried by a gRPC client invocation, normalizing the
+ * user-provided argument list so trace context can ride on the wire.
+ *
+ * Three shapes for the slot at `index`:
+ *
+ * - already a `Metadata` instance → returned by reference, no reshape.
+ * - missing (`undefined` / `null`) → replaced in place with a fresh `Metadata`.
+ *   Length unchanged, preserving overloads like `getUnary(req, undefined, cb)`
+ *   where upstream rejects an extra trailing `undefined`.
+ * - any other value (`CallOptions`, request payload, callback) → a fresh
+ *   `Metadata` is spliced in front of the slot. Length grows by one. Upstream's
+ *   polymorphic resolver (`if (typeof metadata === 'function')` etc.) handles
+ *   the resulting shape for short overloads like `Sum(callback)`.
+ *
+ * @param {object} client - Bound `this` of the wrapped method (a gRPC client).
+ * @param {ArrayLike<unknown>} args - The original `arguments` passed by the user.
+ * @param {number} index - Where the user-facing signature places `metadata`.
+ * @returns {{ metadata: object | undefined, args: ArrayLike<unknown> }}
+ */
+function resolveMetadata (client, args, index) {
+  const grpc = client && getGrpc(client)
+  if (!grpc) return { metadata: undefined, args }
 
-  if (!client || !grpc) return args
+  const slot = args[index]
 
-  const meta = args[index]
-  const normalized = []
-
-  for (let i = 0; i < index; i++) {
-    normalized.push(args[i])
+  // User-provided Metadata at the expected slot — use it, no reshape.
+  // `instanceof` is the primary check (handles subclasses); the constructor-
+  // name fallback covers the rare case of duplicate `@grpc/grpc-js` instances
+  // loaded under different node_modules trees, where `instanceof` fails across
+  // realms but the runtime semantics are still equivalent.
+  if (slot instanceof grpc.Metadata || slot?.constructor?.name === 'Metadata') {
+    return { metadata: slot, args }
   }
 
-  if (!meta || !meta.constructor || meta.constructor.name !== 'Metadata') {
-    normalized.push(new grpc.Metadata())
+  const metadata = new grpc.Metadata()
+
+  // Slot is missing — replace in place. Keeping length stable matters for
+  // overloads where upstream's argument validator rejects trailing `undefined`
+  // (e.g. unary's `checkOptionalUnaryResponseArguments`).
+  if (slot == null) {
+    const out = [...args]
+    out[index] = metadata
+    return { metadata, args: out }
   }
 
-  if (meta) {
-    normalized.push(meta)
-  }
-
-  for (let i = index + 1; i < args.length; i++) {
-    normalized.push(args[i])
-  }
-
-  return normalized
+  // Slot holds something else (options, request payload, callback) — splice
+  // a fresh Metadata in front of it.
+  const out = new Array(args.length + 1)
+  for (let i = 0; i < index; i++) out[i] = args[i]
+  out[index] = metadata
+  for (let i = index; i < args.length; i++) out[i + 1] = args[i]
+  return { metadata, args: out }
 }
 
 function getType (definition) {
