@@ -43,9 +43,9 @@ class SchemaExtractor {
     let type
     let format
     let enumValues
-    let description
     let ref
 
+    const description = field.doc
     const fieldType = field.type?.types ?? field.type?.typeName ?? field.type
 
     if (Array.isArray(fieldType)) {
@@ -129,7 +129,7 @@ class SchemaExtractor {
   }
 
   iterateOverSchema (builder) {
-    this.constructor.extractSchema(this.schema, builder, 0)
+    SchemaExtractor.extractSchema(this.schema, builder, 0)
   }
 
   static attachSchemaOnSpan (args, span, operation, tracer) {

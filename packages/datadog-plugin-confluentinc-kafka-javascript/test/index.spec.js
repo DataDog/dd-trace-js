@@ -172,27 +172,30 @@ describe('Plugin', () => {
               ])
             })
 
-            it('should run the consumer in the context of the consumer span', done => {
+            it('should run the consumer in the context of the consumer span', async () => {
               const firstSpan = tracer.scope().active()
-              let consumerReceiveMessagePromise
-              let eachMessage = async ({ topic, partition, message }) => {
-                const currentSpan = tracer.scope().active()
+              let hasReceivedMessage = false
+              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
+                const eachMessage = async () => {
+                  if (hasReceivedMessage) return
 
-                try {
-                  assert.notStrictEqual(currentSpan, firstSpan)
-                  assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
-                  done()
-                } catch (e) {
-                  done(e)
-                } finally {
-                  eachMessage = async () => {} // avoid being called for each message
+                  hasReceivedMessage = true
+                  const currentSpan = tracer.scope().active()
+
+                  try {
+                    assert.notStrictEqual(currentSpan, firstSpan)
+                    assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                    resolve()
+                  } catch (e) {
+                    reject(e)
+                  }
                 }
-              }
 
-              consumer.run({ eachMessage: (...args) => eachMessage(...args) })
-                .then(() => sendMessages(kafka, testTopic, messages))
-                .then(() => consumerReceiveMessagePromise)
-                .catch(done)
+                consumer.run({ eachMessage }).catch(reject)
+              }))
+
+              await sendMessages(kafka, testTopic, messages)
+              await consumerReceiveMessagePromise
             })
 
             it('should propagate context', async () => {
