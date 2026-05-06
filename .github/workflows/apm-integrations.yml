@@ -25,39 +25,45 @@ env:
 
 jobs:
   aerospike:
+    name: aerospike (${{ matrix.aerospike-version }}, node-${{ matrix.node-version }})
     strategy:
       matrix:
         node-version: [eol]
         range: [">=4.0.0 <5.2.0"]
-        aerospike-image: [ce-5.7.0.15]
+        aerospike-version: [ce-5.7.0.15]
+        image: ["aerospike@sha256:f1fbfd8788f840fc10805690bd1352b4a99acbc4c6d113912357b4211dcf56a4"] # ce-5.7.0.15
         test-image: [ubuntu-22.04]
         include:
           - node-version: 18
             range: ">=5.2.0 <6.3.0"
             range_clean: gte.5.2.0
-            aerospike-image: ce-6.4.0.3
+            aerospike-version: ce-6.4.0.3
+            image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 20
             range: ">=5.5.0"
             range_clean: gte.5.5.0
-            aerospike-image: ce-6.4.0.3
+            aerospike-version: ce-6.4.0.3
+            image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
             range: ">=5.12.1"
             range_clean: gte.5.12.1
-            aerospike-image: ce-6.4.0.3
+            aerospike-version: ce-6.4.0.3
+            image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
             range: ">=6.0.0"
             range_clean: gte.6.0.0
-            aerospike-image: ce-6.4.0.3
+            aerospike-version: ce-6.4.0.3
+            image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
     runs-on: ${{ matrix.test-image }}
     permissions:
       id-token: write
     services:
       aerospike:
-        image: aerospike:${{ matrix.aerospike-image }}
+        image: ${{ matrix.image }}
         ports:
           - "127.0.0.1:3000-3002:3000-3002"
     env:
@@ -91,7 +97,7 @@ jobs:
       id-token: write
     services:
       qpid:
-        image: scholzj/qpid-cpp:1.38.0
+        image: scholzj/qpid-cpp@sha256:480142b4c1a64861f9974492d4f7ecdc3d565cd5e60e6a96d34e44f0bf47e043 # 1.38.0
         env:
           QPIDD_ADMIN_USERNAME: admin
           QPIDD_ADMIN_PASSWORD: admin
@@ -111,7 +117,7 @@ jobs:
       id-token: write
     services:
       rabbitmq:
-        image: rabbitmq:3.6-alpine
+        image: rabbitmq@sha256:ebe7ba2c73c719aaa78db416910b8a6d615cae519bbf0e26a65a76c29cd52729 # 3.6-alpine
         ports:
           - 5672:5672
     env:
@@ -168,7 +174,7 @@ jobs:
       id-token: write
     services:
       redis:
-        image: redis:7.0-alpine
+        image: redis@sha256:c9d92d840fd011c908f040592857c724ae6d877f2aba5c40ad963276507386b2 # 7.0-alpine
         ports:
           - 6379:6379
     env:
@@ -194,7 +200,7 @@ jobs:
       id-token: write
     services:
       cassandra:
-        image: cassandra:3-focal
+        image: cassandra@sha256:61cbfa672b254e8fc82ece6bfd434ef7a2000e39e32f8f03c9ee4700cd9973a5 # 3-focal
         ports:
           - 9042:9042
     env:
@@ -257,7 +263,7 @@ jobs:
       id-token: write
     services:
       kafka:
-        image: apache/kafka:3.9.1
+        image: apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed # 3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -337,7 +343,7 @@ jobs:
       id-token: write
     services:
       couchbase:
-        image: ghcr.io/datadog/couchbase-server-sandbox:latest
+        image: ghcr.io/datadog/couchbase-server-sandbox@sha256:4ffbf2bc9785a9c7c6ddd7580226280a2a9f1f08c689999f5dff7958e71ad97e # latest
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
@@ -409,7 +415,7 @@ jobs:
       id-token: write
     services:
       elasticsearch:
-        image: elasticsearch:7.17.22
+        image: elasticsearch@sha256:432f21444d8b70a4ab5fc64f9ef7112aaf0c21361948f2deb26d7a5c7333cf35 # 7.17.22
         env:
           discovery.type: single-node
         ports:
@@ -617,7 +623,7 @@ jobs:
       id-token: write
     services:
       kafka:
-        image: apache/kafka:3.9.1
+        image: apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed # 3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -705,7 +711,7 @@ jobs:
       id-token: write
     services:
       limitd:
-        image: ghcr.io/rochdev/limitd
+        image: ghcr.io/rochdev/limitd@sha256:3315deb2a9fba6d9753b26363947992c2c7b1465aba7352b4595c76a197aaeff # latest
         env:
           BUCKET_1_NAME: "user"
           BUCKET_1_SIZE: "10"
@@ -735,7 +741,7 @@ jobs:
       id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -754,7 +760,7 @@ jobs:
       id-token: write
     services:
       memcached:
-        image: memcached:1.5-alpine
+        image: memcached@sha256:6627e971255440a1bd789ca709d8c6c767b98ad4ba0b29d49c7949ba3275cbf9 # 1.5-alpine
         ports:
           - 11211:11211
     env:
@@ -790,7 +796,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -807,7 +813,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -824,7 +830,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -850,7 +856,7 @@ jobs:
       id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -869,7 +875,7 @@ jobs:
       id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -983,7 +989,7 @@ jobs:
       id-token: write
     services:
       opensearch:
-        image: opensearchproject/opensearch:2.8.0
+        image: opensearchproject/opensearch@sha256:7d7f306996c0901956e0c413c817f4e249bd3d27c9c9ea6460bd7da88df73039 # 2.8.0
         env:
           plugins.security.disabled: "true"
           discovery.type: single-node
@@ -1002,7 +1008,7 @@ jobs:
       id-token: write
     services:
       oracledb:
-        image: gvenzl/oracle-xe:18-slim
+        image: gvenzl/oracle-xe@sha256:118d22f6df24caff2456323e334c14b9cfcc8fad7475b5421fa1638baa6f54ca # 18-slim
         env:
           ORACLE_PASSWORD: Oracle18
         ports:
@@ -1075,7 +1081,7 @@ jobs:
       id-token: write
     services:
       postgres:
-        image: postgres:9.5
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -1103,13 +1109,13 @@ jobs:
       id-token: write
     services:
       postgres:
-        image: postgres:9.5
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
       mssql:
-        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server:2019-latest
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server@sha256:8bb7f2f0684104d98ef4cbedf574210f38ea0f00fc0713af9d3f962f7578a6a8 # 2019-latest
         env:
           ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2
@@ -1117,11 +1123,11 @@ jobs:
         ports:
           - 1433:1433
       mongodb:
-        image: prismagraphql/mongo-single-replica:4.4.3-bionic
+        image: prismagraphql/mongo-single-replica@sha256:3efd76778f3db22e167e4c5a4ceaae335bdc23a84e82dc3c8b44a39e61d93a24 # 4.4.3-bionic
         ports:
           - 27017:27017
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -1188,7 +1194,7 @@ jobs:
       id-token: write
     services:
       redis:
-        image: redis:6.2-alpine
+        image: redis@sha256:a0bb2f95a4672c5bbf3a01fcc2eb6dfb8fd898d83fc71cbf012c6b9479ab1607 # 6.2-alpine
         ports:
           - 6379:6379
     env:
@@ -1204,7 +1210,7 @@ jobs:
       id-token: write
     services:
       redis:
-        image: redis:6.2-alpine
+        image: redis@sha256:a0bb2f95a4672c5bbf3a01fcc2eb6dfb8fd898d83fc71cbf012c6b9479ab1607 # 6.2-alpine
         ports:
           - 6379:6379
     env:
@@ -1220,7 +1226,7 @@ jobs:
       id-token: write
     services:
       valkey:
-        image: valkey/valkey:8.1-alpine
+        image: valkey/valkey@sha256:1cb6b20b70d927560cc4cc5397b5f045e74aa603ff7696274778880bb6fadc75 # 8.1-alpine
         ports:
           - 6379:6379
     env:
@@ -1263,7 +1269,7 @@ jobs:
       id-token: write
     services:
       qpid:
-        image: scholzj/qpid-cpp:1.38.0
+        image: scholzj/qpid-cpp@sha256:480142b4c1a64861f9974492d4f7ecdc3d565cd5e60e6a96d34e44f0bf47e043 # 1.38.0
         env:
           QPIDD_ADMIN_USERNAME: admin
           QPIDD_ADMIN_PASSWORD: admin
@@ -1325,7 +1331,7 @@ jobs:
       id-token: write
     services:
       mssql:
-        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server:2019-latest
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server@sha256:8bb7f2f0684104d98ef4cbedf574210f38ea0f00fc0713af9d3f962f7578a6a8 # 2019-latest
         env:
           ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2
