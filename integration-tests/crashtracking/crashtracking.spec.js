@@ -159,8 +159,8 @@ describeNotWindows('crashtracking integration', () => {
         throwFrame.file.includes('uncaught-exception.js'),
         `expected top frame to be uncaught-exception.js, got: ${JSON.stringify(throwFrame)}`
       )
-      assert.ok(throwFrame.line === 7, 'expected line number in top frame (in signal-crash.js)')
-      assert.ok(throwFrame.column === 7, 'expected column number in top frame (in signal-crash.js)')
+      assert.strictEqual(throwFrame.line, 7, 'expected line number in top frame (in signal-crash.js)')
+      assert.strictEqual(throwFrame.column, 7, 'expected column number in top frame (in signal-crash.js)')
     })
   })
 })
