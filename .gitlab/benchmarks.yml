@@ -67,6 +67,8 @@ check-big-regressions:
 
 benchmark:
   extends: .benchmarks
+  # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
+  # one, change the other — otherwise variants get silently skipped.
   parallel:
     matrix:
       - MAJOR_VERSION: 18
@@ -79,6 +81,8 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 18
         GROUP: 5
+      - MAJOR_VERSION: 18
+        GROUP: 6
       - MAJOR_VERSION: 20
         GROUP: 1
       - MAJOR_VERSION: 20
@@ -89,6 +93,8 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 20
         GROUP: 5
+      - MAJOR_VERSION: 20
+        GROUP: 6
       - MAJOR_VERSION: 22
         GROUP: 1
       - MAJOR_VERSION: 22
@@ -99,6 +105,8 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 22
         GROUP: 5
+      - MAJOR_VERSION: 22
+        GROUP: 6
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -109,8 +117,10 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 24
         GROUP: 5
+      - MAJOR_VERSION: 24
+        GROUP: 6
   variables:
-    SPLITS: 5
+    SPLITS: 6
 
 benchmark-serverless:
   stage: benchmarks
