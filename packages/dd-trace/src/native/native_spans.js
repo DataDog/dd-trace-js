@@ -289,11 +289,12 @@ class NativeSpansInterface {
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, slotIndex, ...args) {
-    // No detach check at function entry: the only WASM calls that can grow
-    // memory are stringTableInsertOne (inside getStringId) and prepareChunk,
-    // both of which call #checkDetach themselves. The inner getStringId
-    // resolution loop below runs BEFORE we capture `this._cqbView` into a
-    // local, so any grow during it is handled. Saves ~0.4–0.6 μs/req.
+    // No detach check at function entry: every WASM call that can grow
+    // memory is followed by a #checkDetach() at the call site
+    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
+    // in flushSpans). Plus the inner getStringId resolution loop below
+    // runs BEFORE we capture `this._cqbView` into a local, so any grow
+    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
 
     let idx = this._cqbIndex
 
@@ -429,11 +430,12 @@ class NativeSpansInterface {
    * @param {number} startMs Start time in milliseconds
    */
   queueCreateSpan (slotIndex, spanId, traceId, parentId, name, startMs) {
-    // No detach check at function entry: the only WASM calls that can grow
-    // memory are stringTableInsertOne (inside getStringId) and prepareChunk,
-    // both of which call #checkDetach themselves. The inner getStringId
-    // resolution loop below runs BEFORE we capture `this._cqbView` into a
-    // local, so any grow during it is handled. Saves ~0.4–0.6 μs/req.
+    // No detach check at function entry: every WASM call that can grow
+    // memory is followed by a #checkDetach() at the call site
+    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
+    // in flushSpans). Plus the inner getStringId resolution loop below
+    // runs BEFORE we capture `this._cqbView` into a local, so any grow
+    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
 
     let idx = this._cqbIndex
 
@@ -509,11 +511,12 @@ class NativeSpansInterface {
    * @param {number} startMs Start time in milliseconds
    */
   queueCreateSpanFull (slotIndex, spanId, traceId, parentId, name, service, resource, type, startMs) {
-    // No detach check at function entry: the only WASM calls that can grow
-    // memory are stringTableInsertOne (inside getStringId) and prepareChunk,
-    // both of which call #checkDetach themselves. The inner getStringId
-    // resolution loop below runs BEFORE we capture `this._cqbView` into a
-    // local, so any grow during it is handled. Saves ~0.4–0.6 μs/req.
+    // No detach check at function entry: every WASM call that can grow
+    // memory is followed by a #checkDetach() at the call site
+    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
+    // in flushSpans). Plus the inner getStringId resolution loop below
+    // runs BEFORE we capture `this._cqbView` into a local, so any grow
+    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
 
     let idx = this._cqbIndex
 
@@ -590,11 +593,12 @@ class NativeSpansInterface {
   queueBatchMeta (slotIndex, tags) {
     if (tags.length === 0) return
 
-    // No detach check at function entry: the only WASM calls that can grow
-    // memory are stringTableInsertOne (inside getStringId) and prepareChunk,
-    // both of which call #checkDetach themselves. The inner getStringId
-    // resolution loop below runs BEFORE we capture `this._cqbView` into a
-    // local, so any grow during it is handled. Saves ~0.4–0.6 μs/req.
+    // No detach check at function entry: every WASM call that can grow
+    // memory is followed by a #checkDetach() at the call site
+    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
+    // in flushSpans). Plus the inner getStringId resolution loop below
+    // runs BEFORE we capture `this._cqbView` into a local, so any grow
+    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
 
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 8
@@ -642,11 +646,12 @@ class NativeSpansInterface {
   queueBatchMetrics (slotIndex, tags) {
     if (tags.length === 0) return
 
-    // No detach check at function entry: the only WASM calls that can grow
-    // memory are stringTableInsertOne (inside getStringId) and prepareChunk,
-    // both of which call #checkDetach themselves. The inner getStringId
-    // resolution loop below runs BEFORE we capture `this._cqbView` into a
-    // local, so any grow during it is handled. Saves ~0.4–0.6 μs/req.
+    // No detach check at function entry: every WASM call that can grow
+    // memory is followed by a #checkDetach() at the call site
+    // (stringTableInsertOne in getStringId, flushChangeQueue, prepareChunk
+    // in flushSpans). Plus the inner getStringId resolution loop below
+    // runs BEFORE we capture `this._cqbView` into a local, so any grow
+    // during it is handled. Saves ~0.4–0.6 μs/req on the express bench.
 
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 12
@@ -713,6 +718,11 @@ class NativeSpansInterface {
 
     try {
       this._state.prepareChunk(slots.length, firstIsLocalRoot, this._flushBuffer)
+      // prepareChunk calls flush_change_buffer + flush_chunk in Rust which
+      // can allocate (deferred_meta/metrics Vecs, spans Vec). Any of those
+      // can trigger memory.grow which detaches our cached ArrayBuffer views.
+      // Refresh now so the next queueOp doesn't write through a stale view.
+      this.#checkDetach()
       const result = await this._state.sendPreparedChunk()
       return result
     } catch (e) {
