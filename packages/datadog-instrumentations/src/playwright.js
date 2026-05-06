@@ -79,6 +79,7 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 let quarantinedButNotAttemptToFixFqns = new Set()
+let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -661,8 +662,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const test = getTestByTestId(dispatcher, testId)
 
       const isTimeout = status === 'timedOut'
-      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
       const testStatus = STATUS_TO_TEST_STATUS[status]
+      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+      if (shouldCreateTestSpan && !testToCtx.has(test)) {
+        testBeginHandler(test, getBrowserNameFromProjects(projects, test), true)
+      }
       testEndHandler(
         {
           test,
@@ -835,15 +839,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
+        const alreadyReported = testsReportedInGenerateSummary.has(test)
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser, true)
+        testBeginHandler(test, browser, !alreadyReported)
         testEndHandler({
           test,
           annotations: [],
           testStatus: 'skip',
           error: null,
           isTimeout: false,
-          shouldCreateTestSpan: true,
+          shouldCreateTestSpan: !alreadyReported,
           projects,
         })
       }
@@ -894,6 +899,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
     quarantinedButNotAttemptToFixFqns = new Set()
+    testsReportedInGenerateSummary = new Set()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1424,7 +1430,8 @@ function generateSummaryWrapper (generateSummary) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
       const didNotRun = test.outcome() === 'skipped' &&
         (!test.results.length || test.expectedStatus !== 'skipped')
-      if (didNotRun) {
+      if (didNotRun && !testsReportedInGenerateSummary.has(test)) {
+        testsReportedInGenerateSummary.add(test)
         const {
           _requireFile: testSuiteAbsolutePath,
           location: {
