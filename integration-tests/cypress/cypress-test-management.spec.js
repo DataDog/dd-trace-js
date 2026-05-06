@@ -850,9 +850,8 @@ moduleTypes.forEach(({
           test_management: { enabled: true },
           flaky_test_retries_enabled: false,
         })
-        receiver.setTestManagementTestsResponseCode(500)
+        receiver.setTestManagementTestsResponseCode(404)
 
-        // Request module waits before retrying; browser runs are slow — need longer gather timeout
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
