@@ -1,5 +1,5 @@
 {
-  "name": "push-to-test-optimization",
+  "name": "datadog-ci",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
