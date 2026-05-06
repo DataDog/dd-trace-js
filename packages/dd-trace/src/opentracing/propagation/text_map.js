@@ -69,6 +69,12 @@ const percentByte = /%([0-9A-Fa-f]{2})/g
 class TextMapPropagator {
   #extractB3Context
 
+  /** @type {Set<string> | undefined} Cached `Set` view of `_config.baggageTagKeys`. */
+  #baggageTagKeysSet
+
+  /** @type {string[] | undefined} Source array that `#baggageTagKeysSet` was built from. */
+  #baggageTagKeysSetSource
+
   constructor (config) {
     this._config = config
 
@@ -76,6 +82,23 @@ class TextMapPropagator {
     const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     this.#extractB3Context = envName === 'OTEL_PROPAGATORS' ? this._extractB3SingleContext : this._extractB3MultiContext
+  }
+
+  /**
+   * Returns a `Set` view of `_config.baggageTagKeys` that is rebuilt only
+   * when the source array reference changes. Avoids an `O(n)` `Set` alloc
+   * per baggage extract (which is per-request when baggage propagation is
+   * enabled).
+   *
+   * @returns {Set<string>}
+   */
+  #getBaggageTagKeysSet () {
+    const source = this._config.baggageTagKeys
+    if (this.#baggageTagKeysSetSource !== source) {
+      this.#baggageTagKeysSet = new Set(source)
+      this.#baggageTagKeysSetSource = source
+    }
+    return this.#baggageTagKeysSet
   }
 
   inject (spanContext, carrier) {
@@ -174,14 +197,14 @@ class TextMapPropagator {
 
       const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
-      for (const [key, value] of Object.entries(baggageItems)) {
+      for (const key of Object.keys(baggageItems)) {
         const baggageKey = key.trim()
         if (!baggageTokenExpr.test(baggageKey)) continue
 
         // Do not trim values. If callers include leading/trailing whitespace, it must be percent-encoded.
         // W3C list-member allows optional properties after ';'.
         // https://www.w3.org/TR/baggage/#header-content
-        const item = `${baggageKey}=${encodeURIComponent(value)},`
+        const item = `${baggageKey}=${encodeURIComponent(baggageItems[key])},`
         itemCounter += 1
         byteCounter += item.length
 
@@ -218,14 +241,15 @@ class TextMapPropagator {
 
     const tags = []
 
-    for (const key in trace.tags) {
-      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
-      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+    for (const key of Object.keys(trace.tags)) {
+      const value = trace.tags[key]
+      if (!value || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
       }
 
-      tags.push(`${key}=${trace.tags[key]}`)
+      tags.push(`${key}=${value}`)
     }
 
     const header = tags.join(',')
@@ -275,7 +299,7 @@ class TextMapPropagator {
     const {
       _sampling: { priority, mechanism },
       _tracestate: ts = new TraceState(),
-      _trace: { origin, tags },
+      _trace: { origin, tags: traceTags },
     } = spanContext
 
     carrier[traceparentKey] = spanContext.toTraceparent()
@@ -297,21 +321,22 @@ class TextMapPropagator {
       if (typeof origin === 'string') {
         const originValue = origin
           .replaceAll(tracestateOriginFilter, '_')
-          .replaceAll(/[\x3D]/g, '~')
+          .replaceAll('=', '~')
 
         state.set('o', originValue)
       }
 
-      for (const key in tags) {
-        if (!tags[key] || !key.startsWith('_dd.p.')) continue
+      for (const key of Object.keys(traceTags)) {
+        const tagValueRaw = traceTags[key]
+        if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
           .replaceAll(tracestateTagKeyFilter, '_')
 
-        const tagValue = tags[key]
+        const tagValue = tagValueRaw
           .toString()
           .replaceAll(tracestateTagValueFilter, '_')
-          .replaceAll(/[\x3D]/g, '~')
+          .replaceAll('=', '~')
 
         state.set(tagKey, tagValue)
       }
@@ -410,9 +435,11 @@ class TextMapPropagator {
     }
 
     if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'ignore') {
-      context._links = []
+      // `context` is null when no extractor matched; the fallback below picks up
+      // the SQSD context if present, otherwise the request runs untraced.
+      if (context) context._links = []
     } else {
-      if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'restart') {
+      if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'restart' && context) {
         context._links = []
         context._links.push({
           context,
@@ -503,14 +530,19 @@ class TextMapPropagator {
 
   _extractTraceparentContext (carrier) {
     const headerValue = carrier[traceparentKey]
-    if (!headerValue) {
+    if (typeof headerValue !== 'string') {
       return null
     }
     const matches = headerValue.trim().match(traceparentExpr)
-    if (matches?.length) {
-      const [version, traceId, spanId, flags, tail] = matches.slice(1)
+    if (matches !== null) {
+      const [, version, traceId, spanId, flags, tail] = matches
       const traceparent = { version }
-      const tracestate = TraceState.fromString(carrier.tracestate)
+      // W3C Trace Context §3.3.1.1: multiple tracestate fields MUST be combined per RFC 7230 §3.2.2.
+      // `filter` drops non-string members (Symbol, throwing-toString) that would crash `join`.
+      const rawTracestate = Array.isArray(carrier.tracestate)
+        ? carrier.tracestate.filter(item => typeof item === 'string').join(',')
+        : carrier.tracestate
+      const tracestate = TraceState.fromString(rawTracestate)
       if (invalidSegment.test(traceId)) return null
       if (invalidSegment.test(spanId)) return null
 
@@ -524,7 +556,7 @@ class TextMapPropagator {
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
         isRemote: true,
-        sampling: { priority: Number.parseInt(flags, 10) & 1 ? 1 : 0 },
+        sampling: { priority: Number.parseInt(flags, 16) & 1 ? 1 : 0 },
         traceparent,
         tracestate,
       })
@@ -550,7 +582,7 @@ class TextMapPropagator {
               break
             }
             case 'o':
-              spanContext._trace.origin = value
+              spanContext._trace.origin = value.replaceAll('~', '=')
               break
             case 't.dm': {
               const mechanism = Math.abs(Number.parseInt(value, 10))
@@ -563,7 +595,7 @@ class TextMapPropagator {
             default: {
               if (!key.startsWith('t.')) continue
               const subKey = key.slice(2) // e.g. t.tid -> tid
-              const transformedValue = value.replaceAll(/[\x7E]/gm, '=')
+              const transformedValue = value.replaceAll('~', '=')
 
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
@@ -681,7 +713,7 @@ class TextMapPropagator {
     if (!header) return
 
     const baggages = header.split(',')
-    const baggageTagKeys = new Set(this._config.baggageTagKeys)
+    const baggageTagKeys = this.#getBaggageTagKeysSet()
     const tagAllKeys = baggageTagKeys.has('*')
     /** @type {Record<string, string> | undefined} */
     let items
@@ -721,11 +753,17 @@ class TextMapPropagator {
         tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
         return
       }
-      try {
-        value = decodeURIComponent(value)
-      } catch {
-        const bytes = value.replaceAll(percentByte, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
-        value = Buffer.from(bytes, 'binary').toString('utf8')
+      // `decodeURIComponent` only does work when the value contains a
+      // percent-encoded sequence; everything else passes through unchanged.
+      // Skipping the call (and the surrounding `try` frame) shaves an alloc
+      // per baggage entry on the dominant ASCII case.
+      if (value.includes('%')) {
+        try {
+          value = decodeURIComponent(value)
+        } catch {
+          const bytes = value.replaceAll(percentByte, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+          value = Buffer.from(bytes, 'binary').toString('utf8')
+        }
       }
       items ??= {}
       items[key] = value

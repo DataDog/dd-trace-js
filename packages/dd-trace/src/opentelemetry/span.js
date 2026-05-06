@@ -13,33 +13,9 @@ const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
+const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
-const {
-  addOtelLink,
-  recordException,
-  setOtelAttribute,
-  setOtelAttributes,
-  setStatus,
-} = require('./span-helpers')
-
-// The one built into OTel rounds so we lose sub-millisecond precision.
-function hrTimeToMilliseconds (time) {
-  return time[0] * 1e3 + time[1] / 1e6
-}
-
-function isTimeInput (startTime) {
-  if (typeof startTime === 'number') {
-    return true
-  }
-  if (startTime instanceof Date) {
-    return true
-  }
-  if (Array.isArray(startTime) && startTime.length === 2 &&
-      typeof startTime[0] === 'number' && typeof startTime[1] === 'number') {
-    return true
-  }
-  return false
-}
+const { setOtelOperationName } = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -47,6 +23,15 @@ const spanKindNames = {
   [api.SpanKind.CLIENT]: kinds.CLIENT,
   [api.SpanKind.PRODUCER]: kinds.PRODUCER,
   [api.SpanKind.CONSUMER]: kinds.CONSUMER,
+}
+
+/**
+ * The OTel-shipped `hrTimeToMilliseconds` rounds, dropping sub-millisecond precision we want.
+ *
+ * @param {[number, number]} hrTime
+ */
+function hrTimeToMilliseconds (hrTime) {
+  return hrTime[0] * 1e3 + hrTime[1] / 1e6
 }
 
 /**
@@ -128,7 +113,21 @@ function spanNameMapper (spanName, kind, attributes) {
   return spanKindNames[kind]
 }
 
-class Span {
+/**
+ * OTel-bridge span backed by a `DatadogSpan`. `Tracer` constructs these on the OTel API
+ * surface; the underlying DD span carries the lifecycle.
+ */
+class Span extends BridgeSpanBase {
+  /**
+   * @param {import('./tracer')} parentTracer
+   * @param {import('@opentelemetry/api').Context} context
+   * @param {string | undefined} spanName
+   * @param {import('./span_context')} spanContext
+   * @param {import('@opentelemetry/api').SpanKind} kind
+   * @param {Array<import('@opentelemetry/api').Link>} [links]
+   * @param {import('@opentelemetry/api').TimeInput} [timeInput]
+   * @param {import('@opentelemetry/api').Attributes} [attributes]
+   */
   constructor (
     parentTracer,
     context,
@@ -144,7 +143,7 @@ class Span {
     const hrStartTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const startTime = hrTimeToMilliseconds(hrStartTime)
 
-    this._ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
+    const ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
       operationName: spanNameMapper(spanName, kind, attributes),
       context: spanContext._ddContext,
       startTime,
@@ -158,14 +157,14 @@ class Span {
       links,
     }, _tracer._debug)
 
+    super(ddSpan)
+
     if (attributes) {
       this.setAttributes(attributes)
     }
 
     this._parentTracer = parentTracer
     this._context = context
-
-    this._hasStatus = false
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -200,27 +199,13 @@ class Span {
     return new SpanContext(this._ddSpan.context())
   }
 
-  setAttribute (key, value) {
-    setOtelAttribute(this._ddSpan, key, value)
-    return this
-  }
-
-  setAttributes (attributes) {
-    setOtelAttributes(this._ddSpan, attributes)
-    return this
-  }
-
-  addLink (link, attrs) {
-    addOtelLink(this._ddSpan, link, attrs)
-    return this
-  }
-
-  addLinks (links) {
-    for (const link of links) this.addLink(link)
-    return this
-  }
-
+  /**
+   * @param {string} ptrKind
+   * @param {string} ptrDir
+   * @param {string} ptrHash
+   */
   addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    if (this.ended) return this
     const zeroContext = new SpanContext({
       traceId: id('0'),
       spanId: id('0'),
@@ -234,18 +219,17 @@ class Span {
     return this.addLink(zeroContext, attributes)
   }
 
-  setStatus (status) {
-    setStatus(this._ddSpan, this, status)
-    return this
-  }
-
+  /**
+   * @param {string} name
+   */
   updateName (name) {
-    if (!this.ended) {
-      this._ddSpan.setOperationName(name)
-    }
+    setOtelOperationName(this._ddSpan, name)
     return this
   }
 
+  /**
+   * @param {import('@opentelemetry/api').TimeInput} [timeInput]
+   */
   end (timeInput) {
     if (this.ended) {
       api.diag.error('You can only call end() on a span once.')
@@ -259,30 +243,8 @@ class Span {
     this._spanProcessor.onEnd(this)
   }
 
-  isRecording () {
-    return this.ended === false
-  }
-
-  addEvent (name, attributesOrStartTime, startTime) {
-    startTime = attributesOrStartTime && isTimeInput(attributesOrStartTime) ? attributesOrStartTime : startTime
-    const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
-    startTime = hrTimeToMilliseconds(hrStartTime)
-
-    this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
-    return this
-  }
-
-  recordException (exception, timeInput) {
-    // Route through `this.addEvent` so its time-input conversion applies.
-    recordException(this._ddSpan, this, exception, timeInput)
-  }
-
   get duration () {
     return this._ddSpan._duration
-  }
-
-  get ended () {
-    return this.duration !== undefined
   }
 }
 

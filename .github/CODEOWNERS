@@ -231,8 +231,11 @@
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
+/.github/actions/upload-node-reports/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
 /.github/workflows/mirror-image.yml @Datadog/lang-platform-js
+/scripts/check-no-mcr-images.js @Datadog/lang-platform-js
+
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
@@ -285,6 +288,7 @@
 /packages/datadog-core @DataDog/lang-platform-js
 /packages/datadog-shimmer @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/retry.js @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
@@ -313,6 +317,8 @@
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/setup @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
+
+/scripts/** @DataDog/lang-platform-js
 
 # Multiple teams
 /eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js

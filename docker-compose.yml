@@ -4,13 +4,13 @@ services:
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
   azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite:3.35.0
     ports:
       - "127.0.0.1:10000:10000"
       - "127.0.0.1:10001:10001"
       - "127.0.0.1:10002:10002"
   azureeventhubsemulator:
-    image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
     volumes:
       - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
     ports:
@@ -21,7 +21,7 @@ services:
       METADATA_SERVER: azurite
       ACCEPT_EULA: "Y"
   azureservicebusemulator:
-    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     volumes:
       - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
     ports:
@@ -32,7 +32,7 @@ services:
       MSSQL_SA_PASSWORD: "Localtestpass1!"
       SQL_SERVER: azuresqledge
   azuresqledge:
-    image: mcr.microsoft.com/azure-sql-edge:1.0.7
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge:1.0.7
     platform: linux/amd64
     ports:
       - "127.0.0.1:1433:1433"
@@ -54,7 +54,7 @@ services:
     # A working MSSQL server is not available on ARM.
     # This image provides _most_ of sqlserver functionalities, but
     # does not support stored procedures (corresponding tests will fail)
-    image: mcr.microsoft.com/azure-sql-edge
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge:1.0.7
     environment:
       - "ACCEPT_EULA=Y"
       - "SA_PASSWORD=DD_HUNTER2"

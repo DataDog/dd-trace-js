@@ -41,17 +41,6 @@ const conclusionEmojis = {
   timed_out: '⌛',
 }
 
-const conclusionSeverity = {
-  failure: 0,
-  timed_out: 1,
-  action_required: 2,
-  cancelled: 3,
-  stale: 4,
-  neutral: 5,
-  skipped: 6,
-  success: 7,
-}
-
 const failureConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
@@ -174,21 +163,41 @@ function formatConclusion (conclusion) {
   return conclusion ? `${conclusion} ${conclusionEmojis[conclusion]}` : ' '
 }
 
-function bySeverity (a, b) {
-  return (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8)
+function formatTime (timestamp) {
+  if (!timestamp) return ' '
+  const date = new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'America/New_York',
+    timeZoneName: 'short',
+  })
+}
+
+function formatDuration (startedAt, completedAt) {
+  if (!startedAt || !completedAt) return ' '
+  const start = new Date(startedAt)
+  const end = new Date(completedAt)
+  const totalSeconds = Math.floor((end - start) / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
 async function printSummary (runs) {
   const rows = runs
-    .sort(bySeverity)
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map(run => ({
       name: run.name,
       status: run.status,
       conclusion: formatConclusion(run.conclusion),
       // workflow_run has no completed_at; updated_at reflects the final state
       // change once status === 'completed', otherwise it's an in-flight tick.
-      started_at: run.run_started_at,
-      completed_at: run.status === 'completed' ? run.updated_at : ' ',
+      started_at: formatTime(run.run_started_at),
+      completed_at: formatTime(run.status === 'completed' ? run.updated_at : null),
+      duration: formatDuration(run.run_started_at, run.status === 'completed' ? run.updated_at : null),
       url: run.html_url,
     }))
 
@@ -202,6 +211,7 @@ async function printSummary (runs) {
     { data: 'conclusion', header: true },
     { data: 'started_at', header: true },
     { data: 'completed_at', header: true },
+    { data: 'duration', header: true },
   ]
 
   const body = rows.map(row => [
@@ -210,6 +220,7 @@ async function printSummary (runs) {
     row.conclusion,
     row.started_at,
     row.completed_at,
+    row.duration,
   ])
 
   await summary

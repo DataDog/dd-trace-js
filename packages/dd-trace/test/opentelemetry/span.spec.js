@@ -290,6 +290,15 @@ describe('OTel Span', () => {
     assert.strictEqual(span.name, 'new name')
   })
 
+  it('updateName is a no-op after end()', () => {
+    const span = makeSpan('name')
+    span.end()
+
+    span.updateName('after end')
+
+    assert.strictEqual(span._ddSpan.context()._name, 'name')
+  })
+
   it('should set attributes', () => {
     const span = makeSpan('name')
 
@@ -504,6 +513,56 @@ describe('OTel Span', () => {
     assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
   })
 
+  describe('setStatus precedence (OTel spec)', () => {
+    it('OK locks the status against subsequent ERROR and UNSET writes', () => {
+      const span = makeSpan('name')
+      const { _tags } = span._ddSpan.context()
+
+      span.setStatus({ code: 1 })
+      span.setStatus({ code: 2, message: 'late error' })
+      span.setStatus({ code: 0, message: 'late unset' })
+
+      assert.ok(!(ERROR_MESSAGE in _tags))
+    })
+
+    it('ERROR can be overridden by a later ERROR with a fresh message', () => {
+      const span = makeSpan('name')
+      const { _tags } = span._ddSpan.context()
+
+      span.setStatus({ code: 2, message: 'first error' })
+      span.setStatus({ code: 2, message: 'second error' })
+
+      assert.strictEqual(_tags[ERROR_MESSAGE], 'second error')
+    })
+
+    it('UNSET is always a no-op even before any successful write', () => {
+      const span = makeSpan('name')
+      const { _tags } = span._ddSpan.context()
+
+      span.setStatus({ code: 0, message: 'ignored' })
+
+      assert.ok(!(ERROR_MESSAGE in _tags))
+    })
+  })
+
+  it('mutation methods are all no-ops after end()', () => {
+    const span = makeSpan('name')
+    span.end()
+
+    span.setAttribute('after.end', 'no')
+    span.setAttributes({ 'after.end.batch': 'no' })
+    span.addLink({ context: { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), traceFlags: 1 } })
+    span.addLinks([{ context: { traceId: 'c'.repeat(32), spanId: 'd'.repeat(16) } }])
+    span.addSpanPointer('kind', 'd', 'hash')
+    span.addEvent('after.end.event')
+    span.recordException(new Error('after end'))
+    span.updateName('after end')
+
+    assert.deepStrictEqual(span._ddSpan.context()._tags, {})
+    assert.strictEqual(span._ddSpan._links.length, 0)
+    assert.strictEqual(span._ddSpan._events.length, 0)
+  })
+
   it('should mark ended and expose recording state', () => {
     const span = makeSpan('name')
 
@@ -561,5 +620,24 @@ describe('OTel Span', () => {
       },
     }])
     assert.strictEqual(events2.length, 2)
+  })
+
+  it('addEvent normalizes hrTime and Date inputs without leaking array-indexed attributes', () => {
+    const span = makeSpan('time-inputs')
+    const hrTime = [1700000000, 500000000]
+    const hrTimeMs = hrTime[0] * 1e3 + hrTime[1] / 1e6
+    const date = new Date(1700000000000)
+
+    span.addEvent('hr-time-as-second-arg', hrTime)
+    span.addEvent('date-as-second-arg', date)
+    span.addEvent('attrs-and-hr-time', { code: 42 }, hrTime)
+
+    // Numeric startTime (not hrTime array) guarantees span_format's Math.round(startTime * 1e6)
+    // is finite; absent `attributes` key guarantees no { '0': s, '1': n } leak.
+    assert.deepStrictEqual(span._ddSpan._events, [
+      { name: 'hr-time-as-second-arg', startTime: hrTimeMs },
+      { name: 'date-as-second-arg', startTime: date.getTime() },
+      { name: 'attrs-and-hr-time', attributes: { code: 42 }, startTime: hrTimeMs },
+    ])
   })
 })

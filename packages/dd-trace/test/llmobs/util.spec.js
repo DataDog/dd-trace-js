@@ -3,9 +3,12 @@
 const assert = require('node:assert/strict')
 
 const { before, describe, it } = require('mocha')
+
+const getConfig = require('../../src/config')
 const {
   encodeUnicode,
   getFunctionArguments,
+  validateCostTags,
   safeJsonParse,
   validateKind,
   spanHasError,
@@ -39,6 +42,37 @@ describe('util', () => {
 
     it('should throw for an undefined kind', () => {
       assert.throws(() => validateKind())
+    })
+  })
+
+  describe('validateCostTags', () => {
+    const span = {}
+
+    it('should return cost tags that reference span tags', () => {
+      const costTags = validateCostTags(span, ['team', 'feature'], 'annotate', {
+        team: 'ml',
+        feature: 'chatbot',
+      })
+
+      assert.deepStrictEqual(costTags, ['team', 'feature'])
+    })
+
+    it('should skip invalid cost tags', () => {
+      const costTags = validateCostTags(span, ['team', 'missing', 123], 'annotate', { team: 'ml' })
+
+      assert.deepStrictEqual(costTags, ['team'])
+    })
+
+    it('should reject non-array cost tags', () => {
+      const costTags = validateCostTags(span, 'team', 'annotate', { team: 'ml' })
+
+      assert.deepStrictEqual(costTags, [])
+    })
+
+    it('should return an empty list for an empty list', () => {
+      const costTags = validateCostTags(span, [], 'annotate', { team: 'ml' })
+
+      assert.deepStrictEqual(costTags, [])
     })
   })
 
@@ -169,29 +203,31 @@ describe('util', () => {
 
   describe('spanHasError', () => {
     let Span
+    let tracer
     let ps
 
     before(() => {
       Span = require('../../src/opentracing/span')
+      tracer = { _config: getConfig() }
       ps = {
         sample () {},
       }
     })
 
     it('returns false when there is no error', () => {
-      const span = new Span(null, null, ps, {})
+      const span = new Span(tracer, null, ps, {})
       assert.strictEqual(spanHasError(span), false)
     })
 
     it('returns true if the span has an "error" tag', () => {
-      const span = new Span(null, null, ps, {})
+      const span = new Span(tracer, null, ps, {})
       span.setTag('error', true)
       assert.strictEqual(spanHasError(span), true)
     })
 
     it('returns true if the span has the error properties as tags', () => {
       const err = new Error('boom')
-      const span = new Span(null, null, ps, {})
+      const span = new Span(tracer, null, ps, {})
 
       span.setTag('error.type', err.name)
       span.setTag('error.msg', err.message)
