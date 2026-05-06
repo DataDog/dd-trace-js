@@ -5,6 +5,8 @@ const assert = require('node:assert/strict')
 const { setTimeout } = require('node:timers/promises')
 const { When, Then, Before, After } = require('@cucumber/cucumber')
 
+const slowDurationDelayMs = process.env.SHOULD_ADD_SLOW_DURATION_TEST ? 5100 : 0
+
 class Greeter {
   sayFarewell () {
     return 'farewell'
@@ -63,8 +65,6 @@ When('the greeter says greetings', function () {
 })
 
 When('the greeter says whatever', async function () {
-  if (process.env.SHOULD_ADD_SLOW_DURATION_TEST) {
-    await setTimeout(5100)
-  }
+  await setTimeout(slowDurationDelayMs)
   this.whatIHeard = 'whatever'
 })
