@@ -270,7 +270,7 @@ class LLMObs extends NoopLLMObs {
       throw err
     }
 
-    const { inputData, outputData, metadata, metrics, tags, prompt } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
 
     if (inputData || outputData) {
       if (spanKind === 'llm') {
@@ -284,17 +284,31 @@ class LLMObs extends NoopLLMObs {
       }
     }
 
-    if (metadata) {
-      this._tagger.tagMetadata(span, metadata)
-    }
-    if (metrics) {
-      this._tagger.tagMetrics(span, metrics)
-    }
-    if (tags) {
-      this._tagger.tagSpanTags(span, tags)
-    }
-    if (prompt) {
-      this._tagger.tagPrompt(span, prompt)
+      if (metadata) {
+        this._tagger.tagMetadata(span, metadata)
+      }
+      if (metrics) {
+        this._tagger.tagMetrics(span, metrics)
+      }
+      // Apply tags before costTags so costTags can reference tags from the same annotation.
+      if (tags) {
+        this._tagger.tagSpanTags(span, tags)
+      }
+      if (costTags != null) {
+        this._tagger.tagCostTags(span, costTags, 'annotate')
+      }
+      if (prompt) {
+        this._tagger.tagPrompt(span, prompt)
+      }
+    } catch (e) {
+      if (e.ddErrorTag) {
+        err = e.ddErrorTag
+      }
+      throw e
+    } finally {
+      if (autoinstrumented === false) {
+        telemetry.recordLLMObsAnnotate(span, err)
+      }
     }
   }
 

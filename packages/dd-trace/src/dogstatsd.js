@@ -22,6 +22,7 @@ const TYPE_HISTOGRAM = 'h'
  */
 class DogStatsDClient {
   #lookup
+  #tagsPrefix
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -36,6 +37,7 @@ class DogStatsDClient {
     this._family = isIP(this._host)
     this._port = options.port
     this._tags = options.tags
+    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
     this._buffer = ''
     this._offset = 0
@@ -66,9 +68,9 @@ class DogStatsDClient {
   flush () {
     const queue = this._enqueue()
 
-    log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
+    if (queue.length === 0) return
 
-    if (this._queue.length === 0) return
+    log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
@@ -119,11 +121,12 @@ class DogStatsDClient {
   _add (stat, value, type, tags) {
     let message = `${stat}:${value}|${type}`
 
-    // Don't manipulate this._tags as it is still used
-    tags = tags ? [...this._tags, ...tags] : this._tags
-
-    if (tags.length > 0) {
-      message += `|#${tags.join(',')}`
+    if (tags?.length) {
+      message += this.#tagsPrefix
+        ? `${this.#tagsPrefix},${tags.join(',')}`
+        : `|#${tags.join(',')}`
+    } else {
+      message += this.#tagsPrefix
     }
 
     if (entityId) {

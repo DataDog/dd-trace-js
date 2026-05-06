@@ -14,6 +14,7 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   METADATA,
+  COST_TAGS,
   TOOL_DEFINITIONS,
   INPUT_MESSAGES,
   INPUT_VALUE,
@@ -131,8 +132,16 @@ class LLMObsSpanProcessor {
       meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
     }
 
-    if (mlObsTags[METADATA]) {
-      this.#addObject(mlObsTags[METADATA], meta.metadata = {})
+    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS]) {
+      const metadata = {}
+      if (mlObsTags[METADATA]) this.#addObject(mlObsTags[METADATA], metadata)
+      // Only seed `metadata._dd` when there's something to put in it (currently cost_tags). Mirrors
+      // dd-trace-py and the cross-language wire format enforced by system-tests — metadata-only
+      // spans must not carry an empty `_dd: {}` block.
+      if (mlObsTags[COST_TAGS]) {
+        this.#getDdMetadata(metadata).cost_tags = mlObsTags[COST_TAGS]
+      }
+      meta.metadata = metadata
     }
 
     if (mlObsTags[TOOL_DEFINITIONS]) {
@@ -262,6 +271,18 @@ class LLMObsSpanProcessor {
     }
 
     add(obj, carrier)
+  }
+
+  /**
+   * Returns `metadata._dd`, normalizing it to a fresh object if missing or invalid.
+   * @param {Record<string, unknown>} metadata
+   * @returns {Record<string, unknown>}
+   */
+  #getDdMetadata (metadata) {
+    if (!metadata._dd || typeof metadata._dd !== 'object' || Array.isArray(metadata._dd)) {
+      metadata._dd = {}
+    }
+    return metadata._dd
   }
 
   #getTags (span, mlApp, sessionId, error) {

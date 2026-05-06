@@ -1072,6 +1072,127 @@ describe('sdk', () => {
         })
       })
     })
+
+    it('annotates costTags if present', () => {
+      const tags = { team: 'ml', feature: 'chatbot', debug_id: 'abc' }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags, costTags: ['team', 'feature'] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': tags,
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+        })
+      })
+    })
+
+    it('dedupes costTags across annotations', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({
+          tags: { team: 'ml', feature: 'chatbot' },
+          costTags: ['team', 'feature', 'team'],
+        })
+        llmobs.annotate({
+          tags: { project: 'alpha' },
+          costTags: ['feature', 'project'],
+        })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml', feature: 'chatbot', project: 'alpha' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature', 'project'],
+        })
+      })
+    })
+
+    it('skips invalid costTags entries', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: ['team', 'missing', 123] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+        })
+      })
+    })
+
+    it('rejects non-array costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: 'team' })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('does not set costTags for an empty list', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: [] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('ignores null costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: null })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+  })
+
+  describe('annotationContext', () => {
+    it('applies costTags to spans created in the context', () => {
+      llmobs.annotationContext({ tags: { team: 'ml', feature: 'chatbot' }, costTags: ['team', 'feature'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml', feature: 'chatbot' },
+            '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+          })
+        })
+      })
+    })
+
+    it('does not retain costTags for tags added after the span starts', () => {
+      llmobs.annotationContext({ costTags: ['team'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          llmobs.annotate({ tags: { team: 'ml' } })
+
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml' },
+          })
+        })
+      })
+    })
   })
 
   describe('exportSpan', () => {

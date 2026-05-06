@@ -118,7 +118,7 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers)
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
-    assert.deepStrictEqual(calledTags, ['type:kinesis', 'topic:stream-123', 'direction:in', 'manual_checkpoint:true'])
+    assert.deepStrictEqual(calledTags, ['direction:in', 'type:kinesis', 'topic:stream-123', 'manual_checkpoint:true'])
   })
 
   it('should set an automatic checkpoint when setConsumeCheckpoint is called with manualCheckpoint:false', function () {

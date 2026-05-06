@@ -92,6 +92,8 @@ jobs:
           cache: "true"
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-windows
