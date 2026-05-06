@@ -2287,6 +2287,65 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    it('uses the retry count from the matching slow_test_retries bucket', (done) => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+            '10s': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const instantTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/instant-test.js'
+          )
+          assert.strictEqual(instantTests.length, 3)
+          assert.strictEqual(
+            instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+            2
+          )
+
+          const slowTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/mocha-slightly-slow-test.js'
+          )
+          assert.strictEqual(slowTests.length, 1)
+          assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+          assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+        }, 25_000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/instant-test.js',
+              './test-early-flake-detection/mocha-slightly-slow-test.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
       // fail-test.js will be considered new and will always fail
       receiver.setKnownTests({
