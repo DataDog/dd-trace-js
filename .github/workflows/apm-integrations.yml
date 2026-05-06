@@ -29,7 +29,7 @@ jobs:
       matrix:
         node-version: [eol]
         range: [">=4.0.0 <5.2.0"]
-        image: ["aerospike@sha256:f1fbfd8788f840fc10805690bd1352b4a99acbc4c6d113912357b4211dcf56a4 # ce-5.7.0.15"]
+        image: ["aerospike@sha256:f1fbfd8788f840fc10805690bd1352b4a99acbc4c6d113912357b4211dcf56a4"] # ce-5.7.0.15
         test-image: [ubuntu-22.04]
         include:
           - node-version: 18
