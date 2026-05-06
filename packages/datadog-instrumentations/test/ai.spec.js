@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const { wrapModelWithAIGuard } = require('../src/ai')
 
-const aiguardChannel = channel('dd-trace:ai:aiguard')
+const evaluateChannel = channel('dd-trace:vercel-ai:evaluate')
 
 const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
 
@@ -39,15 +39,15 @@ function subscribeAutoResolve () {
     calls.push({ messages: ctx.messages })
     ctx.resolve()
   }
-  aiguardChannel.subscribe(handler)
-  return { calls, unsubscribe: () => aiguardChannel.unsubscribe(handler) }
+  evaluateChannel.subscribe(handler)
+  return { calls, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
 }
 
 function subscribeAutoReject () {
   const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
   const handler = ctx => ctx.reject(err)
-  aiguardChannel.subscribe(handler)
-  return { err, unsubscribe: () => aiguardChannel.unsubscribe(handler) }
+  evaluateChannel.subscribe(handler)
+  return { err, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
 }
 
 describe('wrapModelWithAIGuard', () => {
@@ -205,12 +205,12 @@ describe('wrapModelWithAIGuard', () => {
         callCount++
         callCount === 1 ? ctx.resolve() : ctx.reject(err)
       }
-      aiguardChannel.subscribe(handler)
+      evaluateChannel.subscribe(handler)
       model.doGenerate = sinon.stub().resolves({ content: [{ type: 'text', text: 'bad' }] })
       wrapModelWithAIGuard(model)
 
       return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
-        .finally(() => aiguardChannel.unsubscribe(handler))
+        .finally(() => evaluateChannel.unsubscribe(handler))
     })
 
     it('does not wrap already wrapped model', () => {
@@ -364,13 +364,13 @@ describe('wrapModelWithAIGuard', () => {
         callCount++
         callCount === 1 ? ctx.resolve() : ctx.reject(err)
       }
-      aiguardChannel.subscribe(handler)
+      evaluateChannel.subscribe(handler)
       const chunks = [{ type: 'text-delta', textDelta: 'bad response' }, { type: 'finish' }]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
       wrapModelWithAIGuard(model)
 
       return assert.rejects(() => model.doStream({ prompt }), e => e === err)
-        .finally(() => aiguardChannel.unsubscribe(handler))
+        .finally(() => evaluateChannel.unsubscribe(handler))
     })
   })
 })

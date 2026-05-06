@@ -3,9 +3,115 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
+const { convertOpenAIResponseItemsToMessages } = require('./helpers/ai-messages')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+const evaluateCh = dc.channel('apm:openai:request:evaluate')
+
+const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses'])
+
+/**
+ * Publishes already-converted AI-style messages to the OpenAI evaluation channel.
+ *
+ * @param {Array<object>} messages - AI-style messages to evaluate.
+ * @returns {Promise<void>}
+ */
+function publishEvaluation (messages) {
+  return new Promise((resolve, reject) => {
+    evaluateCh.publish({ messages, resolve, reject })
+  })
+}
+
+/**
+ * Wraps `apiProm.asResponse` so callers that consume the raw `Response` object still
+ * receive the Before Model verdict. After Model evaluation is not performed on this
+ * path because the response body has not been parsed.
+ *
+ * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
+ * @param {() => Promise<void>} getInputEval - Lazy starter for the Before Model evaluation
+ */
+function wrapAsResponseForAIGuard (apiProm, getInputEval) {
+  if (typeof apiProm.asResponse === 'function') {
+    shimmer.wrap(apiProm, 'asResponse', origAsResponse => function () {
+      const responsePromise = origAsResponse.apply(this, arguments)
+      return Promise.all([getInputEval(), responsePromise]).then(([, response]) => response)
+    })
+  }
+}
+
+/**
+ * Extracts OpenAI input messages from a method call's first argument.
+ *
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {object} callArgs - First argument passed to the wrapped OpenAI method
+ * @returns {Array<object>|undefined}
+ */
+function getInputMessages (baseResource, callArgs) {
+  if (baseResource === 'chat.completions') {
+    return callArgs?.messages?.length ? callArgs.messages : undefined
+  }
+
+  const messages = convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
+  return messages.length ? messages : undefined
+}
+
+/**
+ * Extracts OpenAI output messages from parsed response bodies.
+ *
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {object} body - Parsed response body
+ * @returns {Array<object>}
+ */
+function getOutputMessages (baseResource, body) {
+  if (baseResource === 'chat.completions') {
+    const messages = []
+    const choices = Array.isArray(body?.choices) ? body.choices : []
+    for (const choice of choices) {
+      const message = choice?.message
+      // Include the message when it has content (including empty string), tool_calls,
+      // a `refusal` field, or the deprecated `function_call` field. GPT-4o emits
+      // `{content: null, refusal: "..."}` on policy refusals and AI Guard should still
+      // see those, and pre-tool-call SDK paths still produce `function_call`-only output.
+      if (
+        message?.content != null ||
+        message?.tool_calls?.length ||
+        message?.refusal != null ||
+        message?.function_call != null
+      ) {
+        messages.push(message)
+      }
+    }
+    return messages
+  }
+
+  return convertOpenAIResponseItemsToMessages(body?.output, 'assistant')
+}
+
+/**
+ * Publishes AI Guard After Model evaluation for extracted OpenAI output messages.
+ *
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {Array<object>} inputMessages - Already-converted AI Guard style input messages
+ * @param {Array<object>} outputMessages - Already-converted AI Guard style output messages
+ * @returns {Promise<void|Array<void>>}
+ */
+function publishOutputEvaluation (baseResource, inputMessages, outputMessages) {
+  if (!outputMessages.length) return Promise.resolve()
+
+  if (baseResource === 'chat.completions') {
+    // Chat completions may return multiple choices when `n > 1`. Screen every choice
+    // so any unsafe assistant output rejects `.parse()`, regardless of which choice
+    // the caller ends up using.
+    const evals = []
+    for (const message of outputMessages) {
+      evals.push(publishEvaluation([...inputMessages, message]))
+    }
+    return Promise.all(evals)
+  }
+
+  return publishEvaluation([...inputMessages, ...outputMessages])
+}
 
 const V4_PACKAGE_SHIMS = [
   {
@@ -216,14 +322,23 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function () {
-          if (!ch.start.hasSubscribers) {
+          if (!ch.start.hasSubscribers && !evaluateCh.hasSubscribers) {
             return methodFn.apply(this, arguments)
           }
-
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
           const stream = streamedResponse && getOption(arguments, 'stream', false)
+
+          // Streaming AI Guard support lands in a follow-up PR. For now, provider-level AI
+          // Guard only evaluates non-streaming responses.
+          const aiguardApplicable = !stream &&
+            AIGUARD_CONVERSATIONAL_RESOURCES.has(baseResource) &&
+            evaluateCh.hasSubscribers
+
+          if (!ch.start.hasSubscribers && !aiguardApplicable) {
+            return methodFn.apply(this, arguments)
+          }
 
           const client = this._client || this.client
 
@@ -233,8 +348,23 @@ for (const extension of extensions) {
             basePath: client.baseURL,
           }
 
+          // Compute AI Guard input messages before we start the LLM call so Before Model
+          // evaluation can run in parallel with it once the caller awaits the APIPromise.
+          const aiguardInputMessages = aiguardApplicable ? getInputMessages(baseResource, arguments[0]) : undefined
+
           return ch.start.runStores(ctx, () => {
             const apiProm = methodFn.apply(this, arguments)
+
+            // Start Before Model evaluation only when the OpenAI APIPromise is consumed,
+            // then reuse the same result for parse/_thenUnwrap/asResponse.
+            let inputEvalPromise
+            const getInputEval = aiguardInputMessages
+              ? () => (inputEvalPromise ??= publishEvaluation(aiguardInputMessages))
+              : null
+
+            const aiguard = getInputEval
+              ? { baseResource, inputMessages: aiguardInputMessages, getInputEval }
+              : undefined
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
@@ -249,7 +379,7 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, arguments)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)
                 })
 
                 return unwrappedPromise
@@ -262,8 +392,12 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, arguments)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)
             })
+
+            if (getInputEval) {
+              wrapAsResponseForAIGuard(apiProm, getInputEval)
+            }
 
             ch.end.publish(ctx)
 
@@ -276,8 +410,12 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
-  return apiProm
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, aiguard) {
+  const guardedApiProm = aiguard
+    ? Promise.all([aiguard.getInputEval(), apiProm]).then(([, result]) => result)
+    : apiProm
+
+  return guardedApiProm
     .then(([{ response, options }, body]) => {
       if (stream) {
         if (body.iterator) {
@@ -287,20 +425,24 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
             body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, ctx)
           )
         }
-      } else {
-        finish(ctx, {
-          headers: response.headers,
-          data: body,
-          request: {
-            path: response.url,
-            method: options.method,
-          },
-        })
+        return body
       }
 
-      return body
-    })
-    .catch(error => {
+      finish(ctx, {
+        headers: response.headers,
+        data: body,
+        request: {
+          path: response.url,
+          method: options.method,
+        },
+      })
+
+      if (!aiguard) return body
+
+      const outputMessages = getOutputMessages(aiguard.baseResource, body)
+      return publishOutputEvaluation(aiguard.baseResource, aiguard.inputMessages, outputMessages)
+        .then(() => body)
+    }, error => {
       finish(ctx, undefined, error)
 
       throw error
