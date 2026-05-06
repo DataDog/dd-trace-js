@@ -23,7 +23,6 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
       meta['aws.durable.invoke.function_name'] = functionName
     }
 
-<<<<<<< HEAD
     this.startSpan('aws.durable.invoke', {
       resource: operationName,
       kind: this.constructor.kind,
