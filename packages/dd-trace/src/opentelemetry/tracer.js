@@ -130,28 +130,6 @@ class Tracer {
     }
     const attributes = sanitizeAttributes(options.attributes)
 
-    // TODO: sampling API is not yet supported
-    // // make sampling decision
-    // const samplingResult = this._sampler.shouldSample(
-    //   context,
-    //   spanContext.traceId,
-    //   name,
-    //   spanKind,
-    //   attributes,
-    //   links
-    // )
-
-    // // Should use new span context
-    // spanContext._ddContext._sampling.priority =
-    //   samplingResult.decision === api.SamplingDecision.RECORD_AND_SAMPLED
-    //     ? AUTO_KEEP
-    //     : AUTO_REJECT
-
-    // if (samplingResult.decision === api.SamplingDecision.NOT_RECORD) {
-    //   api.diag.debug('Recording is off, propagating context in a non-recording span')
-    //   return api.trace.wrapSpanContext(spanContext)
-    // }
-
     return new Span(
       this,
       context,
