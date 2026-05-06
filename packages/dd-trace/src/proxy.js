@@ -195,6 +195,18 @@ class Tracer extends NoopProxy {
         }
       }
 
+      // OTel logs/metrics must initialize before runtimeMetrics.start() so that
+      // OTLP runtime metrics can register against an existing MeterProvider.
+      if (config.DD_LOGS_OTEL_ENABLED) {
+        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
+        initializeOpenTelemetryLogs(config)
+      }
+
+      if (config.DD_METRICS_OTEL_ENABLED) {
+        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
+        initializeOpenTelemetryMetrics(config)
+      }
+
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
@@ -222,16 +234,6 @@ class Tracer extends NoopProxy {
             'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, but DD_API_KEY is undefined, so no automatic log submission will be performed.'
           )
         }
-      }
-
-      if (config.DD_LOGS_OTEL_ENABLED) {
-        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
-        initializeOpenTelemetryLogs(config)
-      }
-
-      if (config.DD_METRICS_OTEL_ENABLED) {
-        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
-        initializeOpenTelemetryMetrics(config)
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {
