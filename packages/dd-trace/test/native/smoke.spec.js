@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
 require('../setup/core')
@@ -40,12 +39,18 @@ describe('Native Spans Smoke Tests', () => {
       SetTraceOrigin: 12
     }
 
+    // Mock state matches the WasmSpanState shape used by NativeSpansInterface.
+    // The shape changed when the native side moved to libdatadog's WASM
+    // pipeline crate; pre-rebase tests stubbed an older NativeSpanState.
     mockState = {
       flushChangeQueue: sinon.stub(),
       flushChunk: sinon.stub().resolves('OK'),
+      prepareChunk: sinon.stub(),
+      sendPreparedChunk: sinon.stub().resolves('OK'),
       stringTableInsertOne: sinon.stub(),
       stringTableEvict: sinon.stub(),
-      sample: sinon.stub().returns(1),
+      change_queue_ptr: sinon.stub().returns(0),
+      flushStats: sinon.stub().resolves(true),
       getName: sinon.stub().returns('test'),
       getServiceName: sinon.stub().returns('test-service'),
       getResourceName: sinon.stub().returns('test'),
@@ -63,8 +68,13 @@ describe('Native Spans Smoke Tests', () => {
     // Load modules with mocked native state
     const proxyquire = require('proxyquire').noCallThru()
 
+    // Use a real ArrayBuffer-backed WebAssembly.Memory shim so DataView/
+    // Uint8Array views in NativeSpansInterface work without touching real WASM.
+    const fakeWasmMemory = { buffer: new ArrayBuffer(64 * 1024) }
+
     const mockNativeIndex = {
-      NativeSpanState: sinon.stub().returns(mockState),
+      WasmSpanState: function MockWasmSpanState () { return mockState },
+      wasmMemory: fakeWasmMemory,
       OpCode,
       available: true
     }
@@ -128,20 +138,20 @@ describe('Native Spans Smoke Tests', () => {
     })
 
     it('should flush spans to agent', async () => {
-      const spanIds = [123n, 456n]
+      // Use slot indices (numbers) — the WASM pipeline addresses spans by slot,
+      // not by raw spanId buffers like the pre-rebase API did.
+      const slotIndices = [0, 1]
 
-      await nativeSpans.flushSpans(spanIds, true)
+      await nativeSpans.flushSpans(slotIndices, true)
 
-      sinon.assert.calledWith(mockState.flushChunk, 2, true, sinon.match.instanceOf(Buffer))
+      sinon.assert.calledWith(mockState.prepareChunk, 2, true, sinon.match.instanceOf(Buffer))
+      sinon.assert.called(mockState.sendPreparedChunk)
     })
 
-    it('should sample spans', () => {
-      mockState.sample.returns(2) // USER_KEEP
-
-      const priority = nativeSpans.sample(123n)
-
-      assert.strictEqual(priority, 2)
-    })
+    // NOTE: nativeSpans.sample() was removed when sampling moved to the JS-side
+    // priority sampler. See the trailing comment in native_spans.js. The sampling
+    // smoke test no longer applies; remove rather than skip since there's no
+    // matching production behavior to assert on.
   })
 
   describe('NativeSpanContext integration', () => {
@@ -205,9 +215,11 @@ describe('Native Spans Smoke Tests', () => {
 
       exporter.export([mockSpan])
 
-      // With flushInterval: 0, should flush immediately
+      // With flushInterval: 0, should flush immediately. The new pipeline
+      // flushes via prepareChunk + sendPreparedChunk (the old single
+      // flushChunk call was removed when we split sync prep from async send).
       setTimeout(() => {
-        sinon.assert.called(mockState.flushChunk)
+        sinon.assert.called(mockState.prepareChunk)
         done()
       }, 10)
     })
@@ -273,8 +285,8 @@ describe('Native Spans Smoke Tests', () => {
       exporter.export([mockSpan])
       await new Promise(resolve => exporter.flush(resolve))
 
-      // Verify native flush was called
-      sinon.assert.called(mockState.flushChunk)
+      // Verify native flush was called via prepareChunk+sendPreparedChunk
+      sinon.assert.called(mockState.prepareChunk)
     })
 
     it('should handle parent-child span relationships', () => {
