@@ -71,6 +71,7 @@
     "test:integration:aiguard:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/aiguard/*.spec.js\"",
     "test:integration:appsec": "mocha --timeout 60000 \"integration-tests/appsec/*.spec.js\"",
     "test:integration:appsec:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/appsec/*.spec.js\"",
+    "test:integration:crashtracking": "mocha --timeout 60000 \"integration-tests/crashtracking/*.spec.js\"",
     "test:integration:bun": "mocha --timeout 60000 \"integration-tests/bun/*.spec.js\"",
     "test:integration:cucumber": "mocha --timeout 60000 \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cucumber:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/cucumber/*.spec.js\"",

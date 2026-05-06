@@ -143,6 +143,31 @@ jobs:
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
+  crashtracking:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / crashtracking (node-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      # Disable core dumps since crashtracking tests intentionally abort
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
+      - run: yarn test:integration:crashtracking
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
   unit-guardrails:
     runs-on: ubuntu-latest
     permissions:

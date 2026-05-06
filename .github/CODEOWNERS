@@ -277,6 +277,7 @@
 /integration-tests/coverage-fixtures/parent.js @DataDog/lang-platform-js
 /integration-tests/coverage-fixtures/worker.js @DataDog/lang-platform-js
 /integration-tests/coverage-manual-process.spec.js @DataDog/lang-platform-js
+/integration-tests/crashtracking @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
