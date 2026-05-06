@@ -148,7 +148,7 @@ class AIGuard extends NoopAIGuard {
   #setRootSpanClientIpTags (rootSpan) {
     if (!rootSpan) return
 
-    const currentTags = rootSpan.context()._tags
+    const currentTags = rootSpan.context().getTags()
     const needsHttpClientIp = !Object.hasOwn(currentTags, HTTP_CLIENT_IP)
     const needsNetworkClientIp = !Object.hasOwn(currentTags, NETWORK_CLIENT_IP)
 
