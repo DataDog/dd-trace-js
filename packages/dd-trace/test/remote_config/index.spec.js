@@ -23,6 +23,7 @@ describe('RemoteConfig', () => {
   let config
   let rc
   let tagger
+  let getGitMetadata
 
   before(() => {
     require('../../src/process-tags').initialize()
@@ -50,6 +51,8 @@ describe('RemoteConfig', () => {
 
     extraServices = []
 
+    getGitMetadata = sinon.stub().returns({ commitSHA: undefined, repositoryUrl: undefined })
+
     RemoteConfig = proxyquire('../../src/remote_config', {
       '../../../../vendor/dist/crypto-randomuuid': uuid,
       './scheduler': Scheduler,
@@ -57,6 +60,7 @@ describe('RemoteConfig', () => {
       '../exporters/common/request': request,
       '../log': log,
       '../tagger': tagger,
+      '../git_metadata': getGitMetadata,
       '../service-naming/extra-services': {
         getExtraServices: () => extraServices,
       },
@@ -148,12 +152,11 @@ describe('RemoteConfig', () => {
   })
 
   it('should add git metadata to tags if present', () => {
-    const configWithGit = {
-      ...config,
-      repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
+    getGitMetadata.returns({
       commitSHA: '1234567890',
-    }
-    const rc = new RemoteConfig(configWithGit)
+      repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
+    })
+    const rc = new RemoteConfig(config)
     assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
       'runtime-id:runtimeId',
       'git.repository_url:https://github.com/DataDog/dd-trace-js',
