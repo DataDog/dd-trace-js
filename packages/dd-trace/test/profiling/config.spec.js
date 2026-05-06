@@ -5,6 +5,7 @@ const os = require('node:os')
 const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const satisfies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -46,7 +47,10 @@ describe('config', () => {
 
     const tracerConfig = getConfigFresh(tracerOptions)
 
-    const ProfilingConfig = require('../../src/profiling/config').Config
+    const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
+    const ProfilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
+      '../git_metadata': gitMetadata,
+    }).Config
     const config = /** @type {ProfilerConfig} */ (new ProfilingConfig(tracerConfig))
 
     return {
