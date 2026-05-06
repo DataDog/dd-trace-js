@@ -259,6 +259,44 @@ describe('Plugin', () => {
                 })
             })
 
+            it('should handle `client_stream` calls with (metadata, callback)', async () => {
+              const client = await buildClient({
+                getClientStream: (_, callback) => setTimeout(callback, 40),
+              })
+
+              const call = client.getClientStream(new grpc.Metadata(), () => {})
+              assert.ok(call, 'expected ClientWritableStream, got falsy value')
+              assert.strictEqual(typeof call.write, 'function')
+
+              return agent.assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0].meta, {
+                  'grpc.method.name': 'getClientStream',
+                  'grpc.method.kind': 'client_streaming',
+                })
+              })
+            })
+
+            it('should handle `client_stream` calls with (metadata, options, callback)', async () => {
+              const client = await buildClient({
+                getClientStream: (_, callback) => setTimeout(callback, 40),
+              })
+
+              const call = client.getClientStream(
+                new grpc.Metadata(),
+                { deadline: new Date(Date.now() + 10_000) },
+                () => {}
+              )
+              assert.ok(call, 'expected ClientWritableStream, got falsy value')
+              assert.strictEqual(typeof call.write, 'function')
+
+              return agent.assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0].meta, {
+                  'grpc.method.name': 'getClientStream',
+                  'grpc.method.kind': 'client_streaming',
+                })
+              })
+            })
+
             it('should handle `bidi` calls', async () => {
               const client = await buildClient({
                 getBidi: stream => stream.end(),
@@ -286,6 +324,45 @@ describe('Plugin', () => {
                   assert.strictEqual(traces[0][0].meta.component, 'grpc')
                   assert.strictEqual(traces[0][0].meta['_dd.integration'], 'grpc')
                 })
+            })
+
+            it('should handle `bidi` calls with (metadata)', async () => {
+              const client = await buildClient({
+                getBidi: stream => stream.end(),
+              })
+
+              const call = client.getBidi(new grpc.Metadata())
+              assert.ok(call, 'expected ClientDuplexStream, got falsy value')
+              assert.strictEqual(typeof call.on, 'function')
+              call.on('data', () => {})
+
+              return agent.assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0].meta, {
+                  'grpc.method.name': 'getBidi',
+                  'grpc.method.kind': 'bidi_streaming',
+                })
+              })
+            })
+
+            it('should handle `bidi` calls with (metadata, options)', async () => {
+              const client = await buildClient({
+                getBidi: stream => stream.end(),
+              })
+
+              const call = client.getBidi(
+                new grpc.Metadata(),
+                { deadline: new Date(Date.now() + 10_000) }
+              )
+              assert.ok(call, 'expected ClientDuplexStream, got falsy value')
+              assert.strictEqual(typeof call.on, 'function')
+              call.on('data', () => {})
+
+              return agent.assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0].meta, {
+                  'grpc.method.name': 'getBidi',
+                  'grpc.method.kind': 'bidi_streaming',
+                })
+              })
             })
 
             it('should handle cancelled `unary` calls', async () => {
