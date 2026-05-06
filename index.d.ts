@@ -2849,13 +2849,13 @@ declare namespace tracer {
      * [mocha](https://mochajs.org/) module.
      */
     interface mocha extends Integration {}
-    
+
     /**
      * This plugin automatically instruments the
      * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
      */
     interface modelcontextprotocol_sdk extends Instrumentation {}
-    
+
     /**
      * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
@@ -3724,6 +3724,11 @@ declare namespace tracer {
 
     interface LLMObservabilitySpan {
       /**
+       * The span kind
+       */
+      kind: spanKind,
+
+      /**
        * The input content associated with the span.
        */
       input: { content: string, role?: string }[]
@@ -3734,9 +3739,9 @@ declare namespace tracer {
       output: { content: string, role?: string }[]
 
       /**
-       * Get a tag from the span.
+       * Get a tag from the span or its parent.
        * @param key The key of the tag to get.
-       * @returns The value of the tag, or `undefined` if the tag does not exist.
+       * @returns The value of the tag, or `undefined` if the tag does not exist on the span or its direct parent.
        */
       getTag (key: string): string | undefined
     }
