@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
 
@@ -70,13 +69,25 @@ describe('NativeDatadogSpan', () => {
       sample: sinon.stub()
     }
 
+    // The rebased NativeSpansInterface allocates slot indices and uses
+    // queueCreateSpan for the combined Create+SetName+SetStart op. Stub
+    // both so the constructor can run without touching real WASM.
+    let nextSlot = 0
     nativeSpans = {
       queueOp: sinon.stub(),
+      queueCreateSpan: sinon.stub(),
+      queueBatchMeta: sinon.stub(),
+      queueBatchMetrics: sinon.stub(),
       flushChangeQueue: sinon.stub(),
+      allocSlot: sinon.stub().callsFake(() => nextSlot++),
+      freeSlots: sinon.stub(),
       OpCode
     }
 
-    // Create a mock NativeSpanContext that tracks tags
+    // Create a mock NativeSpanContext that tracks tags. The rebased real
+    // class adds syncInitialTags / syncToNativeOnly / syncOneTagToNative /
+    // _setNameLocal — provide stubs so the production span code can call
+    // them without TypeErrors.
     NativeSpanContext = function (ns, props) {
       this._nativeSpans = ns
       this._nativeSpanId = props.spanId.toBuffer()
@@ -85,16 +96,26 @@ describe('NativeDatadogSpan', () => {
       this._parentId = props.parentId || null
       this._sampling = props.sampling || {}
       this._baggageItems = props.baggageItems || {}
+      this._slotIndex = props.slotIndex
       this._trace = props.trace || {
         started: [],
         finished: [],
         tags: {}
       }
-      this._tags = {}
+      this._tags = { ...(props.tags || {}) }
       this._name = undefined
       this._hostname = undefined
       this._isFinished = false
       this._syncNameToNative = sinon.stub()
+      this._setNameLocal = (name) => { this._name = name }
+      // The rebased span code batches initial-tag application via
+      // syncInitialTags; mirror it into _tags so getTags() reflects what
+      // setTag-callers would have written.
+      this.syncInitialTags = (tags) => {
+        Object.assign(this._tags, tags)
+      }
+      this.syncToNativeOnly = sinon.stub()
+      this.syncOneTagToNative = sinon.stub()
 
       // Tag accessor methods (matching real NativeSpanContext)
       this.setTag = (key, value) => {
@@ -142,9 +163,10 @@ describe('NativeDatadogSpan', () => {
           })
         }
       },
-      'dc-polyfill': { channel: sinon.stub().returns({ publish: sinon.stub() }) },
+      'dc-polyfill': { channel: sinon.stub().returns({ publish: sinon.stub(), hasSubscribers: false }) },
       util: require('util'),
-      '../config-helper': { getEnvironmentVariable: sinon.stub() }
+      '../config/helper': { getValueFromEnvSources: sinon.stub().returns(undefined) },
+      '../util': { isTrue: () => false }
     })
   })
 
@@ -170,39 +192,31 @@ describe('NativeDatadogSpan', () => {
       assert.ok(span.context()._trace.started.includes(span))
     })
 
-    it('should queue Create operation to native', () => {
+    it('should issue a combined queueCreateSpan op to native', () => {
+      // The rebased span code merges the old Create + SetName + SetStart
+      // sequence into a single queueCreateSpan call (one WASM round-trip).
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation'
       }, false, nativeSpans)
 
-      sinon.assert.calledWith(
-        nativeSpans.queueOp,
-        OpCode.Create,
-        sinon.match.any, // spanId buffer
-        sinon.match.array, // traceId as id128
-        sinon.match.array // parentId as id64
-      )
+      sinon.assert.calledOnce(nativeSpans.queueCreateSpan)
+      const args = nativeSpans.queueCreateSpan.getCall(0).args
+      // queueCreateSpan(slotIndex, spanId, traceId, parentId, name, startMs)
+      assert.strictEqual(typeof args[0], 'number') // slotIndex
+      assert.strictEqual(args[4], 'test-operation') // name
+      assert.strictEqual(typeof args[5], 'number') // startMs
     })
 
-    it('should queue SetStart operation to native', () => {
+    it('should NOT also issue a separate SetName via _syncNameToNative on init', () => {
+      // CreateSpan already carries the name; the constructor uses
+      // _setNameLocal to skip a redundant SetName WASM op. This test pins
+      // that optimization so we don't regress the WASM call count.
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation'
       }, false, nativeSpans)
 
-      sinon.assert.calledWith(
-        nativeSpans.queueOp,
-        OpCode.SetStart,
-        sinon.match.any,
-        ['i64', sinon.match.any]
-      )
-    })
-
-    it('should sync operation name to native', () => {
-      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'test-operation'
-      }, false, nativeSpans)
-
-      sinon.assert.called(span.context()._syncNameToNative)
+      sinon.assert.notCalled(span.context()._syncNameToNative)
+      assert.strictEqual(span.context()._name, 'test-operation')
     })
 
     it('should use provided start time', () => {
@@ -441,11 +455,13 @@ describe('NativeDatadogSpan', () => {
     it('should queue SetDuration operation to native', () => {
       span.finish()
 
+      // The rebased finish() encodes duration with the 'ns' tag (ms->ns
+      // conversion), not the old 'i64' BigInt tag.
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetDuration,
         sinon.match.any,
-        ['i64', sinon.match.any]
+        ['ns', sinon.match.number]
       )
     })
 
