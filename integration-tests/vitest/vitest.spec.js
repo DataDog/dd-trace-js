@@ -953,6 +953,7 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -963,6 +964,9 @@ versions.forEach((version) => {
             )
             // no new tests
             assert.strictEqual(newTests.length, 0)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -1097,6 +1101,7 @@ versions.forEach((version) => {
             assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
             const testSessionEvent = testSessionEnd.content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
           }, 60000)
 
         childProcess = exec(
