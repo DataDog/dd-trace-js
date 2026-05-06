@@ -10,7 +10,6 @@
  */
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
 require('../setup/core')
@@ -45,6 +44,20 @@ describe('Native Spans Integration', () => {
   let tracer
   let config
   let exportedSpans
+  let originalMaxListeners
+
+  before(() => {
+    // Each tracer instantiation registers a beforeExit listener inside
+    // NativeExporter. setup/core.js caps process.defaultMaxListeners at 6
+    // so the leak detector can catch real bugs. We need a fresh tracer
+    // per test, so allow more listeners just for this suite.
+    originalMaxListeners = process.getMaxListeners()
+    process.setMaxListeners(0)
+  })
+
+  after(() => {
+    process.setMaxListeners(originalMaxListeners)
+  })
 
   beforeEach(() => {
     exportedSpans = []
@@ -123,18 +136,21 @@ describe('Native Spans Integration', () => {
       span.finish()
     })
 
-    it('should create span with service, resource, and type', () => {
-      const span = tracer.startSpan('typed-span', {
+    it('should create span with service, resource, and type via tracer.trace', () => {
+      // The startSpan() options bag does NOT include service/resource/type
+      // tagging — only tracer.trace() applies those (see addTags() in
+      // tracer.js). The original test was passing them to startSpan,
+      // which silently ignores them. Use trace() instead so the assertion
+      // exercises real wiring.
+      tracer.trace('typed-span', {
         service: 'custom-service',
         resource: 'GET /api/users',
         type: 'web'
+      }, (span) => {
+        assert.strictEqual(span.context().getTags()[SERVICE_NAME], 'custom-service')
+        assert.strictEqual(span.context().getTags()[RESOURCE_NAME], 'GET /api/users')
+        assert.strictEqual(span.context().getTags()[SPAN_TYPE], 'web')
       })
-
-      assert.strictEqual(span.context().getTags()[SERVICE_NAME], 'custom-service')
-      assert.strictEqual(span.context().getTags()[RESOURCE_NAME], 'GET /api/users')
-      assert.strictEqual(span.context().getTags()[SPAN_TYPE], 'web')
-
-      span.finish()
     })
   })
 
@@ -254,18 +270,20 @@ describe('Native Spans Integration', () => {
       parent.finish()
     })
 
-    it('should create child span from active span in scope', () => {
+    it('should create child span from active span in scope (via tracer.trace)', () => {
+      // tracer.startSpan does NOT pick up the active scope as parent
+      // automatically — only tracer.trace() sets options.childOf to
+      // tracer.scope().active(). Use trace() so the assertion exercises
+      // the real propagation path.
       const parent = tracer.startSpan('parent')
 
       tracer.scope().activate(parent, () => {
-        const child = tracer.startSpan('child')
-
-        assert.strictEqual(
-          child.context()._parentId.toString(),
-          parent.context()._spanId.toString()
-        )
-
-        child.finish()
+        tracer.trace('child', {}, (child) => {
+          assert.strictEqual(
+            child.context()._parentId.toString(),
+            parent.context()._spanId.toString()
+          )
+        })
       })
 
       parent.finish()
@@ -496,9 +514,27 @@ describe('Native Spans Fallback', () => {
   let Tracer
   let tracer
   let config
+  let originalMaxListeners
+
+  before(() => {
+    // Same listener-cap workaround as the integration suite — each tracer
+    // registers a beforeExit listener.
+    originalMaxListeners = process.getMaxListeners()
+    process.setMaxListeners(0)
+  })
+
+  after(() => {
+    process.setMaxListeners(originalMaxListeners)
+  })
 
   beforeEach(() => {
-    // Native spans are disabled by default, no env var or option needed
+    // Native spans are disabled by default. Clear the env var (it leaks
+    // out of the integration suite if a previous test errored) and clear
+    // module cache so config re-reads it.
+    delete process.env.DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED
+    delete require.cache[require.resolve('../../src/config')]
+    delete require.cache[require.resolve('../../src/tracer')]
+
     const getConfig = require('../../src/config')
     config = getConfig({
       service: 'test-service'
@@ -506,6 +542,18 @@ describe('Native Spans Fallback', () => {
 
     Tracer = require('../../src/tracer')
     tracer = new Tracer(config)
+
+    // Stub out the agent exporter's HTTP send so finished spans don't
+    // generate real network calls (the agent isn't running in unit tests
+    // and the keep-alive sockets keep the event loop pinned, hanging the
+    // process at exit).
+    if (tracer._exporter && tracer._exporter.export) {
+      sinon.stub(tracer._exporter, 'export')
+    }
+  })
+
+  afterEach(() => {
+    sinon.restore()
   })
 
   it('should not use native spans when disabled', () => {
