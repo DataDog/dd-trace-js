@@ -14,16 +14,22 @@ const {
 
 // Hoisted out of the per-trace _erase hot path: this env var is process-static
 // and the JS msgpack encoder used to read it once at construction. Keeping it
-// in _erase (called every flushed trace) was burning ~1.4% of CPU on the express
-// hello-world benchmark.
+// in _erase (called every flushed trace) was unnecessary repeated work.
 const STATE_TRACKING_ENABLED = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true'
 
-// Hoisted out of the per-span _syncSamplingToNative hot path: every inline
-// require() goes through the import-in-the-middle Hook.Module.require
-// interceptor, which does env-var checks (DD_TRACE_DISABLED_INSTRUMENTATIONS
-// etc.) on every call. Profile attributed ~1.5% of CPU to this single line.
-// ./native exports `available`, so consumers must still gate on that.
-const { OpCode: NATIVE_OP_CODE } = require('./native')
+// Lazily resolve OpCode the first time native sampling sync runs.
+// Avoids both the eager-require side effect (loading the native pipeline at
+// module-init time) and the per-call import-in-the-middle interceptor cost
+// (every inline `require()` goes through Hook.Module.require, which does
+// env-var checks on every call). ./native exports `available`, so callers
+// must still gate on that.
+let nativeOpCode
+function getNativeOpCode () {
+  if (nativeOpCode === undefined) {
+    nativeOpCode = require('./native').OpCode
+  }
+  return nativeOpCode
+}
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -126,9 +132,11 @@ class SpanProcessor {
    * @private
    */
   _syncSamplingToNative (spanContext, slotIndex) {
+    const opCode = getNativeOpCode()
+
     // Sync priority as trace metric
     this._nativeSpans.queueOp(
-      NATIVE_OP_CODE.SetTraceMetricsAttr,
+      opCode.SetTraceMetricsAttr,
       slotIndex,
       '_sampling_priority_v1',
       ['f64', spanContext._sampling.priority]
@@ -137,7 +145,7 @@ class SpanProcessor {
     // Sync mechanism as trace meta if set
     if (spanContext._sampling.mechanism !== undefined) {
       this._nativeSpans.queueOp(
-        NATIVE_OP_CODE.SetTraceMetaAttr,
+        opCode.SetTraceMetaAttr,
         slotIndex,
         '_dd.p.dm',
         `-${spanContext._sampling.mechanism}`
