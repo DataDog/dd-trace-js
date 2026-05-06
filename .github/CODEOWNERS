@@ -79,6 +79,7 @@
 /packages/dd-trace/test/ci-visibility/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/encode/agentless-ci-visibility.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/encode/coverage-ci-visibility.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/git_metadata.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/git_metadata_tagger.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
@@ -89,6 +90,7 @@
 /packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/exporters/agentless/ @DataDog/ci-app-libraries
+/packages/dd-trace/src/git_metadata.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/git_metadata_tagger.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/env.js @DataDog/ci-app-libraries
