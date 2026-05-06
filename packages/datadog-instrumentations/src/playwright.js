@@ -293,6 +293,22 @@ function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
 
+function getTestFinishTime (testResult) {
+  if (!testResult?.startTime || typeof testResult.duration !== 'number') {
+    return
+  }
+
+  const startTime = testResult.startTime instanceof Date
+    ? testResult.startTime.getTime()
+    : Number(testResult.startTime)
+
+  if (!Number.isFinite(startTime)) {
+    return
+  }
+
+  return startTime + Math.max(testResult.duration, 0)
+}
+
 function getFinalStatus ({
   isFinalExecution,
   isDisabled,
@@ -1316,6 +1332,7 @@ addHook({
     await res
 
     const { status, error, annotations, retry, testId } = testInfo
+    const testResult = test.results?.at(-1)
 
     // testInfo.errors could be better than "error",
     // which will only include timeout error (even though the test failed because of a different error)
@@ -1384,6 +1401,7 @@ addHook({
       isModified: test._ddIsModified,
       onDone,
       finalStatus,
+      finishTime: getTestFinishTime(testResult) ?? getTestFinishTime(testInfo),
       ...testCtx.currentStore,
     })
 

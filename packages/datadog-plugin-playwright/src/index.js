@@ -321,6 +321,7 @@ class PlaywrightPlugin extends CiPlugin {
       isAtrRetry,
       isModified,
       finalStatus,
+      finishTime,
       onDone,
     }) => {
       if (!span) return
@@ -421,7 +422,7 @@ class PlaywrightPlugin extends CiPlugin {
           isModified,
         }
       )
-      span.finish()
+      span.finish(finishTime)
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
