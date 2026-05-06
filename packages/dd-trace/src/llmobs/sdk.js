@@ -13,6 +13,7 @@ const {
   INPUT_VALUE,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   LLMOBS_PARENT_ID_BRIDGE_KEY,
+  ALLOWED_EVAL_SCOPES,
 } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -373,7 +374,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
       }
 
-      const { label, value, tags, reasoning, assessment, metadata } = options
+      const { label, value, tags, reasoning, assessment, metadata, evalScope = 'span' } = options
       const metricType = options.metricType?.toLowerCase()
       if (!label) {
         err = 'invalid_metric_label'
@@ -410,6 +411,10 @@ class LLMObs extends NoopLLMObs {
       if (metadata != null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
         err = 'invalid_metadata'
         throw new Error('metadata must be a JSON object')
+      }
+      if (!ALLOWED_EVAL_SCOPES.has(evalScope)) {
+        err = 'invalid_eval_scope'
+        throw new Error('evalScope must be one of `span` or `trace`.')
       }
 
       const evaluationTags = {
@@ -454,6 +459,7 @@ class LLMObs extends NoopLLMObs {
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
+        eval_scope: evalScope,
       }
       if (reasoning != null) {
         payload.reasoning = reasoning

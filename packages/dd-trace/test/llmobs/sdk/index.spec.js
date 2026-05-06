@@ -1377,6 +1377,7 @@ describe('sdk', () => {
         metric_type: 'score',
         score_value: 0.6,
         tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost'],
+        eval_scope: 'span',
       })
     })
 
@@ -1444,6 +1445,7 @@ describe('sdk', () => {
         boolean_value: true,
         timestamp_ms: 1234,
         tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
+        eval_scope: 'span',
       })
     })
 
@@ -1478,6 +1480,7 @@ describe('sdk', () => {
         json_value: { f1: 0.8, recall: 1, precision: 0.5 },
         timestamp_ms: 1234,
         tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
+        eval_scope: 'span',
       })
     })
 
@@ -1520,6 +1523,7 @@ describe('sdk', () => {
         reasoning: 'this input is toxic',
         assessment: 'fail',
         metadata: { some: 'details' },
+        eval_scope: 'span',
       })
     })
 
@@ -1579,6 +1583,36 @@ describe('sdk', () => {
         const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
         assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
       })
+    })
+
+    it('submits an evaluation metric with `trace` scope', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'test',
+        metricType: 'score',
+        value: 0.6,
+        tags: {
+          host: 'localhost',
+        },
+        evalScope: 'trace',
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+      assert.equal(evalMetric.eval_scope, 'trace')
+    })
+
+    it('throws with a bad scope', () => {
+      assert.throws(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+          evalScope: 'foo',
+        })
+      }, { message: 'evalScope must be one of `span` or `trace`.' })
     })
   })
 
