@@ -151,11 +151,14 @@
 /benchmark/sirun/llmobs/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/claude-agent-sdk.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 /packages/datadog-plugin-ai/ @DataDog/ml-observability
 /packages/datadog-plugin-anthropic/ @DataDog/ml-observability
+/packages/datadog-plugin-claude-agent-sdk/ @DataDog/ml-observability
+/benchmark/sirun/plugin-claude-agent-sdk/ @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability

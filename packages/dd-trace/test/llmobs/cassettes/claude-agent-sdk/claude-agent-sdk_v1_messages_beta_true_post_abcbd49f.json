@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages?beta=true",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"_\":\"normalized\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"id\": \"msg_vcr\", \"type\": \"message\", \"role\": \"assistant\", \"model\": \"claude-sonnet-4-20250514\", \"content\": [{\"type\": \"text\", \"text\": \"Hello!\"}], \"stop_reason\": \"end_turn\", \"stop_sequence\": null, \"usage\": {\"input_tokens\": 25, \"output_tokens\": 3, \"cache_creation_input_tokens\": 0, \"cache_read_input_tokens\": 0}}"
+  }
+}
