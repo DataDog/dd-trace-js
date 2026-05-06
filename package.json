@@ -178,7 +178,7 @@
     "@actions/github": "^9.1.1",
     "@babel/helpers": "^7.29.2",
     "@eslint/eslintrc": "^3.3.5",
-    "@eslint/js": "^9.39.2",
+    "@eslint/js": "^10.0.1",
     "@msgpack/msgpack": "^3.1.3",
     "@openfeature/core": "^1.10.0",
     "@openfeature/server-sdk": "~1.21.0",
