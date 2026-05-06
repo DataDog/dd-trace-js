@@ -1,8 +1,11 @@
 'use strict'
 
 const tracer = require('dd-trace')
-const assert = require('assert')
+const assert = require('node:assert/strict')
+const { setTimeout } = require('node:timers/promises')
 const { When, Then, Before, After } = require('@cucumber/cucumber')
+
+const slowDurationDelayMs = process.env.SHOULD_ADD_SLOW_DURATION_TEST ? 5100 : 0
 
 class Greeter {
   sayFarewell () {
@@ -61,6 +64,7 @@ When('the greeter says greetings', function () {
   this.whatIHeard = new Greeter().sayGreetings()
 })
 
-When('the greeter says whatever', function () {
+When('the greeter says whatever', async function () {
+  await setTimeout(slowDurationDelayMs)
   this.whatIHeard = 'whatever'
 })
