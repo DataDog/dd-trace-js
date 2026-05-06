@@ -29,12 +29,14 @@ describe('ci-visibility/requests/request', () => {
 
   describe('statusCode preservation across retries', () => {
     it('should preserve 429 status code when the retry fails with a network error', (done) => {
+      const networkError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
       // x-ratelimit-reset: '0' → reset is in the past → waitMs = max(0, 0 − Date.now()) = 0
       nock('http://localhost:8126')
         .post('/path')
         .reply(429, 'rate limited', { 'x-ratelimit-reset': '0' })
         .post('/path')
-        .replyWithError({ code: 'ECONNRESET' })
+        .replyWithError(networkError)
 
       request('{}', { url: 'http://localhost:8126', path: '/path' }, (err, res, statusCode) => {
         assert.ok(err)
@@ -44,11 +46,13 @@ describe('ci-visibility/requests/request', () => {
     })
 
     it('should preserve 5xx status code when the retry fails with a network error', (done) => {
+      const networkError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
       nock('http://localhost:8126')
         .post('/path')
         .reply(503, 'service unavailable')
         .post('/path')
-        .replyWithError({ code: 'ECONNRESET' })
+        .replyWithError(networkError)
 
       request('{}', { url: 'http://localhost:8126', path: '/path' }, (err, res, statusCode) => {
         assert.ok(err)
@@ -59,9 +63,11 @@ describe('ci-visibility/requests/request', () => {
   })
 
   it('should retry on a transient network error and succeed on the next attempt', (done) => {
+    const networkError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
     nock('http://localhost:8126')
       .post('/path')
-      .replyWithError({ code: 'ECONNRESET' })
+      .replyWithError(networkError)
       .post('/path')
       .reply(200, 'ok')
 
