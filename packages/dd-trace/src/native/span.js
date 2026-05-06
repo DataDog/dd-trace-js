@@ -554,7 +554,9 @@ class NativeDatadogSpan {
         tags[key] = keyValuePairs[key]
       }
       this._spanContext.syncToNativeOnly(keyValuePairs)
-      // Fix #5: skip the dispatch + _getContext when priority is already decided.
+      // PrioritySampler#sample early-returns when priority is set, but pays
+      // _getContext() + arg setup; skip the dispatch entirely on the
+      // setTag/addTags hot path.
       if (this._spanContext._sampling.priority === undefined) {
         this._prioritySampler.sample(this, false)
       }
@@ -595,7 +597,9 @@ class NativeDatadogSpan {
     // Sync to native (single-tag fast path)
     this._spanContext.syncOneTagToNative(key, value)
 
-    // Fix #5: skip the dispatch + _getContext when priority is already decided.
+    // PrioritySampler#sample early-returns when priority is set, but pays
+    // _getContext() + arg setup; skip the dispatch entirely on the
+    // setTag/addTags hot path.
     if (this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
