@@ -321,6 +321,7 @@ class PlaywrightPlugin extends CiPlugin {
       isAtrRetry,
       isModified,
       finalStatus,
+      earlyFlakeAbortReason,
       onDone,
     }) => {
       if (!span) return
@@ -383,6 +384,9 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
