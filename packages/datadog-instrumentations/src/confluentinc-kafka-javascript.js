@@ -7,6 +7,7 @@ const {
   addHook,
   channel,
 } = require('./helpers/instrument')
+const { cloneMessages } = require('./helpers/kafka')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
@@ -25,8 +26,6 @@ const channels = {
   batchConsumerError: channel('apm:confluentinc-kafka-javascript:consume-batch:error'),
   batchConsumerCommit: channel('apm:confluentinc-kafka-javascript:consume-batch:commit'),
 }
-
-const disabledHeaderWeakSet = new WeakSet()
 
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
@@ -205,52 +204,67 @@ function instrumentKafkaJS (kafkaJS) {
 
               // Wrap the send method of the producer
               if (producer && typeof producer.send === 'function') {
+                let disableHeaderInjection = false
                 shimmer.wrap(producer, 'send', function wrapSend (send) {
                   return function wrappedSend (payload) {
                     if (!channels.producerStart.hasSubscribers) {
                       return send.apply(this, arguments)
                     }
 
+                    // Hand the underlying client a shallow clone so neither
+                    // injection nor the client's auto-fields (it sets
+                    // `headers: null` on messages without headers) ever
+                    // touch caller-owned objects. With injection disabled the
+                    // clone must not seed `headers: {}` either: brokers that
+                    // reject any header field cannot recover otherwise.
+                    let outgoingPayload = payload
+                    if (payload && Array.isArray(payload.messages)) {
+                      outgoingPayload = {
+                        ...payload,
+                        messages: cloneMessages(payload.messages, !disableHeaderInjection),
+                      }
+                    }
+
                     const ctx = {
-                      topic: payload?.topic,
-                      messages: payload?.messages || [],
+                      topic: outgoingPayload?.topic,
+                      messages: outgoingPayload?.messages || [],
                       bootstrapServers: kafka._ddBrokers,
-                      disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+                      disableHeaderInjection,
                     }
 
                     return channels.producerStart.runStores(ctx, () => {
                       try {
-                        const result = send.apply(this, arguments)
+                        const result = send.call(this, outgoingPayload)
 
                         result.then((res) => {
                           ctx.result = res
                           channels.producerCommit.publish(ctx)
                           channels.producerFinish.publish(ctx)
-                        }, (err) => {
-                          if (err) {
-                            // Fixes bug where we would inject message headers for kafka brokers
-                            // that don't support headers (version <0.11). On the error, we disable
-                            // header injection. Tnfortunately the error name / type is not more specific.
-                            // This approach is implemented by other tracers as well.
-                            if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
-                              disabledHeaderWeakSet.add(producer)
+                        }, (error) => {
+                          if (error) {
+                            // KafkaJS-compat reports `ERR_UNKNOWN` for brokers
+                            // <0.11 that cannot parse headers. Stop injecting
+                            // for this producer; subsequent sends to the same
+                            // broker succeed.
+                            if (error.name === 'KafkaJSError' && error.type === 'ERR_UNKNOWN') {
+                              disableHeaderInjection = true
                               log.error(
                                 // eslint-disable-next-line @stylistic/max-len
                                 'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
                               )
                             }
-                            ctx.error = err
+                            ctx.error = error
                             channels.producerError.publish(ctx)
                           }
                           channels.producerFinish.publish(ctx)
                         })
 
                         return result
-                      } catch (e) {
-                        ctx.error = e
+                      } catch (error) {
+                        ctx.error = error
                         channels.producerError.publish(ctx)
                         channels.producerFinish.publish(ctx)
-                        throw e
+                        throw error
                       }
                     })
                   }
