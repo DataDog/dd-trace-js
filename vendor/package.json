@@ -4,7 +4,7 @@
     "postinstall": "node rspack"
   },
   "dependencies": {
-    "@apm-js-collab/code-transformer": "^0.12.0",
+    "@apm-js-collab/code-transformer": "^0.13.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.4",
@@ -24,7 +24,7 @@
     "mutexify": "^1.4.0",
     "opentracing": ">=0.14.7",
     "pprof-format": "^2.1.1",
-    "protobufjs": "^8.0.1",
+    "protobufjs": "^8.0.3",
     "retry": "^0.13.1",
     "rfdc": "^1.4.1",
     "semifies": "^1.0.0",
