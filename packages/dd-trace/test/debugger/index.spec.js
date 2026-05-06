@@ -36,6 +36,9 @@ describe('debugger/index', () => {
           callback(null, { endpoints: ['/debugger/v2/input'] })
         }),
       },
+      './config': proxyquire('../../src/debugger/config', {
+        '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
+      }),
       worker_threads: {
         Worker,
         MessageChannel: class MessageChannel {
@@ -57,7 +60,6 @@ describe('debugger/index', () => {
     })
 
     config = {
-      commitSHA: 'test-sha',
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
@@ -65,7 +67,6 @@ describe('debugger/index', () => {
       hostname: 'test-host',
       logLevel: 'info',
       port: 8126,
-      repositoryUrl: 'https://github.com/test/repo',
       service: 'test-service',
       tags: {
         'runtime-id': 'test-runtime-id',
