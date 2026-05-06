@@ -98,14 +98,14 @@ yarn services && npm run test:plugins
 ### Test Coverage
 
 ```bash
-./node_modules/.bin/nyc --include "packages/dd-trace/src/debugger/**/*.js" \
+./node_modules/.bin/c8 --include "packages/dd-trace/src/debugger/**/*.js" \
   ./node_modules/.bin/mocha \
   "packages/dd-trace/test/debugger/**/*.spec.js"
 ```
 
 **Philosophy:**
 
-- Integration tests (running in sandboxes) don't count towards nyc coverage metrics
+- Integration tests (running in sandboxes) don't count towards c8 coverage metrics
 - Don't add redundant unit tests solely to improve coverage numbers
 - Focus on covering important production code paths with whichever test type makes sense
 
