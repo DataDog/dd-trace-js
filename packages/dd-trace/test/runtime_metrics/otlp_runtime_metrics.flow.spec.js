@@ -24,6 +24,7 @@ const EXPECTED_METRICS = [
   'nodejs.eventloop.delay.min',
   'nodejs.eventloop.delay.max',
   'nodejs.eventloop.delay.mean',
+  'nodejs.eventloop.delay.stddev',
   'nodejs.eventloop.delay.p50',
   'nodejs.eventloop.delay.p90',
   'nodejs.eventloop.delay.p99',
@@ -65,7 +66,7 @@ describe('OTLP runtime metrics — pipeline flow', () => {
     metrics.disable()
   })
 
-  it('exports all 13 runtime metrics through the OTLP pipeline', () => {
+  it('exports all 14 runtime metrics through the OTLP pipeline', () => {
     otlpRuntimeMetrics.start({ runtimeMetrics: { enabled: true, eventLoop: true } })
 
     reader.forceFlush()
@@ -81,7 +82,7 @@ describe('OTLP runtime metrics — pipeline flow', () => {
       assert.ok(seen.has(name), `expected ${name} in OTLP export, got: ${[...seen].sort().join(', ')}`)
     }
 
-    assert.equal(seen.size, 13, `expected exactly 13 metrics, got ${seen.size}: ${[...seen].sort().join(', ')}`)
+    assert.equal(seen.size, 14, `expected exactly 14 metrics, got ${seen.size}: ${[...seen].sort().join(', ')}`)
 
     for (const name of seen) {
       assert.ok(!name.startsWith('runtime.node.'), `${name} should use OTel naming, not DD naming`)
@@ -190,6 +191,7 @@ describe('OTLP runtime metrics — pipeline flow', () => {
       'nodejs.eventloop.delay.min',
       'nodejs.eventloop.delay.max',
       'nodejs.eventloop.delay.mean',
+      'nodejs.eventloop.delay.stddev',
       'nodejs.eventloop.delay.p50',
       'nodejs.eventloop.delay.p90',
       'nodejs.eventloop.delay.p99',

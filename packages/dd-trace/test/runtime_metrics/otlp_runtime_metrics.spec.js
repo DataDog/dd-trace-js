@@ -64,7 +64,7 @@ describe('otlp_runtime_metrics', () => {
     otlpMetrics.stop()
   })
 
-  it('should create exactly 13 OTel-native metric instruments', () => {
+  it('should create exactly 14 OTel-native metric instruments', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
 
     const expectedMetrics = [
@@ -77,6 +77,7 @@ describe('otlp_runtime_metrics', () => {
       'nodejs.eventloop.delay.min',
       'nodejs.eventloop.delay.max',
       'nodejs.eventloop.delay.mean',
+      'nodejs.eventloop.delay.stddev',
       'nodejs.eventloop.delay.p50',
       'nodejs.eventloop.delay.p90',
       'nodejs.eventloop.delay.p99',
@@ -87,7 +88,7 @@ describe('otlp_runtime_metrics', () => {
       assert.ok(createdGauges[name], `${name} should be created`)
     }
 
-    assert.equal(Object.keys(createdGauges).length, 13, 'should create exactly 13 instruments')
+    assert.equal(Object.keys(createdGauges).length, 14, 'should create exactly 14 instruments')
 
     // No DD-proprietary names should be present
     for (const name of Object.keys(createdGauges)) {
@@ -103,6 +104,7 @@ describe('otlp_runtime_metrics', () => {
     assert.equal(createdGauges['process.cpu.utilization'].opts.unit, '1')
     // Per OTel semconv, nodejs.eventloop.delay.* are reported in seconds, not nanoseconds.
     assert.equal(createdGauges['nodejs.eventloop.delay.min'].opts.unit, 's')
+    assert.equal(createdGauges['nodejs.eventloop.delay.stddev'].opts.unit, 's')
     assert.equal(createdGauges['nodejs.eventloop.delay.p99'].opts.unit, 's')
     assert.equal(createdGauges['nodejs.eventloop.utilization'].opts.unit, '1')
   })
@@ -123,6 +125,7 @@ describe('otlp_runtime_metrics', () => {
       'nodejs.eventloop.delay.min': 'gauge',
       'nodejs.eventloop.delay.max': 'gauge',
       'nodejs.eventloop.delay.mean': 'gauge',
+      'nodejs.eventloop.delay.stddev': 'gauge',
       'nodejs.eventloop.delay.p50': 'gauge',
       'nodejs.eventloop.delay.p90': 'gauge',
       'nodejs.eventloop.delay.p99': 'gauge',
