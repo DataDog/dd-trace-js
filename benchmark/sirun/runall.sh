@@ -5,10 +5,15 @@ set -e
 DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
 CWD=$(pwd)
 
+# Background subshells can't share a bash variable, so failed variants
+# write their dir/variant name here and the parent counts lines after `wait`.
+FAILURES_FILE=$(mktemp)
+
 function cleanup {
   for D in "${DIRS[@]}"; do
     rm -f "${CWD}/${D}/meta-temp.json"
   done
+  rm -f "$FAILURES_FILE"
 }
 
 trap cleanup EXIT
@@ -90,7 +95,16 @@ for D in "${DIRS[@]}"; do
 
       export SIRUN_VARIANT=$V
 
-      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished." || echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2) &
+      (
+        if time node ../run-one-variant.js >> ../results.ndjson; then
+          echo "${D}/${V} finished."
+        else
+          echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
+          # Append-only writes to a single tempfile from parallel subshells are
+          # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
+          echo "${D}/${V}" >> "$FAILURES_FILE"
+        fi
+      ) &
       ((CPU_AFFINITY=CPU_AFFINITY+1))
     fi
 
@@ -110,3 +124,11 @@ if [ "$DEBUG_RESULTS" == "true" ]; then
 fi
 
 echo "all tests for ${VERSION} have now completed."
+
+FAILED_COUNT=$(wc -l < "$FAILURES_FILE" | tr -d ' ')
+if [[ "${FAILED_COUNT}" -gt 0 ]]; then
+  echo "" >&2
+  echo "${FAILED_COUNT} variant(s) failed:" >&2
+  sed 's/^/  - /' "$FAILURES_FILE" >&2
+  exit 1
+fi
