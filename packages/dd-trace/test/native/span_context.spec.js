@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -14,6 +13,12 @@ describe('NativeSpanContext', () => {
   let OpCode
   let id
   let idBuffer
+  // Slot index used for queueOp dispatch — the rebased native side addresses
+  // spans by slot number, not by their raw spanId buffer.
+  let slotIndex
+  // LE form of idBuffer — the rebased NativeSpanContext stores spanId as
+  // a little-endian Uint8Array (matches the WASM change-buffer wire format).
+  let leSpanId
 
   beforeEach(() => {
     OpCode = {
@@ -30,11 +35,15 @@ describe('NativeSpanContext', () => {
     }
 
     nativeSpans = {
-      queueOp: sinon.stub()
+      queueOp: sinon.stub(),
+      queueBatchMeta: sinon.stub(),
+      queueBatchMetrics: sinon.stub(),
     }
 
     // Create a mock ID object with proper 8-byte buffer (big-endian)
     idBuffer = Buffer.from([0x00, 0x00, 0x00, 0x00, 0x07, 0x5b, 0xcd, 0x15]) // 123456789 as BE
+    leSpanId = new Uint8Array([0x15, 0xcd, 0x5b, 0x07, 0x00, 0x00, 0x00, 0x00])
+    slotIndex = 7
     id = {
       toString: () => '123456789',
       toBigInt: () => 123456789n,
@@ -55,6 +64,7 @@ describe('NativeSpanContext', () => {
         parentId: id,
         sampling: { priority: 1 },
         baggageItems: { foo: 'bar' },
+        slotIndex,
         trace: {
           started: [],
           finished: [],
@@ -67,15 +77,20 @@ describe('NativeSpanContext', () => {
       assert.strictEqual(spanContext._parentId, id)
       assert.deepStrictEqual(spanContext._sampling, { priority: 1 })
       assert.deepStrictEqual(spanContext._baggageItems, { foo: 'bar' })
+      assert.strictEqual(spanContext._slotIndex, slotIndex)
     })
 
-    it('should set native span ID buffer from spanId', () => {
+    it('should set native span ID buffer from spanId (little-endian)', () => {
+      // The rebased NativeSpanContext stores spanId as a LE Uint8Array so
+      // the WASM change-buffer can copy it directly. id.toBuffer() returns
+      // the original BE Identifier buffer; the constructor reverses it.
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
 
-      assert.deepStrictEqual(spanContext._nativeSpanId, id.toBuffer())
+      assert.deepStrictEqual(spanContext._nativeSpanId, leSpanId)
     })
   })
 
@@ -83,7 +98,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -93,7 +109,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetServiceName,
-        idBuffer,
+        slotIndex,
         'my-service'
       )
     })
@@ -104,7 +120,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetResourceName,
-        idBuffer,
+        slotIndex,
         'GET /api/users'
       )
     })
@@ -115,7 +131,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetType,
-        idBuffer,
+        slotIndex,
         'web'
       )
     })
@@ -126,7 +142,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetError,
-        idBuffer,
+        slotIndex,
         ['i32', 1]
       )
     })
@@ -137,7 +153,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetError,
-        idBuffer,
+        slotIndex,
         ['i32', 0]
       )
     })
@@ -148,7 +164,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetaAttr,
-        idBuffer,
+        slotIndex,
         'http.url',
         'https://example.com'
       )
@@ -160,7 +176,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetricAttr,
-        idBuffer,
+        slotIndex,
         'response.size',
         ['f64', 1024]
       )
@@ -172,7 +188,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetaAttr,
-        idBuffer,
+        slotIndex,
         'http.status_code',
         '200'
       )
@@ -184,7 +200,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetricAttr,
-        idBuffer,
+        slotIndex,
         'some.flag',
         ['f64', 1]
       )
@@ -213,7 +229,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -232,7 +249,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -251,7 +269,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -267,7 +286,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -285,7 +305,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -295,7 +316,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetName,
-        idBuffer,
+        slotIndex,
         'my-operation'
       )
     })
@@ -306,6 +327,7 @@ describe('NativeSpanContext', () => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
         spanId: id,
+        slotIndex,
         trace: {
           started: [],
           finished: [],
@@ -326,7 +348,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetTraceMetaAttr,
-        idBuffer,
+        slotIndex,
         '_dd.p.tid',
         'abc123'
       )
@@ -338,7 +360,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetTraceMetricsAttr,
-        idBuffer,
+        slotIndex,
         '_sampling_priority_v1',
         ['f64', 2]
       )
@@ -349,7 +371,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
@@ -359,20 +382,25 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetTraceOrigin,
-        idBuffer,
+        slotIndex,
         'synthetics'
       )
     })
   })
 
   describe('nativeSpanId getter', () => {
-    it('should return the native span ID', () => {
+    it('should return the native span ID (LE form)', () => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
 
-      assert.strictEqual(spanContext.nativeSpanId, idBuffer)
+      // nativeSpanId is the same Uint8Array stored as _nativeSpanId during
+      // construction. Compare by content; identity is fine here too since
+      // the getter returns the same reference.
+      assert.deepStrictEqual(spanContext.nativeSpanId, leSpanId)
+      assert.strictEqual(spanContext.nativeSpanId, spanContext._nativeSpanId)
     })
   })
 
@@ -380,7 +408,8 @@ describe('NativeSpanContext', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
-        spanId: id
+        spanId: id,
+        slotIndex
       })
     })
 
