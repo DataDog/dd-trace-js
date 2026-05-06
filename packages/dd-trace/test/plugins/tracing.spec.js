@@ -9,6 +9,7 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
+const { isUserVisible } = require('../../src/user_visibility')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
@@ -70,6 +71,33 @@ describe('TracingPlugin', () => {
 
       const callArgs = startSpanSpy.firstCall.args[1]
       assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
+    })
+  })
+
+  describe('configure() user-visible hook wrapping', () => {
+    class HookPlugin extends TracingPlugin {
+      static id = 'hookPlugin'
+      static operation = 'doit'
+    }
+
+    it('wraps user-supplied hooks so the span is marked user-visible', () => {
+      const userHook = sinon.spy()
+      const plugin = new HookPlugin({ _tracer: {} })
+      plugin.configure({ enabled: true, hooks: { doit: userHook } })
+
+      const fakeSpan = { _spanContext: { _tags: {} } }
+      assert.equal(isUserVisible(fakeSpan), false)
+
+      plugin.config.hooks.doit(fakeSpan, 'arg1', 'arg2')
+
+      sinon.assert.calledOnceWithExactly(userHook, fakeSpan, 'arg1', 'arg2')
+      assert.equal(isUserVisible(fakeSpan), true)
+    })
+
+    it('preserves non-function hook entries untouched', () => {
+      const plugin = new HookPlugin({ _tracer: {} })
+      plugin.configure({ enabled: true, hooks: { doit: 'not-a-fn' } })
+      assert.strictEqual(plugin.config.hooks.doit, 'not-a-fn')
     })
   })
 })

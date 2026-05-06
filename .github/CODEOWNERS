@@ -295,6 +295,7 @@
 /packages/datadog-shimmer @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/retry.js @DataDog/lang-platform-js
+/packages/dd-trace/src/user_visibility.js @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
@@ -322,6 +323,7 @@
 /packages/dd-trace/test/ritm-tests @DataDog/lang-platform-js
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/setup @DataDog/lang-platform-js
+/packages/dd-trace/test/user_visibility.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
 
 /scripts/** @DataDog/lang-platform-js

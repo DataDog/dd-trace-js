@@ -6,6 +6,7 @@ const { isError, isTrue } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
+const { storage: legacyStorage } = require('../../../datadog-core')
 const Span = require('../opentracing/span')
 const {
   SPAN_KIND,
@@ -14,11 +15,11 @@ const {
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   LLMOBS_PARENT_ID_BRIDGE_KEY,
 } = require('./constants/tags')
+const { storage } = require('./storage')
 const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
-const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
@@ -149,7 +150,7 @@ class LLMObs extends NoopLLMObs {
     function wrapped () {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
-      const span = llmobs._tracer.scope().active()
+      const span = legacyStorage('legacy').getStore()?.span
       const fnArgs = arguments
 
       const lastArgId = fnArgs.length - 1

@@ -101,6 +101,40 @@ describe('Tracer', () => {
       })
     })
 
+    describe('_dd.svc_src for user-visible spans', () => {
+      const { SVC_SRC_KEY } = require('../src/constants')
+
+      it('stamps _dd.svc_src=m when the user sets service via setTag inside trace()', () => {
+        tracer.trace('name', {}, span => {
+          span.setTag('service', 'custom')
+          assert.strictEqual(span.context()._tags[SVC_SRC_KEY], 'm')
+        })
+      })
+
+      it('stamps _dd.svc_src=m when the user passes service via trace() options', () => {
+        tracer.trace('name', { service: 'custom' }, span => {
+          assert.strictEqual(span.context()._tags[SVC_SRC_KEY], 'm')
+        })
+      })
+
+      it('overrides a prior internal source when the user sets service inside trace()', () => {
+        tracer.trace('name', {}, span => {
+          span.context()._tags[SVC_SRC_KEY] = 'opt.plugin'
+          span.addTags({ service: 'custom' })
+          assert.strictEqual(span.context()._tags[SVC_SRC_KEY], 'm')
+        })
+      })
+
+      it('does not stamp _dd.svc_src on a span the user never received', () => {
+        const span = new Span(tracer, tracer._processor, tracer._prioritySampler, {
+          operationName: 'internal',
+        })
+        span.setTag('service', 'custom')
+        assert.ok(!(SVC_SRC_KEY in span.context()._tags))
+        span.finish()
+      })
+    })
+
     it('should activate the span', () => {
       tracer.trace('name', {}, span => {
         assert.strictEqual(tracer.scope().active(), span)

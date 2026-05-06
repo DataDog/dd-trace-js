@@ -2,10 +2,12 @@
 
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { storage } = require('../../datadog-core')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
+const { markUserVisible } = require('./user_visibility')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
@@ -58,9 +60,9 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = { childOf: this.scope().active(), ...options }
+    options = { childOf: storage('legacy').getStore()?.span, ...options }
 
-    const span = this.startSpan(name, options)
+    const span = markUserVisible(this.startSpan(name, options))
 
     addTags(span, options)
 
@@ -137,7 +139,7 @@ class DatadogTracer extends Tracer {
     if (!this._enableGetRumData) {
       return ''
     }
-    const span = this.scope().active().context()
+    const span = storage('legacy').getStore().span.context()
     const traceId = span.toTraceId()
     const traceTime = Date.now()
     return `\

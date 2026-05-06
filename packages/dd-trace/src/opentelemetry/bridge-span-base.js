@@ -1,5 +1,6 @@
 'use strict'
 
+const { markUserVisible } = require('../user_visibility')
 const {
   addOtelEvent,
   addOtelLink,
@@ -29,7 +30,7 @@ class BridgeSpanBase {
    * @param {import('../opentracing/span')} ddSpan
    */
   constructor (ddSpan) {
-    this._ddSpan = ddSpan
+    this._ddSpan = markUserVisible(ddSpan)
   }
 
   get ended () {

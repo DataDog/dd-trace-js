@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const { markUserVisible } = require('./user_visibility')
 
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 
@@ -10,11 +11,13 @@ class Scope {
   active () {
     const store = storage('legacy').getStore()
 
-    return (store && store.span) || null
+    return markUserVisible((store && store.span) || null)
   }
 
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
+
+    markUserVisible(span)
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
@@ -38,7 +41,7 @@ class Scope {
     if (typeof fn !== 'function') return fn
 
     const scope = this
-    const spanOrActive = this._spanOrActive(span)
+    const spanOrActive = markUserVisible(this._spanOrActive(span))
 
     const bound = function () {
       return scope.activate(spanOrActive, () => {

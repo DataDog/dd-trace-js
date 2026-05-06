@@ -11,6 +11,7 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
+const { applyUserSourceStamps } = require('../user_visibility')
 const SpanContext = require('./span_context')
 
 const dateNow = Date.now
@@ -406,6 +407,8 @@ class DatadogSpan {
   }
 
   _addTags (keyValuePairs) {
+    applyUserSourceStamps(this, keyValuePairs)
+
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)

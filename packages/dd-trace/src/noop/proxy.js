@@ -4,6 +4,7 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const { markUserVisible, stampManualServiceInOptions } = require('../user_visibility')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
 
@@ -54,9 +55,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return
 
-    options = options || {}
-
-    return this._tracer.trace(name, options, fn)
+    return this._tracer.trace(name, options || {}, fn)
   }
 
   wrap (name, options, fn) {
@@ -67,9 +66,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return fn
 
-    options = options || {}
-
-    return this._tracer.wrap(name, options, fn)
+    return this._tracer.wrap(name, options || {}, fn)
   }
 
   setUrl () {
@@ -77,8 +74,8 @@ class NoopProxy {
     return this
   }
 
-  startSpan () {
-    return this._tracer.startSpan.apply(this._tracer, arguments)
+  startSpan (name, options, ...rest) {
+    return markUserVisible(this._tracer.startSpan(name, stampManualServiceInOptions(options), ...rest))
   }
 
   inject () {
