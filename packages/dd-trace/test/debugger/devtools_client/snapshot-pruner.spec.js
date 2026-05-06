@@ -3,46 +3,18 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
-
 const { pruneSnapshot } = require('../../../src/debugger/devtools_client/snapshot-pruner')
 
 require('../../setup/mocha')
 
 describe('snapshot-pruner', function () {
   describe('pruneSnapshot', function () {
-    let locals, snapshot
+    let locals
+    let snapshot
 
     beforeEach(() => {
       locals = {}
-      snapshot = {
-        service: 'my-service',
-        hostname: 'my-host',
-        message: 'my-message',
-        logger: {
-          name: 'test.js',
-          method: 'testMethod',
-          version: '1.0.0',
-        },
-        dd: { service: 'my-service' },
-        debugger: {
-          snapshot: {
-            id: '12345',
-            timestamp: 123456789,
-            probe: { id: 'probe-1', version: 1 },
-            stack: [
-              { function: 'test', fileName: 'test.js', lineNumber: 10 },
-            ],
-            language: 'javascript',
-            captures: {
-              lines: {
-                10: {
-                  locals,
-                },
-              },
-            },
-          },
-        },
-      }
+      snapshot = createSnapshot(locals)
     })
 
     it('should return original JSON if already under size limit', function () {
@@ -324,8 +296,7 @@ describe('snapshot-pruner', function () {
     })
 
     it('should promote parent to leaf when all children are pruned', function () {
-      // At 674, all the children are pruned, but the parent is not, at 675 one of the children is not pruned
-      assertPrunedSnapshot(674, {
+      const originalLocals = {
         smallVar: { type: 'number', value: '42' },
         parent: {
           type: 'object',
@@ -344,10 +315,23 @@ describe('snapshot-pruner', function () {
             },
           },
         },
-      }, {
+      }
+
+      const expectedLocals = {
         smallVar: { type: 'number', value: '42' },
         parent: { pruned: true },
-      })
+      }
+
+      const maxSize = findBoundaryMaxSize(
+        originalLocals,
+        parsedLocals => parsedLocals.parent?.pruned === true
+      )
+
+      const parsedLocalsAtBoundary = getPrunedLocals(maxSize, originalLocals)
+      assert.deepStrictEqual(parsedLocalsAtBoundary, expectedLocals)
+
+      const parsedLocalsAfterBoundary = getPrunedLocals(maxSize + 1, originalLocals)
+      assert.notDeepStrictEqual(parsedLocalsAfterBoundary, expectedLocals)
     })
 
     it('should handle multi-byte characters correctly', function () {
@@ -429,29 +413,98 @@ describe('snapshot-pruner', function () {
         },
       })
     })
-
-    /**
-     * Assert that the pruneSnapshot function successfully prunes the snapshot and returns the expected locals.
-     * @param {number} maxSize - Used to define the max allowed size of the snapshot. If positive, it's the absolute max
-     *   size value. If negative, it's redacted from the actual size.
-     * @param {object} originalLocals - The locals to use for the snapshot.
-     * @param {object} expectedLocals - The expected locals after pruning.
-     */
-    function assertPrunedSnapshot (maxSize, originalLocals, expectedLocals) {
-      Object.assign(locals, originalLocals)
-
-      const json = JSON.stringify(snapshot)
-      const size = Buffer.byteLength(json)
-      maxSize = maxSize < 0 ? size + maxSize : maxSize
-
-      const result = pruneSnapshot(json, size, maxSize)
-
-      assert.ok(result, 'Expected pruneSnapshot() to successfully prune')
-
-      const parsed = JSON.parse(result)
-      const parsedLocals = parsed.debugger.snapshot.captures.lines['10'].locals
-
-      assert.deepStrictEqual(parsedLocals, expectedLocals)
-    }
   })
 })
+
+/**
+ * Build the standard snapshot fixture used by these tests.
+ * @param {object} locals
+ * @returns {object}
+ */
+function createSnapshot (locals) {
+  return {
+    service: 'my-service',
+    host: 'my-host',
+    message: 'my-message',
+    logger: {
+      name: 'test.js',
+      method: 'testMethod',
+      version: '1.0.0',
+    },
+    dd: { service: 'my-service' },
+    debugger: {
+      snapshot: {
+        id: '12345',
+        timestamp: 123456789,
+        probe: { id: 'probe-1', version: 1 },
+        stack: [
+          { function: 'test', fileName: 'test.js', lineNumber: 10 },
+        ],
+        language: 'javascript',
+        captures: {
+          lines: {
+            10: {
+              locals,
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
+/**
+ * Assert that the pruneSnapshot function successfully prunes the snapshot and returns the expected locals.
+ * @param {number} maxSize - Used to define the max allowed size of the snapshot. If positive, it's the absolute max
+ *   size value. If negative, it's redacted from the actual size.
+ * @param {object} originalLocals - The locals to use for the snapshot.
+ * @param {object} expectedLocals - The expected locals after pruning.
+ */
+function assertPrunedSnapshot (maxSize, originalLocals, expectedLocals) {
+  const parsedLocals = getPrunedLocals(maxSize, originalLocals)
+  assert.deepStrictEqual(parsedLocals, expectedLocals)
+}
+
+/**
+ * Find the largest maxSize that still satisfies the provided predicate.
+ * @param {object} originalLocals - The locals to use for the snapshot.
+ * @param {(parsedLocals: object) => boolean} predicate
+ *   - Returns true when the current pruning result matches.
+ * @returns {number|undefined}
+ */
+function findBoundaryMaxSize (originalLocals, predicate) {
+  const snapshot = createSnapshot(originalLocals)
+  const json = JSON.stringify(snapshot)
+  const size = Buffer.byteLength(json)
+
+  for (let maxSize = size; maxSize >= 0; maxSize--) {
+    const result = pruneSnapshot(json, size, maxSize)
+    if (!result) continue
+
+    const parsedLocals = JSON.parse(result).debugger.snapshot.captures.lines['10'].locals
+    if (predicate(parsedLocals)) {
+      return maxSize
+    }
+  }
+
+  assert.fail('Expected to find a maxSize where the parent gets promoted to a leaf')
+}
+
+/**
+ * Prune a snapshot built from the provided locals and return the parsed locals.
+ * @param {number} maxSize - Used to define the max allowed size of the snapshot. If positive, it's the absolute max
+ *   size value. If negative, it's redacted from the actual size.
+ * @param {object} originalLocals - The locals to use for the snapshot.
+ * @returns {object}
+ */
+function getPrunedLocals (maxSize, originalLocals) {
+  const snapshot = createSnapshot(originalLocals)
+  const json = JSON.stringify(snapshot)
+  const size = Buffer.byteLength(json)
+  maxSize = maxSize < 0 ? size + maxSize : maxSize
+
+  const result = pruneSnapshot(json, size, maxSize)
+  assert.ok(result, 'Expected pruneSnapshot() to successfully prune')
+
+  return JSON.parse(result).debugger.snapshot.captures.lines['10'].locals
+}
