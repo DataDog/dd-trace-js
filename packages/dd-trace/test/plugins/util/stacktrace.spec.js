@@ -409,6 +409,18 @@ describe('stacktrace utils', () => {
       })
     })
 
+    describe('dd-trace instrumentation frames', () => {
+      it('should filter instrumentation frames regardless of the repo directory name', () => {
+        // Regression: previously only filtered when directory was named exactly 'dd-trace-js'
+        for (const repoName of ['dd-trace-js', 'dd-trace-js-1', 'my-dd-trace-fork', 'tracer']) {
+          const instrumentationFrame = `    at wrappedUse (/${repoName}/packages/datadog-instrumentations/src/express.js:144:16)`
+          const userFrame = `    at testCase (/user/app/test.js:10:5)`
+          const stack = `Error: test\n${instrumentationFrame}\n${userFrame}`
+          assert.deepStrictEqual(parseUserLandFrames(stack).length, 1, `failed for repo name: ${repoName}`)
+        }
+      })
+    })
+
     describe('user-land frame', () => {
       it('should should only return user-land frames', () => {
         const stack = genStackTraceWithManyNonUserLandFramesAnd(
