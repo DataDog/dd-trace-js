@@ -10,7 +10,7 @@ const pad = (n) => String(n).padStart(2, '0')
 
 function formatDateTime (t) {
   return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}` +
-         `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
+    `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
 }
 
 class FileExporter extends EventSerializer {

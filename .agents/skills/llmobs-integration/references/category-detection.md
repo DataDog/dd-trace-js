@@ -87,16 +87,16 @@ Follow this tree to determine category:
 
 ```
 1. Does the package make direct HTTP calls to LLM provider endpoints?
-   ├─ YES → Go to question 2
-   └─ NO  → Go to question 3
+    ├─ YES → Go to question 2
+    └─ NO  → Go to question 3
 
 2. Does it support multiple LLM providers via configuration?
-   ├─ YES → LlmObsCategory.MULTI_PROVIDER
-   └─ NO  → LlmObsCategory.LLM_CLIENT
+    ├─ YES → LlmObsCategory.MULTI_PROVIDER
+    └─ NO  → LlmObsCategory.LLM_CLIENT
 
 3. Does it implement workflow/graph orchestration with state management?
-   ├─ YES → LlmObsCategory.ORCHESTRATION
-   └─ NO  → LlmObsCategory.INFRASTRUCTURE
+    ├─ YES → LlmObsCategory.ORCHESTRATION
+    └─ NO  → LlmObsCategory.INFRASTRUCTURE
 ```
 
 ## Detection Process

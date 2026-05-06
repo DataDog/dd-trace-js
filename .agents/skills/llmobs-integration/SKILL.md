@@ -93,16 +93,16 @@ See [references/plugin-architecture.md](references/plugin-architecture.md) for c
 Answer these questions by reading the code:
 
 1. **Does the package make direct HTTP calls to LLM provider endpoints?**
-   - YES → Go to question 2
-   - NO → Go to question 3
+    - YES → Go to question 2
+    - NO → Go to question 3
 
 2. **Does it support multiple LLM providers via configuration?**
-   - YES → **`LlmObsCategory.MULTI_PROVIDER`**
-   - NO → **`LlmObsCategory.LLM_CLIENT`**
+    - YES → **`LlmObsCategory.MULTI_PROVIDER`**
+    - NO → **`LlmObsCategory.LLM_CLIENT`**
 
 3. **Does it implement workflow/graph orchestration with state management?**
-   - YES → **`LlmObsCategory.ORCHESTRATION`**
-   - NO → **`LlmObsCategory.INFRASTRUCTURE`**
+    - YES → **`LlmObsCategory.ORCHESTRATION`**
+    - NO → **`LlmObsCategory.INFRASTRUCTURE`**
 
 See [references/category-detection.md](references/category-detection.md) for detailed heuristics and examples.
 
@@ -138,31 +138,31 @@ See [references/message-extraction.md](references/message-extraction.md) for pro
 ## Implementation Steps
 
 1. **Detect package category** (REQUIRED FIRST STEP)
-   - Follow decision tree above
-   - Output: category, confidence, reasoning
+    - Follow decision tree above
+    - Output: category, confidence, reasoning
 
 2. **Create plugin file**
-   - Location: `packages/dd-trace/src/llmobs/plugins/{integration}/index.js`
-   - Extend: `LLMObsPlugin` base class
-   - Implement: Required methods per plugin architecture
+    - Location: `packages/dd-trace/src/llmobs/plugins/{integration}/index.js`
+    - Extend: `LLMObsPlugin` base class
+    - Implement: Required methods per plugin architecture
 
 3. **Implement `getLLMObsSpanRegisterOptions(ctx)`**
-   - Extract model provider and name from context
-   - Determine span kind (usually `'llm'`)
-   - Return registration options object
+    - Extract model provider and name from context
+    - Determine span kind (usually `'llm'`)
+    - Return registration options object
 
 4. **Implement `setLLMObsTags(ctx)`**
-   - Extract input messages from `ctx.arguments`
-   - Extract output messages from `ctx.result`
-   - Extract token metrics (input_tokens, output_tokens, total_tokens)
-   - Extract metadata (temperature, max_tokens, etc.)
-   - Tag span using `this._tagger` methods
+    - Extract input messages from `ctx.arguments`
+    - Extract output messages from `ctx.result`
+    - Extract token metrics (input_tokens, output_tokens, total_tokens)
+    - Extract metadata (temperature, max_tokens, etc.)
+    - Tag span using `this._tagger` methods
 
 5. **Handle edge cases**
-   - Streaming responses (if applicable)
-   - Error cases (empty output messages)
-   - Non-standard message formats
-   - Missing metadata
+    - Streaming responses (if applicable)
+    - Error cases (empty output messages)
+    - Non-standard message formats
+    - Missing metadata
 
 See [references/plugin-architecture.md](references/plugin-architecture.md) for step-by-step implementation guide.
 

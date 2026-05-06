@@ -15,9 +15,9 @@ trap cleanup EXIT
 
 # Temporary until merged to master
 wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
-	&& tar -xzf sirun.tar.gz \
-	&& rm sirun.tar.gz \
-	&& mv sirun /usr/bin/sirun
+    && tar -xzf sirun.tar.gz \
+    && rm sirun.tar.gz \
+    && mv sirun /usr/bin/sirun
 
 if test -f ~/.nvm/nvm.sh; then
   source ~/.nvm/nvm.sh

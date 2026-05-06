@@ -708,9 +708,9 @@ addHook({
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
         (!config.isKnownTestsEnabled &&
-         !config.isTestManagementTestsEnabled &&
-         !config.isImpactedTestsEnabled &&
-         !config.isFlakyTestRetriesEnabled)) {
+          !config.isTestManagementTestsEnabled &&
+          !config.isImpactedTestsEnabled &&
+          !config.isFlakyTestRetriesEnabled)) {
       return run.apply(this, arguments)
     }
 

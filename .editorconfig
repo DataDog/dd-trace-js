@@ -9,3 +9,12 @@ end_of_line = lf
 charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
+
+[*.avro]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+
+# TODO: fix OpenAI tests
+[packages/datadog-plugin-openai/test/fine-tune.jsonl]
+insert_final_newline = unset
