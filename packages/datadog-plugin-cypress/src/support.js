@@ -79,6 +79,9 @@ function getRetriedTests (test, numRetries, tags) {
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     const clonedTest = test.clone()
+    if (tags.includes('_ddIsEfdRetry')) {
+      clonedTest._ddEfdRetryIndex = retryIndex + 1
+    }
     for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
@@ -173,7 +176,12 @@ beforeEach(function () {
   cy.task('dd:beforeEach', {
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
-  }).then(({ traceId, shouldSkip }) => {
+    isEfdRetry: Cypress.mocha.getRunner().suite.ctx.currentTest._ddIsEfdRetry,
+    efdRetryIndex: Cypress.mocha.getRunner().suite.ctx.currentTest._ddEfdRetryIndex,
+  }).then(({ traceId, shouldSkip, shouldDiscard }) => {
+    if (shouldDiscard) {
+      this.currentTest._ddShouldDiscard = true
+    }
     if (traceId) {
       cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId).then(() => {
         // When testIsolation:false, the page is not reset between tests, so the RUM session
@@ -242,6 +250,9 @@ after(() => {
 
 afterEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  if (currentTest._ddShouldDiscard) {
+    return
+  }
   const testName = currentTest.fullTitle()
 
   // Check if this was a test management test that we suppressed the failure for.
@@ -267,6 +278,7 @@ afterEach(function () {
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
     isModified: currentTest._ddIsModified,
+    duration: currentTest.duration,
     // Mark suppressed tests so the plugin can tag them with the correct test management reason.
     isQuarantined: isTestManagementTestThatFailed && suppressedTestFailure.isQuarantined,
     isDisabled: isTestManagementTestThatFailed && suppressedTestFailure.isDisabled,

@@ -19,10 +19,12 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_NAME,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
+  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
@@ -215,6 +217,69 @@ moduleTypes.forEach(({
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('uses the retry count from the matching slow_test_retries bucket', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          cypress: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const instantTests = tests.filter(test => test.resource ===
+              'cypress/e2e/efd-duration.cy.js.efd duration retries instant test'
+            )
+            assert.strictEqual(instantTests.length, 3)
+            assert.strictEqual(
+              instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+              2
+            )
+
+            const slowTests = tests.filter(test => test.resource ===
+              'cypress/e2e/efd-duration.cy.js.efd duration retries slightly slow test'
+            )
+            assert.strictEqual(slowTests.length, 1)
+            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(slowTests[0].meta[TEST_FINAL_STATUS], 'pass')
+            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+          }, 30_000)
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+        const specToRun = 'cypress/e2e/efd-duration.cy.js'
 
         childProcess = exec(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
