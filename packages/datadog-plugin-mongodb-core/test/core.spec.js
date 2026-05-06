@@ -523,6 +523,61 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with dbmPropagationMode full from tracer configuration', () => {
+        before(() => {
+          // Tracer-level config (third arg) only takes effect if the global
+          // tracer is wiped first; tracer.init() short-circuits once the
+          // process-wide singleton has been initialized by an earlier load.
+          agent.wipe()
+          return agent.load('mongodb-core', {}, {
+            dbmPropagationMode: 'full',
+            sampler: { sampleRate: 1 },
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false, wipe: true })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false,
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it('DBM propagation should inject full mode comment with traceparent', done => {
+          agent
+            .assertFirstTraceSpan(span => {
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
+
+              assert.strictEqual(startSpy.called, true)
+              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.ok(comment.includes(`traceparent='00-${traceId}-${spanId}-01'`))
+              assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
+            })
+            .then(done)
+            .catch(done)
+
+          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+        })
+      })
+
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', { dbmPropagationMode: 'service' })
