@@ -141,7 +141,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
             })
             if (semver.intersects(version, '>=2.3.4')) {
-              assert.match(span.meta['aws.response.request_id'], /[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+              assert.match(span.meta['aws.response.request_id'], /\w{8}(-\w{4}){3}-\w{12}/)
             }
           }).then(done, done)
 

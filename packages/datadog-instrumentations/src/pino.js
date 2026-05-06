@@ -60,17 +60,13 @@ function wrapPrettyFactory (prettyFactory) {
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
-
-  return wrapped
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
 })
 
 addHook({ name: 'pino', versions: ['>=5 <6.8.0'], patchDefault: true }, (pino) => {
   const asJsonSym = ((pino.default || pino)?.symbols.asJsonSym) || 'asJson'
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
-
-  return wrapped
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
 })
 
 addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino) => {

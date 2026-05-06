@@ -271,8 +271,7 @@ class DataStreamsProcessor {
    */
   bucketFromTimestamp (timestamp) {
     const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
-    const bucket = this.buckets.forTime(bucketTime)
-    return bucket
+    return this.buckets.forTime(bucketTime)
   }
 
   recordCheckpoint (checkpoint, span = null) {

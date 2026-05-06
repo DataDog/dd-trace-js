@@ -43,7 +43,7 @@ const BaseFFEWriter = require('./base')
  */
 class ExposuresWriter extends BaseFFEWriter {
   /**
-   * @param {import('../../config')} config - Tracer configuration object
+   * @param {import('../../config/config-base')} config - Tracer configuration object
    */
   constructor (config) {
     // Build full EVP endpoint path
@@ -62,7 +62,19 @@ class ExposuresWriter extends BaseFFEWriter {
     })
     this._enabled = false // Start disabled until agent strategy is set
     this._pendingEvents = [] // Buffer events until enabled
-    this._context = this._buildContext()
+
+    const context = {
+      service: config.service,
+    }
+    // Only include version and env if they are defined
+    if (config.version !== undefined) {
+      context.version = config.version
+    }
+    if (config.env !== undefined) {
+      context.env = config.env
+    }
+
+    this._context = context
   }
 
   /**
@@ -112,61 +124,30 @@ class ExposuresWriter extends BaseFFEWriter {
    * @returns {ExposureEventPayload} Formatted payload with service context
    */
   makePayload (events) {
-    const formattedEvents = events.map(event => this._formatExposureEvent(event))
+    const formattedEvents = events.map(event => {
+      return {
+        timestamp: event.timestamp || Date.now(),
+        allocation: {
+          key: event.allocation?.key || event['allocation.key'],
+        },
+        flag: {
+          key: event.flag?.key || event['flag.key'],
+        },
+        variant: {
+          key: event.variant?.key || event['variant.key'],
+        },
+        subject: {
+          id: event.subject?.id || event['subject.id'],
+          type: event.subject?.type,
+          attributes: event.subject?.attributes,
+        },
+      }
+    })
 
     return {
       context: this._context,
       exposures: formattedEvents,
     }
-  }
-
-  /**
-   * Builds service context metadata
-   * @private
-   * @returns {ExposureContext} Service context
-   */
-  _buildContext () {
-    const context = {
-      service: this._config.service || 'unknown',
-    }
-
-    // Only include version and env if they are defined
-    if (this._config.version !== undefined) {
-      context.version = this._config.version
-    }
-
-    if (this._config.env !== undefined) {
-      context.env = this._config.env
-    }
-
-    return context
-  }
-
-  /**
-   * @private
-   * @param {ExposureEvent} event - Raw exposure event
-   * @returns {ExposureEvent} Formatted exposure event
-   */
-  _formatExposureEvent (event) {
-    // Ensure the event matches the expected schema
-    const formattedEvent = {
-      timestamp: event.timestamp || Date.now(),
-      allocation: {
-        key: event.allocation?.key || event['allocation.key'],
-      },
-      flag: {
-        key: event.flag?.key || event['flag.key'],
-      },
-      variant: {
-        key: event.variant?.key || event['variant.key'],
-      },
-      subject: {
-        id: event.subject?.id || event['subject.id'],
-        type: event.subject?.type,
-        attributes: event.subject?.attributes,
-      },
-    }
-    return formattedEvent
   }
 }
 

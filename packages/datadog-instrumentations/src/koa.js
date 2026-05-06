@@ -31,11 +31,11 @@ function wrapUse (use) {
   return function useWithTrace () {
     const result = use.apply(this, arguments)
 
-    if (!Array.isArray(this.middleware)) return result
+    if (Array.isArray(this.middleware)) {
+      const fn = this.middleware.pop()
 
-    const fn = this.middleware.pop()
-
-    this.middleware.push(wrapMiddleware(fn))
+      this.middleware.push(wrapMiddleware(fn))
+    }
 
     return result
   }

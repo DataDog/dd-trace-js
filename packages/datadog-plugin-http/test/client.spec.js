@@ -946,8 +946,8 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(() => {
-                done(new Error('Noop request was traced.'))
                 clearTimeout(timer)
+                done(new Error('Noop request was traced.'))
               })
 
             appListener = server(app, port => {

@@ -33,6 +33,8 @@ describe('parallel snapshot 2', () => {
   it('is flaky', () => {
     retryCounter++
     const sum = retryCounter > 2 ? 3 : 4
+    // EFD fixture; integration-tests/jest/jest.spec.js exercises this retry-dependent shape.
+    // eslint-disable-next-line sonarjs/no-all-duplicated-branches
     if (retryCounter > 2) {
       expect(sum).toMatchSnapshot()
     } else {

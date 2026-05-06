@@ -317,11 +317,10 @@ class NativeWallProfiler {
   }
 
   #setNewContext () {
-    this.#pprof.time.setContext(
-      this._currentContext = {
-        ref: {},
-      }
-    )
+    this._currentContext = {
+      ref: {},
+    }
+    this.#pprof.time.setContext(this._currentContext)
   }
 
   #spanFinished (span) {

@@ -119,7 +119,8 @@ describe('Plugin', () => {
               }, { timeoutMs: 10000 })
 
               try {
-                await sendMessages(kafka, testTopic, messages = [{ key: 'key1' }])
+                messages = [{ key: 'key1' }]
+                await sendMessages(kafka, testTopic, messages)
               } catch (e) {
                 error = e
                 return expectedSpanPromise

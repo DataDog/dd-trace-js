@@ -9,7 +9,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 describe('TracerProxy', () => {
-  let Proxy
+  let ProxyClass
   let proxy
   let DatadogTracer
   let NoopTracer
@@ -235,7 +235,7 @@ describe('TracerProxy', () => {
       './dogstatsd': NoopDogStatsDClient,
     })
 
-    Proxy = proxyquire('../src/proxy', {
+    ProxyClass = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
@@ -256,7 +256,7 @@ describe('TracerProxy', () => {
       './openfeature/flagging_provider': OpenFeatureProvider,
     })
 
-    proxy = new Proxy()
+    proxy = new ProxyClass()
   })
 
   describe('uninitialized', () => {

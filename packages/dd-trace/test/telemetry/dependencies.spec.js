@@ -295,12 +295,8 @@ describe('dependencies', () => {
       const nestedDependency =
         [fileURIWithoutNodeModules, 'node_modules', 'dependency', 'node_modules', moduleName, 'index1.js'].join('/')
 
-      requirePackageJson.callsFake(function (dependencyPath) {
-        if (dependencyPath.includes(path.join('node_modules', 'dependency', 'node_modules'))) {
-          return { version: packageVersion }
-        } else {
-          return { version: packageVersion }
-        }
+      requirePackageJson.callsFake(function () {
+        return { version: packageVersion }
       })
 
       moduleLoadStartChannel.publish({ request: moduleName, filename: firstLevelDependency })

@@ -256,12 +256,10 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not swallow missing callback errors', done => {
-            try {
+          it('should not swallow missing callback errors', () => {
+            assert.throws(() => {
               server.insert(`test.${collection}`, [{ a: 1 }], {})
-            } catch (e) {
-              done()
-            }
+            })
           })
         })
 

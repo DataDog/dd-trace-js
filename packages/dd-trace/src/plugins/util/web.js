@@ -217,9 +217,7 @@ const web = {
       }
     }
 
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
-
-    return span
+    return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
   },
 
   // Validate a request's status code and then add error tags if necessary

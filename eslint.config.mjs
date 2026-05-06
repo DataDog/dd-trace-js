@@ -11,6 +11,7 @@ import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
+import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
@@ -452,6 +453,43 @@ export default [
       'prefer-object-spread': 'error',
       'require-await': 'error',
       strict: 'error',
+    },
+  },
+  {
+    name: 'dd-trace/sonar',
+    // Apply SonarJS to both production and test code. Many SonarJS rules are test-oriented.
+    plugins: {
+      sonarjs: eslintPluginSonar,
+    },
+    rules: {
+      'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-commented-code': 'error',
+      'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-extra-arguments': 'error',
+      'sonarjs/no-gratuitous-expressions': 'error',
+      'sonarjs/no-invariant-returns': 'error',
+      'sonarjs/no-nested-assignment': 'error',
+      'sonarjs/no-parameter-reassignment': 'error',
+      'sonarjs/no-redundant-assignments': 'error',
+      'sonarjs/no-redundant-jump': 'error',
+      'sonarjs/no-small-switch': 'error',
+      'sonarjs/no-unused-collection': 'error',
+      'sonarjs/no-use-of-empty-return-value': 'error',
+      'sonarjs/prefer-immediate-return': 'error',
+      'sonarjs/prefer-single-boolean-return': 'error',
+      'sonarjs/single-char-in-character-classes': 'error',
+      'sonarjs/single-character-alternation': 'error',
+      'sonarjs/test-check-exception': 'error',
+
+      // --- Rules to check later ------------------
+      'sonarjs/duplicates-in-character-class': 'off', // 86 errors
+      'sonarjs/no-code-after-done': 'off', // 13 errors
+      'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
+      'sonarjs/no-identical-functions': 'off', // 25 errors
+      'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
+      'sonarjs/stable-tests': 'off',
+      'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
+      'sonarjs/updated-loop-counter': 'off', // 4 errors
     },
   },
   {

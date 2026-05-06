@@ -72,6 +72,9 @@ describe('end to end sdk integration tests', () => {
 
     function apm (input) {
       llmobs.annotate({ metadata: { foo: 'bar' } }) // should annotate the agent span
+      // `input` is forwarded so wrap captures it via `arguments` for inputValue, even though
+      // the wrapped `workflow` doesn't declare a named parameter.
+      // eslint-disable-next-line sonarjs/no-extra-arguments
       return workflow(input)
     }
     // eslint-disable-next-line no-func-assign
