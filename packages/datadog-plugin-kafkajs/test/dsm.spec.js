@@ -79,7 +79,7 @@ describe('Plugin', () => {
           topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
-            waitForLeaders: false,
+            waitForLeaders: true,
             topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
               topic,
               numPartitions: 1,
