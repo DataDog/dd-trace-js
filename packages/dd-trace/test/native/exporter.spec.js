@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -29,7 +28,9 @@ describe('NativeExporter', () => {
 
     nativeSpans = {
       flushChangeQueue: sinon.stub(),
-      flushSpans: sinon.stub().resolves('OK')
+      flushSpans: sinon.stub().resolves('OK'),
+      freeSlots: sinon.stub(),
+      setAgentUrl: sinon.stub()
     }
 
     NativeExporter = proxyquire('../../src/exporters/native', {
@@ -98,7 +99,10 @@ describe('NativeExporter', () => {
       const span = createMockSpan(1n)
       exporter.export([span])
 
-      sinon.assert.called(nativeSpans.flushChangeQueue)
+      // The rebased exporter doesn't call flushChangeQueue directly; the
+      // change queue is drained inside flushSpans. Assert the visible
+      // public-API call instead.
+      sinon.assert.called(nativeSpans.flushSpans)
     })
 
     it('should schedule flush after flushInterval', () => {
@@ -138,12 +142,15 @@ describe('NativeExporter', () => {
       })
     })
 
-    it('should flush change queue before exporting', (done) => {
+    it('should call flushSpans on the native side when flushing', (done) => {
+      // The change queue is now drained inside flushSpans, not by an
+      // explicit pre-call from the exporter. Assert that flushSpans was
+      // called — the change-queue drain is its responsibility.
       const span = createMockSpan(1n)
       exporter.export([span])
 
       exporter.flush(() => {
-        sinon.assert.called(nativeSpans.flushChangeQueue)
+        sinon.assert.called(nativeSpans.flushSpans)
         done()
       })
     })
@@ -162,23 +169,22 @@ describe('NativeExporter', () => {
       })
     })
 
-    it('should extract span IDs for native flush', (done) => {
-      const span1 = createMockSpan(123n)
-      const span2 = createMockSpan(456n)
+    it('should extract slot indices for native flush', (done) => {
+      const span1 = createMockSpan(123n, 11)
+      const span2 = createMockSpan(456n, 22)
       exporter.export([span1, span2])
 
       exporter.flush(() => {
-        // flushSpans should be called with buffer arrays
+        // flushSpans is called with an array of u32 slot indices (numbers).
+        // The pre-rebase API used spanId Buffers; the rebased pipeline
+        // addresses spans by their allocated slot.
         sinon.assert.calledWith(
           nativeSpans.flushSpans,
           sinon.match.array,
           sinon.match.any
         )
-        // Verify the arrays contain buffers
         const call = nativeSpans.flushSpans.getCall(0)
-        assert.strictEqual(call.args[0].length, 2)
-        assert.ok(Buffer.isBuffer(call.args[0][0]))
-        assert.ok(Buffer.isBuffer(call.args[0][1]))
+        assert.deepStrictEqual(call.args[0], [11, 22])
         done()
       })
     })
@@ -218,17 +224,27 @@ describe('NativeExporter', () => {
       })
     })
 
-    it('should call done callback with error on failure', (done) => {
+    it('should swallow flushSpans rejections (logged, not propagated to done)', async () => {
+      // The rebased flush() calls done() immediately after kicking off the
+      // async send, then log.error()s any rejection. Errors no longer
+      // surface through the done callback. Verify both: done is invoked
+      // without an argument, and freeSlots eventually runs in the catch
+      // handler (proves the rejection was actually observed).
       nativeSpans.flushSpans.rejects(new Error('Network error'))
 
       const span = createMockSpan(1n)
       exporter.export([span])
 
-      exporter.flush((err) => {
-        assert.ok(err)
-        assert.strictEqual(err.message, 'Network error')
-        done()
-      })
+      let cbErr = 'unset'
+      exporter.flush((err) => { cbErr = err })
+      assert.strictEqual(cbErr, undefined)
+
+      // Drain pending microtasks so the rejection handler runs. With
+      // sinon.useFakeTimers() Promise microtasks still settle when we yield
+      // to the host promise queue via tickAsync.
+      await clock.tickAsync(0)
+
+      sinon.assert.called(nativeSpans.freeSlots)
     })
   })
 
@@ -247,7 +263,7 @@ describe('NativeExporter', () => {
 
 
   // Helper function to create mock spans
-  function createMockSpan (nativeSpanIdValue) {
+  function createMockSpan (nativeSpanIdValue, slotIndex = 0) {
     // Create an 8-byte buffer for the span ID (big-endian)
     const nativeSpanId = Buffer.alloc(8)
     nativeSpanId.writeBigUInt64BE(BigInt(nativeSpanIdValue))
@@ -263,6 +279,9 @@ describe('NativeExporter', () => {
       _spanId: spanId,
       _parentId: { toString: () => '0' },
       _isRemote: false,
+      // The rebased exporter reads context._slotIndex to build the slot
+      // array passed to nativeSpans.flushSpans.
+      _slotIndex: slotIndex,
       _trace: {
         started: [],
         finished: [],
