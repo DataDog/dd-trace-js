@@ -6,7 +6,8 @@ describe('jest-test-focused', () => {
   it('will be skipped', () => {
     assert.strictEqual(true, true)
   })
-  // eslint-disable-next-line
+
+  // eslint-disable-next-line mocha/no-exclusive-tests
   it.only('can do focused test', () => {
     assert.strictEqual(true, true)
   })

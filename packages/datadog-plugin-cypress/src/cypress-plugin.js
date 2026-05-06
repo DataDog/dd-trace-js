@@ -52,7 +52,10 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getSessionRequestErrorTags,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
@@ -471,7 +474,7 @@ class CypressPlugin {
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
           this._pendingRequestErrorTags.push({
-            tag: DD_CI_LIBRARY_CONFIGURATION_ERROR,
+            tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
             value: 'true',
           })
         } else {
@@ -662,6 +665,7 @@ class CypressPlugin {
       )
       if (knownTestsResponse.err) {
         log.error('Cypress known tests response error', knownTestsResponse.err)
+        this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, value: 'true' })
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
@@ -681,6 +685,7 @@ class CypressPlugin {
       )
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
+        this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, value: 'true' })
       } else {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
@@ -696,6 +701,10 @@ class CypressPlugin {
       )
       if (testManagementTestsResponse.err) {
         log.error('Cypress test management tests response error', testManagementTestsResponse.err)
+        this._pendingRequestErrorTags.push({
+          tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+          value: 'true',
+        })
         this.isTestManagementTestsEnabled = false
       } else {
         this.testManagementTests = testManagementTestsResponse.testManagementTests

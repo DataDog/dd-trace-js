@@ -72,7 +72,10 @@ const {
   TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
   TEST_SKIP_REASON,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
@@ -329,20 +332,77 @@ describe(`cucumber@${version} commonJS`, () => {
         logsEndpoint = isAgentless ? '/api/v2/logs' : '/debugger/v1/input'
       })
 
-      it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
-        receiver.setSettingsResponseCode(404)
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
-            const testEvent = events.find(event => event.type === 'test')
-            assert.ok(testEvent, 'should have test event')
-            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
-          })
-        childProcess = exec(runTestsCommand, { cwd, env: envVars })
-        await Promise.all([eventsPromise, once(childProcess, 'exit')])
-      })
+      it(
+        'tags session and children with _dd.ci.library_configuration_error.settings when settings fails 4xx',
+        async () => {
+          receiver.setSettingsResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+            })
+          childProcess = exec(runTestsCommand, { cwd, env: envVars })
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+      it(
+        'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails 4xx',
+        async () => {
+          receiver.setSkippableSuitesResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+            })
+          childProcess = exec(runTestsCommand, { cwd, env: envVars })
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+      it(
+        'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',
+        async () => {
+          receiver.setSettings({ known_tests_enabled: true })
+          receiver.setKnownTestsResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+            })
+          childProcess = exec(runTestsCommand, { cwd, env: envVars })
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+      it(
+        'tags session and children with _dd.ci.library_configuration_error.test_management_tests when request fails',
+        async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
+          receiver.setTestManagementTestsResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(
+                testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
+              )
+            })
+          childProcess = exec(runTestsCommand, { cwd, env: envVars })
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
 
       const runModes = ['serial']
 
