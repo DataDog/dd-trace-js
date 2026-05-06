@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
+const { PublicSpan } = require('../../opentracing/public/span')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
@@ -271,7 +272,7 @@ const web = {
     addRequestTags(context, spanType)
     addResponseTags(context)
 
-    context.config.hooks.request(context.span, req, res)
+    context.config.hooks.request(new PublicSpan(context.span), req, res)
     addResourceTag(context)
 
     context.span.finish()

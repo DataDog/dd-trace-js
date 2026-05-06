@@ -12,6 +12,8 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const plugin = require('../src')
@@ -1914,6 +1916,50 @@ describe('Plugin', () => {
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
+              .catch(done)
+          })
+        })
+      })
+
+      describe('with hooks configuration', () => {
+        before(() => {
+          return agent.load(['express', 'http', 'router'], [{
+            hooks: {
+              request: (span, req, res) => {
+                span.setTag('hook.tag', 'test')
+                assert.ok(span instanceof PublicSpan)
+              },
+            },
+          }, { client: false }, {}])
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(() => {
+          express = require(`../../../versions/express@${version}`).get()
+        })
+
+        it('should run the request hook before the span is finished', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })

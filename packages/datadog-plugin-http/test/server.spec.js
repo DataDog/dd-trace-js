@@ -7,6 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 const { storage } = require('../../datadog-core')
 const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -88,7 +89,7 @@ describe('Plugin', () => {
             .catch(done)
           const source = axios.CancelToken.source()
           axios.get(`http://localhost:${port}/user`, { cancelToken: source.token })
-            .then(() => {})
+            .then(() => { })
           setTimeout(() => { source.cancel() }, 100)
         })
       })
@@ -250,7 +251,45 @@ describe('Plugin', () => {
 
         // see https://github.com/DataDog/dd-trace-js/issues/2453
         it('should not have disabled tracing', (done) => {
-          agent.assertSomeTraces(() => {})
+          agent.assertSomeTraces(() => { })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/user`).catch(done)
+        })
+      })
+
+      describe('with hooks configuration', () => {
+        beforeEach(() => {
+          return agent.load('http', {
+            client: false,
+            server: {
+              hooks: {
+                request: (span, req, res) => {
+                  assert.ok(span instanceof PublicSpan)
+                  span.setTag('hook.tag', 'test')
+                },
+              },
+            },
+          })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server.listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        it('should run the request hook before the span is finished', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+            })
             .then(done)
             .catch(done)
 
@@ -273,7 +312,7 @@ describe('Plugin', () => {
         })
 
         it('should drop traces for blocklist route', done => {
-          const spy = sinon.spy(() => {})
+          const spy = sinon.spy(() => { })
 
           agent
             .assertSomeTraces((traces) => {

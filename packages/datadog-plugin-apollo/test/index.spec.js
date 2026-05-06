@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const agent = require('../../dd-trace/test/plugins/agent.js')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const accounts = require('./fixtures.js')
@@ -592,6 +593,11 @@ describe('Plugin', () => {
                 const executeSpan = config.hooks.execute.firstCall.args[0]
                 const postprocessingSpan = config.hooks.postprocessing.firstCall.args[0]
 
+                assert.ok(requestSpan instanceof PublicSpan)
+                assert.ok(planSpan instanceof PublicSpan)
+                assert.ok(executeSpan instanceof PublicSpan)
+                assert.ok(postprocessingSpan instanceof PublicSpan)
+
                 assert.strictEqual(requestSpan.context()._name, expectedSchema.server.opName)
                 assert.strictEqual(planSpan.context()._name, 'apollo.gateway.plan')
                 assert.strictEqual(executeSpan.context()._name, 'apollo.gateway.execute')
@@ -627,6 +633,7 @@ describe('Plugin', () => {
                 sinon.assert.notCalled(config.hooks.postprocessing)
 
                 const validateSpan = config.hooks.validate.firstCall.args[0]
+                assert.ok(validateSpan instanceof PublicSpan)
                 const validateCtx = config.hooks.validate.firstCall.args[1]
 
                 assert.strictEqual(validateSpan.context()._name, 'apollo.gateway.validate')

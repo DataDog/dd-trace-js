@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-
 require('./setup/core')
 
 describe('TracerProxy', () => {
@@ -66,7 +65,7 @@ describe('TracerProxy', () => {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),
-      startSpan: sinon.stub().returns('span'),
+      startSpan: sinon.stub().returns({ id: 'span' }),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
@@ -77,7 +76,7 @@ describe('TracerProxy', () => {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),
-      startSpan: sinon.stub().returns('span'),
+      startSpan: sinon.stub().returns({ id: 'span' }),
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
@@ -102,6 +101,9 @@ describe('TracerProxy', () => {
       histogram: sinon.spy(),
       flush: sinon.spy(),
     }
+
+    tracer.scope = sinon.stub()
+    noop.scope = sinon.stub()
 
     {
       const dogstatsdIncrements = []
@@ -625,9 +627,20 @@ describe('TracerProxy', () => {
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
-
         sinon.assert.calledWith(noop.trace, 'a', {}, callback)
         assert.strictEqual(returnValue, 'test')
+      })
+
+      it('should set service source override tag when service option is provided', () => {
+        const callback = () => 'test'
+        proxy.trace('a', { service: 'b' }, callback)
+
+        sinon.assert.calledWith(noop.trace, 'a', {
+          service: 'b',
+          tags: {
+            '_dd.svc_src': 'm',
+          },
+        }, callback)
       })
 
       it('should ignore calls without an invalid callback', () => {
@@ -666,8 +679,31 @@ describe('TracerProxy', () => {
       it('should call the underlying NoopTracer', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
-        sinon.assert.calledWith(noop.startSpan, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'span')
+        sinon.assert.calledWith(noop.startSpan, 'a', 'b')
+        assert.deepEqual(returnValue._span, { id: 'span' })
+      })
+
+      it('should set service source override tag when returned span does a setTag', () => {
+        const spanStub = { setTag: sinon.spy() }
+        noop.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', 'b', 'c')
+        returnValue.setTag('service', 'b')
+        assert.strictEqual(setTagSpy.callCount, 2)
+        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
+        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'b')
+      })
+
+      it('should not set service source override tag when returned span does not setTag', () => {
+        const spanStub = { setTag: sinon.spy() }
+        noop.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', 'b', 'c')
+        returnValue.setTag('randomTag', 'b')
+        assert.strictEqual(setTagSpy.callCount, 1)
+        sinon.assert.calledWith(setTagSpy.firstCall, 'randomTag', 'b')
       })
     })
 
@@ -690,11 +726,28 @@ describe('TracerProxy', () => {
     })
 
     describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
+      it('should call the underlying NoopTracer', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        sinon.assert.calledWith(noop.setUrl, 'http://example.com')
         assert.strictEqual(returnValue, proxy)
+        sinon.assert.calledWith(noop.setUrl, 'http://example.com')
+      })
+    })
+
+    describe('scope', () => {
+      it('should return the underlying noop scope', () => {
+        const scope = {
+          active: sinon.stub().returns(null),
+          activate: sinon.stub(),
+          bind: sinon.stub(),
+        }
+
+        noop.scope.returns(scope)
+
+        const returnValue = proxy.scope()
+
+        assert.strictEqual(returnValue, scope)
+        sinon.assert.calledOnce(noop.scope)
       })
     })
 
@@ -872,6 +925,18 @@ describe('TracerProxy', () => {
         assert.strictEqual(returnValue, 'test')
       })
 
+      it('should set service source override tag when service option is provided', () => {
+        const callback = () => 'test'
+        proxy.trace('a', { service: 'b' }, callback)
+
+        sinon.assert.calledWith(tracer.trace, 'a', {
+          service: 'b',
+          tags: {
+            '_dd.svc_src': 'm',
+          },
+        }, callback)
+      })
+
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
@@ -890,6 +955,21 @@ describe('TracerProxy', () => {
         assert.strictEqual(returnValue, 'fn')
       })
 
+      it('should add _dd.svc_src to tags when a service override is provided through options', () => {
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', {
+          service: 'custom-service',
+        }, callback)
+
+        sinon.assert.calledWith(tracer.wrap, 'a', {
+          service: 'custom-service',
+          tags: {
+            '_dd.svc_src': 'm',
+          },
+        }, callback)
+        assert.strictEqual(returnValue, 'fn')
+      })
+
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
@@ -903,8 +983,31 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
-        sinon.assert.calledWith(tracer.startSpan, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'span')
+        sinon.assert.calledWith(tracer.startSpan, 'a', 'b')
+        assert.deepEqual(returnValue._span, { id: 'span' })
+      })
+
+      it('should set service source override tag when returned span does a setTag', () => {
+        const spanStub = { setTag: sinon.spy() }
+        tracer.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', 'b', 'c')
+        returnValue.setTag('service', 'b')
+        assert.strictEqual(setTagSpy.callCount, 2)
+        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
+        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'b')
+      })
+
+      it('should not set service source override tag when returned span does not setTag', () => {
+        const spanStub = { setTag: sinon.spy() }
+        tracer.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', 'b', 'c')
+        returnValue.setTag('randomTag', 'b')
+        assert.strictEqual(setTagSpy.callCount, 1)
+        sinon.assert.calledWith(setTagSpy.firstCall, 'randomTag', 'b')
       })
     })
 
@@ -932,6 +1035,23 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledWith(tracer.setUrl, 'http://example.com')
         assert.strictEqual(returnValue, proxy)
+      })
+    })
+
+    describe('scope', () => {
+      it('should return the underlying tracer scope', () => {
+        const scope = {
+          active: sinon.stub().returns(null),
+          activate: sinon.stub(),
+          bind: sinon.stub(),
+        }
+
+        tracer.scope.returns(scope)
+
+        const returnValue = proxy.scope()
+
+        assert.strictEqual(returnValue, scope)
+        sinon.assert.calledOnce(tracer.scope)
       })
     })
 

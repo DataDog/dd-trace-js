@@ -176,6 +176,26 @@ describe('Plugin', () => {
               })
           })
 
+          it('should inject the pre-batch active span into message attributes', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+
+            let resolveAttrs
+            const attrsPromise = new Promise(resolve => { resolveAttrs = resolve })
+
+            sub.on('message', msg => {
+              resolveAttrs(msg.attributes)
+              msg.ack()
+            })
+
+            const parentSpan = tracer.startSpan('test.producer')
+            await tracer.scope().activate(parentSpan, () => publish(topic, { data: Buffer.from('hello') }))
+            parentSpan.finish()
+
+            const attrs = await attrsPromise
+            assert.strictEqual(attrs['x-datadog-parent-id'], parentSpan.context().toSpanId())
+          })
+
           withNamingSchema(
             async () => {
               const [topic] = await pubsub.createTopic(topicName)

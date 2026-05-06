@@ -8,6 +8,8 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
@@ -380,6 +382,39 @@ describe('Plugin', () => {
         axios
           .get(`http://localhost:${port}${path}`)
           .catch(() => {})
+      })
+
+      describe('with hooks configuration', () => {
+        before(() => {
+          return agent.load(['hapi', 'http'], [{
+            hooks: {
+              request: (span, req, res) => {
+                span.setTag('hook.tag', 'test')
+                assert.ok(span instanceof PublicSpan)
+              },
+            },
+          }, { client: false }])
+            .then(() => {
+              Hapi = require(`../../../versions/${module}@${version}`).get()
+            })
+        })
+
+        it('should run the request hook before the span is finished', done => {
+          server.route({
+            method: 'GET',
+            path: '/user',
+            handler,
+          })
+
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/user`).catch(done)
+        })
       })
     })
   })

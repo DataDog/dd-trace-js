@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 describe('Plugin', () => {
   let ShareDB
@@ -204,6 +205,8 @@ describe('Plugin', () => {
                 sinon.match.object,
                 sinon.match.object
               )
+              assert.ok(receiveHookSpy.firstCall.args[0] instanceof PublicSpan)
+              assert.ok(replyHookSpy.firstCall.args[0] instanceof PublicSpan)
             })
               .then(done)
               .catch(done)

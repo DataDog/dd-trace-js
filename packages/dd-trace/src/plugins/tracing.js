@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
+const { PublicSpan } = require('../opentracing/public/span')
 const Plugin = require('./plugin')
 
 class TracingPlugin extends Plugin {
@@ -60,11 +61,17 @@ class TracingPlugin extends Plugin {
    * @returns {object}
    */
   configure (config) {
+    const hooks = config.hooks || {}
+    const wrappedHooks = {}
+    for (const [name, hook] of Object.entries(hooks)) {
+      wrappedHooks[name] = (span, ...args) => hook.call(hooks, new PublicSpan(span), ...args)
+    }
+
     return super.configure({
       ...config,
       hooks: {
         [this.operation]: () => {},
-        ...config.hooks,
+        ...wrappedHooks,
       },
     })
   }

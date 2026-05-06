@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 const { Span } = require('../../../vendor/dist/opentracing')
+const { PublicSpan } = require('../src/opentracing/public/span')
 require('./setup/core')
 const Scope = require('../src/scope')
 
@@ -15,12 +16,19 @@ describe('Scope', () => {
 
   beforeEach(() => {
     scope = new Scope()
-    span = new Span()
+    span = new PublicSpan(new Span())
   })
 
   describe('active()', () => {
     it('should return null by default', () => {
       assert.strictEqual(scope.active(), null)
+    })
+
+    it('should return a PublicSpan wrapping the active span', () => {
+      scope.activate(span, () => {
+        const active = scope.active()
+        assert.strictEqual(active, span)
+      })
     })
   })
 
@@ -49,6 +57,15 @@ describe('Scope', () => {
       })
 
       assert.strictEqual(scope.active(), null)
+    })
+
+    it('should unwrap a PublicSpan before activating', () => {
+      scope.activate(span, () => {
+        const publicSpan = scope.active()
+        scope.activate(publicSpan, () => {
+          assert.strictEqual(scope.active(), span)
+        })
+      })
     })
 
     it('should persist through setTimeout', done => {
@@ -119,14 +136,14 @@ describe('Scope', () => {
     it('should handle errors', () => {
       const error = new Error('boom')
 
-      sinon.spy(span, 'setTag')
+      sinon.spy(span._span, 'setTag')
 
       try {
         scope.activate(span, () => {
           throw error
         })
       } catch (e) {
-        sinon.assert.calledWith(span.setTag, 'error', e)
+        sinon.assert.calledWith(span._span.setTag, 'error', e)
       }
     })
   })

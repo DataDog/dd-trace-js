@@ -8,6 +8,7 @@ const { satisfies } = require('semver')
 const tags = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
@@ -1291,6 +1292,7 @@ describe('Plugin', () => {
             client: {
               hooks: {
                 request: (span, req, res) => {
+                  assert.ok(span instanceof PublicSpan)
                   span.setTag('resource.name', `${req.method} ${req._route}`)
                 },
               },

@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
+const { storage } = require('../../datadog-core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
 const getConfig = require('../src/config')
@@ -52,7 +53,7 @@ describe('Tracer', () => {
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
-        assert.ok(span instanceof Span)
+        assert.ok(span._span instanceof Span)
         assert.strictEqual(span.context()._name, 'name')
       })
     })
@@ -68,7 +69,7 @@ describe('Tracer', () => {
       }
 
       tracer.trace('name', options, span => {
-        assert.ok(span instanceof Span)
+        assert.ok(span._span instanceof Span)
         assertObjectContains(span.context()._tags, options.tags)
         assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
@@ -110,7 +111,7 @@ describe('Tracer', () => {
     it('should start the span as a child of the active span', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.scope().activate(childOf, () => {
+      storage('legacy').run({ span: childOf }, () => {
         tracer.trace('name', {}, span => {
           assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
         })
@@ -120,10 +121,11 @@ describe('Tracer', () => {
     it('should allow overriding the parent span', () => {
       const root = tracer.startSpan('root')
       const childOf = tracer.startSpan('parent')
-
-      tracer.scope().activate(root, () => {
-        tracer.trace('name', { childOf }, span => {
-          assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+      storage('legacy').run({ span: root }, () => {
+        storage('legacy').run({ span: childOf }, () => {
+          tracer.trace('name', {}, span => {
+            assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+          })
         })
       })
     })
@@ -138,7 +140,7 @@ describe('Tracer', () => {
       let span
 
       tracer.trace('name', {}, (_span) => {
-        span = _span
+        span = _span._span
         sinon.spy(span, 'finish')
       })
 
@@ -151,8 +153,8 @@ describe('Tracer', () => {
 
       try {
         tracer.trace('name', {}, _span => {
-          span = _span
-          tags = span.context()._tags
+          span = _span._span
+          tags = _span.context()._tags
           sinon.spy(span, 'finish')
           throw new Error('boom')
         })
@@ -172,7 +174,7 @@ describe('Tracer', () => {
         let done
 
         tracer.trace('name', {}, (_span, _done) => {
-          span = _span
+          span = _span._span
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -191,8 +193,8 @@ describe('Tracer', () => {
         let done
 
         tracer.trace('name', {}, (_span, _done) => {
-          span = _span
-          tags = span.context()._tags
+          span = _span._span
+          tags = _span.context()._tags
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -219,7 +221,7 @@ describe('Tracer', () => {
 
         tracer
           .trace('name', {}, _span => {
-            span = _span
+            span = _span._span
             sinon.spy(span, 'finish')
             return promise
           })
@@ -240,8 +242,8 @@ describe('Tracer', () => {
 
         tracer
           .trace('name', {}, _span => {
-            span = _span
-            tags = span.context()._tags
+            span = _span._span
+            tags = _span.context()._tags
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
@@ -326,7 +328,7 @@ describe('Tracer', () => {
 
     it('should wait for the callback to be called before finishing the span', done => {
       const fn = tracer.wrap('name', {}, sinon.spy(function (cb) {
-        const span = tracer.scope().active()
+        const span = tracer.scope().active()._span
 
         sinon.spy(span, 'finish')
 
