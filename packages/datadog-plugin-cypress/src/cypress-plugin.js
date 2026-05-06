@@ -975,7 +975,7 @@ class CypressPlugin {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         if (isLastAttempt) {
-          const testSpanTags = finishedTest.testSpan.context()._tags
+          const testSpanTags = finishedTest.testSpan.context().getTags()
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
@@ -1132,7 +1132,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
-        const activeSpanTags = this.activeTestSpan.context()._tags
+        const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
           this.activeTestSpan.setTag('error', error)

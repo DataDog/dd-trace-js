@@ -99,7 +99,7 @@ class LLMObsSpanProcessor {
       // those cases avoids dd-go reparenting OTel children under a span that
       // has no corresponding LLMObs event.
       if (enqueued) {
-        span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
+        span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
       }
     } catch (e) {
       // this should be a rare case
