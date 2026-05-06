@@ -18,6 +18,49 @@ const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
  * - The change buffer protocol for queuing span operations
  * - The string table for string deduplication
  * - Span export to the Datadog agent
+ *
+ * ## Detach-safety invariant
+ *
+ * The cached `_cqbView` / `_cqbBytes` views into WASM memory get detached
+ * whenever a WASM call grows memory. Rather than re-checking on every
+ * queue method entry, every WASM call that can grow memory is followed by
+ * `#checkDetach()` at the call site:
+ *   - `stringTableInsertOne` (in `getStringId`)
+ *   - `flushChangeQueue` (`flush_change_buffer`)
+ *   - `prepareChunk` (in `flushSpans`)
+ *
+ * Inside the queue methods, all `getStringId` resolution runs **before**
+ * the local `view`/`buf` snapshots are taken — so any growth during string
+ * resolution is handled by the inner `#checkDetach()` and the locals see
+ * a fresh view.
+ *
+ * ## Change-buffer wire format
+ *
+ * The change buffer is a contiguous WASM-memory region whose layout is:
+ *
+ *   header   : [count: u64 LE]                    @ offset 0
+ *   per op   : [opcode: u64 LE][slotIndex: u32][...payload...]
+ *
+ * Each `queue*` method appends one op record and increments `count`.
+ * Per-opcode payload layouts (after the `[opcode, slotIndex]` header):
+ *
+ *   queueOp(op, slot, ...args) — generic op-with-args:
+ *     each arg is either:
+ *       number              → u32 string-id (pre-resolved)
+ *       ['id64', value]     → u64 BE-of-LE-input (8 bytes)
+ *       ['id128', value]    → u128 BE-of-LE-input (16 bytes; padded for 8-byte input)
+ *       ['ns', ms]          → u64 LE nanoseconds (ms * 1e6, rounded)
+ *       ['i32', value]      → i32 LE
+ *       ['f64', value]      → f64 LE
+ *
+ *   queueCreateSpan (op=13):     [spanId u64][traceId u128][parentId u64][nameId u32][start u64]
+ *   queueCreateSpanFull (op=14): [spanId u64][traceId u128][parentId u64]
+ *                                [nameId u32][serviceId u32][resourceId u32][typeId u32][start u64]
+ *   queueBatchMeta (op=15):      [count: u32][keyId u32, valId u32] × count
+ *   queueBatchMetrics (op=16):   [count: u32][keyId u32, value f64] × count
+ *
+ * All u64 fields use the LE representation in WASM memory; spanId/traceId/
+ * parentId payloads byte-swap from the JS-side BE Identifier buffers.
  */
 class NativeSpansInterface {
    /**
