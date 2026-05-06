@@ -34,20 +34,27 @@ class EventBridge extends BaseAwsSdkPlugin {
       request.params.Entries &&
       request.params.Entries.length > 0 &&
       request.params.Entries[0].Detail) {
+      const injected = {}
+      this.tracer.inject(span, 'text_map', injected)
+
+      // Only `injectFieldIntoJsonObject` can throw (the slow path
+      // `JSON.parse` for non-`{...}` payloads). Tighten the catch around
+      // it so the rest of the body stays in V8's optimisable surface.
+      let finalData
       try {
-        const details = JSON.parse(request.params.Entries[0].Detail)
-        details._datadog = {}
-        this.tracer.inject(span, 'text_map', details._datadog)
-        const finalData = JSON.stringify(details)
-        const byteSize = Buffer.byteLength(finalData)
-        if (byteSize >= (1024 * 256)) {
-          log.info('Payload size too large to pass context')
-          return
-        }
-        request.params.Entries[0].Detail = finalData
-      } catch (e) {
-        log.error('EventBridge error injecting request', e)
+        finalData = BaseAwsSdkPlugin.injectFieldIntoJsonObject(
+          request.params.Entries[0].Detail, '_datadog', injected
+        )
+      } catch (error) {
+        log.error('EventBridge error injecting request', error)
+        return
       }
+
+      if (Buffer.byteLength(finalData) >= 1024 * 256) {
+        log.info('Payload size too large to pass context')
+        return
+      }
+      request.params.Entries[0].Detail = finalData
     }
   }
 }
