@@ -424,17 +424,6 @@ class NativeSpansInterface {
   }
 
   /**
-   * Increment the op count and write it to WASM memory.
-   * Checks for detach first since a getStringId call may have grown memory.
-   */
-  #updateCount () {
-    this.#checkDetach()
-    this._cqbCount++
-    this._cqbView.setUint32(0, this._cqbCount, true)
-    this._cqbView.setUint32(4, 0, true)
-  }
-
-  /**
    * Refresh WASM memory views after memory growth (buffer detach).
    */
   #refreshViews () {
