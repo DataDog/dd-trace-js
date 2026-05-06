@@ -104,7 +104,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -218,7 +218,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -244,7 +244,7 @@ jobs:
       id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -293,7 +293,7 @@ jobs:
       id-token: write
     services:
       postgres:
-        image: postgres:9.5
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:
