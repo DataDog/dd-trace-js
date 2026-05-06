@@ -36,6 +36,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestSessionName,
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
@@ -55,6 +56,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
+  getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -326,8 +328,10 @@ class CypressPlugin {
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
+  isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
   hasForcedToRunSuites = false
@@ -399,8 +403,10 @@ class CypressPlugin {
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
     this.isEarlyFlakeDetectionEnabled = false
+    this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
+    this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
     this.hasForcedToRunSuites = false
@@ -481,6 +487,7 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
+              earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
               isKnownTestsEnabled,
@@ -493,6 +500,7 @@ class CypressPlugin {
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          this.earlyFlakeDetectionFaultyThreshold = earlyFlakeDetectionFaultyThreshold
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
@@ -665,12 +673,27 @@ class CypressPlugin {
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        if (knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]) {
+        if (knownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
           this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
         } else {
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
         }
+      }
+    }
+
+    if (this.isKnownTestsEnabled && details.specs) {
+      const testSuites = details.specs.map(({ relative }) => relative)
+      const isFaulty = getIsFaultyEarlyFlakeDetection(
+        testSuites,
+        this.knownTestsByTestSuite,
+        this.earlyFlakeDetectionFaultyThreshold
+      )
+      if (isFaulty) {
+        log.warn('New test detection is disabled because the number of new test files is too high.')
+        this.isEarlyFlakeDetectionEnabled = false
+        this.isEarlyFlakeDetectionFaulty = true
+        this.isKnownTestsEnabled = false
       }
     }
 
@@ -730,6 +753,9 @@ class CypressPlugin {
 
     if (this.isEarlyFlakeDetectionEnabled) {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
+    }
+    if (this.isEarlyFlakeDetectionFaulty) {
+      testSessionSpanMetadata[TEST_EARLY_FLAKE_ABORT_REASON] = 'faulty'
     }
 
     const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
