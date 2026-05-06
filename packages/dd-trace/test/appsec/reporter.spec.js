@@ -1298,5 +1298,59 @@ describe('reporter', () => {
         sinon.assert.calledWith(span.addTags, expectedTags)
       })
     })
+
+    describe('Lambda (null req)', () => {
+      it('should not crash when req is null and rootSpan is provided', () => {
+        Reporter.finishRequest(null, null, {}, undefined, span)
+
+        sinon.assert.notCalled(span.addTags)
+      })
+
+      it('should still flush metricsQueue when req is null but rootSpan is provided', () => {
+        Reporter.metricsQueue.set('_dd.appsec.json', '{"triggers":[]}')
+
+        Reporter.finishRequest(null, null, {}, undefined, span)
+
+        sinon.assert.calledWithExactly(span.addTags, { '_dd.appsec.json': '{"triggers":[]}' })
+        assert.strictEqual(Reporter.metricsQueue.size, 0)
+      })
+    })
+  })
+
+  describe('reportAttack (Lambda path)', () => {
+    it('should not crash when req is an empty object and rootSpan is provided', () => {
+      const fakeReq = {}
+
+      Reporter.reportAttack({
+        events: [{ rule: { id: 'test-rule' } }],
+        actions: {},
+      }, fakeReq, span)
+
+      sinon.assert.calledOnce(span.addTags)
+      const tags = span.addTags.firstCall.args[0]
+      assert.strictEqual(tags['appsec.event'], 'true')
+      assert.ok(tags['_dd.appsec.json'].includes('test-rule'))
+    })
+
+    it('should not crash when req is null and rootSpan is provided', () => {
+      Reporter.reportAttack({
+        events: [{ rule: { id: 'test-rule' } }],
+        actions: {},
+      }, null, span)
+
+      sinon.assert.calledOnce(span.addTags)
+      const tags = span.addTags.firstCall.args[0]
+      assert.strictEqual(tags['appsec.event'], 'true')
+    })
+
+    it('should not set NETWORK_CLIENT_IP when req has no socket', () => {
+      Reporter.reportAttack({
+        events: [{ rule: { id: 'test-rule' } }],
+        actions: {},
+      }, {}, span)
+
+      const tags = span.addTags.firstCall.args[0]
+      assert.strictEqual(tags['network.client.ip'], undefined)
+    })
   })
 })
