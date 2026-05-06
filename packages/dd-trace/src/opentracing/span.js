@@ -55,6 +55,8 @@ function getIntegrationCounter (event, integration) {
 }
 
 class DatadogSpan {
+  #parentTracer
+
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
@@ -63,7 +65,7 @@ class DatadogSpan {
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
-    this._parentTracer = tracer
+    this.#parentTracer = tracer
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
@@ -124,7 +126,7 @@ class DatadogSpan {
   [util.inspect.custom] () {
     return {
       ...this,
-      _parentTracer: `[${this._parentTracer.constructor.name}]`,
+      parentTracer: `[${this.#parentTracer.constructor.name}]`,
       _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
       _processor: `[${this._processor.constructor.name}]`,
     }
@@ -156,7 +158,7 @@ class DatadogSpan {
   }
 
   tracer () {
-    return this._parentTracer
+    return this.#parentTracer
   }
 
   setOperationName (name) {
@@ -336,7 +338,7 @@ class DatadogSpan {
     let startTime
 
     let baggage = {}
-    const propagationBehavior = this._parentTracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+    const propagationBehavior = this.#parentTracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
       parent = null

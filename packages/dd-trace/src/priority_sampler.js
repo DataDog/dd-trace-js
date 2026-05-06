@@ -148,9 +148,8 @@ class PrioritySampler {
   update (rates) {
     const samplers = {}
 
-    for (const key in rates) {
-      const rate = rates[key]
-      samplers[key] = new Sampler(rate)
+    for (const key of Object.keys(rates)) {
+      samplers[key] = new Sampler(rates[key])
     }
 
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
@@ -334,7 +333,10 @@ class PrioritySampler {
       if (!trace.tags[DECISION_MAKER_KEY]) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
-    } else {
+    } else if (DECISION_MAKER_KEY in trace.tags) {
+      // Guard the `delete` so the common drop path doesn't pay the V8
+      // dictionary-mode transition unless a prior keep decision actually
+      // set the tag.
       delete trace.tags[DECISION_MAKER_KEY]
     }
   }
