@@ -831,6 +831,67 @@ versions.forEach((version) => {
         })
       })
 
+      it('uses the retry count from the matching slow_test_retries bucket', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          vitest: {},
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(test => test.content)
+
+            const instantTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass'
+            )
+            assert.strictEqual(instantTests.length, 3)
+            assert.strictEqual(
+              instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+              2
+            )
+
+            const slowTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection slightly slow duration bucket test'
+            )
+            assert.strictEqual(slowTests.length, 1)
+            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+          }, 70_000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_ADD_SLOW_DURATION_TEST: '1',
+            },
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          eventsPromise.then(() => {
+            assert.strictEqual(exitCode, 0)
+            done()
+          }).catch(done)
+        })
+      })
+
       it('fails if all the attempts fail', (done) => {
         receiver.setSettings({
           early_flake_detection: {

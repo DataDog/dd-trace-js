@@ -4,6 +4,7 @@
 const realSetTimeout = setTimeout
 
 const path = require('node:path')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -12,6 +13,8 @@ const {
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   DYNAMIC_NAME_RE,
   getTestSuitePath,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
   recordAttemptToFixExecution,
   collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
@@ -61,6 +64,10 @@ const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
 const modifiedTasks = new WeakSet()
+const efdDeterminedRetries = new WeakMap()
+const efdSlowAbortedTasks = new WeakSet()
+const efdExecutionStartByTask = new WeakMap()
+const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
 let isRetryReasonEfd = false
@@ -71,6 +78,7 @@ let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionSlowTestRetries = {}
 let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
@@ -86,6 +94,13 @@ let isSessionStarted = false
 let vitestPool = null
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
+  if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
+    return fallbackRetryCount
+  }
+  return getMaxEfdRetryCount(slowTestRetries)
+}
 
 function getTestCommand () {
   return `vitest ${process.argv.slice(2).join(' ')}`
@@ -110,6 +125,7 @@ function getProvidedContext () {
       _ddIsDiEnabled,
       _ddKnownTests: knownTests,
       _ddEarlyFlakeDetectionNumRetries: numRepeats,
+      _ddEarlyFlakeDetectionSlowTestRetries: slowTestRetries,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
@@ -125,6 +141,7 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
       knownTests,
       numRepeats,
+      slowTestRetries: slowTestRetries ?? {},
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
@@ -141,6 +158,7 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: false,
       knownTests: {},
       numRepeats: 0,
+      slowTestRetries: {},
       isKnownTestsEnabled: false,
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
@@ -331,6 +349,7 @@ function getSortWrapper (sort, frameworkVersion) {
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
         isDiEnabled = libraryConfig.isDiEnabled
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -389,7 +408,9 @@ function getSortWrapper (sort, frameworkVersion) {
               workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
               workspaceProject._provided._ddKnownTests = knownTests
               workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-              workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+              workspaceProject._provided._ddEarlyFlakeDetectionNumRetries =
+                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries)
+              workspaceProject._provided._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
             } catch {
               log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
             }
@@ -721,7 +742,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isImpacted) => {
           if (isImpacted) {
             if (isEarlyFlakeDetectionEnabled) {
-              isRetryReasonEfd = task.repeats !== numRepeats
+              isRetryReasonEfd = true
               task.repeats = numRepeats
             }
             modifiedTasks.add(task)
@@ -739,7 +760,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isNew) => {
           if (isNew && !attemptToFixTasks.has(task)) {
             if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
-              isRetryReasonEfd = task.repeats !== numRepeats
+              isRetryReasonEfd = true
               task.repeats = numRepeats
             }
             newTasks.add(task)
@@ -811,6 +832,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isTestManagementTestsEnabled,
       testManagementTests,
       isFlakyTestRetriesEnabled,
+      slowTestRetries,
     } = getProvidedContext()
 
     if (isKnownTestsEnabled) {
@@ -832,6 +854,39 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
+    const isEfdManagedTask = isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)
+
+    if (isEfdManagedTask && numRepetition > 0 && !efdDeterminedRetries.has(task)) {
+      const previousExecutionStart = efdExecutionStartByTask.get(task)
+      const duration = previousExecutionStart === undefined
+        ? task.result?.duration ?? 0
+        : performance.now() - previousExecutionStart
+      const retryCount = getEfdRetryCount(duration, slowTestRetries)
+      efdDeterminedRetries.set(task, retryCount)
+      task.repeats = retryCount
+      if (retryCount === 0) {
+        efdSlowAbortedTasks.add(task)
+      }
+    }
+
+    const efdRetryCount = efdDeterminedRetries.get(task)
+    if (isEfdManagedTask && efdRetryCount !== undefined && numRepetition > efdRetryCount) {
+      if (task.result) {
+        efdSkippedRetryResults.set(task, {
+          ...task.result,
+          errors: task.result.errors?.slice(),
+        })
+      }
+      if (vitestSetFn) {
+        const noop = function () {}
+        noop.__ddTraceWrapped = true
+        vitestSetFn(task, noop)
+      }
+      return onBeforeTryTask.apply(this, arguments)
+    }
+    if (isEfdManagedTask) {
+      efdExecutionStartByTask.set(task, performance.now())
+    }
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
@@ -985,21 +1040,48 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
-    async function (task, { retry: retryCount }) {
+    async function (task, retryInfo) {
       if (!testPassCh.hasSubscribers && !testErrorCh.hasSubscribers && !testSkipCh.hasSubscribers) {
         return onAfterTryTask.apply(this, arguments)
       }
       const result = await onAfterTryTask.apply(this, arguments)
 
-      const { testManagementAttemptToFixRetries } = getProvidedContext()
+      const {
+        isEarlyFlakeDetectionEnabled,
+        testManagementAttemptToFixRetries,
+        slowTestRetries,
+      } = getProvidedContext()
 
-      const status = getVitestTestStatus(task, retryCount)
+      const status = getVitestTestStatus(task, retryInfo.retry)
       const ctx = taskToCtx.get(task)
 
       const { isDiEnabled } = getProvidedContext()
 
-      if (isDiEnabled && retryCount > 1) {
+      if (efdSkippedRetryResults.has(task)) {
+        task.result = efdSkippedRetryResults.get(task)
+        efdSkippedRetryResults.delete(task)
+        return result
+      }
+
+      if (isDiEnabled && retryInfo.retry > 1) {
         await waitForHitProbe()
+      }
+
+      if (
+        isEarlyFlakeDetectionEnabled &&
+        (retryInfo.repeats ?? 0) === 0 &&
+        taskToStatuses.has(task) &&
+        !attemptToFixTasks.has(task) &&
+        !efdDeterminedRetries.has(task)
+      ) {
+        const executionStart = efdExecutionStartByTask.get(task)
+        const duration = executionStart === undefined ? task.result?.duration ?? 0 : performance.now() - executionStart
+        const retryCount = getEfdRetryCount(duration, slowTestRetries)
+        efdDeterminedRetries.set(task, retryCount)
+        task.repeats = retryCount
+        if (retryCount === 0) {
+          efdSlowAbortedTasks.add(task)
+        }
       }
 
       let attemptToFixPassed = false
@@ -1234,6 +1316,7 @@ addHook({
             testPassCh.publish({
               task,
               finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
+              earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
               ...testCtx.currentStore,
             })
           }
@@ -1255,8 +1338,9 @@ addHook({
             providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
           if (isEfdRetry) {
             const statuses = taskToStatuses.get(task)
-            // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
-            if (statuses && statuses.length === providedContext.numRepeats &&
+            const efdRetryCount = efdDeterminedRetries.get(task) ?? providedContext.numRepeats
+            // statuses only includes repetitions (not the initial run), so we check against retry count (not +1)
+            if (efdRetryCount > 0 && statuses && statuses.length === efdRetryCount &&
               statuses.every(status => status === 'fail')) {
               hasFailedAllRetries = true
             }
@@ -1297,6 +1381,7 @@ addHook({
               hasFailedAllRetries,
               attemptToFixFailed,
               finalStatus,
+              earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
               ...testCtx.currentStore,
             })
           }
