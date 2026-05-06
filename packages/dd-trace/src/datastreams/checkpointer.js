@@ -65,7 +65,7 @@ class DataStreamsCheckpointer {
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.config.dsmEnabled) return
-    const activeSpan = span ?? storage('legacy').getStore()?.span
+    const activeSpan = span ?? storage('legacy').getStore()?.span ?? null
     this.dsmProcessor.trackTransaction(transactionId, checkpointName, activeSpan)
   }
 }

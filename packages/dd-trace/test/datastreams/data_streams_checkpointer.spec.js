@@ -156,13 +156,16 @@ describe('data streams checkpointer manual api', () => {
     const mockTrackTransaction = sinon.stub()
     tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
     const activeSpan = { setTag: sinon.stub() }
-    const scopeStub = sinon.stub(tracer._tracer, 'scope').returns({ active: () => activeSpan })
+    const { storage } = require('../../../datadog-core')
+    const legacy = storage('legacy')
+    const prevStore = legacy.getStore()
+    legacy.enterWith({ ...prevStore, span: activeSpan })
 
     try {
       tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
       sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', activeSpan)
     } finally {
-      scopeStub.restore()
+      legacy.enterWith(prevStore)
     }
   })
 
