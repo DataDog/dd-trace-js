@@ -1,6 +1,7 @@
 variables:
   MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
+  SLS_CI_BRANCH: v1.3.0
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "5.0"
@@ -152,6 +153,7 @@ benchmark-serverless-trigger:
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
+    branch: $SLS_CI_BRANCH
     strategy: depend
   allow_failure: true
   variables:
@@ -164,3 +166,6 @@ benchmark-serverless-trigger:
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_GITLAB_USER_LOGIN: $GITLAB_USER_LOGIN
     UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
+    # only available on Merge Requests
+    UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
