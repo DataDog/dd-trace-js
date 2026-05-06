@@ -57,6 +57,10 @@ const messaging = {
       opName: () => 'gcp.pubsub.process',
       serviceName: identityService,
     },
+    'google-cloud-pubsub-push-subscription': {
+      opName: () => 'gcp.pubsub.process',
+      serviceName: identityService,
+    },
     kafkajs: {
       opName: () => 'kafka.process',
       serviceName: identityService,
