@@ -2,6 +2,7 @@
 
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { storage } = require('../../datadog-core')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
@@ -59,7 +60,7 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = { childOf: this.scope().active(), ...options }
+    options = { childOf: storage('legacy').getStore()?.span, ...options }
 
     const span = markUserVisible(this.startSpan(name, options))
 

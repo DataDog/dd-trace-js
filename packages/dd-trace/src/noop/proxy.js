@@ -55,9 +55,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return
 
-    options = stampManualServiceInOptions(options || {})
-
-    return this._tracer.trace(name, options, fn)
+    return this._tracer.trace(name, options || {}, fn)
   }
 
   wrap (name, options, fn) {
@@ -68,9 +66,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return fn
 
-    options = stampManualServiceInOptions(options || {})
-
-    return this._tracer.wrap(name, options, fn)
+    return this._tracer.wrap(name, options || {}, fn)
   }
 
   setUrl () {

@@ -111,6 +111,12 @@ describe('Tracer', () => {
         })
       })
 
+      it('stamps _dd.svc_src=m when the user passes service via trace() options', () => {
+        tracer.trace('name', { service: 'custom' }, span => {
+          assert.strictEqual(span.context()._tags[SVC_SRC_KEY], 'm')
+        })
+      })
+
       it('overrides a prior internal source when the user sets service inside trace()', () => {
         tracer.trace('name', {}, span => {
           span.context()._tags[SVC_SRC_KEY] = 'opt.plugin'

@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../log')
+const { storage } = require('../../../datadog-core')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { ImpendingTimeout } = require('./runtime/errors')
@@ -42,8 +43,8 @@ function checkTimeout (context) {
  * Once that is done, it finishes the last span.
  */
 function crashFlush () {
-  const activeSpan = tracer.scope().active()
-  if (activeSpan === null) {
+  const activeSpan = storage('legacy').getStore()?.span
+  if (activeSpan == null) {
     log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
   } else {
     const error = new ImpendingTimeout('Datadog detected an impending timeout')
@@ -54,7 +55,7 @@ function crashFlush () {
   }
 
   tracer._processor.killAll()
-  if (activeSpan !== null) {
+  if (activeSpan != null) {
     activeSpan.finish()
   }
 }
