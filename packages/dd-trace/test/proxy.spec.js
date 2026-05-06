@@ -151,14 +151,13 @@ describe('TracerProxy', () => {
           enabled: true,
         },
       },
-      injectionEnabled: [],
+      DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
-      debug: true,
       profiling: {},
       apmTracingEnabled: false,
       appsec: {},
       iast: {},
-      crashtracking: {},
+      DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true,
@@ -168,7 +167,6 @@ describe('TracerProxy', () => {
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
@@ -412,12 +410,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { tracing_enabled: false }
+        let conf = { tracing: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { tracing_enabled: true }
+        conf = { tracing: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -439,7 +437,7 @@ describe('TracerProxy', () => {
         config.appsec.enabled = true
         config.iast.enabled = true
         config.setRemoteConfig = conf => {
-          config.tracing = conf.tracing_enabled
+          config.tracing = conf.tracing
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -448,12 +446,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { tracing_enabled: false }
+        let conf = { tracing: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { tracing_enabled: true }
+        conf = { tracing: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
@@ -767,6 +765,15 @@ describe('TracerProxy', () => {
           const baggage = proxy.removeBaggageItem('missing')
           assert.deepStrictEqual(baggage, { key: 'value' })
         })
+
+        it('should not replace the store on invalid keys', () => {
+          proxy.setBaggageItem('key', 'value')
+          const before = proxy.getAllBaggageItems()
+          proxy.removeBaggageItem(null)
+          proxy.removeBaggageItem(123)
+          proxy.removeBaggageItem('')
+          assert.strictEqual(proxy.getAllBaggageItems(), before)
+        })
       })
 
       describe('removeAllBaggageItems', () => {
@@ -775,6 +782,22 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
           assert.deepStrictEqual(baggage, {})
+        })
+      })
+
+      describe('immutability', () => {
+        it('should freeze every store handed out', () => {
+          assert.ok(Object.isFrozen(proxy.getAllBaggageItems()))
+          assert.ok(Object.isFrozen(proxy.setBaggageItem('key', 'value')))
+          assert.ok(Object.isFrozen(proxy.removeBaggageItem('key')))
+          assert.ok(Object.isFrozen(proxy.removeAllBaggageItems()))
+        })
+
+        it('should refuse mutation through the returned reference', () => {
+          const baggage = proxy.setBaggageItem('key', 'value')
+          assert.throws(() => { baggage.key = 'tampered' }, TypeError)
+          assert.throws(() => { baggage.added = 'value' }, TypeError)
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), { key: 'value' })
         })
       })
     })

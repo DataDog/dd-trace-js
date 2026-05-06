@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -22,9 +22,16 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
+  formatAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -80,6 +87,328 @@ describe('getTestSuitePath', () => {
   })
 })
 
+describe('getTestSessionName', () => {
+  let originalEnv
+
+  function getTestSessionNameWithMajor (ddMajor) {
+    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+      '../../../../version': { DD_MAJOR: ddMajor },
+    })
+
+    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+      '../../ci-visibility/lage': lage,
+    }).getTestSessionName
+  }
+
+  beforeEach(() => {
+    originalEnv = { ...process.env }
+    delete process.env.DD_ENABLE_LAGE_PACKAGE_NAME
+    delete process.env.LAGE_PACKAGE_NAME
+    delete process.env.DD_TEST_SESSION_NAME
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('returns the explicit test optimization session name from config', () => {
+    process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+
+    const testSessionName = getTestSessionName({ DD_TEST_SESSION_NAME: 'explicit-session' }, 'jest', {})
+
+    assert.strictEqual(testSessionName, 'explicit-session')
+  })
+
+  it('returns the current Lage package name when enabled', () => {
+    process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
+    process.env.LAGE_PACKAGE_NAME = 'lage-package-a'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-a')
+
+    process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
+  })
+
+  it('returns the current Lage package name by default in v6', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(6)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package')
+  })
+
+  it('does not return the current Lage package name by default in v5', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(5)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'jest')
+  })
+})
+
+describe('attempt to fix summary', () => {
+  it('reports when every attempt to fix execution passes', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    assert.strictEqual(
+      formatAttemptToFixSummary(executions),
+      'Attempt to fix passed: all 2 execution(s) passed for 1 test(s).'
+    )
+  })
+
+  it('reports failed executions without error messages', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.ok(!summary.includes('Error:'))
+    assert.ok(!summary.includes('execution 1:'))
+  })
+
+  it('reports when quarantine and disabled were ignored for attempt to fix', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+  })
+
+  it('reports ignored quarantine and disabled for passing attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
+  it('lists each failed test once', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'fail',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'fail',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'always fails',
+      status: 'fail',
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 3 of 4 execution\(s\) failed across 2 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails sometimes/)
+    assert.match(summary, /suite\.js › always fails/)
+    assert.strictEqual(summary.match(/suite\.js › fails sometimes/g).length, 1)
+    assert.doesNotMatch(summary, /execution \d+:/)
+  })
+
+  it('collects attempt to fix executions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'fail',
+            'test.test_management.is_quarantined': 'true',
+            'error.message': 'worker failure',
+            'error.stack': 'Error: worker failure\n    at worker-suite.js:10:5',
+          },
+        },
+      ],
+    ])
+
+    collectAttemptToFixExecutionsFromTraces(payload, executions)
+
+    const summary = formatAttemptToFixSummary(executions)
+    assert.match(summary, /worker-suite\.js › worker test/)
+    assert.ok(!summary.includes('worker failure'))
+    assert.ok(!summary.includes('worker-suite.js:10:5'))
+    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
+  it('collects test optimization summaries from worker traces with one parse', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'pass',
+          },
+        },
+        {
+          meta: {
+            '_dd.has_dynamic_name': 'true',
+            'test.suite': 'dynamic-suite.js',
+            'test.name': 'dynamic 123',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, {
+      attemptToFixExecutions: executions,
+      newTestsWithDynamicNames,
+    })
+
+    assert.deepStrictEqual([...newTestsWithDynamicNames], ['dynamic-suite.js › dynamic 123'])
+    assert.match(formatAttemptToFixSummary(executions), /worker-suite\.js › worker test/)
+  })
+
+  it('logs and clears the attempt to fix summary', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Datadog Test Optimization/)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+  })
+
+  it('logs a compact progress line when an attempt to fix execution starts', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name')
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+  })
+
+  it('logs the attempt to fix progress line once for a test effort', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'other test', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+    assert.strictEqual(
+      consoleWarn.secondCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › other test'
+    )
+  })
+
+  it('combines attempt to fix and dynamic name sections into one session report', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set(['dynamic-suite.js › dynamic test 123'])
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions, newTestsWithDynamicNames })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+    assert.match(consoleWarn.firstCall.args[0], /dynamic-suite\.js › dynamic test 123/)
+  })
+})
+
 describe('getCodeOwnersFileEntries', () => {
   it('returns code owners entries', () => {
     const rootDir = path.join(__dirname, '__test__')
@@ -132,6 +461,128 @@ describe('getCodeOwnersForFilename', () => {
     assert.strictEqual(codeOwners, null)
   })
 
+  it('matches supported GitHub CODEOWNERS patterns', () => {
+    const patternTests = [
+      {
+        pattern: '*',
+        matches: ['index.js', 'packages/dd-trace/src/index.js'],
+      },
+      {
+        pattern: '*.js',
+        matches: ['index.js', 'packages/dd-trace/src/index.js'],
+        misses: ['index.jsx', 'packages/dd-trace/src/index.js.map'],
+      },
+      {
+        pattern: 'README.md',
+        matches: ['README.md', 'packages/dd-trace/README.md'],
+        misses: ['README.txt', 'packages/dd-trace/readme.md'],
+      },
+      {
+        pattern: '/package.json',
+        matches: ['package.json'],
+        misses: ['packages/dd-trace/package.json'],
+      },
+      {
+        pattern: '/docs/',
+        matches: ['docs/README.md', 'docs/api/reference.md'],
+        misses: ['src/docs/README.md'],
+      },
+      {
+        pattern: 'apps/',
+        matches: ['apps/api/index.js', 'packages/apps/api/index.js'],
+        misses: ['applications/api/index.js'],
+      },
+      {
+        pattern: 'docs/*',
+        matches: ['docs/getting-started.md'],
+        misses: ['docs/build-app/troubleshooting.md', 'src/docs/getting-started.md'],
+      },
+      {
+        pattern: '**/logs',
+        matches: ['logs/app.log', 'build/logs/app.log', 'deeply/nested/logs/app.log'],
+        misses: ['build/logs-old/app.log'],
+      },
+      {
+        pattern: 'logs/**',
+        matches: ['logs/app.log', 'logs/deeply/nested/app.log'],
+        misses: ['src/logs/app.log'],
+      },
+      {
+        pattern: '/packages/**/dsm.spec.js',
+        matches: ['packages/dsm.spec.js', 'packages/datadog-plugin-kafkajs/test/dsm.spec.js'],
+        misses: ['src/packages/datadog-plugin-kafkajs/test/dsm.spec.js'],
+      },
+      {
+        pattern: 'file?.js',
+        matches: ['file1.js', 'packages/dd-trace/fileA.js'],
+        misses: ['file10.js', 'packages/dd-trace/file/name.js'],
+      },
+    ]
+
+    for (const { pattern, matches = [], misses = [] } of patternTests) {
+      const entries = [{ pattern, owners: [`@owner-${pattern}`] }]
+      const expectedCodeOwners = JSON.stringify([`@owner-${pattern}`])
+
+      for (const filename of matches) {
+        assert.strictEqual(getCodeOwnersForFilename(filename, entries), expectedCodeOwners)
+      }
+
+      for (const filename of misses) {
+        assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
+      }
+    }
+  })
+
+  it('keeps CODEOWNERS matching case-sensitive', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/Docs/', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(
+      getCodeOwnersForFilename('Docs/reference.md', codeOwnersFileEntries),
+      JSON.stringify(['@datadog-docs'])
+    )
+    assert.strictEqual(getCodeOwnersForFilename('docs/reference.md', codeOwnersFileEntries), null)
+  })
+
+  it('uses the last matching CODEOWNERS entry', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '*.js', owners: ['@datadog-default-js'] },
+      { pattern: '/packages/dd-trace/', owners: ['@datadog-dd-trace-js'] },
+    ].reverse()
+
+    const codeOwners = getCodeOwnersForFilename(
+      'packages/dd-trace/src/index.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwners, JSON.stringify(['@datadog-dd-trace-js']))
+  })
+
+  it('preserves multiple CODEOWNERS owners and email owners', () => {
+    const codeOwnersFileEntries = [
+      {
+        pattern: '*.js',
+        owners: ['@datadog-team-a', '@datadog/team-b', 'user@example.com'],
+      },
+    ]
+
+    const codeOwners = getCodeOwnersForFilename('index.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwners, JSON.stringify(['@datadog-team-a', '@datadog/team-b', 'user@example.com']))
+  })
+
+  it('supports empty owner overrides', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '*', owners: ['@datadog-default'] },
+      { pattern: '/apps/github', owners: [] },
+    ].reverse()
+
+    const codeOwners = getCodeOwnersForFilename('apps/github/index.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwners, JSON.stringify([]))
+  })
+
   it('returns the code owners for a given file path', () => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
@@ -149,6 +600,164 @@ describe('getCodeOwnersForFilename', () => {
     )
 
     assert.strictEqual(codeOwnersForTestSpec, JSON.stringify(['@datadog-ci-app']))
+  })
+
+  it('does not let root-level fallbacks override integration test directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+      { pattern: '/integration-tests/mocha/', owners: ['@datadog-ci-app-libraries'] },
+      { pattern: '/integration-tests/playwright/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForMochaSpec = getCodeOwnersForFilename(
+      'integration-tests/mocha/codeowners-root-pattern.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForPlaywrightSpec = getCodeOwnersForFilename(
+      'integration-tests/playwright/codeowners-root-pattern.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForRootFile = getCodeOwnersForFilename('root-level-codeowners-test.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwnersForMochaSpec, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForPlaywrightSpec, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForRootFile, JSON.stringify(['@datadog-lang-platform-js']))
+  })
+
+  it('matches directory patterns against descendants', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/dd-trace/src/ci-visibility/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForCiVisibilityFile = getCodeOwnersForFilename(
+      'packages/dd-trace/src/ci-visibility/exporters/agentless/writer.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForCiVisibilityFile, JSON.stringify(['@datadog-ci-app-libraries']))
+  })
+
+  it('matches wildcard directory patterns against descendants', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+      { pattern: '/packages/datadog-plugin-*/', owners: ['@datadog-apm-idm-js'] },
+    ]
+
+    const codeOwnersForPluginFile = getCodeOwnersForFilename(
+      'packages/datadog-plugin-http/test/codeowners-wildcard-directory.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForPluginFile, JSON.stringify(['@datadog-apm-idm-js']))
+  })
+
+  it('does not match single-star wildcards across directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/dd-trace/*/standalone', owners: ['@datadog-lang-platform-js'] },
+    ]
+
+    const codeOwnersForDirectMatch = getCodeOwnersForFilename(
+      'packages/dd-trace/src/standalone/codeowners-single-star.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForNestedMismatch = getCodeOwnersForFilename(
+      'packages/dd-trace/src/profiling/standalone/codeowners-single-star.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForDirectMatch, JSON.stringify(['@datadog-lang-platform-js']))
+    assert.strictEqual(codeOwnersForNestedMismatch, null)
+  })
+
+  it('matches double-star patterns across directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/**/dsm.spec.js', owners: ['@datadog-data-streams-monitoring'] },
+      { pattern: '/packages/**/*.dsm.spec.js', owners: ['@datadog-data-streams-monitoring'] },
+    ]
+
+    const codeOwnersForDsmSpec = getCodeOwnersForFilename(
+      'packages/datadog-plugin-kafkajs/test/dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForTopLevelDsmSpec = getCodeOwnersForFilename(
+      'packages/dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForSuffixDsmSpec = getCodeOwnersForFilename(
+      'packages/datadog-plugin-kafkajs/test/codeowners.dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForTopLevelSuffixDsmSpec = getCodeOwnersForFilename(
+      'packages/codeowners.dsm.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForTopLevelDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForSuffixDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForTopLevelSuffixDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+  })
+
+  it('matches slashless patterns in any directory', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'github_event_payload.json', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForNestedFixture = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/fixtures/github_event_payload.json',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForNestedFixture, JSON.stringify(['@datadog-ci-app-libraries']))
+  })
+
+  it('matches patterns with middle slashes from the repository root', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'fixtures/codeowners-middle-slash.json', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForRootFixture = getCodeOwnersForFilename(
+      'fixtures/codeowners-middle-slash.json',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForNestedFixture = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/fixtures/codeowners-middle-slash.json',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForRootFixture, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForNestedFixture, null)
+  })
+
+  it('does not let a root-level wildcard match nested files', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+    ]
+
+    const codeOwnersForNestedFile = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/root-wildcard-check.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForRootFile = getCodeOwnersForFilename(
+      'root-wildcard-check.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForNestedFile, null)
+    assert.strictEqual(codeOwnersForRootFile, JSON.stringify(['@datadog-lang-platform-js']))
+  })
+
+  it('matches paths with Windows separators', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/integration-tests/vitest/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForWindowsPath = getCodeOwnersForFilename(
+      'integration-tests\\vitest\\vitest.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForWindowsPath, JSON.stringify(['@datadog-ci-app-libraries']))
   })
 })
 

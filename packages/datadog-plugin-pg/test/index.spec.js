@@ -89,7 +89,7 @@ describe('Plugin', () => {
               if (implementation !== 'pg.native') {
                 assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
               }
-            })
+            }, { spanResourceMatch: /^SELECT \$1::text as message$/ })
               .then(done)
               .catch(done)
 
@@ -217,7 +217,7 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            const span = {}
+            const span = tracer.startSpan('test')
 
             tracer.scope().activate(span, () => {
               const span = tracer.scope().active()

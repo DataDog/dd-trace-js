@@ -1,6 +1,14 @@
 'use strict'
 
-const { getTestSuitePath } = require('../../../dd-trace/src/plugins/util/test')
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
+const {
+  getTestSuitePath,
+  DYNAMIC_NAME_RE,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+} = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -23,9 +31,12 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
 const testsStatuses = new Map()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 
 function getAfterEachHooks (testOrHook) {
   const hooks = []
@@ -221,6 +232,17 @@ function getOnTestHandler (isMain) {
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
     testInfo.isModified = isModified
+    testInfo.hasDynamicName = isNew && DYNAMIC_NAME_RE.test(test.fullTitle())
+    if (testInfo.hasDynamicName) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`)
+    }
+    if (isAttemptToFix) {
+      logAttemptToFixTestExecution(
+        getTestSuitePath(test.file, process.cwd()),
+        test.fullTitle(),
+        loggedAttemptToFixTests
+      )
+    }
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -241,6 +263,137 @@ function getOnTestHandler (isMain) {
   }
 }
 
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isFlakyTestRetriesEnabled,
+  isLastAtrAttempt,
+  isEfdRetry,
+  isLastEfdRetry,
+  isAttemptToFix,
+  isLastAttemptToFix,
+  attemptToFixPassed,
+  isQuarantined,
+  isDisabled,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // Intermediate EFD and ATF executions must not carry a final status, regardless of quarantine/disabled state
+  const isIntermediateExecution =
+    (isEfdRetry && !isLastEfdRetry) ||
+    (isAttemptToFix && !isLastAttemptToFix)
+  if (isIntermediateExecution) {
+    return
+  }
+
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (!isAttemptToFix && (isQuarantined || isDisabled)) {
+    return 'skip'
+  }
+
+  const isAtrActive = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry
+
+  // When no retry feature is active, every execution is final
+  if (!isAtrActive && !isEfdRetry && !isAttemptToFix) {
+    return status
+  }
+  if (isAtrActive && isLastAtrAttempt) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isEfdRetry && isLastEfdRetry) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isAttemptToFix && isLastAttemptToFix) {
+    return attemptToFixPassed ? 'pass' : 'fail'
+  }
+}
+
+function getTestFinishInfo (test, status, config, error) {
+  let hasFailedAllRetries = false
+  let attemptToFixPassed = false
+  let attemptToFixFailed = false
+
+  const testName = getTestFullName(test)
+
+  if (testsStatuses.get(testName)) {
+    testsStatuses.get(testName).push(status)
+  } else {
+    testsStatuses.set(testName, [status])
+  }
+  const testStatuses = testsStatuses.get(testName)
+
+  const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
+  const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
+  const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
+
+  // Needed for the getFinalStatus call. This is because EFD does NOT tag as
+  // EFD retry the first run of the test. It only tags as retries the clones
+  const isEfdRetry = test._ddIsEfdRetry || (test._ddIsNew && config.isEarlyFlakeDetectionEnabled)
+
+  if (test._ddIsAttemptToFix && isLastAttempt) {
+    if (testStatuses.includes('fail')) {
+      attemptToFixFailed = true
+    }
+    if (testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
+    } else if (testStatuses.every(status => status === 'pass')) {
+      attemptToFixPassed = true
+    }
+  }
+
+  if (test._ddIsEfdRetry && isLastEfdRetry &&
+    testStatuses.every(status => status === 'fail')) {
+    hasFailedAllRetries = true
+  }
+
+  // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
+    getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
+    hasFailedAllRetries = true
+  }
+
+  const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
+  const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+    !test._ddIsAttemptToFix &&
+    !test._ddIsEfdRetry
+
+  const { isFlakyTestRetriesEnabled } = config
+  const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
+
+  const finalStatus = getFinalStatus({
+    status,
+    hasFailedAllRetries,
+    isFlakyTestRetriesEnabled,
+    isLastAtrAttempt,
+    isEfdRetry,
+    isLastEfdRetry,
+    isAttemptToFix: _ddIsAttemptToFix,
+    isLastAttemptToFix: isLastAttempt,
+    attemptToFixPassed,
+    isQuarantined: _ddIsQuarantined,
+    isDisabled: _ddIsDisabled,
+  })
+
+  if (_ddIsAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: getTestSuitePath(test.file, process.cwd()),
+      testName: test.fullTitle(),
+      status,
+      isDisabled: _ddIsDisabled,
+      isQuarantined: _ddIsQuarantined,
+    })
+  }
+
+  return {
+    hasFailedAllRetries,
+    attemptToFixPassed,
+    attemptToFixFailed,
+    isAttemptToFixRetry,
+    isAtrRetry,
+    finalStatus,
+  }
+}
+
 function getOnTestEndHandler (config) {
   return async function (test) {
     const ctx = getTestContext(test)
@@ -250,73 +403,31 @@ function getOnTestEndHandler (config) {
     // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
     if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
       await new Promise((resolve) => {
-        setTimeout(() => {
+        realSetTimeout(() => {
           resolve()
         }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
       })
     }
 
-    let hasFailedAllRetries = false
-    let attemptToFixPassed = false
-    let attemptToFixFailed = false
-
-    const testName = getTestFullName(test)
-
-    if (testsStatuses.get(testName)) {
-      testsStatuses.get(testName).push(status)
-    } else {
-      testsStatuses.set(testName, [status])
-    }
-    const testStatuses = testsStatuses.get(testName)
-
-    const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
-    const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
-
-    if (test._ddIsAttemptToFix && isLastAttempt) {
-      if (testStatuses.includes('fail')) {
-        attemptToFixFailed = true
-      }
-      if (testStatuses.every(status => status === 'fail')) {
-        hasFailedAllRetries = true
-      } else if (testStatuses.every(status => status === 'pass')) {
-        attemptToFixPassed = true
-      }
-    }
-
-    if (test._ddIsEfdRetry && isLastEfdRetry &&
-      testStatuses.every(status => status === 'fail')) {
-      hasFailedAllRetries = true
-    }
-
-    // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-    if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
-      getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
-      hasFailedAllRetries = true
-    }
-
-    const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
-    const isAtrRetry = config.isFlakyTestRetriesEnabled &&
-      !test._ddIsAttemptToFix &&
-      !test._ddIsEfdRetry
-
-    // if there are afterEach to be run, we don't finish the test yet
-    if (ctx && !getAfterEachHooks(test).length) {
+    // If there are afterEach to be run, we don't finish the test yet.
+    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
+    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
+    // directly sets finalStatus without waiting for hooks
+    if (ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))) {
+      const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
         isLastRetry: getIsLastRetry(test),
-        hasFailedAllRetries,
-        attemptToFixPassed,
-        attemptToFixFailed,
-        isAttemptToFixRetry,
-        isAtrRetry,
+        ...testFinishInfo,
         ...ctx.currentStore,
       })
     }
   }
 }
 
-function getOnHookEndHandler () {
+function getOnHookEndHandler (config) {
   return function (hook) {
     const test = hook.ctx.currentTest
     const afterEachHooks = getAfterEachHooks(hook)
@@ -325,11 +436,15 @@ function getOnHookEndHandler () {
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const ctx = getTestContext(test)
-        if (ctx) {
+        // Disabled tests are already finished in getOnTestEndHandler,
+        // skip to avoid double-publishing
+        if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
+          const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
+            ...testFinishInfo,
             ...ctx.currentStore,
           })
         }
@@ -338,7 +453,7 @@ function getOnHookEndHandler () {
   }
 }
 
-function getOnFailHandler (isMain) {
+function getOnFailHandler (isMain, config) {
   return function (testOrHook, err) {
     const testFile = testOrHook.file
     let test = testOrHook
@@ -355,8 +470,13 @@ function getOnFailHandler (isMain) {
         err.message = `${testOrHook.fullTitle()}: ${err.message}`
         testContext.err = err
         errorCh.runStores(testContext, () => {})
-        // if it's a hook and it has failed, 'test end' will not be called
-        testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
+        const testFinishInfo = getTestFinishInfo(test, 'fail', config, err)
+        testFinishCh.publish({
+          status: 'fail',
+          hasBeenRetried: isMochaRetry(test),
+          ...testFinishInfo,
+          ...testContext.currentStore,
+        })
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
@@ -519,7 +639,10 @@ module.exports = {
   testFileToSuiteCtx,
   getRunTestsWrapper,
   newTests,
+  newTestsWithDynamicNames,
   testsQuarantined,
   testsAttemptToFix,
   testsStatuses,
+  attemptToFixExecutions,
+  loggedAttemptToFixTests,
 }

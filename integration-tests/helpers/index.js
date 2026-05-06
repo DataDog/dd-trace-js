@@ -2,17 +2,25 @@
 
 const assert = require('assert')
 const childProcess = require('child_process')
-const { execSync, fork, spawn } = childProcess
+const { exec, execSync, fork, spawn } = childProcess
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
-const { inspect } = require('util')
+const { inspect, promisify } = require('util')
+
+const execAsync = promisify(exec)
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
+const {
+  FLUSH_SIGNAL_KEY,
+  isCoverageActive,
+  resolveCoverageRoot,
+} = require('../coverage/runtime')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
@@ -42,12 +50,12 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
-    let out = Buffer.alloc(0)
+    const out = []
     proc.stdout.on('data', data => {
-      out = Buffer.concat([out, data])
+      out.push(data)
     })
     proc.stderr.pipe(process.stdout)
-    proc.once('exit', () => resolve(out.toString('utf8')))
+    proc.once('exit', () => resolve(Buffer.concat(out).toString('utf8')))
     if (shouldKill) {
       setTimeout(() => {
         if (proc.exitCode === null) proc.kill()
@@ -280,6 +288,12 @@ async function stopProc (proc, options = {}) {
   const signal = options.signal ?? 'SIGTERM'
   const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
 
+  // Windows SIGTERM is forceful; ask the bootstrap to flush via the IPC sentinel instead.
+  if (process.platform === 'win32' && isCoverageActive() && proc.connected) {
+    proc.send({ [FLUSH_SIGNAL_KEY]: true }, () => {})
+    if (await waitForProcExit(proc, timeoutMs)) return
+  }
+
   proc.kill(signal)
 
   const exitedAfterInitialSignal = await waitForProcExit(proc, timeoutMs)
@@ -330,8 +344,11 @@ function waitForProcExit (proc, timeoutMs) {
  * @returns {SpawnedProcess}
  */
 function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
-  // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
-  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
+  // When stdio is 'pipe', stdout/stderr are guaranteed non-null.
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, {
+    ...options,
+    stdio: 'pipe',
+  }))
 
   proc.stdout.on('data', data => {
     if (stdioHandler) {
@@ -385,14 +402,63 @@ function execHelper (command, options) {
 }
 
 /**
- * Pack dd-trace into a tarball at the specified path.
+ * Async sibling of {@link execHelper}. Runs in parallel with other awaited operations and
+ * preserves the bun-only 60s retry semantics.
  *
- * @param {string} tarballPath - The path where the tarball should be created
- * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @param {string} command - Command to run.
+ * @param {import('child_process').ExecOptions} [options] - Exec options.
+ * @returns {Promise<void>}
  */
-function packTarball (tarballPath, env) {
-  execHelper(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+async function execHelperAsync (command, options) {
+  try {
+    log('Exec START: ', command)
+    await execAsync(command, options)
+    log('Exec SUCCESS: ', command)
+    return
+  } catch (execError) {
+    error('Exec ERROR: ', command, execError)
+    if (!command.startsWith(BUN)) throw execError
+  }
+  log('Exec RETRY BACKOFF: 60 seconds')
+  await new Promise(resolve => setTimeout(resolve, 60_000))
+  try {
+    log('Exec RETRY START: ', command)
+    await execAsync(command, options)
+    log('Exec RETRY SUCCESS: ', command)
+  } catch (retryError) {
+    error('Exec RETRY ERROR', command, retryError)
+    throw retryError
+  }
+}
+
+/**
+ * @param {string} tarballPath
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {Promise<void>}
+ */
+async function packTarball (tarballPath, env) {
+  if (isCoverageActive()) {
+    const { packInstrumentedTarball } = require('../coverage/pack-instrumented-tarball')
+    await packInstrumentedTarball(tarballPath, env)
+    log('Pre-instrumented tarball packed successfully:', tarballPath)
+    return
+  }
+  await execHelperAsync(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
+}
+
+/**
+ * Copy each integration-tests path into the sandbox folder concurrently.
+ *
+ * @param {string[]} integrationTestsPaths - Source paths to copy from.
+ * @param {string} folder - Destination sandbox folder.
+ * @returns {Promise<void>}
+ */
+async function copyIntegrationTests (integrationTestsPaths, folder) {
+  await Promise.all(integrationTestsPaths.map(p => process.platform === 'win32'
+    ? execHelperAsync(`Copy-Item -Recurse -Path "${p}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+    : execHelperAsync(`cp -R ${p} ${folder}`)
+  ))
 }
 
 /**
@@ -424,7 +490,7 @@ async function packTarballWithLock (tarballPath, env) {
     }
 
     // We have the lock, pack the tarball
-    packTarball(tarballPath, env)
+    await packTarball(tarballPath, env)
   } catch (err) {
     if (err.code === 'EEXIST') {
       // Lock exists, another process is packing - wait for the tarball to appear
@@ -432,6 +498,11 @@ async function packTarballWithLock (tarballPath, env) {
 
       while (!existsSync(tarballPath)) {
         await new Promise(resolve => setTimeout(resolve, 100))
+        if (!existsSync(lockFile) && !existsSync(tarballPath)) {
+          // Lock holder failed without creating the tarball, retry from scratch
+          log('Lock released without tarball, retrying:', tarballPath)
+          return packTarballWithLock(tarballPath, env)
+        }
       }
 
       log('Tarball ready:', tarballPath)
@@ -439,9 +510,9 @@ async function packTarballWithLock (tarballPath, env) {
       throw err
     }
   } finally {
-    // Strictly no need to clean up the lock - it's in a temp directory
     if (lockFd) {
-      lockFd.close().catch(() => {})
+      await lockFd.close().catch(() => {})
+      await fs.unlink(lockFile).catch(() => {})
     }
   }
 }
@@ -483,20 +554,28 @@ async function createSandbox (
     execHelper('yarn link')
     execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+    return {
+      coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),
+      folder: path.join(process.cwd(), 'integration-tests'),
+      remove: async () => {},
+    }
   }
   const folder = path.join(sandboxRoot, id().toString())
   const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
   const out = tarballEnv && tarballEnv !== '0' && tarballEnv !== 'false'
     ? tarballEnv
     : path.join(sandboxRoot, 'dd-trace.tgz')
-  const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
-  const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--trust']
+  const addOptions = { cwd: folder, env: restOfEnv, timeout: 60_000 }
+  const addFlags = ['--linker=hoisted', '--trust']
 
-  await packTarballWithLock(out, restOfEnv)
+  // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
+  // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
+  await Promise.all([
+    packTarballWithLock(out, restOfEnv),
+    copyIntegrationTests(integrationTestsPaths, folder),
+  ])
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
@@ -510,18 +589,12 @@ async function createSandbox (
     addFlags.push('--silent')
   }
 
-  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
-    ...addOptions,
-    timeout: 90_000,
-  })
-
-  for (const path of integrationTestsPaths) {
-    if (process.platform === 'win32') {
-      execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-    } else {
-      execHelper(`cp -R ${path} ${folder}`)
-    }
+  if (cappedDependencies.length > 0) {
+    execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, addOptions)
   }
+
+  execHelper(`${BUN} add file:${out} ${[...addFlags, '--ignore-scripts'].join(' ')}`, addOptions)
+
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
     execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
@@ -553,8 +626,11 @@ async function createSandbox (
   }
 
   return {
+    coverageRoot: resolveCoverageRoot({ cwd: folder }),
     folder,
-    remove: () => {
+    remove: async () => {
+      await finalizeSandboxCoverage(folder, resolveCoverageRoot({ cwd: folder }))
+
       // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
       // our `integration-guardrails` GitHub Actions workflow
       if (process.platform === 'win32') {
@@ -684,7 +760,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
         if (!data && retries < 10) {
           return tryAgain()
         }
-        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
+        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`, { cause: e })
       }
       msgs.push([telemetryType, parsed])
     }
@@ -781,6 +857,34 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
+ * Exercise the full `cypress run` pipeline (config loader + setupNodeEvents +
+ * spec resolution) once per matrix job so the first real test doesn't pay an
+ * electron + NYC require-hook cold-start that exceeds the per-test gather window.
+ * `cypress verify` only warms the binary; it leaves the run pipeline cold.
+ *
+ * The non-existent spec pattern makes cypress exit with "No specs found" *after*
+ * loading config and plugins — that's the side-effect we want. The non-zero exit
+ * code is intentionally ignored.
+ *
+ * `NODE_OPTIONS` is cleared because the workflow-level `-r ./ci/init` is relative
+ * to the dd-trace repo root and won't resolve from inside the sandbox. The
+ * coverage harness still prepends its NYC bootstrap via `patchExecOptions`, so
+ * the require-hook cold-start is absorbed here too.
+ *
+ * @param {string} cwd - Sandbox folder where cypress is installed.
+ * @returns {Promise<void>}
+ */
+function warmCypressBinary (cwd) {
+  return new Promise(resolve => {
+    childProcess.exec('./node_modules/.bin/cypress run --spec __ddwarmup_no_match__.cy.js', {
+      cwd,
+      timeout: 80_000,
+      env: { ...process.env, NODE_OPTIONS: '' },
+    }, () => resolve())
+  })
+}
+
+/**
  * @typedef {Record<string, string|undefined>} AdditionalEnvArgs
  */
 
@@ -811,8 +915,10 @@ function preparePluginIntegrationTestSpawnOptions (
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
+  const scriptPath = path.join(cwd, serverFile)
+
   return {
-    filename: path.join(cwd, serverFile),
+    filename: scriptPath,
     options: {
       cwd,
       env: {
@@ -898,7 +1004,7 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
-    return sandbox.remove()
+    return sandbox?.remove()
   })
 }
 
@@ -954,6 +1060,8 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     return
   }
 
+  assert.ok(typeof actual === 'object' && actual !== null, msg)
+
   for (const [key, val] of Object.entries(expected)) {
     assert.ok(Object.hasOwn(actual, key), msg)
     if (useMatchers && val === ANY_STRING) {
@@ -965,7 +1073,6 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     } else if (val !== null && typeof val === 'object') {
       assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
-      assert.ok(actual, msg)
       assert.strictEqual(actual[key], expected[key], msg)
     }
   }
@@ -980,11 +1087,11 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
 
   try {
     assertionFn(actual, expected, msg)
-  } catch {
+  } catch (error) {
     // First attempt failed, retry with matcher support
     try {
       assertObjectContainsImpl(actual, expected, msg, true)
-    } catch (error) {
+    } catch {
       // eslint-disable-next-line no-console
       console.error(error)
 
@@ -1031,4 +1138,5 @@ module.exports = {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  warmCypressBinary,
 }

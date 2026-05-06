@@ -1,23 +1,16 @@
 'use strict'
 
 if (!global._ddtrace) {
-  const TracerProxy = require('./src')
-
-  Object.defineProperty(global, '_ddtrace', {
-    value: new TracerProxy(),
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  })
-
   const ddTraceSymbol = Symbol.for('dd-trace')
 
+  // Set up beforeExitHandlers before loading the tracer so that modules loaded
+  // during require('./src') can register handlers.
   Object.defineProperty(globalThis, ddTraceSymbol, {
     value: {
       beforeExitHandlers: new Set(),
     },
     enumerable: false,
-    configurable: true, // Allow this to be overridden by loading the tracer
+    configurable: true,
     writable: false,
   })
 
@@ -29,8 +22,18 @@ if (!global._ddtrace) {
     }
   })
 
-  global._ddtrace.default = global._ddtrace
-  global._ddtrace.tracer = global._ddtrace
+  const TracerProxy = require('./src')
+
+  Object.defineProperty(global, '_ddtrace', {
+    value: new TracerProxy(),
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  })
 }
 
 module.exports = global._ddtrace
+// Static aliases so cjs-module-lexer surfaces them as ESM named exports
+// (`import { tracer } from 'dd-trace'`).
+module.exports.tracer = global._ddtrace
+module.exports.default = global._ddtrace

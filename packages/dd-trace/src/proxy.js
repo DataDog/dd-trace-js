@@ -1,6 +1,5 @@
 'use strict'
 
-const { getValueFromEnvSources } = require('./config/helper')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -27,9 +26,12 @@ class LazyModule {
     this.provider = provider
   }
 
-  enable (...args) {
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  enable (config, ...args) {
     this.module = this.provider()
-    this.module.enable(...args)
+    this.module.enable(config, ...args)
   }
 
   disable () {
@@ -85,6 +87,7 @@ class Tracer extends NoopProxy {
     // these requires must work with esm bundler
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
+      aiguard: new LazyModule(() => require('./aiguard')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
@@ -110,11 +113,11 @@ class Tracer extends NoopProxy {
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
 
-      if (config.crashtracking.enabled) {
+      if (config.DD_CRASHTRACKING_ENABLED) {
         require('./crashtracking').start(config)
       }
 
-      if (config.heapSnapshot.count > 0) {
+      if (config.DD_HEAP_SNAPSHOT_COUNT > 0) {
         require('./heap_snapshots').start(config)
       }
 
@@ -125,11 +128,11 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
 
-      if (config.spanLeakDebug > 0) {
+      if (config.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
         const spanleak = require('./spanleak')
-        if (config.spanLeakDebug === spanleak.MODES.LOG) {
+        if (config.DD_TRACE_SPAN_LEAK_DEBUG === spanleak.MODES.LOG) {
           spanleak.enableLogging()
-        } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
+        } else if (config.DD_TRACE_SPAN_LEAK_DEBUG === spanleak.MODES.GC_AND_LOG) {
           spanleak.enableGarbageCollection()
         }
         spanleak.startScrubber()
@@ -192,12 +195,14 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.otelLogsEnabled) {
+      // OTel logs/metrics must initialize before runtimeMetrics.start() so that
+      // OTLP runtime metrics can register against an existing MeterProvider.
+      if (config.DD_LOGS_OTEL_ENABLED) {
         const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
         initializeOpenTelemetryLogs(config)
       }
 
-      if (config.otelMetricsEnabled) {
+      if (config.DD_METRICS_OTEL_ENABLED) {
         const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
         initializeOpenTelemetryMetrics(config)
       }
@@ -210,7 +215,7 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing && config.isManualApiEnabled) {
+      if (config.tracing && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
@@ -218,8 +223,8 @@ class Tracer extends NoopProxy {
         // are lazily configured when the library is imported.
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
-      if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (getValueFromEnvSources('DD_API_KEY')) {
+      if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
+        if (config.apiKey) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -237,25 +242,32 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
     } catch (e) {
-      log.error('Error initialising tracer', e)
+      log.error('Error initializing tracer', e)
+      // TODO: Should we stop everything started so far?
     }
 
     return this
   }
 
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
   _startProfiler (config) {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
-    } catch (e) {
+    } catch (error) {
       log.error(
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-        e
+        error
       )
       return false
     }
   }
 
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
   #updateTracing (config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
@@ -272,7 +284,9 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+
         if (config.experimental?.aiguard?.enabled) {
+          this._modules.aiguard.enable(this._tracer, config)
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
@@ -287,6 +301,7 @@ class Tracer extends NoopProxy {
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
+      this._modules.aiguard.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
       this._modules.openfeature.disable()
@@ -324,6 +339,25 @@ class Tracer extends NoopProxy {
       log.debug('[proxy] Stopping Dynamic Instrumentation via remote config')
       DynamicInstrumentation.stop()
     }
+  }
+
+  /**
+   * @override
+   */
+  get profiling () {
+    // Lazily require the profiler module and cache the result. If profiling
+    // is not enabled, runWithLabels still works as a passthrough (just calls fn()).
+    const profilerModule = require('./profiler')
+    const profiling = {
+      setCustomLabelKeys (keys) {
+        profilerModule.setCustomLabelKeys(keys)
+      },
+      runWithLabels (labels, fn) {
+        return profilerModule.runWithLabels(labels, fn)
+      },
+    }
+    Reflect.defineProperty(this, 'profiling', { value: profiling, configurable: true, enumerable: true })
+    return profiling
   }
 
   /**

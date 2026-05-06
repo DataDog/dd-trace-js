@@ -135,6 +135,7 @@ describe('Plugin', () => {
             assert.strictEqual(span.resource.startsWith('sendMessage'), true)
             assertObjectContains(span.meta, {
               queuename: queueName,
+              'messaging.system': 'aws_sqs',
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
             })
 
@@ -186,6 +187,7 @@ describe('Plugin', () => {
             assert.strictEqual(span.resource.startsWith('sendMessageBatch'), true)
             assertObjectContains(span.meta, {
               queuename: queueName,
+              'messaging.system': 'aws_sqs',
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
             })
 
@@ -359,6 +361,7 @@ describe('Plugin', () => {
 
             assertObjectContains(span.meta, {
               queuename: queueName,
+              'messaging.system': 'aws_sqs',
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
               aws_service: 'SQS',
               region: 'us-east-1',

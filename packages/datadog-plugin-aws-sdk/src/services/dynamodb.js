@@ -40,6 +40,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     // Also add span type to match serverless convention
     tags['span.type'] = 'dynamodb'
+    tags['db.system'] = 'aws.dynamodb'
 
     return tags
   }
@@ -117,7 +118,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
       return this.dynamoPrimaryKeyConfig
     }
 
-    const configStr = this._tracerConfig?.trace?.dynamoDb?.tablePrimaryKeys
+    const configStr = this._tracerConfig?.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS
     if (!configStr) {
       log.warn(
         // eslint-disable-next-line @stylistic/max-len

@@ -8,11 +8,14 @@ const sinon = require('sinon')
 const api = require('@opentelemetry/api')
 
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../ext/priority')
+const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
+const NoopTracer = require('../../src/noop/tracer')
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
 
@@ -71,6 +74,30 @@ describe('OTel Tracer', () => {
     assert.strictEqual(ddSpanContext._tags.foo, 'bar')
   })
 
+  it('returns a non-recording span when the inner tracer is the noop', () => {
+    const originalTracer = tracer._tracer
+    const originalInitialized = tracer._tracingInitialized
+    tracer._tracer = new NoopTracer()
+    tracer._tracingInitialized = false
+    try {
+      const otelTracer = new Tracer({}, {}, new TracerProvider())
+      const span = otelTracer.startSpan('name', { attributes: { foo: 'bar' } })
+
+      assert.strictEqual(span instanceof Span, false)
+      assert.strictEqual(span.isRecording(), false)
+      assert.ok(api.trace.isSpanContextValid(span.spanContext()))
+
+      span.setAttribute('after', 'create')
+      span.setAttributes({ baz: 'qux' })
+      span.addEvent('event')
+      span.recordException(new Error('oops'))
+      span.end()
+    } finally {
+      tracer._tracer = originalTracer
+      tracer._tracingInitialized = originalInitialized
+    }
+  })
+
   it('should pass through span kind', () => {
     const tracerProvider = new TracerProvider()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -125,7 +152,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (span) => {
       assert.ok(span instanceof Span)
-      assert.strictEqual(span._ddSpan, tracer.scope().active())
+      assert.strictEqual(span._ddSpan, storage('legacy').getStore()?.span)
     })
   })
 
@@ -210,6 +237,54 @@ describe('OTel Tracer', () => {
         })
       })
       orphan1.end()
+    })
+  })
+
+  describe('_convertOtelContextToDatadog (traceparent/tracestate extraction)', () => {
+    const TRACE_ID = '0123456789abcdef0123456789abcdef'
+    const SPAN_ID = '0123456789abcdef'
+
+    /**
+     * @param {number} traceFlag
+     * @param {string|null} tracestate
+     */
+    function convert (traceFlag, tracestate) {
+      const otelTracer = new Tracer({}, {}, new TracerProvider())
+      return otelTracer._convertOtelContextToDatadog(
+        TRACE_ID,
+        SPAN_ID,
+        traceFlag,
+        tracestate ? { traceparent: tracestate } : null
+      )
+    }
+
+    it('writes sampling priority onto the wrapped Datadog context', () => {
+      const spanContext = convert(1, 'other=bleh,dd=s:2;o:synthetics;t.dm:-4')
+      assert.strictEqual(spanContext._ddContext._sampling.priority, USER_KEEP)
+      assert.strictEqual(spanContext._ddContext._trace.origin, 'synthetics')
+      assert.strictEqual(spanContext.traceFlags, 1)
+    })
+
+    it('preserves the existing _trace.started/finished/tags when writing origin', () => {
+      const spanContext = convert(1, 'other=bleh,dd=s:1;o:foo')
+      assert.deepStrictEqual(spanContext._ddContext._trace.started, [])
+      assert.deepStrictEqual(spanContext._ddContext._trace.finished, [])
+      assert.deepStrictEqual(spanContext._ddContext._trace.tags, {})
+      assert.strictEqual(spanContext._ddContext._trace.origin, 'foo')
+    })
+
+    it('falls back to AUTO_REJECT/AUTO_KEEP when tracestate has no s: field', () => {
+      const rejected = convert(0, 'other=bleh,dd=o:foo;t.dm:-4')
+      assert.strictEqual(rejected._ddContext._sampling.priority, AUTO_REJECT)
+
+      const kept = convert(1, 'other=bleh,dd=o:foo;t.dm:-4')
+      assert.strictEqual(kept._ddContext._sampling.priority, AUTO_KEEP)
+    })
+
+    it('falls back to AUTO_KEEP for RUM traces without a priority', () => {
+      const spanContext = convert(1, 'other=bleh,dd=o:rum')
+      assert.strictEqual(spanContext._ddContext._sampling.priority, AUTO_KEEP)
+      assert.strictEqual(spanContext._ddContext._trace.origin, 'rum')
     })
   })
 

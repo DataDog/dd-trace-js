@@ -2,12 +2,8 @@
 
 const { test, expect } = require('@playwright/test')
 
-test.beforeEach(async ({ page }) => {
-  await page.goto(process.env.PW_BASE_URL)
-})
-
 test.describe('attempt to fix', () => {
-  test('should attempt to fix failed test', async ({ page }) => {
+  test('should attempt to fix failed test', async () => {
     let textToAssert
 
     if (process.env.SHOULD_ALWAYS_PASS) {
@@ -22,9 +18,7 @@ test.describe('attempt to fix', () => {
       textToAssert = 'Hello Warld'
     }
 
-    await expect(page.locator('.hello-world')).toHaveText([
-      textToAssert,
-    ])
+    expect(textToAssert).toBe('Hello World')
   })
 
   test('should attempt to fix passed test', async () => {
@@ -34,6 +28,8 @@ test.describe('attempt to fix', () => {
 
 if (process.env.SHOULD_INCLUDE_FLAKY_TEST) {
   test('flaky test is retried without attempt to fix', async ({ page }, testInfo) => {
+    await page.goto(process.env.PW_BASE_URL)
+
     await expect(page.locator('.hello-world')).toHaveText([
       testInfo.retry === 0 ? 'Hello Warld' : 'Hello World',
     ])

@@ -41,7 +41,7 @@ const execArgvs = [
 execArgvs.forEach(({ execArgv, skip, optional = true }) => {
   const describe = skip ? globalThis.describe.skip : globalThis.describe
 
-  describe(`startup ${execArgv.join(' ').concat(`(optional: ${optional})`)}`, () => {
+  describe(`startup ${execArgv.join(' ').concat(` (optional: ${optional})`)}`, () => {
     let agent
     let proc
     let cwd

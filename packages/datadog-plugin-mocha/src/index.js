@@ -1,8 +1,10 @@
 'use strict'
 
+// Capture real Date.now at module load time, before any test can install fake timers.
+const realDateNow = Date.now.bind(Date)
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
@@ -32,6 +34,8 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  TEST_FINAL_STATUS,
+  TEST_HAS_DYNAMIC_NAME,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -213,9 +217,13 @@ class MochaPlugin extends CiPlugin {
       attemptToFixFailed,
       isAttemptToFixRetry,
       isAtrRetry,
+      finalStatus,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
@@ -317,8 +325,8 @@ class MochaPlugin extends CiPlugin {
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
-            while (Date.now() < waitUntil) {
+            const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
+            while (realDateNow() < waitUntil) {
               // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
               // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
               // fall back to a fixed syncronous delay.
@@ -397,7 +405,7 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
       }
       this.libraryConfig = null
@@ -422,6 +430,7 @@ class MochaPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
     } = testInfo
 
     const extraTags = {}
@@ -471,6 +480,10 @@ class MochaPlugin extends CiPlugin {
         extraTags[TEST_IS_RETRY] = 'true'
         extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

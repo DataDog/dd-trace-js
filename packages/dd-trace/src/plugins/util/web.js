@@ -7,8 +7,9 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
+const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
+const { storage } = require('../../../../datadog-core')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
@@ -125,33 +126,13 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
+    context.store = storage('legacy').getStore()
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
 
     return span
   },
-  wrap (req) {
-    const context = contexts.get(req)
-    if (!context.instrumented) {
-      this.wrapEnd(context)
-      context.instrumented = true
-    }
-  },
-  // Start a span and activate a scope for a request.
-  instrument (tracer, config, req, res, name, callback) {
-    const span = this.startSpan(tracer, config, req, res, name)
-
-    this.wrap(req)
-
-    return callback && tracer.scope().activate(span, () => callback(span))
-  },
-
-  // Reactivate the request scope in case it was changed by a middleware.
-  reactivate (req, fn) {
-    return reactivate(req, fn)
-  },
-
   // Add a route segment that will be used for the resource name.
   enterRoute (req, path) {
     if (typeof path === 'string') {
@@ -170,61 +151,6 @@ const web = {
   // Remove the current route segment.
   exitRoute (req) {
     contexts.get(req).paths.pop()
-  },
-
-  // Start a new middleware span and activate a new scope with the span.
-  wrapMiddleware (req, middleware, name, fn) {
-    if (!this.active(req)) return fn()
-
-    const context = contexts.get(req)
-    const tracer = context.tracer
-    const childOf = this.active(req)
-    const config = context.config
-    const traceCtx = context.traceCtx
-
-    if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
-
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
-
-    analyticsSampler.sample(span, config.measured)
-
-    span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>',
-    })
-
-    context.middleware.push(span)
-
-    return tracer.scope().activate(span, fn)
-  },
-
-  // catch errors and apply to active span
-  bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
-    try {
-      return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
-    } catch (e) {
-      web.addError(req, e) // TODO: remove when error formatting is moved to Span
-      throw e
-    }
-  },
-
-  // Finish the active middleware span.
-  finish (req, error) {
-    if (!this.active(req)) return
-
-    const context = contexts.get(req)
-    const span = context.middleware.pop()
-
-    if (span) {
-      if (error) {
-        span.addTags({
-          [ERROR_TYPE]: error.name,
-          [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack,
-        })
-      }
-
-      span.finish()
-    }
   },
 
   // Register a callback to run before res.end() is called.
@@ -278,7 +204,6 @@ const web = {
   startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    const { storage } = require('../../../../datadog-core')
     const store = storage('legacy').getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
@@ -391,7 +316,6 @@ const web = {
     }
   },
   wrapEnd (context) {
-    const scope = context.tracer.scope()
     const req = context.req
     const res = context.res
     const end = res.end
@@ -406,7 +330,9 @@ const web = {
         return ends.get(this)
       },
       set (value) {
-        ends.set(this, scope.bind(value, context.span))
+        ends.set(this, function () {
+          return storage('legacy').run(context.store, value, ...arguments)
+        })
       },
     })
   },
@@ -451,14 +377,6 @@ function isOriginAllowed (req, headers) {
 
 function splitHeader (str) {
   return typeof str === 'string' ? str.split(/\s*,\s*/) : []
-}
-
-function reactivate (req, fn) {
-  const context = contexts.get(req)
-
-  return context
-    ? context.tracer.scope().activate(context.span, fn)
-    : fn()
 }
 
 function addRequestTags (context, spanType) {

@@ -78,7 +78,6 @@ module.exports = {
   setup,
   setupAssertionListeners,
   testBasicInput,
-  testBasicInputWithoutDD,
   testBasicInputWithoutRC,
 }
 
@@ -304,13 +303,14 @@ function setupAssertionListeners (t, done, probe) {
   let traceId, spanId, dd
 
   const messageListener = ({ payload }) => {
-    const span = payload.find((arr) => arr[0].name === 'fastify.request')?.[0]
+    const span = payload
+      .flat()
+      .find((span) => span.name === 'fastify.request' && (!dd || span.span_id.toString() === dd.span_id))
+
     if (!span) return
 
     traceId = span.trace_id.toString()
     spanId = span.span_id.toString()
-
-    t.agent.removeListener('message', messageListener)
 
     assertDD()
   }
@@ -336,26 +336,9 @@ function setupAssertionListeners (t, done, probe) {
     if (!traceId || !spanId || !dd) return
     assert.strictEqual(dd.trace_id, traceId)
     assert.strictEqual(dd.span_id, spanId)
+    t.agent.removeListener('message', messageListener)
     done()
   }
-}
-
-/**
- * Test helper for basic input messages without DD tracing integration.
- *
- * @param {DebuggerTestEnvironment} t - The test environment.
- * @param {Function} done - The mocha done callback.
- */
-function testBasicInputWithoutDD (t, done) {
-  t.triggerBreakpoint()
-
-  t.agent.on('debugger-input', ({ payload }) => {
-    assertBasicInputPayload(t, payload)
-    assert.ok(!('dd' in payload[0]))
-    done()
-  })
-
-  t.agent.addRemoteConfig(t.rcConfig)
 }
 
 /**

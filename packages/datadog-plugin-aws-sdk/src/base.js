@@ -23,12 +23,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     return id
   }
 
+  /** @type {import('../../dd-trace/src/config/config-types').ConfigProperties['cloudPayloadTagging']} */
   get cloudTaggingConfig () {
     return this._tracerConfig.cloudPayloadTagging
   }
 
   get payloadTaggingRules () {
-    return this.cloudTaggingConfig.rules.aws?.[this.constructor.id]
+    return this.cloudTaggingConfig.rules?.aws?.[this.constructor.id]
   }
 
   constructor (...args) {
@@ -55,7 +56,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const meta = {
         'span.kind': 'client',
-        'service.name': this.serviceName(),
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
@@ -69,6 +69,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
+        service: this.serviceName(),
         integrationName: 'aws-sdk',
       }, ctx)
 
@@ -78,7 +79,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.requestInject(span, request)
       })
 
-      if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.requestsEnabled) {
+      if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.request) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
         const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
         span.addTags(requestTags)
@@ -148,7 +149,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         }
         this.addResponseTags(span, response)
 
-        if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
+        if (this._tracerConfig?.DD_TRACE_AWS_ADD_SPAN_POINTERS) {
           this.addSpanPointers(span, response)
         }
       })
@@ -196,8 +197,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
-    return envVarValue ? isTrue(envVarValue) : true
+    return this._tracerConfig[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`] ?? true
   }
 
   addResponseTags (span, response) {
@@ -215,7 +215,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     span.addTags(tags)
 
-    if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.responsesEnabled) {
+    if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
       const responseBody = this.extractResponseBody(response)
       const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })

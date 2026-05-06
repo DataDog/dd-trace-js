@@ -8,7 +8,7 @@ on:
     - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -21,70 +21,97 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / unit (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:openfeature:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: openfeature-${{ github.job }}-${{ matrix.version }}
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-unit-${{ matrix.version }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   macos:
     name: ${{ github.workflow }} / macos
     runs-on: macos-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-macos
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/latest
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-ubuntu
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/node
+        with:
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
         with:
           cache: "true"
-      - run: yarn test:integration:openfeature
+      - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-windows
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

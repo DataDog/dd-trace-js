@@ -201,7 +201,7 @@ describe('Plugin', () => {
         }
 
         it('should bind callbacks to the correct active span', (done) => {
-          const span = {}
+          const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             s3.listBuckets({}, () => {
@@ -332,7 +332,7 @@ describe('Plugin', () => {
             })
 
             total++
-          }).catch(() => {}, { timeoutMs: 100 })
+          }, { timeoutMs: 100 }).catch(() => {})
 
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
@@ -344,7 +344,7 @@ describe('Plugin', () => {
             })
 
             total++
-          }).catch((e) => {}, { timeoutMs: 100 })
+          }, { timeoutMs: 100 }).catch((e) => {})
 
           s3.listBuckets({}, () => {})
           sqs.listQueues({}, () => {})
@@ -395,9 +395,9 @@ describe('Plugin', () => {
 
       describe('with env variable _BATCH_PROPAGATION_ENABLED configuration', () => {
         before(() => {
-          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = true
-          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = false
-          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = true
+          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = 'true'
+          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = 'false'
+          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = 'true'
 
           return agent.load(['aws-sdk'])
         })

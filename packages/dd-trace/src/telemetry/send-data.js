@@ -2,8 +2,6 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
-const { isTrue } = require('../util')
-const { getValueFromEnvSources } = require('../config/helper')
 
 /**
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
@@ -63,19 +61,6 @@ const { getValueFromEnvSources } = require('../config/helper')
  * } & Record<string, unknown>} TelemetryHost
  */
 /**
- * @typedef {{
- *   hostname?: string,
- *   port?: string | number,
- *   url?: string | URL,
- *   site?: string,
- *   apiKey?: string,
- *   isCiVisibility?: boolean,
- *   spanAttributeSchema?: string,
- *   tags: Record<string, string>,
- *   telemetry?: { debug?: boolean }
- * }} TelemetryConfig
- */
-/**
  * @callback SendDataCallback
  * @param {Error | null | undefined} error
  * @param {SendDataRetryObject} retryObj
@@ -85,23 +70,22 @@ const { getValueFromEnvSources } = require('../config/helper')
 let agentTelemetry = true
 
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  * @param {TelemetryRequestType} reqType
  * @returns {Record<string, string>}
  */
 function getHeaders (config, application, reqType) {
-  const sessionId = config.tags['runtime-id']
   const headers = {
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType,
     'dd-client-library-language': application.language_name,
     'dd-client-library-version': application.tracer_version,
-    'dd-session-id': sessionId,
+    'dd-session-id': config.tags['runtime-id'],
   }
-  if (config.rootSessionId && config.rootSessionId !== sessionId) {
-    headers['dd-root-session-id'] = config.rootSessionId
+  if (config.DD_ROOT_JS_SESSION_ID) {
+    headers['dd-root-session-id'] = config.DD_ROOT_JS_SESSION_ID
   }
   const debug = config.telemetry && config.telemetry.debug
   if (debug) {
@@ -141,7 +125,7 @@ function getPayload (payload) {
 
 // TODO(BridgeAR): Simplify this code. A lot does not need to be recalculated on every call.
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  * @param {TelemetryHost} host
  * @param {TelemetryRequestType} reqType
@@ -153,16 +137,16 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     hostname,
     port,
     isCiVisibility,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED,
   } = config
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility &&
-                                      isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
+  const isCiVisibilityAgentlessMode = isCiVisibility && DD_CIVISIBILITY_AGENTLESS_ENABLED
 
   if (isCiVisibilityAgentlessMode) {
     try {
-      url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
+      url ||= new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
@@ -192,14 +176,14 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && getValueFromEnvSources('DD_API_KEY') && config.site) {
+    if (error && config.apiKey && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
       // figure out which data center to send to
       const backendUrl = getAgentlessTelemetryEndpoint(config.site)
-      const backendHeader = { ...options.headers, 'DD-API-KEY': getValueFromEnvSources('DD_API_KEY') }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': config.apiKey }
       const backendOptions = {
         ...options,
         url: backendUrl,

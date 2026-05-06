@@ -53,6 +53,7 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
+            waitForLeaders: false,
             topics: [{
               topic: testTopic,
               numPartitions: 1,
@@ -214,7 +215,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
           })
 
           afterEach(async () => {
@@ -266,7 +267,8 @@ describe('Plugin', () => {
 
           it('should propagate context', async () => {
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces[0].find(s => s.name === 'kafka.consume')
+              assert.ok(span)
 
               assertObjectContains(span, {
                 name: 'kafka.consume',
@@ -299,7 +301,6 @@ describe('Plugin', () => {
 
             })
 
-            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {
                 throw fakeError
@@ -400,6 +401,123 @@ describe('Plugin', () => {
             async () => {
               await consumer.run({ eachMessage: () => {} })
               await sendMessages(kafka, testTopic, messages)
+            },
+            rawExpectedSchema.receive
+          )
+        })
+
+        describe('consumer (eachBatch)', () => {
+          let consumer
+          const batchMessages = [{ key: 'key1', value: 'test2' }, { key: 'key2', value: 'test3' }]
+
+          beforeEach(async () => {
+            consumer = kafka.consumer({ groupId: 'test-group' })
+            await consumer.connect()
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+
+          it('should be instrumented', async () => {
+            const meta = {
+              'span.kind': 'consumer',
+              component: 'kafkajs',
+              'kafka.topic': testTopic,
+              'messaging.destination.name': testTopic,
+              'messaging.system': 'kafka',
+            }
+            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              meta,
+              metrics: {
+                'messaging.batch.message_count': batchMessages.length,
+              },
+              resource: testTopic,
+              error: 0,
+              type: 'worker',
+            })
+
+            await consumer.run({
+              eachBatch: () => {},
+            })
+            return Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
+          })
+
+          it('should run the consumer in the context of the consumer span', done => {
+            const firstSpan = tracer.scope().active()
+
+            let eachBatch = async ({ batch }) => {
+              const currentSpan = tracer.scope().active()
+
+              try {
+                assert.notEqual(currentSpan, firstSpan)
+                assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachBatch = () => {} // avoid being called for each message
+              }
+            }
+
+            consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+              .then(() => sendMessages(kafka, testTopic, batchMessages))
+              .catch(done)
+          })
+
+          it('should propagate context via span links', async () => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
+
+              assertObjectContains(span, {
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                resource: testTopic,
+              })
+
+              assert.strictEqual(links.length, batchMessages.length)
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            await Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
+          })
+
+          it('should not fail when messages have headers without trace context', async () => {
+            const messagesWithHeaders = [
+              { key: 'key1', value: 'test1', headers: { 'x-custom-header': 'value' } },
+            ]
+            const meta = {
+              'span.kind': 'consumer',
+              component: 'kafkajs',
+              'kafka.topic': testTopic,
+              'messaging.destination.name': testTopic,
+              'messaging.system': 'kafka',
+            }
+            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              meta,
+              resource: testTopic,
+              error: 0,
+              type: 'worker',
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            return Promise.all([sendMessages(kafka, testTopic, messagesWithHeaders), expectedSpanPromise])
+          })
+
+          withNamingSchema(
+            async () => {
+              await consumer.run({ eachBatch: () => {} })
+              await sendMessages(kafka, testTopic, batchMessages)
             },
             rawExpectedSchema.receive
           )

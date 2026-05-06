@@ -19,7 +19,7 @@ describe('Plugin', () => {
 
   describe('rhea', function () {
     before(() => {
-      agent.load('rhea')
+      return agent.load('rhea')
     })
 
     after(() => agent.close({ ritmReset: false }))
@@ -243,7 +243,7 @@ describe('Plugin', () => {
             it('should extract the span context', done => {
               container.once('message', msg => {
                 const span = tracer.scope().active()
-                assert.notStrictEqual(span._spanContext._parentId, null)
+                assert.notStrictEqual(span.context()._parentId, null)
                 done()
               })
               context.sender.send({ body: 'Hello World!' })

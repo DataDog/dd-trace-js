@@ -27,6 +27,8 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
+const OOM_HEAP_MB = 50
+
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
@@ -227,6 +229,64 @@ async function gatherFilesystemTimelineEvents (cwd, scriptFilePath, agentPort) {
   return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'fs', [], FilesystemEventProcessor)
 }
 
+class ZlibEventProcessor extends TimelineEventProcessor {
+  processLabel () {
+    return false
+  }
+
+  decorateEvent () {}
+}
+
+async function gatherZlibTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'zlib', [], ZlibEventProcessor)
+}
+
+class CryptoEventProcessor extends TimelineEventProcessor {
+  constructor (strings, encoded) {
+    super(strings, encoded)
+
+    this.algorithmKey = strings.dedup('algorithm')
+    this.digestKey = strings.dedup('digest')
+    this.iterationsKey = strings.dedup('iterations')
+    this.keylenKey = strings.dedup('keylen')
+    this.offsetKey = strings.dedup('offset')
+    this.sizeKey = strings.dedup('size')
+    this.typeKey = strings.dedup('type')
+  }
+
+  processLabel (label, processedLabels) {
+    switch (label.key) {
+      case this.algorithmKey: processedLabels.algorithm = label.str; return true
+      case this.digestKey: processedLabels.digest = label.str; return true
+      case this.iterationsKey: processedLabels.iterations = label.num; return true
+      case this.keylenKey: processedLabels.keylen = label.num; return true
+      case this.offsetKey: processedLabels.offset = label.num; return true
+      case this.sizeKey: processedLabels.size = label.num; return true
+      case this.typeKey: processedLabels.type = label.str; return true
+      default: return false
+    }
+  }
+
+  decorateEvent (ev, pl) {
+    ev.algorithm = this.strings.strings[pl.algorithm]
+    ev.digest = this.strings.strings[pl.digest]
+    ev.type = this.strings.strings[pl.type]
+    ev.iterations = pl.iterations
+    ev.keylen = pl.keylen
+    ev.offset = pl.offset
+    ev.size = pl.size
+    for (const [k, v] of Object.entries(ev)) {
+      if (v === undefined) {
+        delete ev[k]
+      }
+    }
+  }
+}
+
+async function gatherCryptoTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'crypto', [], CryptoEventProcessor)
+}
+
 async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
@@ -270,7 +330,6 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
           }
       }
     }
-    // Timestamp must be defined and be between process start and end time
     assert.notStrictEqual(ts, undefined, encoded)
     assert.strictEqual(typeof ts, 'bigint', encoded)
     assert.ok(ts <= procEnd, encoded)
@@ -330,7 +389,7 @@ describe('profiler', () => {
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')
     oomTestFile = path.join(cwd, 'profiler/oom.js')
-    oomExecArgv = ['--max-old-space-size=50']
+    oomExecArgv = [`--max-old-space-size=${OOM_HEAP_MB}`]
   })
 
   beforeEach(async () => {
@@ -513,6 +572,27 @@ describe('profiler', () => {
       ])
     })
 
+    it('zlib timeline events work', async () => {
+      const events = await gatherZlibTimelineEvents(cwd, 'profiler/zlibtest.js', agent.port)
+      const compare = (a, b) => a.operation.localeCompare(b.operation)
+      assertObjectContains(events.sort(compare), [
+        { operation: 'brotliCompress' },
+        { operation: 'deflate' },
+        { operation: 'gunzip' },
+        { operation: 'gzip' },
+      ])
+    })
+
+    it('crypto timeline events work', async () => {
+      const events = await gatherCryptoTimelineEvents(cwd, 'profiler/cryptotest.js', agent.port)
+      const compare = (a, b) => a.operation.localeCompare(b.operation)
+      assertObjectContains(events.sort(compare), [
+        { operation: 'pbkdf2', digest: 'sha256', iterations: 1000, keylen: 32 },
+        { operation: 'randomBytes', size: 16 },
+        { operation: 'randomFill' },
+      ])
+    })
+
     it('net timeline events work', async () => {
       // Simple server that writes a constant message to the socket.
       const msg = 'cya later!\n'
@@ -579,9 +659,14 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: '1',
         },
       })
-      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
-      // so expect telemetry callback to time out
+      // so expect telemetry callback to time out. expectedMessageCount: Infinity keeps the listener
+      // from ever resolving, so the only outcome is the timeout that expectTimeout requires.
+      const checkTelemetry = agent.assertTelemetryReceived({
+        requestType: 'generate-metrics',
+        timeout: 1000,
+        expectedMessageCount: Infinity,
+      })
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
@@ -602,7 +687,7 @@ describe('profiler', () => {
       })
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
+        proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
@@ -703,38 +788,47 @@ describe('profiler', () => {
       let requestCount = 0
       let pointsCount = 0
 
-      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        assert.strictEqual(pp.namespace, 'profilers')
-        const series = pp.series
-        const requests = series.find(s => s.metric === 'profile_api.requests')
-        assert.strictEqual(requests.type, 'count')
-        // There's a race between metrics and on-shutdown profile, so metric
-        // value will be between 1 and 3
-        requestCount = requests.points[0][1]
-        assert.ok(requestCount >= 1)
-        assert.ok(requestCount <= 3)
+      const checkMetrics = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload
+          const series = pp.series
+          const requests = series.find(s => s.metric === 'profile_api.requests')
+          assert.strictEqual(requests.type, 'count')
+          // There's a race between the periodic uploader and the on-shutdown
+          // upload, so the count can include up to one extra request.
+          requestCount = requests.points[0][1]
+          assert.ok(requestCount >= 1)
+          assert.ok(requestCount <= 4)
 
-        const responses = series.find(s => s.metric === 'profile_api.responses')
-        assert.strictEqual(responses.type, 'count')
-        assert.deepStrictEqual(responses.tags, ['status_code:200'])
+          const responses = series.find(s => s.metric === 'profile_api.responses')
+          assert.strictEqual(responses.type, 'count')
+          assert.deepStrictEqual(responses.tags, ['status_code:200'])
 
-        // Same number of requests and responses
-        assert.strictEqual(responses.points[0][1], requestCount)
-      }, 'generate-metrics', timeout, 1, true)
+          // Same number of requests and responses
+          assert.strictEqual(responses.points[0][1], requestCount)
+        },
+        requestType: 'generate-metrics',
+        timeout,
+        resolveAtFirstSuccess: true,
+        namespace: 'profilers',
+      })
 
-      const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        assert.strictEqual(pp.namespace, 'profilers')
-        const series = pp.series
-        assert.strictEqual(series.length, 2)
-        assert.strictEqual(series[0].metric, 'profile_api.bytes')
-        assert.strictEqual(series[1].metric, 'profile_api.ms')
+      const checkDistributions = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload
+          const series = pp.series
+          assert.strictEqual(series.length, 2)
+          assert.strictEqual(series[0].metric, 'profile_api.bytes')
+          assert.strictEqual(series[1].metric, 'profile_api.ms')
 
-        // Same number of points
-        pointsCount = series[0].points.length
-        assert.strictEqual(pointsCount, series[1].points.length)
-      }, 'distributions', timeout)
+          // Same number of points
+          pointsCount = series[0].points.length
+          assert.strictEqual(pointsCount, series[1].points.length)
+        },
+        requestType: 'distributions',
+        timeout,
+        namespace: 'profilers',
+      })
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
 
@@ -761,16 +855,21 @@ describe('profiler', () => {
         },
       })
 
-      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        assert.strictEqual(pp.namespace, 'profilers');
-        ['live', 'used'].forEach(metricName => {
-          const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
-          assert.notStrictEqual(sampleContexts, undefined)
-          assert.strictEqual(sampleContexts.type, 'gauge')
-          assert.ok(sampleContexts.points[0][1] >= 1)
-        })
-      }, 'generate-metrics', timeout, 1, true)
+      const checkMetrics = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload;
+          ['live', 'used'].forEach(metricName => {
+            const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
+            assert.notStrictEqual(sampleContexts, undefined)
+            assert.strictEqual(sampleContexts.type, 'gauge')
+            assert.ok(sampleContexts.points[0][1] >= 1)
+          })
+        },
+        requestType: 'generate-metrics',
+        timeout,
+        resolveAtFirstSuccess: true,
+        namespace: 'profilers',
+      })
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
     })

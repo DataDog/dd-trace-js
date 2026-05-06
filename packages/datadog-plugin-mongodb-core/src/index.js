@@ -1,8 +1,6 @@
 'use strict'
 
-const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static id = 'mongodb-core'
@@ -20,11 +18,8 @@ class MongodbCorePlugin extends DatabasePlugin {
   configure (config) {
     super.configure(config)
 
-    const heartbeatFromEnv = getValueFromEnvSources('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
-
     this.config.heartbeatEnabled = config.heartbeatEnabled ??
-      (heartbeatFromEnv && isTrue(heartbeatFromEnv)) ??
-      true
+      this._tracerConfig.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
   }
 
   bindStart (ctx) {
@@ -35,9 +30,9 @@ class MongodbCorePlugin extends DatabasePlugin {
     }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    const service = this.serviceName({ pluginConfig: this.config })
+    const serviceResult = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
-      service,
+      service: serviceResult,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -49,7 +44,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port,
       },
     }, ctx)
-    const comment = this.injectDbmComment(span, ops.comment, service)
+    const comment = this.injectDbmComment(span, ops.comment, serviceResult.name)
     if (comment) {
       ops.comment = comment
     }
@@ -165,10 +160,9 @@ function limitDepth (input) {
       input, output, depth,
     } = queue.pop()
     const nextDepth = depth + 1
-    for (const key in input) {
-      if (typeof input[key] === 'function') continue
-
+    for (const key of Object.keys(input)) {
       let child = input[key]
+      if (typeof child === 'function') continue
 
       if (isBSON(child)) {
         child = typeof child.toJSON === 'function' ? child.toJSON() : '?'

@@ -1,17 +1,25 @@
 'use strict'
 
 const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('./constants')
+const getGitMetadata = require('./git_metadata')
 
 class GitMetadataTagger {
+  #commitSHA
+  #repositoryUrl
+  #enabled
+
   constructor (config) {
-    this._config = config
+    this.#enabled = config.DD_TRACE_GIT_METADATA_ENABLED
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    this.#commitSHA = commitSHA
+    this.#repositoryUrl = repositoryUrl
   }
 
   tagGitMetadata (spanContext) {
-    if (this._config.gitMetadataEnabled) {
-      // These tags are added only to the local root span
-      spanContext._trace.tags[SCI_COMMIT_SHA] = this._config.commitSHA
-      spanContext._trace.tags[SCI_REPOSITORY_URL] = this._config.repositoryUrl
+    if (this.#enabled) {
+      const tags = spanContext._trace.tags
+      tags[SCI_COMMIT_SHA] = this.#commitSHA
+      tags[SCI_REPOSITORY_URL] = this.#repositoryUrl
     }
   }
 }

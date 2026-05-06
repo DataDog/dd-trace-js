@@ -30,12 +30,17 @@ module.exports = {
   ],
   exclude: [
     '**/.bun/**',
+    // Serialized into browsers; coverage counters would ReferenceError. Also: pre-instrumented
+    // output is compact, which shifts line numbers inside the bundler that consumes them.
+    '**/*-browser-scripts.js',
+    '**/datadog-plugin-cypress/src/support.js',
     '**/*.spec.*',
     '**/fixtures/**',
     '**/integration-tests/**',
     '**/resources/**',
     '**/test/**',
     '**/vendor/**',
+    '**/versions/**',
   ],
   // Avoid collisions when a single CI job runs coverage sequentially across multiple Node.js versions.
   tempDir: `.nyc_output/node-${process.version}${label}`,

@@ -1,6 +1,11 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const path = require('path')
+const satisfies = require('../../../vendor/dist/semifies')
+const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
@@ -8,6 +13,7 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
@@ -15,6 +21,11 @@ const {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   getTestEndLine,
   isModifiedTest,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -72,7 +83,7 @@ let knownTests = {}
 let isCodeCoverageEnabled = false
 let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
-let isKeepingCoverageConfiguration = false
+let DD_TEST_TIA_KEEP_COV_CONFIG = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -97,7 +108,11 @@ const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
-const wrappedWorkers = new WeakSet()
+const wrappedWorkerChannels = new WeakMap()
+// New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
+// Populated in-process for runInBand, and via worker-report:trace for parallel mode.
+const newTestsWithDynamicNames = new Set()
+const loggedAttemptToFixTests = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
@@ -106,12 +121,52 @@ const efdDeterminedRetries = new Map()
 const efdSlowAbortedTests = new Set()
 // Tests added as EFD new-test candidates (not ATF, not impacted).
 const efdNewTestCandidates = new Set()
+// Tests that are genuinely new (not in known tests list).
+const newTests = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
 const testSuiteJestObjects = new Map()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
+const MINIMUM_JEST_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=24.8.0'
+const MINIMUM_JEST_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.8.0 <30.0.0'
+const MINIMUM_JEST_WORKER_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.9.0 <30.0.0'
+const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0'
+const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
 const atrSuppressedErrors = new Map()
+let hasWarnedDeprecatedJestVersion = false
+
+// Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
+const quarantinedFailingTests = new Set()
+
+/**
+ * Sends suppressed quarantine test names from a worker process to the main process.
+ * Supports both child_process (process.send) and worker_threads (parentPort.postMessage).
+ * Returns true if the data was sent (worker mode), false if in main process (runInBand).
+ *
+ * @param {string[]} testNames
+ * @returns {boolean}
+ */
+function sendQuarantineInfoToMainProcess (testNames) {
+  const payload = [JEST_WORKER_QUARANTINE_PAYLOAD_CODE, JSON.stringify(testNames)]
+
+  if (process.send) {
+    process.send(payload)
+    return true
+  }
+
+  try {
+    const { isMainThread, parentPort } = require('node:worker_threads')
+    if (!isMainThread && parentPort) {
+      parentPort.postMessage(payload)
+      return true
+    }
+  } catch {
+    // Not in a worker context
+  }
+
+  return false
+}
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -128,6 +183,20 @@ function formatJestError (errors) {
     error = errors
   }
   return error
+}
+
+function warnDeprecatedJestVersion (frameworkVersion) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedJestVersion || !frameworkVersion ||
+      !satisfies(frameworkVersion, '<28.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedJestVersion = true
+  // eslint-disable-next-line no-console
+  console.warn(
+    'dd-trace support for Jest<28.0.0 is deprecated and will be removed in dd-trace v6. ' +
+      'Please upgrade Jest to >=28.0.0.'
+  )
 }
 
 function getTestEnvironmentOptions (config) {
@@ -150,29 +219,88 @@ function getTestStats (testStatuses) {
 }
 
 /**
- * @param {string[]} efdNames
- * @param {string[]} quarantineNames
- * @param {number} totalCount
+ * Formats the ignored-failure section for the Test Optimization summary.
+ *
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ * @returns {string}
  */
-function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
-  const names = []
-  for (const n of efdNames) {
-    names.push({ name: n, reason: 'Early Flake Detection' })
+function formatIgnoredFailuresSummary (ignoredFailures) {
+  if (!ignoredFailures) return ''
+
+  const items = []
+
+  for (const n of ignoredFailures.efdNames) {
+    items.push({ text: n, suffix: 'Early Flake Detection' })
   }
-  for (const n of quarantineNames) {
-    names.push({ name: n, reason: 'Quarantine' })
+  for (const n of ignoredFailures.quarantineNames) {
+    items.push({ text: n, suffix: 'Quarantine' })
   }
-  const shown = names.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = names.length - shown.length
+
+  if (items.length === 0 || ignoredFailures.totalCount <= 0) return ''
+
+  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const list = shown.map(({ name, reason }) => `  • ${name} (${reason})`).join('\n')
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing message when exit code is flipped
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-    `${list}${moreSuffix}\n`
-  )
+  const formattedItems = shown
+    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
+    .join('\n') + moreSuffix
+
+  return `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
+}
+
+/**
+ * Logs a single "Datadog Test Optimization" summary at session end.
+ *
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ */
+function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
+  logTestOptimizationSummary({
+    attemptToFixExecutions,
+    extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
+    newTestsWithDynamicNames,
+  })
+  loggedAttemptToFixTests.clear()
+}
+
+function getTestStatusFromJestResult (status) {
+  if (status === 'failed') return 'fail'
+  if (status === 'passed') return 'pass'
+}
+
+function getAttemptToFixExecutionsFromJestResults (result) {
+  const executions = new Map()
+  const rootDir = result.globalConfig?.rootDir || process.cwd()
+
+  for (const { testResults, testFilePath } of result.results.testResults) {
+    const testSuite = getTestSuitePath(testFilePath, rootDir)
+    const testManagementTestsForSuite = testManagementTests
+      ?.jest
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+    if (!testManagementTestsForSuite) continue
+
+    for (const { fullName, status } of testResults) {
+      const testName = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
+        ? fullName.replace(SEED_SUFFIX_RE, '')
+        : fullName
+      const testStatus = getTestStatusFromJestResult(status)
+      if (!testStatus) continue
+
+      const testManagementTest = testManagementTestsForSuite[testName]?.properties
+      if (!testManagementTest?.attempt_to_fix) continue
+
+      recordAttemptToFixExecution(executions, {
+        testSuite,
+        testName,
+        status: testStatus,
+        isDisabled: testManagementTest.disabled,
+        isQuarantined: testManagementTest.quarantined,
+      })
+    }
+  }
+
+  return executions
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -445,7 +573,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (this.isKnownTestsEnabled) {
-          isNewTest = retriedTestsToNumAttempts.has(testName)
+          isNewTest = newTests.has(testName)
         }
 
         const willRunEfd = this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)
@@ -457,6 +585,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isJestRetry = event.test?.invocations > 1
+        const hasDynamicName = isNewTest && DYNAMIC_NAME_RE.test(testName)
         const ctx = {
           name: testName,
           suite: this.testSuite,
@@ -472,9 +601,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled,
           isQuarantined,
           isModified,
+          hasDynamicName,
           testSuiteAbsolutePath: this.testSuiteAbsolutePath,
         }
         testContexts.set(event.test, ctx)
+
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(this.testSuite, testName, loggedAttemptToFixTests)
+        }
 
         testStartCh.runStores(ctx, () => {
           let p = event.test.parent
@@ -563,7 +697,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         if (!isAttemptToFix && this.isKnownTestsEnabled) {
           const isNew = !this.knownTestsForThisSuite.includes(testFullName)
+          if (isNew && !isSkipped) {
+            newTests.add(testFullName)
+          }
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+            if (DYNAMIC_NAME_RE.test(testFullName)) {
+              // Populated directly for runInBand; for parallel workers the main process
+              // collects these from the TEST_HAS_DYNAMIC_NAME span tag via worker-report:trace.
+              newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
+            }
             retriedTestsToNumAttempts.set(testFullName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
               testsToBeRetried.add(testFullName)
@@ -668,7 +810,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isEfdRetry = false
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
-          const isNewTest = retriedTestsToNumAttempts.has(testName)
+          const isNewTest = newTests.has(testName)
           if (isNewTest) {
             if (newTestsTestStatuses.has(testName)) {
               newTestsTestStatuses.get(testName).push(status)
@@ -701,6 +843,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
+        // For quarantined tests, suppress errors so Jest doesn't count them as failures.
+        // This prevents --bail from stopping the test run on quarantined test failures.
+        // The actual status ('fail') is already captured above for dd-trace reporting.
+        // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
+        if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
+          const quarantineCtx = testContexts.get(event.test)
+          if (quarantineCtx?.isQuarantined && !quarantineCtx.isAttemptToFix && event.test.errors?.length) {
+            quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)
+            event.test.errors = []
+          }
+        }
+
         const ctx = testContexts.get(event.test)
         if (!ctx) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
@@ -722,7 +876,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             error: formatJestError(originalError),
             shouldSetProbe,
             promises,
-            finalStatus,
           })
         }
 
@@ -730,7 +883,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
         if (status === 'fail' && mightHitBreakpoint) {
           await new Promise(resolve => {
-            setTimeout(() => {
+            realSetTimeout(() => {
               resolve()
             }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
           })
@@ -759,12 +912,29 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
-          test.errors = errors
+          // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
+          // so Jest doesn't see the failure (prevents --bail from stopping the run).
+          const ctx = testContexts.get(test)
+          if (ctx?.isQuarantined && !ctx.isAttemptToFix) {
+            const testName = getJestTestName(test, this.getShouldStripSeedFromTestName())
+            quarantinedFailingTests.add(`${ctx.suite} › ${testName}`)
+          } else {
+            test.errors = errors
+          }
         }
         atrSuppressedErrors.clear()
+
+        // In parallel mode, send suppressed quarantine info to the main process
+        // so it can include them in the session summary.
+        // In runInBand mode, keep the set — it will be consumed by the session-level code directly.
+        if (quarantinedFailingTests.size > 0 && sendQuarantineInfoToMainProcess([...quarantinedFailingTests])) {
+          quarantinedFailingTests.clear()
+        }
+
         efdDeterminedRetries.clear()
         efdSlowAbortedTests.clear()
         efdNewTestCandidates.clear()
+        newTests.clear()
         retriedTestsToNumAttempts.clear()
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
@@ -868,7 +1038,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       // If the test is quarantined, regardless of its actual execution result,
       // the final status of its last execution should be reported as 'skip'.
-      if (this.isTestManagementTestsEnabled &&
+      if (!attemptToFixResult.isAttemptToFixEnabled &&
+        this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.quarantined?.includes(testName)) {
         return 'skip'
       }
@@ -924,12 +1095,12 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
 addHook({
   name: 'jest-environment-node',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
 addHook({
@@ -1001,6 +1172,8 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
 
 function getCliWrapper (isNewJestVersion) {
   return function cliWrapper (cli, jestVersion) {
+    warnDeprecatedJestVersion(jestVersion)
+
     if (isNewJestVersion) {
       cli = shimmer.wrap(
         cli,
@@ -1025,8 +1198,8 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-          isKeepingCoverageConfiguration =
-            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
+          DD_TEST_TIA_KEEP_COV_CONFIG =
+            libraryConfig.DD_TEST_TIA_KEEP_COV_CONFIG ?? DD_TEST_TIA_KEEP_COV_CONFIG
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -1199,7 +1372,7 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       let numFailedQuarantinedTests = 0
-      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
+      let numSuppressedQuarantinedTests = 0
       if (isTestManagementTestsEnabled) {
         const failedTests = result
           .results
@@ -1226,55 +1399,73 @@ function getCliWrapper (isNewJestVersion) {
             ?.tests
             ?.[testName]
             ?.properties
-          // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
-          if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
-            numFailedQuarantinedOrDisabledAttemptedToFixTests++
-            quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
-          } else if (testManagementTest?.quarantined) {
+          if (testManagementTest?.quarantined && !testManagementTest?.attempt_to_fix) {
             numFailedQuarantinedTests++
             quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
           }
         }
 
+        // Include quarantined tests whose errors were suppressed at test_done time.
+        // These tests don't appear as failed in Jest's results because their errors were cleared
+        // to prevent --bail from stopping the run, but they should still be counted for the summary.
+        for (const name of quarantinedFailingTests) {
+          if (!quarantineIgnoredNames.includes(name)) {
+            numSuppressedQuarantinedTests++
+            quarantineIgnoredNames.push(name)
+          }
+        }
+        quarantinedFailingTests.clear()
+
         // If every test that failed was quarantined, we'll consider the suite passed
-        // Note that if a test is attempted to fix,
-        // it's considered quarantined both if it's disabled and if it's quarantined
-        // (it'll run but its status is ignored)
+        // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
         // Skip if EFD block already flipped (to avoid logging twice)
+        // Only use visible failures (from Jest results) for the flip check.
+        // Suppressed quarantine failures are not in numFailedTests.
+        const visibleQuarantineFailures = numFailedQuarantinedTests
         if (
           !result.results.success &&
           !mustNotFlipSuccess &&
-          (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
-          result.results.numFailedTests ===
-            numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+          visibleQuarantineFailures !== 0 &&
+          result.results.numFailedTests === visibleQuarantineFailures
         ) {
           result.results.success = true
-          ignoredFailuresSummary = {
-            efdNames: [],
-            quarantineNames: quarantineIgnoredNames,
-            totalCount: numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests,
+        }
+
+        const totalQuarantineFailures = visibleQuarantineFailures + numSuppressedQuarantinedTests
+        if (totalQuarantineFailures > 0) {
+          if (ignoredFailuresSummary) {
+            ignoredFailuresSummary.quarantineNames = quarantineIgnoredNames
+            ignoredFailuresSummary.totalCount += totalQuarantineFailures
+          } else {
+            ignoredFailuresSummary = {
+              efdNames: [],
+              quarantineNames: quarantineIgnoredNames,
+              totalCount: totalQuarantineFailures,
+            }
           }
         }
       }
 
       // Combined check: if all failed tests are accounted for by EFD (flaky retries) and/or quarantine,
       // we should consider the suite passed even when neither check alone covers all failures.
+      // Only visible failures (in Jest results) are compared — suppressed quarantine failures
+      // are already removed from numFailedTests at test_done time.
       if (
         !result.results.success &&
         !mustNotFlipSuccess &&
         (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
       ) {
-        const totalIgnoredFailures =
-          numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        const visibleIgnoredFailures =
+          numEfdFailedTestsToIgnore + numFailedQuarantinedTests
         if (
-          totalIgnoredFailures !== 0 &&
-          result.results.numFailedTests === totalIgnoredFailures
+          visibleIgnoredFailures !== 0 &&
+          result.results.numFailedTests === visibleIgnoredFailures
         ) {
           result.results.success = true
           ignoredFailuresSummary = {
             efdNames: efdIgnoredNames,
             quarantineNames: quarantineIgnoredNames,
-            totalCount: totalIgnoredFailures,
+            totalCount: visibleIgnoredFailures + numSuppressedQuarantinedTests,
           }
         }
       }
@@ -1299,7 +1490,7 @@ function getCliWrapper (isNewJestVersion) {
       })
 
       const timeoutPromise = new Promise((resolve) => {
-        timeoutId = setTimeout(() => {
+        timeoutId = realSetTimeout(() => {
           resolve('timeout')
         }, FLUSH_TIMEOUT).unref()
       })
@@ -1333,13 +1524,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      if (ignoredFailuresSummary) {
-        logIgnoredFailuresSummary(
-          ignoredFailuresSummary.efdNames,
-          ignoredFailuresSummary.quarantineNames,
-          ignoredFailuresSummary.totalCount
-        )
-      }
+      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
       numSkippedSuites = 0
 
@@ -1360,7 +1545,7 @@ function coverageReporterWrapper (coverageReporter) {
    */
   // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    if (isKeepingCoverageConfiguration) {
+    if (DD_TEST_TIA_KEEP_COV_CONFIG) {
       return addUntestedFiles.apply(this, arguments)
     }
     if (isCodeCoverageEnabledBecauseOfUs) {
@@ -1375,7 +1560,7 @@ function coverageReporterWrapper (coverageReporter) {
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
-  versions: ['>=27.0.0'],
+  versions: [MINIMUM_JEST_TEST_SCHEDULER_VERSION],
 }, (testSchedulerPackage, frameworkVersion) => {
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
@@ -1391,17 +1576,19 @@ addHook({
   return testSchedulerPackage
 })
 
-addHook({
-  name: '@jest/core',
-  file: 'build/TestScheduler.js',
-  versions: ['>=24.8.0 <27.0.0'],
-}, (testSchedulerPackage, frameworkVersion) => {
-  shimmer.wrap(
-    testSchedulerPackage.default.prototype,
-    'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
-  )
-  return testSchedulerPackage
-})
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/core',
+    file: 'build/TestScheduler.js',
+    versions: ['>=24.8.0 <27.0.0'],
+  }, (testSchedulerPackage, frameworkVersion) => {
+    shimmer.wrap(
+      testSchedulerPackage.default.prototype,
+      'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
+    )
+    return testSchedulerPackage
+  })
+}
 
 addHook({
   name: '@jest/test-sequencer',
@@ -1421,16 +1608,18 @@ addHook({
   return sequencerPackage
 })
 
-addHook({
-  name: '@jest/reporters',
-  file: 'build/coverage_reporter.js',
-  versions: ['>=24.8.0 <26.6.2'],
-}, coverageReporterWrapper)
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/reporters',
+    file: 'build/coverage_reporter.js',
+    versions: ['>=24.8.0 <26.6.2'],
+  }, coverageReporterWrapper)
+}
 
 addHook({
   name: '@jest/reporters',
   file: 'build/CoverageReporter.js',
-  versions: ['>=26.6.2'],
+  versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
 }, coverageReporterWrapper)
 
 addHook({
@@ -1443,7 +1632,7 @@ addHook({
 addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
 }, getCliWrapper(false))
 
 addHook({
@@ -1530,7 +1719,7 @@ addHook({
 addHook({
   name: 'jest-circus',
   file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
@@ -1562,7 +1751,7 @@ function configureTestEnvironment (readConfigsResult) {
       ...readConfigsResult.globalConfig,
       passWithNoTests: true,
     }
-    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
+    if (isCodeCoverageEnabledBecauseOfUs && !DD_TEST_TIA_KEEP_COV_CONFIG) {
       globalConfig.coverageReporters = ['none']
       readConfigsResult.configs = configs.map(config => ({
         ...config,
@@ -1667,7 +1856,7 @@ function wrapCreateScriptTransformer (createScriptTransformer) {
 
 addHook({
   name: '@jest/transform',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
   file: 'build/ScriptTransformer.js',
 }, transformPackage => {
   transformPackage.createScriptTransformer = wrapCreateScriptTransformer(transformPackage.createScriptTransformer)
@@ -1687,20 +1876,22 @@ addHook({
  */
 addHook({
   name: '@jest/core',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
   file: 'build/SearchSource.js',
 }, searchSourceWrapper)
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
-  versions: ['>=25.1.0'],
+  versions: [MINIMUM_JEST_CONFIG_ASYNC_VERSION],
 }, jestConfigAsyncWrapper)
 
-addHook({
-  name: 'jest-config',
-  versions: ['24.8.0 - 24.9.0'],
-}, jestConfigSyncWrapper)
+if (DD_MAJOR < 6) {
+  addHook({
+    name: 'jest-config',
+    versions: ['24.8.0 - 24.9.0'],
+  }, jestConfigSyncWrapper)
+}
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
@@ -1715,7 +1906,7 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
 
 addHook({
   name: 'jest-runtime',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
 
@@ -1793,8 +1984,14 @@ addHook({
 
 function onMessageWrapper (onMessage) {
   return function () {
-    const [code, data] = arguments[0]
+    const response = arguments[0]
+    if (!Array.isArray(response)) {
+      return onMessage.apply(this, arguments)
+    }
+
+    const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
       workerReportTraceCh.publish(data)
       return
     }
@@ -1808,6 +2005,12 @@ function onMessageWrapper (onMessage) {
     }
     if (code === JEST_WORKER_TELEMETRY_PAYLOAD_CODE) { // datadog telemetry payload
       workerReportTelemetryCh.publish(data)
+      return
+    }
+    if (code === JEST_WORKER_QUARANTINE_PAYLOAD_CODE) { // quarantined test failures suppressed in worker
+      for (const name of JSON.parse(data)) {
+        quarantinedFailingTests.add(name)
+      }
       return
     }
     return onMessage.apply(this, arguments)
@@ -1855,15 +2058,40 @@ function sendWrapper (send) {
   }
 }
 
+function wrapWorkerChannel (worker) {
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
+}
+
+function wrapWorker (worker) {
+  // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  wrapWorkerChannel(worker)
+  shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+  workerChannel.removeAllListeners('message')
+  workerChannel.on('message', worker._onMessage.bind(worker))
+}
+
 function enqueueWrapper (enqueue) {
   return function () {
     shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
-      if (worker && !wrappedWorkers.has(worker)) {
-        shimmer.wrap(worker._child, 'send', sendWrapper)
-        shimmer.wrap(worker, '_onMessage', onMessageWrapper)
-        worker._child.removeAllListeners('message')
-        worker._child.on('message', worker._onMessage.bind(worker))
-        wrappedWorkers.add(worker)
+      if (worker) {
+        const currentChannel = worker._child || worker._worker
+        const previousChannel = wrappedWorkerChannels.get(worker)
+        if (currentChannel !== previousChannel) {
+          if (previousChannel) {
+            // Worker restarted — only re-wrap the new child's send/postMessage
+            wrapWorkerChannel(worker)
+          } else {
+            // First time seeing this worker — full setup
+            wrapWorker(worker)
+          }
+          wrappedWorkerChannels.set(worker, currentChannel)
+        }
       }
       return onStart.apply(this, arguments)
     })
@@ -1879,7 +2107,7 @@ function enqueueWrapper (enqueue) {
 */
 addHook({
   name: 'jest-worker',
-  versions: ['>=24.9.0 <30.0.0'],
+  versions: [MINIMUM_JEST_WORKER_VERSION_BEFORE_30],
   file: 'build/workers/ChildProcessWorker.js',
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
@@ -1890,6 +2118,21 @@ addHook({
     shimmer.wrap(ChildProcessWorker.prototype, 'onMessage', onMessageWrapper)
   }
   return childProcessWorker
+})
+
+addHook({
+  name: 'jest-worker',
+  versions: [MINIMUM_JEST_WORKER_VERSION_BEFORE_30],
+  file: 'build/workers/NodeThreadsWorker.js',
+}, (nodeThreadsWorker) => {
+  const ExperimentalWorker = nodeThreadsWorker.default
+  shimmer.wrap(ExperimentalWorker.prototype, 'send', sendWrapper)
+  if (ExperimentalWorker.prototype._onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, '_onMessage', onMessageWrapper)
+  } else if (ExperimentalWorker.prototype.onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, 'onMessage', onMessageWrapper)
+  }
+  return nodeThreadsWorker
 })
 
 addHook({

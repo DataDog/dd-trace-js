@@ -45,7 +45,9 @@ class BaseLLMObsWriter {
     /** @type {LLMObsBuffer} */
     this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
 
+    /** @type {import('../../config/config-base')} */
     this._config = config
+
     this._endpoint = endpoint
     this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
@@ -85,19 +87,25 @@ class BaseLLMObsWriter {
     return buffer
   }
 
+  /**
+   * @returns {boolean} `true` if the event was buffered, `false` if it was dropped
+   * (e.g. the per-routing buffer was full). Callers that depend on the event
+   * actually being submitted should check this value.
+   */
   append (event, routing, byteLength) {
     const buffer = this._getBuffer(routing)
 
     if (buffer.events.length >= buffer.limit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
-      return
+      return false
     }
 
     const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
 
     buffer.size += eventSize
     buffer.events.push(event)
+    return true
   }
 
   flush () {

@@ -27,6 +27,7 @@ const testVersions = [
   '^3',
   '^4',
   '^5',
+  '^6',
 ]
 
 const testCases = [
@@ -58,7 +59,9 @@ const testCases = [
           ml_app: 'test',
           foo: 'bar',
           bar: 'baz',
+          team: 'ml',
         },
+        metadata: { _dd: { cost_tags: ['team'] } },
         inputValue: 'this is a',
         outputValue: 'test',
       }]
@@ -100,7 +103,7 @@ describe('typescript', () => {
 
           // compile typescript
           execSync(
-            `tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap ${file}.ts`,
+            `tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap --types node ${file}.ts`,
             { cwd, stdio: 'inherit' }
           )
 

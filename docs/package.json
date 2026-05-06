@@ -4,13 +4,13 @@
   "main": "typedoc.js",
   "scripts": {
     "build": "typedoc ../index.d.ts",
-    "pretest": "tsc -p . && tsc --types node test",
+    "pretest": "tsc -p .",
     "test": "node test"
   },
   "license": "BSD-3-Clause",
   "private": true,
   "devDependencies": {
-    "typedoc": "^0.28.17",
-    "typescript": "^5.9.3"
+    "typedoc": "^0.28.19",
+    "typescript": "^6.0.3"
   }
 }

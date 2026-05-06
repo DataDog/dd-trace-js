@@ -36,6 +36,9 @@ describe('debugger/index', () => {
           callback(null, { endpoints: ['/debugger/v2/input'] })
         }),
       },
+      './config': proxyquire('../../src/debugger/config', {
+        '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
+      }),
       worker_threads: {
         Worker,
         MessageChannel: class MessageChannel {
@@ -57,7 +60,6 @@ describe('debugger/index', () => {
     })
 
     config = {
-      commitSHA: 'test-sha',
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
@@ -65,11 +67,12 @@ describe('debugger/index', () => {
       hostname: 'test-host',
       logLevel: 'info',
       port: 8126,
-      repositoryUrl: 'https://github.com/test/repo',
       service: 'test-service',
       tags: {
         'runtime-id': 'test-runtime-id',
       },
+      version: '1.2.3',
+      env: 'test-env',
       url: new URL('http://localhost:8126'),
     }
 
@@ -225,15 +228,17 @@ describe('debugger/index', () => {
         dynamicInstrumentation: {
           enabled: true,
         },
+        env: 'test-env',
         hostname: 'test-host',
         inputPath: '/debugger/v2/input',
         logLevel: 'info',
         port: 8126,
-        propagateProcessTags: undefined,
+        propagateProcessTags: { enabled: undefined },
         repositoryUrl: 'https://github.com/test/repo',
         runtimeId: 'test-runtime-id',
         service: 'test-service',
         url: 'http://localhost:8126/',
+        version: '1.2.3',
       })
     })
   })

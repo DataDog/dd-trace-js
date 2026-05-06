@@ -52,11 +52,11 @@ describe('Plugin', () => {
             metrics: {
               'network.destination.port': 6379,
             },
-          })
+          }, { spanResourceMatch: /^get$/ })
         })
 
         it('should run the callback in the parent context', () => {
-          const span = {}
+          const span = tracer.startSpan('test')
 
           return tracer.scope().activate(span, async () => {
             await redis.get('foo')
@@ -105,7 +105,7 @@ describe('Plugin', () => {
             metrics: {
               'network.destination.port': 6379,
             },
-          })
+          }, { spanResourceMatch: /^get$/ })
         })
 
         withNamingSchema(

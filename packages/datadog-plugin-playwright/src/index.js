@@ -3,7 +3,6 @@
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   finishAllTraceSpans,
@@ -38,6 +37,9 @@ const {
   TEST_STATUS,
   TEST_SUITE_ID,
   TEST_SUITE,
+  TEST_HAS_DYNAMIC_NAME,
+  DYNAMIC_NAME_RE,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -106,7 +108,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
@@ -221,6 +223,9 @@ class PlaywrightPlugin extends CiPlugin {
             trace_id: id(span.trace_id),
             parent_id: id(span.parent_id),
           }
+          if (span.meta[TEST_IS_NEW] === 'true' && DYNAMIC_NAME_RE.test(span.meta[TEST_NAME] || '')) {
+            formattedSpan.meta[TEST_HAS_DYNAMIC_NAME] = 'true'
+          }
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
@@ -303,6 +308,7 @@ class PlaywrightPlugin extends CiPlugin {
       error,
       extraTags,
       isNew,
+      hasDynamicName,
       isEfdRetry,
       isRetry,
       isAttemptToFix,
@@ -314,6 +320,7 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAttemptToFixRetries,
       isAtrRetry,
       isModified,
+      finalStatus,
       onDone,
     }) => {
       if (!span) return
@@ -334,6 +341,9 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+      if (hasDynamicName) {
+        span.setTag(TEST_HAS_DYNAMIC_NAME, 'true')
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
@@ -370,6 +380,9 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
       }
       for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
@@ -411,7 +424,7 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
 
       finishAllTraceSpans(span)
-      if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
+      if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
         this.tracer._exporter.flush(onDone)
       }
     })
@@ -443,6 +456,7 @@ class PlaywrightPlugin extends CiPlugin {
       )
 
       span.setTag(TEST_STATUS, 'skip')
+      span.setTag(TEST_FINAL_STATUS, 'skip')
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')

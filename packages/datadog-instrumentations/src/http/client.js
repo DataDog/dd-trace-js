@@ -16,9 +16,8 @@ const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
-const names = ['http', 'https', 'node:http', 'node:https']
-
-addHook({ name: names }, hookFn)
+addHook({ name: 'http' }, hookFn)
+addHook({ name: 'https' }, hookFn)
 
 function hookFn (http) {
   patch(http, 'request')
@@ -27,10 +26,27 @@ function hookFn (http) {
   return http
 }
 
+// `inputURL` may be the user's options object (for the `http.request(options)`
+// shape); never write directly into it. The result is later mutated by
+// `normalizeHeaders` and read by `url.format`, so the merged object must be
+// owned by the tracer. `undefined` means "no URL supplied" — Node merges
+// with the options object or its defaults, so build a tracer-owned
+// options-only shape and let tracing proceed. `null`/primitive first args
+// are returned as-is so `normalizeHeaders` throws and the surrounding
+// try/catch in `instrumentRequest` falls through to the native request;
+// spreading a primitive yields `{}`, which would silently turn an invalid
+// `http.request(123)` into a synthesized localhost request.
 function combineOptions (inputURL, inputOptions) {
-  return inputOptions !== null && typeof inputOptions === 'object'
-    ? Object.assign(inputURL || {}, inputOptions)
-    : inputURL
+  if (inputURL === undefined) {
+    return inputOptions !== null && typeof inputOptions === 'object' ? { ...inputOptions } : {}
+  }
+  if (inputURL === null || (typeof inputURL !== 'object' && typeof inputURL !== 'function')) {
+    return inputURL
+  }
+  if (inputOptions !== null && typeof inputOptions === 'object') {
+    return { ...inputURL, ...inputOptions }
+  }
+  return { ...inputURL }
 }
 function normalizeHeaders (options) {
   options.headers ??= {}

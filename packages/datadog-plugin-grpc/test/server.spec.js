@@ -11,10 +11,10 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const defaults = require('../../dd-trace/src/config/defaults')
+const { defaults } = require('../../dd-trace/src/config/defaults')
 const { NODE_MAJOR } = require('../../../version')
 
-const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']
+const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
@@ -285,7 +285,7 @@ describe('Plugin', () => {
         })
 
         it('should ignore errors not set by DD_GRPC_SERVER_ERROR_STATUSES', async () => {
-          tracer._tracer._config.grpc.server.error.statuses = [6, 7, 8, 9, 10, 11, 12, 13]
+          tracer._tracer._config.DD_GRPC_SERVER_ERROR_STATUSES = [6, 7, 8, 9, 10, 11, 12, 13]
           const client = await buildClient({
             getUnary: (_, callback) => {
               const metadata = new grpc.Metadata()
@@ -312,7 +312,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].error, 0)
               assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 5)
-              tracer._tracer._config.grpc.server.error.statuses = GRPC_SERVER_ERROR_STATUSES
+              tracer._tracer._config.DD_GRPC_SERVER_ERROR_STATUSES = GRPC_SERVER_ERROR_STATUSES
             })
         })
 

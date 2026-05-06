@@ -4,6 +4,7 @@ const assert = require('assert')
 const http = require('http')
 const path = require('path')
 const util = require('util')
+const { setTimeout: wait } = require('timers/promises')
 
 const bodyParser = require('body-parser')
 const express = require('express')
@@ -14,6 +15,7 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
+
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
@@ -132,90 +134,10 @@ function unformatSpanEvents (span) {
 }
 
 /**
- * Adds environment variables to headers.
- *
- * @param {http.IncomingHttpHeaders} headers
- */
-function addEnvironmentVariablesToHeaders (headers) {
-  // get all environment variables that start with "DD_"
-  const ddEnvVars = new Map(
-    Object.entries(process.env)
-      .filter(([key]) => key.startsWith('DD_'))
-  )
-
-  // add plugin name and plugin version to headers, this is used for verifying tested
-  // integration version ranges
-  const currentPlugin = testedPlugins[testedPlugins.length - 1]
-  if (currentPlugin && currentPlugin.pluginName && currentPlugin.pluginVersion) {
-    ddEnvVars.set('DD_INTEGRATION', currentPlugin.pluginName)
-    ddEnvVars.set('DD_INTEGRATION_VERSION', currentPlugin.pluginVersion)
-  }
-
-  // add the DD environment variables to the header if any exist
-  // to send with trace to final agent destination
-  // if (ddEnvVars.size > 0) {
-  //   // TODO: Should we still do this? It has never worked until now.
-  //   headers['X-Datadog-Trace-Env-Variables'] = [...ddEnvVars].map(([key, value]) => `${key}=${value}`).join(',')
-  // }
-
-  // serialize the DD environment variables into a string of k=v pairs separated by comma
-  const serializedEnvVars = Array.from(ddEnvVars.entries())
-    .map(([key, value]) => `${key}=${value}`)
-    .join(',')
-
-  // add the serialized DD environment variables to the header
-  // to send with trace to the final agent destination
-  headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
-}
-
-/**
- * Handles the received trace request and sends trace to Test Agent if bool enabled.
- *
  * @param {express.Request} req
  * @param {express.Response} res
- * @param {boolean} sendToTestAgent
  */
-function handleTraceRequest (req, res, sendToTestAgent) {
-  // handles the received trace request and sends trace to Test Agent if bool enabled.
-  if (sendToTestAgent) {
-    const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
-    const replacer = (k, v) => typeof v === 'bigint' ? Number(v) : v
-
-    // remove incorrect headers
-    delete req.headers.host
-    delete req.headers['content-type']
-    delete req.headers['content-length']
-
-    // add current environment variables to trace headers
-    addEnvironmentVariablesToHeaders(req.headers)
-
-    const testAgentReq = http.request(
-      `${testAgentUrl}/v0.4/traces`, {
-        method: 'PUT',
-        headers: {
-          ...req.headers,
-          'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json',
-        },
-      })
-
-    testAgentReq.on('response', testAgentRes => {
-      if (testAgentRes.statusCode !== 200) {
-        // handle request failures from the Test Agent here
-        let body = ''
-        testAgentRes.on('data', chunk => {
-          body += chunk
-        })
-        testAgentRes.on('end', () => {
-          // eslint-disable-next-line no-console
-          console.warn(`handleTraceRequest: Test agent returned ${testAgentRes.statusCode}: ${body}`)
-        })
-      }
-    })
-    testAgentReq.write(JSON.stringify(req.body, replacer))
-    testAgentReq.end()
-  }
-
+function handleTraceRequest (req, res) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   traceHandlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
@@ -223,37 +145,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
     }
-  })
-}
-
-function checkAgentStatus () {
-  return new Promise((resolve) => {
-    const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-    const timeoutMs = 2000
-
-    const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
-      resolve(response.statusCode === 200)
-    })
-
-    request.on('timeout', () => {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
-        'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
-      )
-      request.destroy()
-      resolve(false)
-    })
-
-    request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
-      if (err.code !== 'ECONNREFUSED') {
-        // eslint-disable-next-line no-console
-        console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
-      }
-      resolve(false)
-    })
-
-    request.end()
   })
 }
 
@@ -424,8 +315,10 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
-    // Reload dogstatsd to avoid adding new events to the global process object
+    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+      './defaults': defaults,
+    })
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
       './config': getConfigFresh,
@@ -449,9 +342,12 @@ module.exports = {
       next()
     })
 
+    // This is a workaround to ensure that the agent is ready to receive
+    // requests without being cleaned up properly.
+    // TODO: Fix the root cause.
     const innerAgent = agent
 
-    const useTestAgent = await checkAgentStatus()
+    await wait(1)
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -467,9 +363,7 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.put('/v0.4/traces', (req, res) => {
-      handleTraceRequest(req, res, useTestAgent)
-    })
+    agent.put('/v0.4/traces', handleTraceRequest)
 
     // CI Visibility Agentless intake
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
@@ -505,8 +399,7 @@ module.exports = {
     /** @type {(this: server, event: string, ...args: unknown[]) => boolean} */
     const originalEmit = emit
     server.emit = function (event, ...args) {
-      storage('legacy').enterWith({ noop: true })
-      return originalEmit.call(this, event, ...args)
+      return storage('legacy').run({ noop: true }, () => originalEmit.call(this, event, ...args))
     }
 
     server.on('connection', socket => sockets.push(socket))
@@ -734,6 +627,10 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
+    // Tracer initializations across `agent.load()` cycles leave behind
+    // `exit` / `beforeExit` listeners from dogstatsd, telemetry, heap
+    // snapshots, etc. Without sweeping them here they accumulate and
+    // either leak memory (aws-sdk OOM) or fire against a torn-down tracer.
     process.removeAllListeners('exit')
     process.removeAllListeners('beforeExit')
 

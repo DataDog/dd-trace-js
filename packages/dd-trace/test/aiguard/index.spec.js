@@ -17,6 +17,7 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 const { USER_KEEP } = require('../../../../ext/priority')
 const { SAMPLING_MECHANISM_AI_GUARD, DECISION_MAKER_KEY } = require('../../src/constants')
+const { AI_GUARD_EVENT_TAG_KEY } = require('../../src/aiguard/tags')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -24,7 +25,7 @@ describe('AIGuard SDK', () => {
     service: 'ai_guard_demo',
     env: 'test',
     apiKey: 'API_KEY',
-    appKey: 'APP_KEY',
+    DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
     experimental: {
       aiguard: {
@@ -117,7 +118,7 @@ describe('AIGuard SDK', () => {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.apiKey,
-          'DD-APPLICATION-KEY': config.appKey,
+          'DD-APPLICATION-KEY': config.DD_APP_KEY,
           'DD-AI-GUARD-VERSION': tracerVersion,
           'DD-AI-GUARD-SOURCE': 'SDK',
           'DD-AI-GUARD-LANGUAGE': 'nodejs',
@@ -144,9 +145,9 @@ describe('AIGuard SDK', () => {
   }
 
   const testSuite = [
-    { action: 'ALLOW', reason: 'Go ahead', tags: [] },
-    { action: 'DENY', reason: 'Nope', tags: ['deny_everything', 'test_deny'] },
-    { action: 'ABORT', reason: 'Kill it with fire', tags: ['alarm_tag', 'abort_everything'] },
+    { action: 'ALLOW', reason: 'Go ahead' },
+    { action: 'DENY', reason: 'Nope', tagProbs: { deny_everything: 0.8, test_deny: 0.2 } },
+    { action: 'ABORT', reason: 'Kill it with fire', tagProbs: { alarm_tag: 0.3, abort_everything: 0.7 } },
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },
@@ -156,23 +157,29 @@ describe('AIGuard SDK', () => {
     { ...r, suite: 'prompt', target: 'prompt', messages: prompt },
   ])
 
-  for (const { action, reason, tags, blocking, suite, target, messages } of testSuite) {
+  for (const { action, reason, tagProbs, blocking, suite, target, messages } of testSuite) {
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockFetch({ body: { data: { attributes: { action, reason, tags, is_blocking_enabled: blocking } } } })
+      const attributes = { action, reason, is_blocking_enabled: blocking }
+      if (tagProbs) {
+        attributes.tags = Object.keys(tagProbs)
+        attributes.tag_probs = tagProbs
+      }
+      mockFetch({ body: { data: { attributes } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags &&
-            JSON.stringify(err.sds) === '[]'
+          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === attributes.tags &&
+             err.tagProbabilities === attributes.tag_probs && JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
         assert.strictEqual(evaluation.action, action)
         assert.strictEqual(evaluation.reason, reason)
-        if (tags) {
-          assert.strictEqual(evaluation.tags, tags)
+        if (tagProbs) {
+          assert.strictEqual(evaluation.tags, attributes.tags)
+          assert.strictEqual(evaluation.tagProbabilities, attributes.tag_probs)
         }
         assert.deepStrictEqual(evaluation.sds, [])
       }
@@ -188,7 +195,8 @@ describe('AIGuard SDK', () => {
       },
       {
         messages,
-        ...(tags.length > 0 ? { attack_categories: tags } : {}),
+        ...(attributes.tags ? { attack_categories: attributes.tags } : {}),
+        ...(attributes.tag_probs ? { tag_probs: attributes.tag_probs } : {}),
       })
     })
   }
@@ -459,6 +467,25 @@ describe('AIGuard SDK', () => {
     const result = await client.evaluate(toolCall)
     assert.strictEqual(result.action, 'ALLOW')
     assert.strictEqual(result.reason, 'AI Guard is not enabled')
+  })
+
+  it('test ai_guard.event tag on root span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+    await tracer.trace('root', async () => {
+      await aiguard.evaluate(prompt, { block: false })
+    })
+    await agent.assertSomeTraces(traces => {
+      assert.ok(traces[0].length === 2, 'Trace should contain two spans root + ai_guard')
+      for (const span of traces[0]) {
+        if (span.name === 'root') {
+          assert.strictEqual(span.meta[AI_GUARD_EVENT_TAG_KEY], 'true')
+        } else {
+          assert.ok(!Object.hasOwn(span.meta, AI_GUARD_EVENT_TAG_KEY))
+        }
+      }
+    })
   })
 
   const sites = [

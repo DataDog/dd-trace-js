@@ -15,6 +15,41 @@ describe('log', () => {
   describe('config', () => {
     let env
 
+    /**
+     * @param {{
+     *   fleetEntries?: Record<string, string|undefined>,
+     *   localEntries?: Record<string, string|undefined>,
+     *   isServerless?: boolean
+     * }} [options]
+     */
+    const reloadLog = (options = {}) => {
+      const { fleetEntries, localEntries, isServerless = true } = options
+      const logWriter = {
+        configure: sinon.spy(),
+      }
+      const configHelper = isServerless
+        ? proxyquire.noPreserveCache()('../src/config/helper', {
+          '../serverless': { IS_SERVERLESS: true },
+        })
+        : proxyquire.noPreserveCache()('../src/config/helper', {
+          '../serverless': { IS_SERVERLESS: false },
+          './stable': function StableConfigStub () {
+            this.localEntries = localEntries
+            this.fleetEntries = fleetEntries
+            this.warnings = []
+          },
+        })
+
+      const log = proxyquire.noPreserveCache()('../src/log', {
+        '../config/helper': configHelper,
+        './writer': logWriter,
+      })
+
+      logWriter.configure.resetHistory()
+
+      return { log, logWriter }
+    }
+
     beforeEach(() => {
       env = process.env
       process.env = {}
@@ -24,110 +59,176 @@ describe('log', () => {
       process.env = env
     })
 
-    it('should have getConfig function', () => {
-      const log = require('../src/log')
-      assert.strictEqual(typeof log.getConfig, 'function')
+    it('should have configure function', () => {
+      const { log } = reloadLog()
+      assert.strictEqual(typeof log.configure, 'function')
     })
 
-    it('should be configured with default config if no environment variables are set', () => {
-      const log = require('../src/log')
-      assert.deepStrictEqual(log.getConfig(), {
-        enabled: false,
-        logger: undefined,
-        logLevel: 'debug',
-      })
+    it('should configure with default config if no environment variables are set', () => {
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({}), false)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, false, 'debug', undefined)
     })
 
-    it('should not be possbile to mutate config object returned by getConfig', () => {
-      const log = require('../src/log')
-      const config = log.getConfig()
-      config.enabled = 1
-      config.logger = 1
-      config.logLevel = 1
-      assert.deepStrictEqual(log.getConfig(), {
-        enabled: false,
-        logger: undefined,
-        logLevel: 'debug',
-      })
+    it('should pass the logger option to the writer', () => {
+      const { log, logWriter } = reloadLog()
+      const logger = {
+        debug: () => {},
+        error: () => {},
+      }
+
+      log.configure({ logger })
+
+      sinon.assert.calledOnceWithExactly(logWriter.configure, false, 'debug', logger)
     })
 
     it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
       process.env.DD_TRACE_LOG_LEVEL = 'error'
       process.env.DD_TRACE_DEBUG = 'false'
       process.env.OTEL_LOG_LEVEL = 'debug'
-      const config = proxyquire('../src/log', {}).getConfig()
-      assert.strictEqual(config.enabled, false)
-      assert.strictEqual(config.logLevel, 'error')
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({}), false)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, false, 'error', undefined)
     })
 
     it('should initialize with OTEL environment variables when DD env vars are not set', () => {
       process.env.OTEL_LOG_LEVEL = 'debug'
-      const config = proxyquire('../src/log', {}).getConfig()
-      assert.strictEqual(config.enabled, true)
-      assert.strictEqual(config.logLevel, 'debug')
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({}), true)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', undefined)
     })
 
     it('should initialize from environment variables', () => {
       process.env.DD_TRACE_DEBUG = 'true'
-      const config = proxyquire('../src/log', {}).getConfig()
-      assert.strictEqual(config.enabled, true)
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({}), true)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', undefined)
     })
 
     it('should read case-insensitive booleans from environment variables', () => {
       process.env.DD_TRACE_DEBUG = 'TRUE'
-      const config = proxyquire('../src/log', {}).getConfig()
-      assert.strictEqual(config.enabled, true)
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({}), true)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', undefined)
     })
 
-    describe('isEnabled', () => {
+    describe('configure', () => {
       it('prefers fleetStableConfigValue over env and local', () => {
-        const log = proxyquire('../src/log', {})
-        assert.strictEqual(log.isEnabled('true', 'false'), true)
-        assert.strictEqual(log.isEnabled('false', 'true'), false)
+        process.env.DD_TRACE_DEBUG = 'false'
+
+        let loaded = reloadLog({
+          fleetEntries: { DD_TRACE_DEBUG: 'true' },
+          isServerless: false,
+          localEntries: { DD_TRACE_DEBUG: 'false' },
+        })
+        assert.strictEqual(loaded.log.configure({}), true)
+
+        process.env.DD_TRACE_DEBUG = 'true'
+
+        loaded = reloadLog({
+          fleetEntries: { DD_TRACE_DEBUG: 'false' },
+          isServerless: false,
+          localEntries: { DD_TRACE_DEBUG: 'true' },
+        })
+        assert.strictEqual(loaded.log.configure({}), false)
       })
 
       it('uses DD_TRACE_DEBUG when fleetStableConfigValue is not set', () => {
         process.env.DD_TRACE_DEBUG = 'true'
-        let log = proxyquire('../src/log', {})
-        assert.strictEqual(log.isEnabled(undefined, 'false'), true)
+        let loaded = reloadLog({
+          isServerless: false,
+          localEntries: { DD_TRACE_DEBUG: 'false' },
+        })
+        assert.strictEqual(loaded.log.configure({}), true)
 
         process.env.DD_TRACE_DEBUG = 'false'
-        log = proxyquire('../src/log', {})
-        assert.strictEqual(log.isEnabled(undefined, 'true'), false)
+        loaded = reloadLog({
+          isServerless: false,
+          localEntries: { DD_TRACE_DEBUG: 'true' },
+        })
+        assert.strictEqual(loaded.log.configure({}), false)
       })
 
       it('uses OTEL_LOG_LEVEL=debug when DD vars are not set', () => {
         process.env.OTEL_LOG_LEVEL = 'debug'
-        let log = proxyquire('../src/log', {})
-        assert.strictEqual(log.isEnabled(undefined, undefined), true)
+        let loaded = reloadLog({
+          isServerless: false,
+          localEntries: { OTEL_LOG_LEVEL: 'info' },
+        })
+        assert.strictEqual(loaded.log.configure({}), true)
 
         process.env.OTEL_LOG_LEVEL = 'info'
-        log = proxyquire('../src/log', {})
-        assert.strictEqual(log.isEnabled(undefined, undefined), false)
+        loaded = reloadLog({
+          isServerless: false,
+          localEntries: { OTEL_LOG_LEVEL: 'debug' },
+        })
+        assert.strictEqual(loaded.log.configure({}), false)
       })
 
       it('falls back to localStableConfigValue', () => {
-        const log = proxyquire('../src/log', {})
-        assert.strictEqual(log.isEnabled(undefined, 'false'), false)
-        assert.strictEqual(log.isEnabled(undefined, 'true'), true)
+        let loaded = reloadLog({
+          isServerless: false,
+          localEntries: { DD_TRACE_DEBUG: 'false' },
+        })
+        assert.strictEqual(loaded.log.configure({}), false)
+
+        loaded = reloadLog({
+          isServerless: false,
+          localEntries: { DD_TRACE_DEBUG: 'true' },
+        })
+        assert.strictEqual(loaded.log.configure({}), true)
       })
 
       it('falls back to internal config.enabled when nothing else provided', () => {
-        const log = proxyquire('../src/log', {})
-        log.toggle(true)
-        assert.strictEqual(log.isEnabled(), true)
-        log.toggle(false)
-        assert.strictEqual(log.isEnabled(), false)
+        const { log, logWriter } = reloadLog({
+          fleetEntries: {},
+          isServerless: false,
+          localEntries: {},
+        })
+
+        process.env.OTEL_LOG_LEVEL = 'debug'
+        assert.strictEqual(log.configure({}), true)
+
+        process.env = {}
+        assert.strictEqual(log.configure({}), true)
+        sinon.assert.calledWithExactly(logWriter.configure.secondCall, true, 'debug', undefined)
+      })
+
+      it('falls back to the previous log level when no override is provided', () => {
+        const { log, logWriter } = reloadLog()
+
+        log.configure({ logLevel: 'error' })
+        log.configure({})
+
+        sinon.assert.calledWithExactly(logWriter.configure.secondCall, false, 'error', undefined)
       })
     })
   })
 
   describe('general usage', () => {
+    let env
     let log
     let logger
     let error
 
+    function loadConfiguredLog (options = {}, envEntries = {}) {
+      process.env = {
+        DD_TRACE_DEBUG: 'true',
+        ...envEntries,
+      }
+      log = proxyquire.noPreserveCache()('../src/log', {})
+      log.configure(options)
+      return log
+    }
+
     beforeEach(() => {
+      env = process.env
+      process.env = {}
       sinon.stub(console, 'info')
       sinon.stub(console, 'error')
       sinon.stub(console, 'warn')
@@ -140,12 +241,11 @@ describe('log', () => {
         error: sinon.spy(),
       }
 
-      log = proxyquire('../src/log', {})
-      log.toggle(true)
+      loadConfiguredLog()
     })
 
     afterEach(() => {
-      log.reset()
+      process.env = env
       console.info.restore()
       console.error.restore()
       console.warn.restore()
@@ -153,12 +253,11 @@ describe('log', () => {
     })
 
     it('should support chaining', () => {
+      loadConfiguredLog({ logger })
+
       log
-        .use(logger)
-        .toggle(true)
         .error('error')
         .debug('debug')
-        .reset()
     })
 
     it('should call the logger in a noop context', () => {
@@ -167,7 +266,8 @@ describe('log', () => {
         assert.strictEqual(storage('legacy').getStore().noop, true)
       }
 
-      log.use(logger).debug('debug')
+      loadConfiguredLog({ logger })
+      log.debug('debug')
     })
 
     describe('debug', () => {
@@ -198,7 +298,7 @@ describe('log', () => {
           }
         }
 
-        log.toggle(true, 'trace')
+        loadConfiguredLog({ logLevel: 'trace' })
         log.trace('argument', { hello: 'world' }, new Foo())
 
         sinon.assert.calledOnce(console.debug)
@@ -310,9 +410,9 @@ describe('log', () => {
       })
     })
 
-    describe('toggle', () => {
-      it('should disable the logger', () => {
-        log.toggle(false)
+    describe('configure', () => {
+      it('should disable the logger when DD_TRACE_DEBUG is false', () => {
+        loadConfiguredLog({}, { DD_TRACE_DEBUG: 'false' })
         log.debug('debug')
         log.error(error)
 
@@ -320,9 +420,8 @@ describe('log', () => {
         sinon.assert.notCalled(console.error)
       })
 
-      it('should enable the logger', () => {
-        log.toggle(false)
-        log.toggle(true)
+      it('should enable the logger when OTEL_LOG_LEVEL is debug', () => {
+        loadConfiguredLog({}, { OTEL_LOG_LEVEL: 'debug' })
         log.debug('debug')
         log.error(error)
 
@@ -330,8 +429,8 @@ describe('log', () => {
         sinon.assert.calledWith(console.error, error)
       })
 
-      it('should set minimum log level when enabled with logLevel argument set to a valid string', () => {
-        log.toggle(true, 'error')
+      it('should set minimum log level when configured with a valid string', () => {
+        loadConfiguredLog({ logLevel: 'error' })
         log.debug('debug')
         log.error(error)
 
@@ -339,8 +438,8 @@ describe('log', () => {
         sinon.assert.calledWith(console.error, error)
       })
 
-      it('should set default log level when enabled with logLevel argument set to an invalid string', () => {
-        log.toggle(true, 'not a real log level')
+      it('should set default log level when configured with an invalid string', () => {
+        loadConfiguredLog({ logLevel: 'not a real log level' })
         log.debug('debug')
         log.error(error)
 
@@ -348,8 +447,8 @@ describe('log', () => {
         sinon.assert.calledWith(console.error, error)
       })
 
-      it('should set min log level when enabled w/logLevel arg set to valid string w/wrong case or whitespace', () => {
-        log.toggle(true, ' ErRoR   ')
+      it('should set min log level when configured with valid string with wrong case or whitespace', () => {
+        loadConfiguredLog({ logLevel: ' ErRoR   ' })
         log.debug('debug')
         log.error(error)
 
@@ -358,7 +457,7 @@ describe('log', () => {
       })
 
       it('should log all log levels greater than or equal to minimum log level', () => {
-        log.toggle(true, 'debug')
+        loadConfiguredLog({ logLevel: 'debug' })
         log.debug('debug')
         log.error(error)
 
@@ -366,8 +465,8 @@ describe('log', () => {
         sinon.assert.calledWith(console.error, error)
       })
 
-      it('should enable default log level when enabled with logLevel argument set to invalid input', () => {
-        log.toggle(true, ['trace', 'info', 'eror'])
+      it('should enable default log level when configured with invalid input', () => {
+        loadConfiguredLog({ logLevel: ['trace', 'info', 'eror'] })
         log.debug('debug')
         log.error(error)
 
@@ -375,8 +474,8 @@ describe('log', () => {
         sinon.assert.calledWith(console.error, error)
       })
 
-      it('should enable default log level when enabled without logLevel argument', () => {
-        log.toggle(true)
+      it('should enable default log level when configured without logLevel argument', () => {
+        loadConfiguredLog()
         log.debug('debug')
         log.error(error)
 
@@ -385,9 +484,9 @@ describe('log', () => {
       })
     })
 
-    describe('use', () => {
+    describe('logger option', () => {
       it('should set the underlying logger when valid', () => {
-        log.use(logger)
+        loadConfiguredLog({ logger })
         log.debug('debug')
         log.error(error)
 
@@ -396,7 +495,7 @@ describe('log', () => {
       })
 
       it('be a no op with an empty logger', () => {
-        log.use(null)
+        loadConfiguredLog({ logger: null })
         log.debug('debug')
         log.error(error)
 
@@ -405,65 +504,12 @@ describe('log', () => {
       })
 
       it('be a no op with an invalid logger', () => {
-        log.use('invalid')
+        loadConfiguredLog({ logger: 'invalid' })
         log.debug('debug')
         log.error(error)
 
         sinon.assert.calledWith(console.debug, 'debug')
         sinon.assert.calledWith(console.error, error)
-      })
-    })
-
-    describe('reset', () => {
-      it('should reset the logger', () => {
-        log.use(logger)
-        log.reset()
-        log.toggle(true)
-        log.debug('debug')
-        log.error(error)
-
-        sinon.assert.calledWith(console.debug, 'debug')
-        sinon.assert.calledWith(console.error, error)
-      })
-
-      it('should reset the toggle', () => {
-        log.use(logger)
-        log.reset()
-        log.debug('debug')
-        log.error(error)
-
-        sinon.assert.notCalled(console.debug)
-        sinon.assert.notCalled(console.error)
-      })
-
-      it('should reset the minimum log level to defaults', () => {
-        log.use(logger)
-        log.toggle(true, 'error')
-        log.reset()
-        log.toggle(true)
-        log.debug('debug')
-        log.error(error)
-
-        sinon.assert.calledWith(console.debug, 'debug')
-        sinon.assert.calledWith(console.error, error)
-      })
-    })
-
-    describe('deprecate', () => {
-      it('should log a deprecation warning', () => {
-        log.deprecate('test', 'message')
-
-        sinon.assert.calledOnce(console.error)
-        const consoleErrorArg = console.error.getCall(0).args[0]
-        assert.strictEqual(typeof consoleErrorArg, 'string')
-        assert.strictEqual(consoleErrorArg, 'message')
-      })
-
-      it('should only log once for a given code', () => {
-        log.deprecate('test', 'message')
-        log.deprecate('test', 'message')
-
-        sinon.assert.calledOnce(console.error)
       })
     })
 
@@ -471,11 +517,7 @@ describe('log', () => {
       let logWriter
 
       beforeEach(() => {
-        logWriter = require('../src/log/writer')
-      })
-
-      afterEach(() => {
-        logWriter.reset()
+        logWriter = proxyquire.noPreserveCache()('../src/log/writer', {})
       })
 
       describe('error', () => {
@@ -486,7 +528,7 @@ describe('log', () => {
         })
 
         it('should call console.error no matter enable flag value', () => {
-          logWriter.toggle(false)
+          logWriter.configure(false)
           logWriter.error(error)
 
           sinon.assert.calledOnceWithExactly(console.error, error)
@@ -501,14 +543,14 @@ describe('log', () => {
         })
 
         it('should call logger debug if warn is not provided', () => {
-          logWriter.use(logger)
+          logWriter.configure(false, undefined, logger)
           logWriter.warn('warn')
 
           sinon.assert.calledOnceWithExactly(logger.debug, 'warn')
         })
 
         it('should call console.warn no matter enable flag value', () => {
-          logWriter.toggle(false)
+          logWriter.configure(false)
           logWriter.warn('warn')
 
           sinon.assert.calledOnceWithExactly(console.warn, 'warn')
@@ -523,14 +565,14 @@ describe('log', () => {
         })
 
         it('should call logger debug if info is not provided', () => {
-          logWriter.use(logger)
+          logWriter.configure(false, undefined, logger)
           logWriter.info('info')
 
           sinon.assert.calledOnceWithExactly(logger.debug, 'info')
         })
 
         it('should call console.info no matter enable flag value', () => {
-          logWriter.toggle(false)
+          logWriter.configure(false)
           logWriter.info('info')
 
           sinon.assert.calledOnceWithExactly(console.info, 'info')
@@ -545,7 +587,7 @@ describe('log', () => {
         })
 
         it('should call console.debug no matter enable flag value', () => {
-          logWriter.toggle(false)
+          logWriter.configure(false)
           logWriter.debug('debug')
 
           sinon.assert.calledOnceWithExactly(console.debug, 'debug')

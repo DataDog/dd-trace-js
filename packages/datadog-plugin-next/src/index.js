@@ -3,14 +3,13 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
-  #requestsBySpanId = new WeakMap()
 
   constructor (...args) {
     super(...args)
@@ -20,26 +19,28 @@ class NextPlugin extends ServerPlugin {
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : store
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const serviceName = this.config.service || schemaServiceName
+    let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
+    if (!serviceName || serviceName === this.tracer._service) serviceSource = undefined
+
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {
         [COMPONENT]: this.constructor.id,
-        'service.name': this.config.service || this.serviceName(),
+        'service.name': serviceName,
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method,
+        ...(serviceSource === undefined ? {} : { [SVC_SRC_KEY]: serviceSource }),
       },
       integrationName: this.constructor.id,
     })
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    // Store request by span ID to handle cases where child spans are activated
-    const spanId = span.context()._spanId
-    this.#requestsBySpanId.set(spanId, req)
-
-    return { ...store, span }
+    return { ...store, span, req }
   }
 
   error ({ span, error }) {
@@ -90,14 +91,7 @@ class NextPlugin extends ServerPlugin {
 
     if (!store) return
 
-    const span = store.span
-
-    const spanId = span.context()._spanId
-    const parentSpanId = span.context()._parentId
-
-    // Try current span first, then parent span.
-    // This handles cases where pageLoad runs in a child span context
-    const req = this.#requestsBySpanId.get(spanId) ?? this.#requestsBySpanId.get(parentSpanId)
+    const { span, req } = store
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return

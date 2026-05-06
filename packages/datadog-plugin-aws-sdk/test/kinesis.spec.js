@@ -156,6 +156,7 @@ describe('Kinesis', function () {
           const span = traces[0][0]
           assertObjectContains(span.meta, {
             streamname: streamName,
+            'messaging.system': 'aws_kinesis',
             aws_service: 'Kinesis',
             region: 'us-east-1',
           })
@@ -167,12 +168,21 @@ describe('Kinesis', function () {
       })
 
       describe('Disabled', () => {
+        let savedKinesisEnv
+
         before(() => {
+          savedKinesisEnv = process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
           process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
+          agent.wipe()
         })
 
         after(() => {
-          delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
+          if (savedKinesisEnv === undefined) {
+            delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
+          } else {
+            process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = savedKinesisEnv
+          }
+          agent.wipe()
         })
 
         it('skip injects trace context to Kinesis putRecord when disabled', done => {

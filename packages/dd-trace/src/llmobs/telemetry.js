@@ -6,6 +6,7 @@ const telemetryMetrics = require('../telemetry/metrics')
 const {
   SPAN_KIND,
   MODEL_PROVIDER,
+  ML_APP,
   PARENT_ID_KEY,
   SESSION_ID,
   ROOT_PARENT_ID,
@@ -123,6 +124,32 @@ function recordLLMObsAnnotate (span, err, value = 1) {
   llmobsMetrics.count('annotations', tags).inc(value)
 }
 
+function recordCostTagsAnnotated (span, source, value = 1) {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const tags = {
+    span_kind: mlObsTags[SPAN_KIND] || 'N/A',
+    source,
+    ml_app: mlObsTags[ML_APP] || 'N/A',
+    model_provider: mlObsTags[MODEL_PROVIDER] || 'N/A',
+  }
+
+  llmobsMetrics.count('cost_tags.annotated', tags).inc(value)
+}
+
+function recordCostTagsSubmitted (span, count, source, state, reason = 'none') {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const tags = {
+    span_kind: mlObsTags[SPAN_KIND] || 'N/A',
+    source,
+    ml_app: mlObsTags[ML_APP] || 'N/A',
+    model_provider: mlObsTags[MODEL_PROVIDER] || 'N/A',
+    state,
+    reason,
+  }
+
+  llmobsMetrics.count('cost_tags.submitted', tags).inc(count)
+}
+
 function recordUserFlush (err, value = 1) {
   const tags = { error: Number(!!err) }
   if (err) tags.error_type = err
@@ -167,6 +194,8 @@ module.exports = {
   recordLLMObsSpanSize,
   recordDroppedPayload,
   recordLLMObsAnnotate,
+  recordCostTagsAnnotated,
+  recordCostTagsSubmitted,
   recordUserFlush,
   recordExportSpan,
   recordSubmitEvaluation,

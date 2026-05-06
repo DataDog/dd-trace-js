@@ -20,7 +20,7 @@ describe('Plugin', () => {
   describe('memcached', () => {
     withVersions('memcached', 'memcached', version => {
       afterEach(() => {
-        memcached.end()
+        memcached?.end()
         agent.close({ ritmReset: false })
       })
 
@@ -198,7 +198,7 @@ describe('Plugin', () => {
         describe('enabling command', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
-            tracer._initialized = false // force config read
+            agent.wipe()
             await agent.load('memcached', { service: 'custom' })
             Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
             memcached = new Memcached('localhost:11211', { retries: 0 })
@@ -225,7 +225,7 @@ describe('Plugin', () => {
         describe('disabling command', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'false'
-            tracer._initialized = false // force config read
+            agent.wipe()
             await agent.load('memcached', { service: 'custom' })
             Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
             memcached = new Memcached('localhost:11211', { retries: 0 })

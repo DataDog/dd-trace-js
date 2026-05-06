@@ -2,6 +2,22 @@
 
 const path = require('path')
 
+/**
+ * `for-in` with an early return is the only allocation-free shape for
+ * "does this object have any own enumerable properties". Microbenchmarks
+ * pin it as 1.3-1.4x faster than `Object.keys(obj).length === 0` across
+ * small / medium / large objects -- enough that hot paths in the AWS SDK
+ * and AppSec reporter promote it.
+ *
+ * @param {object | undefined} obj
+ * @returns {boolean}
+ */
+function isEmpty (obj) {
+  // eslint-disable-next-line no-unreachable-loop
+  for (const _ in obj) return false
+  return true
+}
+
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -67,14 +83,6 @@ function calculateDDBasePath (dirname) {
   return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
 }
 
-function normalizeProfilingEnabledValue (configValue) {
-  return isTrue(configValue)
-    ? 'true'
-    : isFalse(configValue)
-      ? 'false'
-      : configValue === 'auto' ? 'auto' : undefined
-}
-
 function normalizePluginEnvName (envPluginName, makeLowercase = false) {
   if (envPluginName.startsWith('@')) {
     envPluginName = envPluginName.slice(1)
@@ -84,11 +92,11 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
 }
 
 module.exports = {
+  isEmpty,
   isTrue,
   isFalse,
   isError,
   globMatch,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
-  normalizeProfilingEnabledValue,
   normalizePluginEnvName,
 }

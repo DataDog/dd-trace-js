@@ -35,7 +35,7 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 /**
  * Initializes OpenTelemetry Metrics support
- * @param {Config} config - Tracer configuration instance
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryMetrics (config) {
   const resourceAttributes = {
@@ -57,18 +57,18 @@ function initializeOpenTelemetryMetrics (config) {
   }
 
   const exporter = new OtlpHttpMetricExporter(
-    config.otelMetricsUrl,
-    config.otelMetricsHeaders,
-    config.otelMetricsTimeout,
-    config.otelMetricsProtocol,
+    config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+    config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+    config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+    config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
     resourceAttributes
   )
 
   const reader = new PeriodicMetricReader(
     exporter,
-    config.otelMetricsExportInterval,
-    config.otelMetricsTemporalityPreference,
-    config.otelMaxQueueSize
+    config.OTEL_METRIC_EXPORT_INTERVAL,
+    config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+    config.OTEL_BSP_MAX_QUEUE_SIZE
   )
 
   const meterProvider = new MeterProvider({ reader })

@@ -2,9 +2,12 @@
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
+const { withRequest } = require('../../dd-trace/src/appsec/store')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+
+const legacyStorage = storage('legacy')
 
 class HttpServerPlugin extends ServerPlugin {
   static id = 'http'
@@ -17,31 +20,36 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   start ({ req, res, abortController }) {
-    let store = storage('legacy').getStore()
+    let store = legacyStorage.getStore()
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const service = this.config.service || schemaServiceName
+    const serviceSource = (this.config.service && service !== this.tracer._service)
+      ? 'opt.plugin'
+      : (service === this.tracer._service ? undefined : schemaServiceSource)
     const span = web.startSpan(
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName(),
+        service,
       },
       req,
       res,
       this.operationName()
     )
+    if (serviceSource !== undefined) {
+      span.setTag(SVC_SRC_KEY, serviceSource)
+    }
     span.setTag(COMPONENT, this.constructor.id)
     span._integrationName = this.constructor.id
 
     const context = web.getContext(req)
+    context.parentStore = store
 
-    if (context) {
-      context.parentStore = store
-    }
-
-    // Only AppSec needs the request scope to be active for any async work that
-    // may be scheduled after the synchronous `request` event returns (e.g.
-    // Fastify).
-    if (incomingHttpRequestStart.hasSubscribers) {
-      store = { ...store, req, res }
+    const appsecActive = incomingHttpRequestStart.hasSubscribers
+    if (appsecActive) {
+      // AppSec, IAST, and AI Guard need req on the store so downstream
+      // subscribers can access them from the async context.
+      store = withRequest(store, req)
     }
 
     this.enter(span, store)
@@ -51,7 +59,7 @@ class HttpServerPlugin extends ServerPlugin {
       context.instrumented = true
     }
 
-    if (incomingHttpRequestStart.hasSubscribers) {
+    if (appsecActive) {
       incomingHttpRequestStart.publish({ req, res, abortController }) // TODO: no need to make a new object here
     }
   }

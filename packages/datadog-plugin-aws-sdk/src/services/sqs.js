@@ -100,6 +100,7 @@ class Sqs extends BaseAwsSdkPlugin {
     const tags = {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
+      'messaging.system': 'aws_sqs',
       queuename: queueName,
     }
 

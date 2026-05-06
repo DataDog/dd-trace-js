@@ -2,6 +2,7 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { DD_MAJOR } = require('../../../../version')
 
 const {
   runnableWrapper,
@@ -14,6 +15,8 @@ const {
   getRunTestsWrapper,
 } = require('./utils')
 require('./common')
+
+const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
 
@@ -64,7 +67,7 @@ addHook({
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/runner.js',
 }, function (Runner) {
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
@@ -84,9 +87,9 @@ addHook({
     this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler())
+    this.on('hook end', getOnHookEndHandler(config))
 
-    this.on('fail', getOnFailHandler(false))
+    this.on('fail', getOnFailHandler(false, config))
 
     this.on('pending', getOnPendingHandler())
 
@@ -99,6 +102,6 @@ addHook({
 // Used to set the correct async resource to the test.
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/runnable.js',
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))

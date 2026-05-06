@@ -16,8 +16,10 @@ const tracerVersion = require('../../../../package.json').version
 const processTags = require('../../src/process-tags')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
+const DEFAULT_EXTENDED_HEARTBEAT_INTERVAL = 86400000
 
 let traceAgent
+let traceAgentSeqBase
 
 describe('telemetry (proxy)', () => {
   let telemetry
@@ -30,7 +32,6 @@ describe('telemetry (proxy)', () => {
   beforeEach(() => {
     telemetry = sinon.spy({
       start () {},
-      stop () {},
       updateIntegrations () {},
       updateConfig () {},
       appClosing () {},
@@ -46,15 +47,13 @@ describe('telemetry (proxy)', () => {
 
     proxy.start(config)
     proxy.updateIntegrations()
-    proxy.updateConfig()
+    proxy.updateConfig([], config)
     proxy.appClosing()
-    proxy.stop()
 
     sinon.assert.calledWith(telemetry.start, config)
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.called(telemetry.updateConfig)
     sinon.assert.called(telemetry.appClosing)
-    sinon.assert.called(telemetry.stop)
   })
 
   it('should proxy when enabled from updateConfig', () => {
@@ -63,12 +62,10 @@ describe('telemetry (proxy)', () => {
     proxy.updateConfig([], config)
     proxy.updateIntegrations()
     proxy.appClosing()
-    proxy.stop()
 
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.calledWith(telemetry.updateConfig, [], config)
     sinon.assert.called(telemetry.appClosing)
-    sinon.assert.called(telemetry.stop)
   })
 })
 
@@ -96,6 +93,7 @@ describe('telemetry', () => {
     })
 
     traceAgent.reqs = []
+    traceAgentSeqBase = undefined
 
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
@@ -123,7 +121,11 @@ describe('telemetry', () => {
     circularObject.child.parent = circularObject
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -139,18 +141,15 @@ describe('telemetry', () => {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2',
       },
-      installSignature: {
-        id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
-        type: 'k8s_single_step',
-        time: '1703188212',
-      },
+      DD_INSTRUMENTATION_INSTALL_ID: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+      DD_INSTRUMENTATION_INSTALL_TYPE: 'k8s_single_step',
+      DD_INSTRUMENTATION_INSTALL_TIME: '1703188212',
     }, {
       _pluginsByName: pluginsByName,
     })
   })
 
   after(() => {
-    telemetry.stop()
     traceAgent.close()
   })
 
@@ -250,15 +249,18 @@ describe('telemetry', () => {
   })
 
   it('should do nothing when not enabled', (done) => {
-    telemetry.stop()
-
     const server = http.createServer(() => {
       assert.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
-        telemetry: { enabled: false, heartbeatInterval: 60000 },
+        telemetry: {
+          enabled: false,
+          heartbeatInterval: 60000,
+          extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        },
         hostname: 'localhost',
         port: (/** @type {import('net').AddressInfo} */ (server.address())).port,
+        appsec: { sca: { enabled: false } },
       })
 
       setTimeout(() => {
@@ -276,8 +278,12 @@ describe('telemetry', () => {
       },
     })
     notEnabledTelemetry.start({
-      telemetry: { enabled: false, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
-      appsec: { enabled: false },
+      telemetry: {
+        enabled: false,
+        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
+      appsec: { enabled: false, sca: { enabled: undefined } },
       profiling: { enabled: false },
     }, {
       _pluginsByName: pluginsByName,
@@ -301,7 +307,6 @@ describe('telemetry app-heartbeat', () => {
 
   after(() => {
     clock.restore()
-    telemetry.stop()
     traceAgent.close()
   })
 
@@ -324,7 +329,11 @@ describe('telemetry app-heartbeat', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -360,8 +369,7 @@ describe('Telemetry extended heartbeat', () => {
 
   afterEach(() => {
     clock.restore()
-    telemetry.stop()
-    traceAgent.close()
+    traceAgent?.close()
   })
 
   it('should be sent every 24 hours', (done) => {
@@ -391,7 +399,11 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -405,10 +417,10 @@ describe('Telemetry extended heartbeat', () => {
     }, {
       _pluginsByName: pluginsByName,
     })
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
     assert.strictEqual(beats, 1)
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 2)
     done()
   })
@@ -434,7 +446,11 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     const config = {
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -449,38 +465,37 @@ describe('Telemetry extended heartbeat', () => {
 
     telemetry.start(config, { _pluginsByName: pluginsByName })
 
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, [])
 
     const changes = [
       { name: 'test', value: true, origin: 'code', seq_id: 0 },
     ]
     telemetry.updateConfig(changes, config)
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, changes)
 
-    const updatedChanges = [
-      { name: 'test', value: false, origin: 'code', seq_id: 1 },
-    ]
+    const change = { name: 'test', value: false, origin: 'code', seq_id: 1 }
+    const updatedChanges = [change]
     telemetry.updateConfig(updatedChanges, config)
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, updatedChanges)
 
     const changeNeedingNameRemapping = [
       { name: 'sampleRate', value: 0, origin: 'code', seq_id: 2 },
     ]
+    /** @type {{ name: string, value: unknown, origin: string, seq_id: number }[]} */
     const expectedConfigList = [
-      updatedChanges[0],
-      { ...changeNeedingNameRemapping[0], name: 'DD_TRACE_SAMPLE_RATE' },
+      ...changeNeedingNameRemapping,
     ]
     telemetry.updateConfig(changeNeedingNameRemapping, config)
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, expectedConfigList)
 
     const samplingRule = [
       {
         name: 'sampler.rules',
-        value: [
+        value: JSON.stringify([
           { service: '*', sampling_rate: 1 },
           {
             service: 'svc*',
@@ -489,37 +504,92 @@ describe('Telemetry extended heartbeat', () => {
             tags: { 'tag-a': 'ta-v*', 'tag-b': 'tb-v?', 'tag-c': 'tc-v' },
             sample_rate: 0.5,
           },
-        ],
+        ]),
         origin: 'code',
         seq_id: 3,
       },
     ]
-    const expectedConfigListWithSamplingRules = expectedConfigList.concat([
-      {
-        name: 'DD_TRACE_SAMPLING_RULES',
-        value: '[{"service":"*","sampling_rate":1},' +
-          '{"service":"svc*","resource":"*abc","name":"op-??",' +
-          '"tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
-        origin: 'code',
-        seq_id: 3,
-      },
-    ])
+    /** @type {{ name: string, value: unknown, origin: string, seq_id: number }[]} */
+    const expectedConfigListWithSamplingRules = samplingRule
     telemetry.updateConfig(samplingRule, config)
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, expectedConfigListWithSamplingRules)
 
-    const chainedChanges = expectedConfigListWithSamplingRules.concat([
+    /** @type {{ name: string, value: unknown, origin: string, seq_id: number }[]} */
+    const chainedChanges = [
       { name: 'test', value: true, origin: 'env', seq_id: 4 },
       { name: 'test', value: false, origin: 'remote_config', seq_id: 5 },
-    ])
+    ]
     const samplingRule2 = [
-      { name: 'test', value: true, origin: 'env' },
-      { name: 'test', value: false, origin: 'remote_config' },
+      { name: 'test', value: true, origin: 'env', seq_id: 4 },
+      { name: 'test', value: false, origin: 'remote_config', seq_id: 5 },
     ]
 
     telemetry.updateConfig(samplingRule2, config)
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, chainedChanges)
+
+    done()
+  })
+
+  it('should serialize URL, object, and function config values for extended heartbeat', (done) => {
+    let configuration
+
+    const sendDataRequest = {
+      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+        if (reqType === 'app-extended-heartbeat') {
+          configuration = payload.configuration
+        }
+      },
+    }
+
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        },
+      },
+      './send-data': sendDataRequest,
+    })
+
+    const config = {
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { enabled: true },
+      profiling: { enabled: true },
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c',
+      },
+    }
+
+    telemetry.start(config, { _pluginsByName: pluginsByName })
+
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
+    assert.deepStrictEqual(configuration, [])
+
+    const objectValue = {
+      foo: 'bar',
+      nested: { answer: 42 },
+    }
+
+    const changes = [
+      { name: 'url', value: 'http://example.test:4318/v1/traces', origin: 'code', seq_id: 0 },
+      { name: 'payload', value: JSON.stringify(objectValue), origin: 'code', seq_id: 1 },
+      { name: 'callback', value: 'telemetryCallback', origin: 'code', seq_id: 2 },
+    ]
+
+    telemetry.updateConfig(changes, config)
+
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
+    assert.deepStrictEqual(configuration, changes)
 
     done()
   })
@@ -579,7 +649,11 @@ describe('Telemetry retry', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -668,7 +742,11 @@ describe('Telemetry retry', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -739,7 +817,11 @@ describe('Telemetry retry', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -801,7 +883,11 @@ describe('Telemetry retry', () => {
 
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -885,7 +971,11 @@ describe('Telemetry retry', () => {
 
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -903,7 +993,7 @@ describe('Telemetry retry', () => {
     pluginsByName.foo1 = { _enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and fails
     // Skip forward a day
-    clock.tick(86400000)
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
     assertObjectContains(extendedHeartbeatPayload, {
       integrations: [{
@@ -973,13 +1063,18 @@ describe('AVM OSS', () => {
           })
 
           traceAgent.reqs = []
+          traceAgentSeqBase = undefined
 
           delete require.cache[require.resolve('../../src/telemetry/send-data')]
           delete require.cache[require.resolve('../../src/telemetry/telemetry')]
           telemetry = require('../../src/telemetry/telemetry')
 
           telemetryConfig = {
-            telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+            telemetry: {
+              enabled: true,
+              heartbeatInterval: HEARTBEAT_INTERVAL,
+              extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+            },
             hostname: 'localhost',
             port: traceAgent.address().port,
             service: 'test service',
@@ -1003,26 +1098,25 @@ describe('AVM OSS', () => {
 
         after((done) => {
           clock.restore()
-          telemetry.stop()
           traceAgent.close(done)
         })
 
         it('in app-started message', () => {
           return testSeq(1, 'app-started', payload => {
             assert.deepStrictEqual(payload.configuration, [
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 },
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin },
             ])
-          }, true)
+          })
         })
 
         it('in app-extended-heartbeat message', () => {
           // Skip a full day
-          clock.tick(86400000)
+          clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
           return testSeq(2, 'app-extended-heartbeat', payload => {
             assert.deepStrictEqual(payload.configuration, [
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 },
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin },
             ])
-          }, true)
+          })
         })
       })
     })
@@ -1042,7 +1136,6 @@ describe('AVM OSS', () => {
     })
 
     after(() => {
-      telemetry.stop()
       sinon.restore()
     })
 
@@ -1050,7 +1143,7 @@ describe('AVM OSS', () => {
       telemetry.start(
         {
           telemetry: { enabled: false },
-          sca: { enabled: true },
+          appsec: { sca: { enabled: true } },
         }
       )
 
@@ -1064,6 +1157,8 @@ async function testSeq (seqId, reqType, validatePayload) {
     await once(traceAgent, 'handled-req')
   }
   const req = traceAgent.reqs[seqId - 1]
+  traceAgentSeqBase ??= req.body.seq_id - (seqId - 1)
+
   assert.strictEqual(req.method, 'POST')
   assert.strictEqual(req.url, '/telemetry/proxy/api/v2/apmtelemetry')
   assertObjectContains(req.headers, {
@@ -1098,7 +1193,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     naming_schema_version: '',
     request_type: reqType,
     runtime_id: '1a2b3c',
-    seq_id: seqId,
+    seq_id: traceAgentSeqBase + seqId - 1,
     application: {
       service_name: 'test service',
       env: 'preprod',

@@ -140,7 +140,6 @@ tracer.init({
   },
   iast: {
     enabled: true,
-    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
@@ -160,7 +159,6 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
-      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
@@ -199,9 +197,9 @@ tracer.dogstatsd.flush()
 
 const httpOptions = {
   service: 'test',
-  allowlist: ['url', /url/, url => true],
-  blocklist: ['url', /url/, url => true],
-  validateStatus: code => code < 400,
+  allowlist: ['url', /url/, (url: string) => true],
+  blocklist: ['url', /url/, (url: string) => true],
+  validateStatus: (code: number) => code < 400,
   headers: ['host'],
   middleware: true
 };
@@ -384,6 +382,7 @@ tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
+tracer.use('modelcontextprotocol-sdk');
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
@@ -523,6 +522,14 @@ const req = {} as IncomingMessage
 const res = {} as OutgoingMessage
 resBlockRequest = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)
+
+// Profiling custom labels
+tracer.profiling.setCustomLabelKeys(['customer', 'region'])
+tracer.profiling.setCustomLabelKeys(new Set(['customer', 'region']))
+const labelResult: number = tracer.profiling.runWithLabels({ customer: 'acme', region: 'us-east' }, () => 42)
+tracer.profiling.runWithLabels({ tier: 'premium' }, () => {
+  tracer.profiling.runWithLabels({ region: 'eu-west' }, () => {})
+})
 
 // OTel TracerProvider registers and provides a tracer
 const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
@@ -684,7 +691,8 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {},
+  tags: { team: 'ml' },
+  costTags: ['team'],
   prompt: {
     id: '123',
     version: '1.0.0',
@@ -696,7 +704,8 @@ llmobs.annotate(span, {
   outputData: 'output',
   metadata: {},
   metrics: {},
-  tags: {}
+  tags: { team: 'ml' },
+  costTags: ['team']
 })
 
 
@@ -711,6 +720,7 @@ tracer.init({
   experimental: {
     aiguard: {
       enabled: true,
+      block: true,
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
@@ -738,11 +748,11 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
-  result.action && result.reason && result.tags
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
 })

@@ -1,19 +1,17 @@
 'use strict'
 
+const getConfig = require('../config')
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
-const { isTrue } = require('../util')
-const { memoize } = require('../log/utils')
-const { getValueFromEnvSources } = require('../config/helper')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
 function formatSpan (span, config) {
-  span = normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(span)
   if (span.span_events) {
     // ensure span events are encoded as tags if agent doesn't support native top level span events
-    if (config?.trace?.nativeSpanEvents) {
+    if (config.DD_TRACE_NATIVE_SPAN_EVENTS) {
       formatSpanEvents(span)
     } else {
       span.meta.events = JSON.stringify(span.span_events)
@@ -31,8 +29,8 @@ class AgentEncoder {
     this._stringBytes = new MsgpackChunk()
     this._writer = writer
     this._reset()
-    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
-    this._config = this._writer?._config
+    this._config = getConfig()
+    this._debugEncoding = this._config.DD_TRACE_ENCODING_DEBUG
   }
 
   count () {
@@ -140,7 +138,7 @@ class AgentEncoder {
     this._traceBytes.length = 0
     this._stringCount = 0
     this._stringBytes.length = 0
-    this._stringMap = {}
+    this._stringMap = Object.create(null)
 
     this._cacheString('')
   }
@@ -338,11 +336,13 @@ class AgentEncoder {
   }
 }
 
-const memoizedLogDebug = memoize((key, message) => {
-  log.debug(message)
-  // return something to store in memoize cache
-  return true
-})
+const seenKeys = new Set()
+const memoizedLogDebug = (key, message) => {
+  if (!seenKeys.has(key)) {
+    seenKeys.add(key)
+    log.debug(message)
+  }
+}
 
 function formatSpanEvents (span) {
   for (const spanEvent of span.span_events) {

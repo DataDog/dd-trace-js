@@ -31,11 +31,17 @@ const {
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
+
+const blockedTemplate = {
+  html: blockedTemplateHtml,
+  json: blockedTemplateJson,
+}
 
 const resultActions = {
   actions: {
@@ -1102,7 +1108,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackLogin() returns action', () => {
@@ -1183,7 +1190,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackUser() returns action', () => {
@@ -1639,6 +1647,7 @@ describe('IP blocking', function () {
         },
       },
     }))
+    setTestBlockingTemplates()
 
     RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
   })

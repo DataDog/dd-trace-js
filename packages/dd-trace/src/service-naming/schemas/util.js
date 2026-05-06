@@ -18,8 +18,22 @@ function httpPluginClientService ({ tracerService, pluginConfig, sessionDetails 
   return tracerService
 }
 
+function optionServiceSource ({ pluginConfig }) {
+  if (pluginConfig.splitByDomain) {
+    return 'opt.split_by_domain'
+  }
+
+  if (pluginConfig.service) {
+    return 'opt.plugin'
+  }
+}
+
 function awsServiceV0 ({ tracerService, awsService }) {
   return `${tracerService}-aws-${awsService}`
 }
 
-module.exports = { identityService, httpPluginClientService, awsServiceV0 }
+function awsServiceSource ({ awsService }) {
+  return awsService
+}
+
+module.exports = { identityService, httpPluginClientService, awsServiceV0, optionServiceSource, awsServiceSource }

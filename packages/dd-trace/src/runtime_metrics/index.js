@@ -14,12 +14,15 @@ const noop = runtimeMetrics = {
 }
 
 module.exports = {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
     // Use OTLP runtime metrics with OTel-native naming when the OTel metrics
     // pipeline is active. DogStatsD runtime metrics are skipped to avoid double-reporting.
-    runtimeMetrics = config.otelMetricsEnabled
+    runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
       ? require('./otlp_runtime_metrics')
       : require('./runtime_metrics')
 

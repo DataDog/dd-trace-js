@@ -14,7 +14,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -38,7 +38,7 @@ jobs:
           - name: yarn-berry
             install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
           - name: bun
-            install: bun add
+            install: bun add --linker=hoisted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -65,21 +65,28 @@ jobs:
 
   bun-runtime:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@293a1d0af2a269c6300930eb13d3bf0ddec21863  # v2.2.0
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: always()
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   core:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:core:ci
@@ -88,364 +95,21 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   dd-trace-api:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: dd-trace-api
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  esbuild:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:esbuild:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:esbuild:ci
-      - uses: ./.github/actions/coverage
-        with:
-          flags: platform-esbuild
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  webpack:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:webpack:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:webpack:ci
-      - uses: ./.github/actions/coverage
-        with:
-          flags: platform-webpack
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-bluebird:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: bluebird
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-body-parser:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: body-parser
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-child_process:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: child_process
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-cookie-parser:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: cookie-parser
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-express-mongo-sanitize:
-    runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: circleci/mongo
-        ports:
-          - 27017:27017
-    env:
-      PLUGINS: express-mongo-sanitize
-      SERVICES: mongo
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-express-session:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: express-session
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-express:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: express
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-fs:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: fs
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-generic-pool:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: generic-pool
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
-  # ./.github/actions/instrumentations/test once fixed upstream.
-  instrumentation-http:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: http
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - name: Run instrumentation tests (oldest-maintenance, with retries)
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 5
-          timeout_minutes: 15
-          retry_wait_seconds: 20
-          command: yarn test:instrumentations:ci
-      - uses: ./.github/actions/node/latest
-      - name: Run instrumentation tests (latest, with retries)
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          max_attempts: 5
-          timeout_minutes: 15
-          retry_wait_seconds: 20
-          command: yarn test:instrumentations:ci
-      - uses: ./.github/actions/coverage
-        with:
-          flags: instrumentations-${{ github.job }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-knex:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: knex
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-mongoose:
-    runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: circleci/mongo
-        ports:
-          - 27017:27017
-    env:
-      PLUGINS: mongoose
-      SERVICES: mongo
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-multer:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: multer
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-mysql2:
-    runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mariadb:10.4
-        env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-          MYSQL_DATABASE: "db"
-        ports:
-          - 3306:3306
-    env:
-      PLUGINS: mysql2
-      SERVICES: mysql2
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-passport:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: passport
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-passport-http:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: passport-http
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-passport-local:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: passport-local
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-pg:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:9.5
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-    env:
-      PG_TEST_NATIVE: "true"
-      PLUGINS: pg
-      SERVICES: postgres
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-promise-js:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: promise-js
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-promise:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: promise
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-q:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: q
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-url:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: url
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentation-when:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: when
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  instrumentations-misc:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:instrumentations:misc:ci
-        shell: bash
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:instrumentations:misc:ci
-        shell: bash
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:instrumentations:misc:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:instrumentations:misc:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
-        with:
-          flags: platform-instrumentations-misc
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: test-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: Split this up as it runs tests for multiple different teams.
   integration:
@@ -457,38 +121,47 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
-      - run: yarn test:integration:esbuild
-      - run: yarn test:integration:webpack
+      - run: yarn test:integration:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-integration-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   unit-guardrails:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
@@ -497,12 +170,16 @@ jobs:
       matrix:
         version: [16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0, 25]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts express@4 # Use older express to support old Node.js versions
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -510,7 +187,7 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-guardrails-unsupported:
     strategy:
@@ -533,8 +210,12 @@ jobs:
 
   shimmer:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:shimmer:ci
@@ -543,8 +224,8 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

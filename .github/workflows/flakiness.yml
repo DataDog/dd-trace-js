@@ -2,6 +2,18 @@ name: "[Flakiness Report]"
 
 on:
   workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to look back'
+        default: '1'
+        type: string
+      branch:
+        description: 'Branch to filter (leave empty for all branches)'
+        type: string
+      occurrences:
+        description: 'Minimum number of occurrences to consider a test flaky'
+        default: '1'
+        type: string
   schedule:
     - cron: "0 6 * * 1"
 
@@ -12,8 +24,9 @@ jobs:
       actions: read
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      DAYS: "7"
-      OCCURRENCES: "2"
+      BRANCH: ${{ inputs.branch }}
+      DAYS: ${{ inputs.days || '7' }}
+      OCCURRENCES: ${{ inputs.occurrences || '2' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -31,11 +44,12 @@ jobs:
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
       - id: slack
         run: echo "report=$(cat flakiness.txt)" >> $GITHUB_OUTPUT
-      - uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.0
+      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
         if: github.event_name == 'schedule'
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
           payload: |
             channel: ${{ secrets.SLACK_CHANNEL_ID }}
             blocks:

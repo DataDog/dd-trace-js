@@ -326,16 +326,23 @@ describe('Plugin', () => {
         supportedRange = '>=6.16.0 <7.0.0'
       }
       withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
+        // Run prisma generate once per (config, version) pair instead of once per describe block.
+        // All three describe blocks below use the same schema + version, so the output is identical.
+        before(async function () {
+          this.timeout(10000)
+          clearPrismaEnv()
+          setPrismaEnv(config)
+          const cwd = await copySchemaToVersionDir(config.schema, range)
+          execPrismaGenerate(config, cwd)
+        })
+
         describe(`without configuration ${config.schema}`, () => {
           before(async function () {
             this.timeout(10000)
             clearPrismaEnv()
             setPrismaEnv(config)
 
-            const cwd = await copySchemaToVersionDir(config.schema, range)
-
             await agent.load(['prisma', 'pg'])
-            execPrismaGenerate(config, cwd)
             prisma = loadPrismaModule(config, range)
 
             prismaClient = createPrismaClient(prisma, config)
@@ -408,7 +415,7 @@ describe('Plugin', () => {
                 'prisma.method': 'findMany',
                 'prisma.model': 'users',
               },
-            })
+            }, { spanResourceMatch: /^users\.findMany$/ })
 
             tracingHelper.runInChildSpan(
               {
@@ -514,10 +521,6 @@ describe('Plugin', () => {
             clearPrismaEnv()
             setPrismaEnv(config)
 
-            const cwd = await copySchemaToVersionDir(config.schema, range)
-
-            execPrismaGenerate(config, cwd)
-
             require('../../dd-trace')
 
             prisma = loadPrismaModule(config, range)
@@ -536,10 +539,6 @@ describe('Plugin', () => {
               this.timeout(10000)
               clearPrismaEnv()
               setPrismaEnv(config)
-
-              const cwd = await copySchemaToVersionDir(config.schema, range)
-
-              execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 service: 'custom',

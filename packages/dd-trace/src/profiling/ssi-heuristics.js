@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('dc-polyfill')
+const dc = /** @type {typeof import('diagnostics_channel')} */ (require('dc-polyfill'))
 const log = require('../log')
 
 // If the process lives for at least 30 seconds, it's considered long-lived
@@ -10,13 +10,16 @@ const DEFAULT_LONG_LIVED_THRESHOLD = 30_000
  * This class embodies the SSI profiler-triggering heuristics under SSI.
  */
 class SSIHeuristics {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (config) {
-    const longLivedThreshold = config.profiling.longLivedThreshold || DEFAULT_LONG_LIVED_THRESHOLD
+    const longLivedThreshold = config.DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD || DEFAULT_LONG_LIVED_THRESHOLD
     if (typeof longLivedThreshold !== 'number' || longLivedThreshold <= 0) {
       this.longLivedThreshold = DEFAULT_LONG_LIVED_THRESHOLD
       log.warn(
         'Invalid SSIHeuristics.longLivedThreshold value: %s. Using default value:',
-        config.profiling.longLivedThreshold,
+        config.DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
         DEFAULT_LONG_LIVED_THRESHOLD
       )
     } else {

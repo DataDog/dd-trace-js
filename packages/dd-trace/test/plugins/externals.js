@@ -1,5 +1,7 @@
 'use strict'
 
+const { DD_MAJOR } = require('../../../../version')
+
 module.exports = {
   ai: [
     {
@@ -8,7 +10,7 @@ module.exports = {
     },
     {
       name: '@ai-sdk/openai',
-      versions: ['>=1.3.23', '>=2.0.0'],
+      versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
     },
     {
       name: 'zod',
@@ -391,6 +393,12 @@ module.exports = {
       versions: ['>=2'],
     },
   ],
+  'light-my-request': [
+    {
+      name: 'fastify',
+      versions: ['>=3'],
+    },
+  ],
   lodash: [
     {
       name: 'lodash',
@@ -406,11 +414,17 @@ module.exports = {
   mocha: [
     {
       name: 'mocha',
-      versions: ['>=5.2.0', '>=8.0.0'],
+      versions: DD_MAJOR >= 6 ? ['>=8.0.0'] : ['>=5.2.0', '>=8.0.0'],
     },
     {
       name: 'mocha-each',
       versions: ['>=2.0.1'],
+    },
+  ],
+  modelcontextprotocol_sdk: [
+    {
+      name: '@modelcontextprotocol/sdk',
+      versions: ['>=1.27.1'],
     },
   ],
   moleculer: [

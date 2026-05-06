@@ -35,11 +35,14 @@ let eventLoopDelayObserver = null
 // https://github.com/DataDog/dogweb/blob/prod/integration/node/node_metadata.csv
 
 module.exports = {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
-    if (config.propagateProcessTags?.enabled) {
+    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
       for (const tag of processTags.tagsArray) {
         clientConfig.tags.push(tag)
       }
@@ -48,24 +51,28 @@ module.exports = {
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
 
+    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+
     if (trackGc) {
       startGCObserver()
     }
 
-    // Using no-gc prevents the native gc metrics from being tracked. Not
-    // passing any options means all metrics are tracked.
-    // TODO: This is a workaround. We should find a better solution.
-    const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+    const useNative = config.runtimeMetrics.native !== false
 
-    try {
-      nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start(...watchers)
-    } catch (error) {
-      log.error('Error starting native metrics', error)
-      nativeMetrics = null
+    if (useNative) {
+      // Using no-gc prevents the native gc metrics from being tracked. Not
+      // passing any options means all metrics are tracked.
+      // TODO: This is a workaround. We should find a better solution.
+      const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+
+      try {
+        nativeMetrics = require('@datadog/native-metrics')
+        nativeMetrics.start(...watchers)
+      } catch (error) {
+        log.error('Error starting native metrics', error)
+        nativeMetrics = null
+      }
     }
-
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     lastTime = performance.now()
 

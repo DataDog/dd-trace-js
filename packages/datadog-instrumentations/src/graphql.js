@@ -129,7 +129,7 @@ function wrapValidate (validate) {
       try {
         errors = validate.apply(this, arguments)
         if (errors && errors[0]) {
-          ctx.error = errors && errors[0]
+          ctx.error = errors[0]
           validateErrorCh.publish(ctx)
         }
         return errors
@@ -171,7 +171,7 @@ function wrapExecute (execute) {
         args,
         docSource: documentSources.get(document),
         source,
-        fields: {},
+        fields: Object.create(null),
         abortController: new AbortController(),
       }
 

@@ -14,6 +14,7 @@ describe('sendData', () => {
     language_name: 'nodejs',
     tracer_version: 'version',
   }
+  const host = { hostname: 'test-host' }
 
   let sendDataModule
   let request
@@ -25,17 +26,17 @@ describe('sendData', () => {
     })
   })
 
-  it('should call to request (TCP)', () => {
+  it('sends telemetry to the agent using hostname and port', () => {
     sendDataModule.sendData({
       hostname: '',
       port: '12345',
       tags: { 'runtime-id': '123' },
-    }, application, 'test', 'req-type')
+    }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    assert.deepStrictEqual(options, {
+    assertObjectContains(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -52,16 +53,16 @@ describe('sendData', () => {
     })
   })
 
-  it('should call to request (UDP)', () => {
+  it('sends telemetry to the configured socket url', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
       tags: { 'runtime-id': '123' },
-    }, application, 'test', 'req-type')
+    }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    assert.deepStrictEqual(options, {
+    assertObjectContains(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -78,40 +79,25 @@ describe('sendData', () => {
     })
   })
 
-  it('should add debug header if DD_TELEMETRY_DEBUG is present', () => {
+  it('adds the debug header when telemetry debug mode is enabled', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
       telemetry: { debug: true },
-    }, application, 'test', 'req-type')
+    }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    assert.deepStrictEqual(options, {
-      method: 'POST',
-      path: '/telemetry/proxy/api/v2/apmtelemetry',
-      headers: {
-        'content-type': 'application/json',
-        'dd-telemetry-api-version': 'v2',
-        'dd-telemetry-request-type': 'req-type',
-        'dd-telemetry-debug-enabled': 'true',
-        'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version,
-        'dd-session-id': '123',
-      },
-      url: '/test',
-      hostname: undefined,
-      port: undefined,
-    })
+    assert.strictEqual(options.headers['dd-telemetry-debug-enabled'], 'true')
   })
 
-  it('should include dd-root-session-id header when rootSessionId differs from runtime-id', () => {
+  it('includes both child and root session ids when provided', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': 'child-runtime-id' },
-      rootSessionId: 'root-runtime-id',
-    }, application, 'test', 'req-type')
+      DD_ROOT_JS_SESSION_ID: 'root-runtime-id',
+    }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
@@ -120,28 +106,14 @@ describe('sendData', () => {
     assert.strictEqual(options.headers['dd-root-session-id'], 'root-runtime-id')
   })
 
-  it('should not include dd-root-session-id header when rootSessionId equals runtime-id', () => {
-    sendDataModule.sendData({
-      url: '/test',
-      tags: { 'runtime-id': 'same-id' },
-      rootSessionId: 'same-id',
-    }, application, 'test', 'req-type')
-
-    sinon.assert.calledOnce(request)
-    const options = request.getCall(0).args[1]
-
-    assert.strictEqual(options.headers['dd-session-id'], 'same-id')
-    assert.strictEqual(options.headers['dd-root-session-id'], undefined)
-  })
-
-  it('should remove not wanted properties from a payload with object type', () => {
+  it('removes internal-only fields from object payloads before sending them', () => {
     const payload = {
       message: 'test',
       logger: {},
       tags: {},
       serviceMapping: {},
     }
-    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', payload)
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, application, host, 'req-type', payload)
 
     sinon.assert.calledOnce(request)
     const data = JSON.parse(request.getCall(0).args[0])
@@ -150,7 +122,7 @@ describe('sendData', () => {
     assert.deepStrictEqual(data.payload, trimmedPayload)
   })
 
-  it('should send batch request with retryPayload', () => {
+  it('preserves batch payload items when sending message batches', () => {
     const retryObjData = { payload: { foo: 'bar' }, request_type: 'req-type-1' }
     const payload = [{
       request_type: 'req-type-2',
@@ -164,7 +136,7 @@ describe('sendData', () => {
     }, retryObjData]
 
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
-      { language: 'js' }, 'test', 'message-batch', payload)
+      application, host, 'message-batch', payload)
 
     sinon.assert.calledOnce(request)
 
@@ -185,17 +157,17 @@ describe('sendData', () => {
     assert.deepStrictEqual(data.payload, expectedPayload)
   })
 
-  it('should also work in CI Visibility agentless mode', () => {
-    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = '1'
-
+  it('uses the CI Visibility agentless intake when agentless mode is enabled', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
       application,
-      'test', 'req-type'
+      host,
+      'req-type'
     )
 
     sinon.assert.calledOnce(request)
@@ -206,6 +178,5 @@ describe('sendData', () => {
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
-    delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })

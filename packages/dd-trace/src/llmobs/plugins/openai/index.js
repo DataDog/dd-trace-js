@@ -5,7 +5,9 @@ const {
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
+  UNKNOWN_MODEL_PROVIDER,
 } = require('../../constants/tags')
+const { safeJsonParse } = require('../../util')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -90,10 +92,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _getModelProviderAndClient (baseUrl = '') {
     if (baseUrl.includes('azure')) {
       return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
+    } else if (baseUrl.includes('openai')) {
+      return { modelProvider: 'openai', client: 'OpenAI' }
     } else if (baseUrl.includes('deepseek')) {
       return { modelProvider: 'deepseek', client: 'DeepSeek' }
     }
-    return { modelProvider: 'openai', client: 'OpenAI' }
+    return { modelProvider: UNKNOWN_MODEL_PROVIDER, client: 'OpenAI' }
   }
 
   _extractMetrics (response) {
@@ -180,13 +184,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
-    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (!['tools', 'functions'].includes(key)) {
-        obj[key] = value
+    const metadata = {}
+    for (const key of Object.keys(parameters)) {
+      if (key !== 'tools' && key !== 'functions') {
+        metadata[key] = parameters[key]
       }
-
-      return obj
-    }, {})
+    }
 
     this._tagger.tagMetadata(span, metadata)
 
@@ -210,14 +213,14 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (message.function_call) {
         const functionCallInfo = {
           name: message.function_call.name,
-          arguments: JSON.parse(message.function_call.arguments),
+          arguments: safeJsonParse(message.function_call.arguments),
         }
         outputMessages.push({ content, role, toolCalls: [functionCallInfo] })
       } else if (message.tool_calls) {
         const toolCallsInfo = []
         for (const toolCall of message.tool_calls) {
           const toolCallInfo = {
-            arguments: JSON.parse(toolCall.function.arguments),
+            arguments: safeJsonParse(toolCall.function.arguments),
             name: toolCall.function.name,
             toolId: toolCall.id,
             type: toolCall.type,
@@ -274,22 +277,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             inputMessages.push({ role, content })
           }
         } else if (item.type === 'function_call') {
-          // Function call: convert to message with tool_calls
-          // Parse arguments if it's a JSON string
-          let parsedArgs = item.arguments
-          if (typeof parsedArgs === 'string') {
-            try {
-              parsedArgs = JSON.parse(parsedArgs)
-            } catch {
-              parsedArgs = {}
-            }
-          }
           inputMessages.push({
             role: 'assistant',
             toolCalls: [{
               toolId: item.call_id,
               name: item.name,
-              arguments: parsedArgs,
+              arguments: safeJsonParse(item.arguments, {}),
               type: item.type,
             }],
           })
@@ -314,12 +307,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'user', content: input })
     }
 
-    const inputMetadata = Object.entries(parameters).reduce((obj, [key, value]) => {
+    const inputMetadata = {}
+    for (const key of Object.keys(parameters)) {
       if (allowedParamKeys.has(key)) {
-        obj[key] = value
+        inputMetadata[key] = parameters[key]
       }
-      return obj
-    }, {})
+    }
 
     this._tagger.tagMetadata(span, inputMetadata)
 
@@ -351,21 +344,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           })
         } else if (item.type === 'function_call') {
           // Handle function_call type (responses API tool calls)
-          let args = item.arguments
-          // Parse arguments if it's a JSON string
-          if (typeof args === 'string') {
-            try {
-              args = JSON.parse(args)
-            } catch {
-              args = {}
-            }
-          }
           outputMessages.push({
             role: 'assistant',
             toolCalls: [{
               toolId: item.call_id,
               name: item.name,
-              arguments: args,
+              arguments: safeJsonParse(item.arguments, {}),
               type: item.type,
             }],
           })
@@ -387,23 +371,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
           // Extract tool calls if present in message.tool_calls
           if (Array.isArray(item.tool_calls)) {
-            outputMsg.toolCalls = item.tool_calls.map(tc => {
-              let args = tc.function?.arguments || tc.arguments
-              // Parse arguments if it's a JSON string
-              if (typeof args === 'string') {
-                try {
-                  args = JSON.parse(args)
-                } catch {
-                  args = {}
-                }
-              }
-              return {
-                toolId: tc.id,
-                name: tc.function?.name || tc.name,
-                arguments: args,
-                type: tc.type || 'function_call',
-              }
-            })
+            outputMsg.toolCalls = item.tool_calls.map(tc => ({
+              toolId: tc.id,
+              name: tc.function?.name || tc.name,
+              arguments: safeJsonParse(tc.function?.arguments || tc.arguments, {}),
+              type: tc.type || 'function_call',
+            }))
           }
 
           outputMessages.push(outputMsg)

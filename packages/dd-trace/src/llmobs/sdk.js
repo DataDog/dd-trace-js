@@ -2,12 +2,18 @@
 
 const { channel } = require('dc-polyfill')
 
-const { isTrue, isError } = require('../util')
+const { isError, isTrue } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const {
+  SPAN_KIND,
+  OUTPUT_VALUE,
+  INPUT_VALUE,
+  LLMOBS_TRACE_ID_BRIDGE_KEY,
+  LLMOBS_PARENT_ID_BRIDGE_KEY,
+} = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind,
@@ -29,16 +35,23 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  /**
+   * @param {import('../tracer')} tracer - Tracer instance
+   * @param {import('./index')} llmobsModule - LLMObs module instance
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
+    /** @type {import('../config/config-base')} */
     this._config = config
+
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
   }
 
   get enabled () {
-    return this._config.llmobs.enabled
+    return this._config.llmobs.enabled ?? false
   }
 
   enable (options = {}) {
@@ -56,13 +69,10 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    const llmobs = {
-      mlApp: options.mlApp,
-      agentlessEnabled: options.agentlessEnabled,
-    }
-    // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
-    // based on `APM_TRACING` RC product updates.
-    this._config.updateOptions({ llmobs })
+    // TODO: These configs should be passed through directly at construction time instead.
+    this._config.llmobs.enabled = true
+    this._config.llmobs.mlApp = options.mlApp
+    this._config.llmobs.agentlessEnabled = options.agentlessEnabled
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -241,7 +251,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -261,8 +271,12 @@ class LLMObs extends NoopLLMObs {
       if (metrics) {
         this._tagger.tagMetrics(span, metrics)
       }
+      // Apply tags before costTags so costTags can reference tags from the same annotation.
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
+      }
+      if (costTags != null) {
+        this._tagger.tagCostTags(span, costTags, 'annotate')
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)
@@ -423,7 +437,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))) {
+      if (this._config.DD_TRACE_OTEL_ENABLED) {
         evaluationTags.source = 'otel'
       }
 
@@ -529,6 +543,20 @@ class LLMObs extends NoopLLMObs {
         ...options,
         parent: parentStore?.span,
       })
+
+      // Bridge tags read by the dd-go LLMObs trace-indexer to correlate OTel
+      // gen_ai.* spans with SDK LLMObs spans. Written once per local trace,
+      // on the first successful SDK LLMObs span registration. The shared
+      // _trace.tags bag is serialized to the first span in every flushed
+      // chunk's meta, so partial flush is covered automatically without a
+      // separate flush-time processor. Writing only after registerLLMObsSpan
+      // succeeds avoids poisoning _trace.tags with bridge tags pointing at a
+      // span that will never produce an LLMObs event.
+      const traceTags = span?.context?.()._trace?.tags
+      if (this.enabled && traceTags && !traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) {
+        traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+        traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+      }
     }
 
     try {

@@ -1,7 +1,5 @@
 'use strict'
 
-process.setMaxListeners(50)
-
 const assert = require('assert')
 const http = require('http')
 const { format } = require('util')
@@ -20,7 +18,7 @@ describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
   let httpStub
 
-  function setupTracer (envOverrides, setDefaultEnv = true) {
+  function setupMetrics (envOverrides, setDefaultEnv = true) {
     if (setDefaultEnv) {
       process.env.DD_METRICS_OTEL_ENABLED = 'true'
       process.env.DD_SERVICE = 'test-service'
@@ -29,23 +27,24 @@ describe('OpenTelemetry Meter Provider', () => {
       process.env.OTEL_METRIC_EXPORT_INTERVAL = '100'
       process.env.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT = '5000'
     }
-    Object.assign(process.env, envOverrides)
+    if (envOverrides) {
+      for (const [key, value] of Object.entries(envOverrides)) {
+        if (value === undefined) {
+          delete process.env[key]
+        } else {
+          process.env[key] = value
+        }
+      }
+    }
 
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-
-    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
-      './proxy': proxy,
-    })
-    const tracer = proxyquire.noPreserveCache()('../../', {
-      './src': TracerProxy,
-    })
-    tracer._initialized = false
-    tracer.init()
-    return { tracer, meterProvider: metrics.getMeterProvider() }
+    metrics.disable()
+    const config = getConfigFresh()
+    if (config.DD_METRICS_OTEL_ENABLED) {
+      const { initializeOpenTelemetryMetrics } =
+        proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+      initializeOpenTelemetryMetrics(config)
+    }
+    return { config, meterProvider: metrics.getMeterProvider() }
   }
 
   function mockOtlpExport (validator) {
@@ -131,7 +130,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(metrics[0].sum.dataPoints[0].asDouble, 10.3)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const counter = meter.createCounter('requests')
       counter.add(5.1)
@@ -148,7 +147,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.createHistogram('duration').record(100)
 
@@ -173,7 +172,7 @@ describe('OpenTelemetry Meter Provider', () => {
         }
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
 
       const hist = meter.createHistogram('size')
@@ -205,7 +204,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 75)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const temp = meter.createGauge('temperature')
       temp.record(72)
@@ -222,7 +221,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(updown.sum.dataPoints[0].asInt, 7)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const queue = meter.createUpDownCounter('queue')
       queue.add(10)
@@ -241,7 +240,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(dp.attributes.find(a => a.key === 'type').value.stringValue, 'heap')
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const mem = meter.createObservableGauge('memory')
       mem.addCallback((result) => result.observe(process.memoryUsage().heapUsed, { type: 'heap' }))
@@ -257,7 +256,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 42)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
       const meter = metrics.getMeter('app')
       const conn = meter.createObservableCounter('connections')
       conn.addCallback((result) => result.observe(42))
@@ -273,7 +272,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(updown.sum.dataPoints[0].asInt, 15)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
       const meter = metrics.getMeter('app')
       const tasks = meter.createObservableUpDownCounter('tasks')
       tasks.addCallback((result) => result.observe(15))
@@ -291,7 +290,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert(dataPoint.timeUnixNano > 0)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(5)
 
@@ -311,7 +310,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 100)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json' })
       const meter = metrics.getMeter('app')
       meter.createCounter('counter').add(5)
       meter.createHistogram('histogram').record(10)
@@ -332,7 +331,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert(attrs['host.name'], 'should include host.name')
       })
 
-      setupTracer({ DD_SERVICE: 'custom', DD_VERSION: '2.0.0', DD_TRACE_REPORT_HOSTNAME: 'true' })
+      setupMetrics({ DD_SERVICE: 'custom', DD_VERSION: '2.0.0', DD_TRACE_REPORT_HOSTNAME: 'true' })
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(1)
 
@@ -351,7 +350,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(getDp('POST').asInt, 5)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const api = meter.createCounter('api')
       api.add(10, { method: 'GET' })
@@ -373,7 +372,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(getDp('POST', 200).asInt, 150)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const api = meter.createCounter('api')
       api.add(10, { method: 'GET', status: 200 })
@@ -404,7 +403,7 @@ describe('OpenTelemetry Meter Provider', () => {
         validated = true
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(5, {
         str: 'val',
@@ -432,7 +431,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 8)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
       const meter = metrics.getMeter('app')
       const counter = meter.createCounter('test')
       counter.add(5)
@@ -449,7 +448,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta' })
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(5)
 
@@ -463,7 +462,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'LOWMEMORY' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'LOWMEMORY' })
       const meter = metrics.getMeter('app')
       meter.createCounter('sync').add(5)
 
@@ -477,7 +476,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 10)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'lowmemory' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'lowmemory' })
       const meter = metrics.getMeter('app')
       const obs = meter.createObservableCounter('obs')
       obs.addCallback((result) => result.observe(10))
@@ -492,7 +491,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(updown.sum.dataPoints[0].asInt, 5)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
       const meter = metrics.getMeter('app')
       meter.createUpDownCounter('updown').add(5)
 
@@ -507,7 +506,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(updown.sum.dataPoints[0].asInt, 10)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
       const meter = metrics.getMeter('app')
       const obs = meter.createObservableUpDownCounter('obs.updown')
       obs.addCallback((result) => result.observe(10))
@@ -523,7 +522,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(histogram.histogram.dataPoints[0].sum, 30)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
       const meter = metrics.getMeter('app')
       meter.createHistogram('latency').record(10)
       meter.createHistogram('latency').record(20)
@@ -539,7 +538,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(histogram.histogram.dataPoints[0].sum, 60)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
       const meter = metrics.getMeter('app')
       meter.createHistogram('latency').record(10)
       meter.createHistogram('latency').record(20)
@@ -551,7 +550,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
   describe('Case Insensitivity', () => {
     it('meter names are case-insensitive', () => {
-      setupTracer()
+      setupMetrics()
       const meter1 = metrics.getMeter('MyApp')
       const meter2 = metrics.getMeter('myapp')
       assert.strictEqual(meter1, meter2)
@@ -564,7 +563,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 6)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const c1 = meter.createCounter('MyMetric')
       const c2 = meter.createCounter('mymetric')
@@ -591,7 +590,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.createCounter('Test').add(5)
       meter.createHistogram('TEST').record(100)
@@ -602,7 +601,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
   describe('Lifecycle', () => {
     it('handles shutdown gracefully', async () => {
-      setupTracer()
+      setupMetrics()
       const provider = metrics.getMeterProvider()
       await provider.reader.shutdown()
       await provider.reader.shutdown() // Second shutdown should be safe
@@ -613,7 +612,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert(decoded.resourceMetrics)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(1)
 
@@ -628,7 +627,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 200)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       const gauge = meter.createObservableGauge('temperature')
 
@@ -653,7 +652,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(idAttr?.value.intValue, 23)
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app', '', { attributes: { username: 'test', id: 23 } })
       meter.createCounter('num.monkies').add(1)
       meter.createCounter('num.baboons').add(2)
@@ -667,22 +666,24 @@ describe('OpenTelemetry Meter Provider', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.addBatchObservableCallback(() => {}, [])
       meter.removeBatchObservableCallback(() => {}, [])
 
       assert.strictEqual(warnSpy.callCount, 2)
-      assert.strictEqual(warnSpy.firstCall.args[0], 'addBatchObservableCallback is not implemented')
-      assert.strictEqual(warnSpy.secondCall.args[0], 'removeBatchObservableCallback is not implemented')
 
+      assert.deepStrictEqual(
+        warnSpy.getCalls().map(call => format(...call.args)),
+        ['addBatchObservableCallback is not implemented', 'removeBatchObservableCallback is not implemented']
+      )
       warnSpy.restore()
     })
   })
 
   describe('Protocol Configuration', () => {
     it('uses default protobuf protocol', () => {
-      const { meterProvider } = setupTracer({
+      const { meterProvider } = setupMetrics({
         OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: undefined,
         OTEL_EXPORTER_OTLP_PROTOCOL: undefined,
       })
@@ -691,12 +692,12 @@ describe('OpenTelemetry Meter Provider', () => {
     })
 
     it('configures protocol from environment variable', () => {
-      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json' })
+      const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json' })
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/json')
     })
 
     it('prioritizes metrics-specific protocol over generic protocol', () => {
-      const { meterProvider } = setupTracer({
+      const { meterProvider } = setupMetrics({
         OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
         OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       })
@@ -706,7 +707,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('logs warning and falls back to protobuf when gRPC protocol is set', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
-      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc' })
+      const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc' })
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
       const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
@@ -717,7 +718,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
   describe('Endpoint Configuration', () => {
     it('configures OTLP endpoint from environment variable', () => {
-      const { meterProvider } = setupTracer({
+      const { meterProvider } = setupMetrics({
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics',
       })
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
@@ -726,7 +727,7 @@ describe('OpenTelemetry Meter Provider', () => {
     })
 
     it('prioritizes metrics-specific endpoint over generic endpoint', () => {
-      const { meterProvider } = setupTracer({
+      const { meterProvider } = setupMetrics({
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4318/v1/metrics',
         OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics',
       })
@@ -737,21 +738,21 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('appends /v1/metrics to endpoint if not provided', () => {
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://custom:4318'
-      const { meterProvider } = setupTracer()
+      const { meterProvider } = setupMetrics()
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
     })
   })
 
   describe('Headers Configuration', () => {
     it('configures OTLP headers from environment variable', () => {
-      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_HEADERS: 'api-key=secret,env=prod' })
+      const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_HEADERS: 'api-key=secret,env=prod' })
       const exporter = meterProvider.reader.exporter
       assert.strictEqual(exporter.options.headers['api-key'], 'secret')
       assert.strictEqual(exporter.options.headers.env, 'prod')
     })
 
     it('prioritizes metrics-specific headers over generic OTLP headers', () => {
-      const { meterProvider } = setupTracer({
+      const { meterProvider } = setupMetrics({
         OTEL_EXPORTER_OTLP_HEADERS: 'generic=value,shared=generic',
         OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics',
       })
@@ -764,29 +765,29 @@ describe('OpenTelemetry Meter Provider', () => {
 
   describe('Timeout Configuration', () => {
     it('uses default timeout when not set', () => {
-      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: undefined })
+      const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: undefined })
       assert.strictEqual(meterProvider.reader.exporter.options.timeout, 10000)
     })
 
     it('configures OTLP timeout from environment variable', () => {
-      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '1000' })
+      const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '1000' })
       assert.strictEqual(meterProvider.reader.exporter.options.timeout, 1000)
     })
 
     it('prioritizes metrics-specific timeout over generic timeout', () => {
-      const { meterProvider } = setupTracer(
+      const { meterProvider } = setupMetrics(
         { OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '1000', OTEL_EXPORTER_OTLP_TIMEOUT: '2000' }
       )
       assert.strictEqual(meterProvider.reader.exporter.options.timeout, 1000)
     })
 
     it('falls back to generic timeout when metrics-specific not set', () => {
-      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_TIMEOUT: '5000' })
+      const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_TIMEOUT: '5000' })
       assert.strictEqual(meterProvider.reader.exporter.options.timeout, 5000)
     })
   })
 
-  describe('NonNegInt Configuration Validation', () => {
+  describe('Allowed Integer Configuration Validation', () => {
     let log, warnSpy
 
     beforeEach(() => {
@@ -798,8 +799,12 @@ describe('OpenTelemetry Meter Provider', () => {
       warnSpy.restore()
     })
 
+    function hasWarning (message) {
+      return warnSpy.getCalls().some(call => format(...call.args).includes(message))
+    }
+
     it('rejects zero for metrics configs with allowZero=false', () => {
-      setupTracer({
+      setupMetrics({
         OTEL_BSP_SCHEDULE_DELAY: '0',
         OTEL_METRIC_EXPORT_INTERVAL: '0',
         OTEL_BSP_MAX_QUEUE_SIZE: '0',
@@ -808,17 +813,17 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_TIMEOUT: '0',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
       }, false)
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
-      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
-      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
-      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
+      assert(hasWarning('Invalid value: 0 for OTEL_BSP_SCHEDULE_DELAY'))
+      assert(hasWarning('Invalid value: 0 for OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(hasWarning('Invalid value: 0 for OTEL_BSP_MAX_QUEUE_SIZE'))
+      assert(hasWarning('Invalid value: 0 for OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(hasWarning('Invalid value: 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(hasWarning('Invalid value: 0 for OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(hasWarning('Invalid value: 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
     })
 
-    it('rejects negative values for all configs', () => {
-      setupTracer({
+    it('rejects negative values for non-negative integer configs', () => {
+      setupMetrics({
         OTEL_EXPORTER_OTLP_TIMEOUT: '-1',
         OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: '-1',
         OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '-1',
@@ -828,18 +833,18 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '-1',
         OTEL_BSP_MAX_QUEUE_SIZE: '-1',
       }, false)
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
+      assert(hasWarning('Invalid value: -1 for OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(hasWarning('Invalid value: -1 for OTEL_BSP_SCHEDULE_DELAY'))
+      assert(hasWarning('Invalid value: -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
+      assert(hasWarning('Invalid value: -1 for OTEL_BSP_MAX_QUEUE_SIZE'))
     })
 
-    it('rejects values that are not numbers for all configs', () => {
-      setupTracer({
+    it('rejects values that are not numbers for integer-based configs', () => {
+      setupMetrics({
         OTEL_EXPORTER_OTLP_TIMEOUT: 'not a number',
         OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 'invalid',
         OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 'hi sir',
@@ -849,27 +854,27 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 'abc',
         OTEL_BSP_MAX_QUEUE_SIZE: 'xyz',
       }, false)
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
+      assert(hasWarning("Invalid INT input: 'not a number' for OTEL_EXPORTER_OTLP_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: 'invalid' for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: 'hi sir' for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: '@weeeeee' for OTEL_METRIC_EXPORT_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: 'python!' for OTEL_METRIC_EXPORT_INTERVAL"))
+      assert(hasWarning("Invalid INT input: 'NaN' for OTEL_BSP_SCHEDULE_DELAY"))
+      assert(hasWarning("Invalid INT input: 'abc' for OTEL_BSP_MAX_EXPORT_BATCH_SIZE"))
+      assert(hasWarning("Invalid INT input: 'xyz' for OTEL_BSP_MAX_QUEUE_SIZE"))
     })
   })
 
   describe('Initialization', () => {
     it('does not initialize when OTEL metrics configuration is unset', () => {
-      const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: undefined })
+      const { meterProvider } = setupMetrics({ DD_METRICS_OTEL_ENABLED: undefined })
       const { MeterProvider } = require('../../src/opentelemetry/metrics')
 
       assert.strictEqual(meterProvider instanceof MeterProvider, false)
     })
 
     it('does not initialize when OTEL metrics are explicitly disabled', () => {
-      const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: 'false' })
+      const { meterProvider } = setupMetrics({ DD_METRICS_OTEL_ENABLED: 'false' })
       const { MeterProvider } = require('../../src/opentelemetry/metrics')
 
       assert.strictEqual(meterProvider instanceof MeterProvider, false)
@@ -879,7 +884,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
 
-      setupTracer()
+      setupMetrics()
       const provider = metrics.getMeterProvider()
       provider.reader.shutdown()
 
@@ -914,7 +919,7 @@ describe('OpenTelemetry Meter Provider', () => {
         ))
       })
 
-      setupTracer(
+      setupMetrics(
         { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' }
         , false
       )
@@ -938,7 +943,7 @@ describe('OpenTelemetry Meter Provider', () => {
         }
       })
 
-      setupTracer(
+      setupMetrics(
         { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
         false
       )
@@ -962,7 +967,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
       })
 
-      setupTracer(
+      setupMetrics(
         { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
         false
       )
@@ -1000,7 +1005,7 @@ describe('OpenTelemetry Meter Provider', () => {
         }))
       })
 
-      setupTracer({ DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '30000' }, false)
+      setupMetrics({ DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '30000' }, false)
       const meter = metrics.getMeterProvider().getMeter('test')
       const counter = meter.createCounter('counter.sync')
 
@@ -1054,7 +1059,7 @@ describe('OpenTelemetry Meter Provider', () => {
         return mockReq
       })
 
-      setupTracer()
+      setupMetrics()
       const meter = metrics.getMeter('app')
       meter.createCounter('test1').add(1)
 

@@ -4,11 +4,11 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 
 const satisfies = require('../../../../vendor/dist/semifies')
+const getGitMetadata = require('../git_metadata')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
-const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const { getAgentUrl } = require('../agent/url')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
@@ -22,118 +22,58 @@ const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 
 class Config {
-  constructor (options = {}) {
-    // TODO: Remove entries that were already resolved in config.
-    // For the others, move them over to config.
+  constructor (options) {
     const AWS_LAMBDA_FUNCTION_NAME = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
 
-    // TODO: Move initialization of these values to packages/dd-trace/src/config/index.js, and just read from config
-    const {
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
-      DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_CPU_ENABLED,
-      DD_PROFILING_DEBUG_SOURCE_MAPS,
-      DD_PROFILING_DEBUG_UPLOAD_COMPRESSION,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
-      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
-      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
-      DD_PROFILING_HEAP_ENABLED,
-      DD_PROFILING_HEAP_SAMPLING_INTERVAL,
-      DD_PROFILING_PPROF_PREFIX,
-      DD_PROFILING_PROFILERS,
-      DD_PROFILING_TIMELINE_ENABLED,
-      DD_PROFILING_UPLOAD_PERIOD,
-      DD_PROFILING_UPLOAD_TIMEOUT,
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
-      DD_PROFILING_WALLTIME_ENABLED,
-      DD_TAGS,
-    } = getProfilingEnvValues()
-
-    // Must be longer than one minute so pad with five seconds
-    const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
-    const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
-    const pprofPrefix = options.pprofPrefix ?? DD_PROFILING_PPROF_PREFIX ?? ''
-
-    // TODO: Remove the fallback. Just use the value from the config.
-    this.service = options.service || 'node'
+    this.version = options.version
+    this.service = options.service
     this.env = options.env
     this.functionname = AWS_LAMBDA_FUNCTION_NAME
 
-    this.version = options.version
-    this.tags = Object.assign(
-      tagger.parse(DD_TAGS),
-      tagger.parse(options.tags),
-      tagger.parse({
-        env: options.env,
+    this.tags = {
+      ...options.tags,
+      ...tagger.parse({
         host: options.reportHostname ? require('os').hostname() : undefined,
-        service: this.service,
-        version: this.version,
         functionname: AWS_LAMBDA_FUNCTION_NAME,
       }),
-      getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())
-    )
-
-    // Add source code integration tags if available
-    if (options.repositoryUrl && options.commitSHA) {
-      this.tags[GIT_REPOSITORY_URL] = options.repositoryUrl
-      this.tags[GIT_COMMIT_SHA] = options.commitSHA
+      ...getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata()),
     }
+
+    const { commitSHA, repositoryUrl } = getGitMetadata(options)
+    if (repositoryUrl && commitSHA) {
+      this.tags[GIT_REPOSITORY_URL] = repositoryUrl
+      this.tags[GIT_COMMIT_SHA] = commitSHA
+    }
+
+    // Normalize from seconds to milliseconds. Default must be longer than a minute.
+    this.flushInterval = options.DD_PROFILING_UPLOAD_PERIOD * 1000
+    this.uploadTimeout = options.DD_PROFILING_UPLOAD_TIMEOUT
+    this.sourceMap = options.DD_PROFILING_SOURCE_MAP
+    this.debugSourceMaps = options.DD_PROFILING_DEBUG_SOURCE_MAPS
+    this.endpointCollectionEnabled = options.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
+    this.pprofPrefix = options.DD_PROFILING_PPROF_PREFIX
+    this.v8ProfilerBugWorkaroundEnabled = options.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 
     this.logger = ensureLogger(options.logger)
-    // Profiler sampling contexts are not available on Windows, so features
-    // depending on those (code hotspots and endpoint collection) need to default
-    // to false on Windows.
-    const samplingContextsAvailable = process.platform !== 'win32'
-    function checkOptionAllowed (option, description, condition) {
-      if (option && !condition) {
-        // injection hardening: all of these can only happen if user explicitly
-        // sets an environment variable to its non-default value on the platform.
-        // In practical terms, it'd require someone explicitly turning on OOM
-        // monitoring, code hotspots, endpoint profiling, or CPU profiling on
-        // Windows, where it is not supported.
-        throw new Error(`${description} not supported on ${process.platform}.`)
-      }
-    }
-    function checkOptionWithSamplingContextAllowed (option, description) {
-      checkOptionAllowed(option, description, samplingContextsAvailable)
-    }
-
-    this.flushInterval = flushInterval
-    this.uploadTimeout = uploadTimeout
-    this.sourceMap = options.sourceMap
-    this.debugSourceMaps = isTrue(options.debugSourceMaps ?? DD_PROFILING_DEBUG_SOURCE_MAPS)
-    this.endpointCollectionEnabled = isTrue(options.endpointCollection ??
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED ?? samplingContextsAvailable)
-    checkOptionWithSamplingContextAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
-
-    this.pprofPrefix = pprofPrefix
-    this.v8ProfilerBugWorkaroundEnabled = isTrue(options.v8ProfilerBugWorkaround ??
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND ?? true)
     this.url = getAgentUrl(options)
 
-    this.libraryInjected = options.libraryInjected
-    this.activation = options.activation
-    this.exporters = ensureExporters(options.exporters || [
-      new AgentExporter(this),
-    ], this)
+    this.libraryInjected = !!options.DD_INJECTION_ENABLED
 
-    // OOM monitoring does not work well on Windows, so it is disabled by default.
-    const oomMonitoringSupported = process.platform !== 'win32'
+    let activation
+    if (options.profiling.enabled === 'auto') {
+      activation = 'auto'
+    } else if (options.profiling.enabled === 'true') {
+      activation = 'manual'
+    } // else activation = undefined
 
-    const oomMonitoringEnabled = isTrue(options.oomMonitoring ??
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED ?? oomMonitoringSupported)
-    checkOptionAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
+    this.activation = activation
+    this.exporters = ensureExporters(options.DD_PROFILING_EXPORTERS, this)
 
-    const heapLimitExtensionSize = options.oomHeapLimitExtensionSize ??
-      (Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE) || 0)
-    const maxHeapExtensionCount = options.oomMaxHeapExtensionCount ??
-      (Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT) || 0)
+    const oomMonitoringEnabled = options.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED
+    const heapLimitExtensionSize = options.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE
+    const maxHeapExtensionCount = options.DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT
     const exportStrategies = oomMonitoringEnabled
-      ? ensureOOMExportStrategies(options.oomExportStrategies ?? DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES ??
-        [oomExportStrategies.PROCESS], this)
+      ? ensureOOMExportStrategies(options.DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES, this)
       : []
     const exportCommand = oomMonitoringEnabled ? buildExportCommand(this) : undefined
     this.oomMonitoring = {
@@ -144,61 +84,26 @@ class Config {
       exportCommand,
     }
 
-    const profilers = options.profilers || getProfilers({
-      DD_PROFILING_HEAP_ENABLED,
-      DD_PROFILING_WALLTIME_ENABLED,
-      DD_PROFILING_PROFILERS,
-    })
+    const profilers = getProfilers(options)
 
-    this.timelineEnabled = isTrue(
-      options.timelineEnabled ?? DD_PROFILING_TIMELINE_ENABLED ?? samplingContextsAvailable
-    )
-    checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
-    this.timelineSamplingEnabled = isTrue(
-      options.timelineSamplingEnabled ?? DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED ?? true
-    )
+    this.timelineEnabled = options.DD_PROFILING_TIMELINE_ENABLED
+    this.timelineSamplingEnabled = options.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED
+    this.codeHotspotsEnabled = options.DD_PROFILING_CODEHOTSPOTS_ENABLED
+    this.cpuProfilingEnabled = options.DD_PROFILING_CPU_ENABLED
+    this.heapSamplingInterval = options.DD_PROFILING_HEAP_SAMPLING_INTERVAL
 
-    this.codeHotspotsEnabled = isTrue(
-      options.codeHotspotsEnabled ?? DD_PROFILING_CODEHOTSPOTS_ENABLED ?? samplingContextsAvailable
-    )
-    checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
-
-    this.cpuProfilingEnabled = isTrue(
-      options.cpuProfilingEnabled ?? DD_PROFILING_CPU_ENABLED ?? samplingContextsAvailable
-    )
-    checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
-
-    this.samplingInterval = options.samplingInterval || 1e3 / 99 // 99hz in millis
-
-    this.heapSamplingInterval = options.heapSamplingInterval ??
-      (Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL) || 512 * 1024)
+    this.samplingInterval = 1e3 / 99 // 99hz in milliseconds
 
     const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
-    const uploadCompression0 = options.uploadCompression ?? DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'on'
+    const uploadCompression0 = options.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION
     let [uploadCompression, level0] = uploadCompression0.split('-')
-    if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
-      this.logger.warn(`Invalid profile upload compression method "${uploadCompression0}". Will use "on".`)
-      uploadCompression = 'on'
-    }
     let level = level0 ? Number.parseInt(level0, 10) : undefined
     if (level !== undefined) {
-      if (['on', 'off'].includes(uploadCompression)) {
-        this.logger.warn(`Compression levels are not supported for "${uploadCompression}".`)
-        level = undefined
-      } else if (Number.isNaN(level)) {
-        this.logger.warn(
-          `Invalid compression level "${level0}". Will use default level.`)
-        level = undefined
-      } else if (level < 1) {
-        this.logger.warn(`Invalid compression level ${level}. Will use 1.`)
-        level = 1
-      } else {
-        const maxLevel = { gzip: 9, zstd: 22 }[uploadCompression]
-        if (level > maxLevel) {
-          this.logger.warn(`Invalid compression level ${level}. Will use ${maxLevel}.`)
-          level = maxLevel
-        }
+      const maxLevel = { gzip: 9, zstd: 22 }[uploadCompression]
+      if (level > maxLevel) {
+        this.logger.warn(`Invalid compression level ${level}. Will use ${maxLevel}.`)
+        level = maxLevel
       }
     }
 
@@ -219,13 +124,9 @@ class Config {
       that.asyncContextFrameEnabled = false
     }
 
-    const canUseAsyncContextFrame = samplingContextsAvailable && isACFActive
-
-    this.asyncContextFrameEnabled = isTrue(DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? canUseAsyncContextFrame)
-    if (this.asyncContextFrameEnabled && !canUseAsyncContextFrame) {
-      if (!samplingContextsAvailable) {
-        turnOffAsyncContextFrame(`on ${process.platform}`)
-      } else if (isAtLeast24) {
+    this.asyncContextFrameEnabled = options.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? isACFActive
+    if (this.asyncContextFrameEnabled && !isACFActive) {
+      if (isAtLeast24) {
         turnOffAsyncContextFrame('with --no-async-context-frame')
       } else if (satisfies(process.versions.node, '>=22.9.0')) {
         turnOffAsyncContextFrame('without --experimental-async-context-frame')
@@ -234,7 +135,7 @@ class Config {
       }
     }
 
-    this.heartbeatInterval = options.heartbeatInterval || 60 * 1000 // 1 minute
+    this.heartbeatInterval = options.telemetry.heartbeatInterval
 
     this.profilers = ensureProfilers(profilers, this)
   }
@@ -248,7 +149,7 @@ class Config {
       endpointCollectionEnabled: this.endpointCollectionEnabled,
       heapSamplingInterval: this.heapSamplingInterval,
       oomMonitoring: { ...this.oomMonitoring },
-      profilerTypes: this.profilers.map(p => p.type),
+      profilerTypes: this.profilers.map(profiler => profiler.type),
       sourceMap: this.sourceMap,
       timelineEnabled: this.timelineEnabled,
       timelineSamplingEnabled: this.timelineSamplingEnabled,
@@ -263,7 +164,9 @@ class Config {
 module.exports = { Config }
 
 function getProfilers ({
-  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS,
+  DD_PROFILING_HEAP_ENABLED,
+  DD_PROFILING_WALLTIME_ENABLED,
+  DD_PROFILING_PROFILERS,
 }) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to space + wall
   // Use a Set to avoid duplicates
@@ -272,26 +175,26 @@ function getProfilers ({
   // snapshots the space profile won't include memory taken by profiles created
   // before it in the sequence. That memory is ultimately transient and will be
   // released when all profiles are subsequently encoded.
-  const profilers = new Set((DD_PROFILING_PROFILERS ?? 'space,wall').split(','))
+  const profilers = new Set(DD_PROFILING_PROFILERS)
 
   let spaceExplicitlyEnabled = false
   // Add/remove space depending on the value of DD_PROFILING_HEAP_ENABLED
-  if (DD_PROFILING_HEAP_ENABLED != null) {
-    if (isTrue(DD_PROFILING_HEAP_ENABLED)) {
+  if (DD_PROFILING_HEAP_ENABLED !== undefined) {
+    if (DD_PROFILING_HEAP_ENABLED) {
       if (!profilers.has('space')) {
         profilers.add('space')
         spaceExplicitlyEnabled = true
       }
-    } else if (isFalse(DD_PROFILING_HEAP_ENABLED)) {
+    } else {
       profilers.delete('space')
     }
   }
 
   // Add/remove wall depending on the value of DD_PROFILING_WALLTIME_ENABLED
-  if (DD_PROFILING_WALLTIME_ENABLED != null) {
-    if (isTrue(DD_PROFILING_WALLTIME_ENABLED)) {
+  if (DD_PROFILING_WALLTIME_ENABLED !== undefined) {
+    if (DD_PROFILING_WALLTIME_ENABLED) {
       profilers.add('wall')
-    } else if (isFalse(DD_PROFILING_WALLTIME_ENABLED)) {
+    } else {
       profilers.delete('wall')
       profilers.delete('cpu') // remove alias too
     }
@@ -321,22 +224,12 @@ function getExportStrategy (name, options) {
 }
 
 function ensureOOMExportStrategies (strategies, options) {
-  if (!strategies) {
-    return []
+  const set = new Set()
+  for (const strategy of strategies) {
+    set.add(getExportStrategy(strategy, options))
   }
 
-  if (typeof strategies === 'string') {
-    strategies = strategies.split(',')
-  }
-
-  for (let i = 0; i < strategies.length; i++) {
-    const strategy = strategies[i]
-    if (typeof strategy === 'string') {
-      strategies[i] = getExportStrategy(strategy, options)
-    }
-  }
-
-  return [...new Set(strategies)]
+  return [...set]
 }
 
 function getExporter (name, options) {
@@ -345,22 +238,13 @@ function getExporter (name, options) {
       return new AgentExporter(options)
     case 'file':
       return new FileExporter(options)
+    default:
+      options.logger.error(`Unknown exporter "${name}"`)
   }
 }
 
 function ensureExporters (exporters, options) {
-  if (typeof exporters === 'string') {
-    exporters = exporters.split(',')
-  }
-
-  for (let i = 0; i < exporters.length; i++) {
-    const exporter = exporters[i]
-    if (typeof exporter === 'string') {
-      exporters[i] = getExporter(exporter, options)
-    }
-  }
-
-  return exporters
+  return exporters.map((exporter) => getExporter(exporter, options))
 }
 
 function getProfiler (name, options) {
@@ -376,30 +260,26 @@ function getProfiler (name, options) {
 }
 
 function ensureProfilers (profilers, options) {
-  if (typeof profilers === 'string') {
-    profilers = profilers.split(',')
-  }
+  const filteredProfilers = []
 
   for (let i = 0; i < profilers.length; i++) {
-    const profiler = profilers[i]
-    if (typeof profiler === 'string') {
-      profilers[i] = getProfiler(profiler, options)
+    const profiler = getProfiler(profilers[i], options)
+    if (profiler !== undefined) {
+      filteredProfilers.push(profiler)
     }
   }
 
   // Events profiler is a profiler that produces timeline events. It is only
   // added if timeline is enabled and there's a wall profiler.
-  if (options.timelineEnabled && profilers.some(p => p instanceof WallProfiler)) {
-    profilers.push(new EventsProfiler(options))
+  if (options.timelineEnabled && filteredProfilers.some(profiler => profiler instanceof WallProfiler)) {
+    filteredProfilers.push(new EventsProfiler(options))
   }
 
-  // Filter out any invalid profilers
-  return profilers.filter(Boolean)
+  return filteredProfilers
 }
 
 function ensureLogger (logger) {
-  if (typeof logger !== 'object' ||
-    typeof logger.debug !== 'function' ||
+  if (typeof logger?.debug !== 'function' ||
     typeof logger.info !== 'function' ||
     typeof logger.warn !== 'function' ||
     typeof logger.error !== 'function') {
@@ -423,51 +303,4 @@ function buildExportCommand (options) {
   return [process.execPath,
     path.join(__dirname, 'exporter_cli.js'),
     urls.join(','), tags, 'space']
-}
-
-function getProfilingEnvValues () {
-  return {
-    DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED:
-      getValueFromEnvSources('DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED'),
-    DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED'),
-    DD_PROFILING_CODEHOTSPOTS_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_CODEHOTSPOTS_ENABLED'),
-    DD_PROFILING_CPU_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_CPU_ENABLED'),
-    DD_PROFILING_DEBUG_SOURCE_MAPS:
-      getValueFromEnvSources('DD_PROFILING_DEBUG_SOURCE_MAPS'),
-    DD_PROFILING_DEBUG_UPLOAD_COMPRESSION:
-      getValueFromEnvSources('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION'),
-    DD_PROFILING_ENDPOINT_COLLECTION_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_ENDPOINT_COLLECTION_ENABLED'),
-    DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES:
-      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES'),
-    DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE:
-      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'),
-    DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT:
-      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT'),
-    DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED'),
-    DD_PROFILING_HEAP_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_HEAP_ENABLED'),
-    DD_PROFILING_HEAP_SAMPLING_INTERVAL:
-      getValueFromEnvSources('DD_PROFILING_HEAP_SAMPLING_INTERVAL'),
-    DD_PROFILING_PPROF_PREFIX:
-      getValueFromEnvSources('DD_PROFILING_PPROF_PREFIX'),
-    DD_PROFILING_PROFILERS:
-      getValueFromEnvSources('DD_PROFILING_PROFILERS'),
-    DD_PROFILING_TIMELINE_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_TIMELINE_ENABLED'),
-    DD_PROFILING_UPLOAD_PERIOD:
-      getValueFromEnvSources('DD_PROFILING_UPLOAD_PERIOD'),
-    DD_PROFILING_UPLOAD_TIMEOUT:
-      getValueFromEnvSources('DD_PROFILING_UPLOAD_TIMEOUT'),
-    DD_PROFILING_V8_PROFILER_BUG_WORKAROUND:
-      getValueFromEnvSources('DD_PROFILING_V8_PROFILER_BUG_WORKAROUND'),
-    DD_PROFILING_WALLTIME_ENABLED:
-      getValueFromEnvSources('DD_PROFILING_WALLTIME_ENABLED'),
-    DD_TAGS:
-      getValueFromEnvSources('DD_TAGS'),
-  }
 }

@@ -6,7 +6,8 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
-const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
+const { getConfiguredEnvName } = require('../../config/helper')
+const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
@@ -63,10 +64,41 @@ const tracestateTagValueFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
+const percentByte = /%([0-9A-Fa-f]{2})/g
 
 class TextMapPropagator {
+  #extractB3Context
+
+  /** @type {Set<string> | undefined} Cached `Set` view of `_config.baggageTagKeys`. */
+  #baggageTagKeysSet
+
+  /** @type {string[] | undefined} Source array that `#baggageTagKeysSet` was built from. */
+  #baggageTagKeysSetSource
+
   constructor (config) {
     this._config = config
+
+    // TODO: should match "b3 single header" in next major
+    const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
+    this.#extractB3Context = envName === 'OTEL_PROPAGATORS' ? this._extractB3SingleContext : this._extractB3MultiContext
+  }
+
+  /**
+   * Returns a `Set` view of `_config.baggageTagKeys` that is rebuilt only
+   * when the source array reference changes. Avoids an `O(n)` `Set` alloc
+   * per baggage extract (which is per-request when baggage propagation is
+   * enabled).
+   *
+   * @returns {Set<string>}
+   */
+  #getBaggageTagKeysSet () {
+    const source = this._config.baggageTagKeys
+    if (this.#baggageTagKeysSetSource !== source) {
+      this.#baggageTagKeysSet = new Set(source)
+      this.#baggageTagKeysSetSource = source
+    }
+    return this.#baggageTagKeysSet
   }
 
   inject (spanContext, carrier) {
@@ -157,6 +189,7 @@ class TextMapPropagator {
         }
       }
     }
+
     if (this._hasPropagationStyle('inject', 'baggage')) {
       let baggage = ''
       let itemCounter = 0
@@ -164,16 +197,16 @@ class TextMapPropagator {
 
       const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
-      for (const [key, value] of Object.entries(baggageItems)) {
-        const baggageKey = String(key).trim()
-        if (!baggageKey || !baggageTokenExpr.test(baggageKey)) continue
+      for (const key of Object.keys(baggageItems)) {
+        const baggageKey = key.trim()
+        if (!baggageTokenExpr.test(baggageKey)) continue
 
         // Do not trim values. If callers include leading/trailing whitespace, it must be percent-encoded.
         // W3C list-member allows optional properties after ';'.
         // https://www.w3.org/TR/baggage/#header-content
-        const item = `${baggageKey}=${encodeURIComponent(String(value))},`
+        const item = `${baggageKey}=${encodeURIComponent(baggageItems[key])},`
         itemCounter += 1
-        byteCounter += Buffer.byteLength(item)
+        byteCounter += item.length
 
         // Check for item count limit exceeded
         if (itemCounter > this._config.baggageMaxItems) {
@@ -201,26 +234,27 @@ class TextMapPropagator {
   _injectTags (spanContext, carrier) {
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping injection.')
       return
     }
 
     const tags = []
 
-    for (const key in trace.tags) {
-      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
-      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+    for (const key of Object.keys(trace.tags)) {
+      const value = trace.tags[key]
+      if (!value || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
       }
 
-      tags.push(`${key}=${trace.tags[key]}`)
+      tags.push(`${key}=${value}`)
     }
 
     const header = tags.join(',')
 
-    if (header.length > this._config.tagsHeaderMaxLength) {
+    if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from span are too large, skipping injection.')
     } else if (header) {
       carrier[tagsKey] = header
@@ -265,7 +299,7 @@ class TextMapPropagator {
     const {
       _sampling: { priority, mechanism },
       _tracestate: ts = new TraceState(),
-      _trace: { origin, tags },
+      _trace: { origin, tags: traceTags },
     } = spanContext
 
     carrier[traceparentKey] = spanContext.toTraceparent()
@@ -287,21 +321,22 @@ class TextMapPropagator {
       if (typeof origin === 'string') {
         const originValue = origin
           .replaceAll(tracestateOriginFilter, '_')
-          .replaceAll(/[\x3D]/g, '~')
+          .replaceAll('=', '~')
 
         state.set('o', originValue)
       }
 
-      for (const key in tags) {
-        if (!tags[key] || !key.startsWith('_dd.p.')) continue
+      for (const key of Object.keys(traceTags)) {
+        const tagValueRaw = traceTags[key]
+        if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
           .replaceAll(tracestateTagKeyFilter, '_')
 
-        const tagValue = tags[key]
+        const tagValue = tagValueRaw
           .toString()
           .replaceAll(tracestateTagValueFilter, '_')
-          .replaceAll(/[\x3D]/g, '~')
+          .replaceAll('=', '~')
 
         state.set(tagKey, tagValue)
       }
@@ -363,10 +398,7 @@ class TextMapPropagator {
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':
-          extractedContext = this._config.tracePropagationStyle.otelPropagators
-            // TODO: should match "b3 single header" in next major
-            ? this._extractB3SingleContext(carrier)
-            : this._extractB3MultiContext(carrier)
+          extractedContext = this.#extractB3Context(carrier)
           break
         case 'b3multi':
           extractedContext = this._extractB3MultiContext(carrier)
@@ -382,7 +414,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         style = extractor
-        if (this._config.tracePropagationExtractFirst) {
+        if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) {
           break
         }
       } else {
@@ -402,10 +434,12 @@ class TextMapPropagator {
       }
     }
 
-    if (this._config.tracePropagationBehaviorExtract === 'ignore') {
-      context._links = []
+    if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'ignore') {
+      // `context` is null when no extractor matched; the fallback below picks up
+      // the SQSD context if present, otherwise the request runs untraced.
+      if (context) context._links = []
     } else {
-      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+      if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'restart' && context) {
         context._links = []
         context._links.push({
           context,
@@ -431,7 +465,7 @@ class TextMapPropagator {
     this._extractSamplingPriority(carrier, spanContext)
     this._extractTags(carrier, spanContext)
 
-    if (this._config.tracePropagationExtractFirst) return spanContext
+    if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) return spanContext
 
     const tc = this._extractTraceparentContext(carrier)
 
@@ -496,14 +530,19 @@ class TextMapPropagator {
 
   _extractTraceparentContext (carrier) {
     const headerValue = carrier[traceparentKey]
-    if (!headerValue) {
+    if (typeof headerValue !== 'string') {
       return null
     }
     const matches = headerValue.trim().match(traceparentExpr)
-    if (matches?.length) {
-      const [version, traceId, spanId, flags, tail] = matches.slice(1)
+    if (matches !== null) {
+      const [, version, traceId, spanId, flags, tail] = matches
       const traceparent = { version }
-      const tracestate = TraceState.fromString(carrier.tracestate)
+      // W3C Trace Context §3.3.1.1: multiple tracestate fields MUST be combined per RFC 7230 §3.2.2.
+      // `filter` drops non-string members (Symbol, throwing-toString) that would crash `join`.
+      const rawTracestate = Array.isArray(carrier.tracestate)
+        ? carrier.tracestate.filter(item => typeof item === 'string').join(',')
+        : carrier.tracestate
+      const tracestate = TraceState.fromString(rawTracestate)
       if (invalidSegment.test(traceId)) return null
       if (invalidSegment.test(spanId)) return null
 
@@ -517,7 +556,7 @@ class TextMapPropagator {
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
         isRemote: true,
-        sampling: { priority: Number.parseInt(flags, 10) & 1 ? 1 : 0 },
+        sampling: { priority: Number.parseInt(flags, 16) & 1 ? 1 : 0 },
         traceparent,
         tracestate,
       })
@@ -543,7 +582,7 @@ class TextMapPropagator {
               break
             }
             case 'o':
-              spanContext._trace.origin = value
+              spanContext._trace.origin = value.replaceAll('~', '=')
               break
             case 't.dm': {
               const mechanism = Math.abs(Number.parseInt(value, 10))
@@ -556,7 +595,7 @@ class TextMapPropagator {
             default: {
               if (!key.startsWith('t.')) continue
               const subKey = key.slice(2) // e.g. t.tid -> tid
-              const transformedValue = value.replaceAll(/[\x7E]/gm, '=')
+              const transformedValue = value.replaceAll('~', '=')
 
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
@@ -669,11 +708,29 @@ class TextMapPropagator {
   _extractBaggageItems (carrier, spanContext) {
     removeAllBaggageItems()
     if (!this._hasPropagationStyle('extract', 'baggage')) return
-    if (!carrier?.baggage) return
-    const baggages = carrier.baggage.split(',')
-    const baggageTagKeys = new Set(this._config.baggageTagKeys)
+    const baggageHeader = carrier?.baggage
+    const header = Array.isArray(baggageHeader) ? baggageHeader.join(',') : baggageHeader
+    if (!header) return
+
+    const baggages = header.split(',')
+    const baggageTagKeys = this.#getBaggageTagKeysSet()
     const tagAllKeys = baggageTagKeys.has('*')
+    /** @type {Record<string, string> | undefined} */
+    let items
+    let itemCount = 0
+    let byteCount = 0
+
     for (const keyValue of baggages) {
+      if (itemCount >= this._config.baggageMaxItems) {
+        tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
+        break
+      }
+      // Charge the comma slot before the empty-entry skip so a `,,,,,foo=bar` can't iterate for free.
+      byteCount += keyValue.length + 1
+      if (byteCount > this._config.baggageMaxBytes) {
+        tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
+        break
+      }
       if (!keyValue) continue
 
       // Per W3C baggage, list-members can contain optional properties after `;`.
@@ -686,7 +743,6 @@ class TextMapPropagator {
       const eqIdx = member.indexOf('=')
       if (eqIdx === -1) {
         tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-        removeAllBaggageItems()
         return
       }
 
@@ -695,25 +751,33 @@ class TextMapPropagator {
 
       if (!baggageTokenExpr.test(key) || !value) {
         tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-        removeAllBaggageItems()
         return
       }
-      try {
-        value = decodeURIComponent(value)
-      } catch {
-        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-        removeAllBaggageItems()
-        return
+      // `decodeURIComponent` only does work when the value contains a
+      // percent-encoded sequence; everything else passes through unchanged.
+      // Skipping the call (and the surrounding `try` frame) shaves an alloc
+      // per baggage entry on the dominant ASCII case.
+      if (value.includes('%')) {
+        try {
+          value = decodeURIComponent(value)
+        } catch {
+          const bytes = value.replaceAll(percentByte, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+          value = Buffer.from(bytes, 'binary').toString('utf8')
+        }
       }
+      items ??= {}
+      items[key] = value
+      itemCount++
 
       if (spanContext && (tagAllKeys || baggageTagKeys.has(key))) {
         spanContext._trace.tags['baggage.' + key] = value
       }
-      setBaggageItem(key, value)
     }
 
-    // Successfully extracted baggage
-    tracerMetrics.count('context_header_style.extracted', ['header_style:baggage']).inc()
+    if (items) {
+      setAllBaggageItems(items)
+      tracerMetrics.count('context_header_style.extracted', ['header_style:baggage']).inc()
+    }
   }
 
   _extractSamplingPriority (carrier, spanContext) {
@@ -729,9 +793,9 @@ class TextMapPropagator {
 
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
-    } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
+    } else if (carrier[tagsKey].length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
     } else {
       const pairs = carrier[tagsKey].split(',')
@@ -797,18 +861,25 @@ class TextMapPropagator {
     return spanContext._traceId.toString(16)
   }
 
-  static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {
+  /**
+   * @param {number} traceparentSampled
+   * @param {number|undefined} tracestateSamplingPriority
+   * @param {string|null} origin
+   * @returns {import('../../priority_sampler').SamplingPriority}
+   */
+  static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin) {
     const fromRumWithoutPriority = !tracestateSamplingPriority && origin === 'rum'
 
-    let samplingPriority
-    if (!fromRumWithoutPriority && traceparentSampled === 0 &&
-    (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
-      samplingPriority = 0
-    } else if (!fromRumWithoutPriority && traceparentSampled === 1 &&
-    (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
-      samplingPriority = 1
-    } else {
-      samplingPriority = tracestateSamplingPriority
+    let samplingPriority =
+      /** @type {import('../../priority_sampler').SamplingPriority} */ (tracestateSamplingPriority ?? AUTO_KEEP)
+    if (!fromRumWithoutPriority) {
+      if (traceparentSampled === 0 &&
+          (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
+        samplingPriority = AUTO_REJECT
+      } else if (traceparentSampled === 1 &&
+                 (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+        samplingPriority = AUTO_KEEP
+      }
     }
 
     return samplingPriority

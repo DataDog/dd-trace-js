@@ -1,11 +1,5 @@
 'use strict'
 
-const ROLE_MAPPINGS = {
-  human: 'user',
-  ai: 'assistant',
-  system: 'system',
-}
-
 class LangChainLLMObsHandler {
   constructor (tagger) {
     /** @type {import('../../../tagger')} */
@@ -17,38 +11,6 @@ class LangChainLLMObsHandler {
   }
 
   setMetaTags () {}
-
-  formatIO (messages) {
-    if (messages.constructor.name === 'Object') { // plain JSON
-      const formatted = {}
-      for (const [key, value] of Object.entries(messages)) {
-        formatted[key] = this.formatIO(value)
-      }
-
-      return formatted
-    } else if (Array.isArray(messages)) {
-      return messages.map(message => this.formatIO(message))
-    } // either a BaseMesage type or a string
-    return this.getContentFromMessage(messages)
-  }
-
-  getContentFromMessage (message) {
-    if (typeof message === 'string') {
-      return message
-    }
-    try {
-      const messageContent = {
-        content: message.content || '',
-      }
-
-      const role = this.getRole(message)
-      if (role) messageContent.role = role
-
-      return messageContent
-    } catch {
-      return JSON.stringify(message)
-    }
-  }
 
   checkTokenUsageChatOrLLMResult (results) {
     const llmOutput = results.llmOutput
@@ -89,17 +51,6 @@ class LangChainLLMObsHandler {
       },
       runId: runIdBase,
     }
-  }
-
-  getRole (message) {
-    if (message.role) return ROLE_MAPPINGS[message.role] || message.role
-
-    const type = (
-      (typeof message.getType === 'function' && message.getType()) ||
-      (typeof message._getType === 'function' && message._getType())
-    )
-
-    return ROLE_MAPPINGS[type] || type
   }
 }
 

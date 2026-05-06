@@ -26,7 +26,7 @@ describe('telemetry', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port,
+          AGENT_PORT: String(agent.port),
           DD_LOGS_INJECTION: 'true',
         },
       })
@@ -41,36 +41,44 @@ describe('telemetry', () => {
       let ddTraceFound = false
       let importInTheMiddleFound = false
 
-      await agent.assertTelemetryReceived(msg => {
-        const { payload } = msg
+      await agent.assertTelemetryReceived({
+        fn: msg => {
+          const { payload } = msg
 
-        if (payload.request_type === 'app-dependencies-loaded') {
-          if (payload.payload.dependencies) {
-            payload.payload.dependencies.forEach(dependency => {
-              if (dependency.name === 'dd-trace') {
-                ddTraceFound = true
-              }
-              if (dependency.name === 'import-in-the-middle') {
-                importInTheMiddleFound = true
-              }
-            })
+          if (payload.request_type === 'app-dependencies-loaded') {
+            if (payload.payload.dependencies) {
+              payload.payload.dependencies.forEach(dependency => {
+                if (dependency.name === 'dd-trace') {
+                  ddTraceFound = true
+                }
+                if (dependency.name === 'import-in-the-middle') {
+                  importInTheMiddleFound = true
+                }
+              })
+            }
           }
-        }
-      }, 'app-dependencies-loaded', 5_000, 1)
+        },
+        requestType: 'app-dependencies-loaded',
+        timeout: 5_000,
+      })
 
       assert.strictEqual(ddTraceFound, true)
       assert.strictEqual(importInTheMiddleFound, true)
     })
 
     it('Assert configuration chaining data is sent', async () => {
-      await agent.assertTelemetryReceived(msg => {
-        const { configuration } = msg.payload.payload
-        assertObjectContains(configuration, [
-          { name: 'DD_LOG_INJECTION', value: true, origin: 'default' },
-          { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
-          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' },
-        ])
-      }, 'app-started', 5_000, 1)
+      await agent.assertTelemetryReceived({
+        fn: msg => {
+          const { configuration } = msg.payload.payload
+          assertObjectContains(configuration, [
+            { name: 'DD_LOGS_INJECTION', value: true, origin: 'default' },
+            { name: 'DD_LOGS_INJECTION', value: true, origin: 'env_var' },
+            { name: 'DD_LOGS_INJECTION', value: false, origin: 'code' },
+          ])
+        },
+        requestType: 'app-started',
+        timeout: 5_000,
+      })
     })
   })
 })

@@ -353,7 +353,7 @@ describe('Plugin', () => {
                 meta: { component: 'graphql' },
               })
               assert.ok(!('graphql.source' in span.meta))
-            })
+            }, { spanResourceMatch: /^graphql\.parse$/ })
             .then(done)
             .catch(done)
 
@@ -375,7 +375,7 @@ describe('Plugin', () => {
                 meta: { component: 'graphql' },
               })
               assert.ok(!('graphql.source' in span.meta))
-            })
+            }, { spanResourceMatch: /^graphql\.validate$/ })
             .then(done)
             .catch(done)
 
@@ -444,6 +444,36 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should trace aliased __proto__ fields with default collapsing', async () => {
+          const source = '{ hello(name: "world") __proto__: hello(name: "alias") }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+
+              assert.strictEqual(resolveSpans.length, 2)
+
+              const paths = resolveSpans
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
+
+              assert.deepStrictEqual(paths, ['__proto__', 'hello'])
+
+              for (const span of resolveSpans) {
+                assert.strictEqual(span.error, 0)
+                assert.strictEqual(span.resource, 'hello:String')
+              }
+            }),
+            graphql.graphql({ schema, source }),
+          ])
+
+          assert.ok(!result.errors || result.errors.length === 0)
+          assert.strictEqual(result.data.hello, 'world')
+          // eslint-disable-next-line no-proto
+          assert.strictEqual(result.data.__proto__, 'alias')
         })
 
         it('should instrument each field resolver duration independently', done => {
@@ -1666,6 +1696,31 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should trace aliased __proto__ fields when collapsing is disabled', async () => {
+          const source = '{ __proto__: hello(name: "alias") }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+
+              assert.strictEqual(resolveSpans.length, 1)
+              assertObjectContains(resolveSpans[0], {
+                resource: 'hello:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': '__proto__',
+                },
+              })
+            }),
+            graphql.graphql({ schema, source }),
+          ])
+
+          assert.ok(!result.errors || result.errors.length === 0)
+          // eslint-disable-next-line no-proto
+          assert.strictEqual(result.data.__proto__, 'alias')
         })
       })
 

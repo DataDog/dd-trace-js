@@ -1,0 +1,730 @@
+[
+  {
+    "dependency": "@anthropic-ai/sdk",
+    "integration": "anthropic",
+    "minimum_tracer_supported": "0.14.0",
+    "max_tracer_supported": "0.73.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@apollo/gateway",
+    "integration": "apollo",
+    "minimum_tracer_supported": "2.3.0",
+    "max_tracer_supported": "2.12.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@aws-sdk/smithy-client",
+    "integration": "aws-sdk",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.374.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@azure/event-hubs",
+    "integration": "azure-event-hubs",
+    "minimum_tracer_supported": "6.0.0",
+    "max_tracer_supported": "6.0.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@azure/functions",
+    "integration": "azure-functions",
+    "minimum_tracer_supported": "4.0.0",
+    "max_tracer_supported": "4.11.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@azure/service-bus",
+    "integration": "azure-service-bus",
+    "minimum_tracer_supported": "7.9.2",
+    "max_tracer_supported": "7.9.5",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@confluentinc/kafka-javascript",
+    "integration": "confluentinc-kafka-javascript",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "1.8.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@cucumber/cucumber",
+    "integration": "cucumber",
+    "minimum_tracer_supported": "7.0.0",
+    "max_tracer_supported": "12.5.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@elastic/elasticsearch",
+    "integration": "elasticsearch",
+    "minimum_tracer_supported": "5.6.16",
+    "max_tracer_supported": "9.3.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@elastic/transport",
+    "integration": "elasticsearch",
+    "minimum_tracer_supported": "8.0.0",
+    "max_tracer_supported": "9.3.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@google-cloud/pubsub",
+    "integration": "google-cloud-pubsub",
+    "minimum_tracer_supported": "1.2.0",
+    "max_tracer_supported": "5.2.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@google-cloud/vertexai",
+    "integration": "google-cloud-vertexai",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "1.10.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@google/genai",
+    "integration": "google-genai",
+    "minimum_tracer_supported": "1.19.0",
+    "max_tracer_supported": "1.37.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@grpc/grpc-js",
+    "integration": "grpc",
+    "minimum_tracer_supported": "1.0.3",
+    "max_tracer_supported": "1.14.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@hapi/hapi",
+    "integration": "hapi",
+    "minimum_tracer_supported": "17.9.0",
+    "max_tracer_supported": "21.4.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@happy-dom/jest-environment",
+    "integration": "jest",
+    "minimum_tracer_supported": "10.0.0",
+    "max_tracer_supported": "20.3.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@jest/core",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@jest/test-sequencer",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@jest/transform",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@koa/router",
+    "integration": "koa",
+    "minimum_tracer_supported": "8.0.0",
+    "max_tracer_supported": "15.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@langchain/core",
+    "integration": "langchain",
+    "minimum_tracer_supported": "0.1.0",
+    "max_tracer_supported": "1.1.16",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@langchain/langgraph",
+    "integration": "langgraph",
+    "minimum_tracer_supported": "1.1.2",
+    "max_tracer_supported": "1.1.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@modelcontextprotocol/sdk",
+    "integration": "modelcontextprotocol-sdk",
+    "minimum_tracer_supported": "1.27.1",
+    "max_tracer_supported": "1.27.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@node-redis/client",
+    "integration": "redis",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "1.0.6",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@opensearch-project/opensearch",
+    "integration": "opensearch",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "3.5.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@prisma/client",
+    "integration": "prisma",
+    "minimum_tracer_supported": "6.1.0",
+    "max_tracer_supported": "7.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@redis/client",
+    "integration": "redis",
+    "minimum_tracer_supported": "1.1.0",
+    "max_tracer_supported": "5.10.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@smithy/smithy-client",
+    "integration": "aws-sdk",
+    "minimum_tracer_supported": "1.0.3",
+    "max_tracer_supported": "4.10.9",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@vitest/runner",
+    "integration": "vitest",
+    "minimum_tracer_supported": "1.6.0",
+    "max_tracer_supported": "4.1.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "aerospike",
+    "integration": "aerospike",
+    "minimum_tracer_supported": "4.0.0",
+    "max_tracer_supported": "6.5.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "ai",
+    "integration": "ai",
+    "minimum_tracer_supported": "4.0.0",
+    "max_tracer_supported": "6.0.39",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "amqp10",
+    "integration": "amqp10",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.6.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "amqplib",
+    "integration": "amqplib",
+    "minimum_tracer_supported": "0.5.0",
+    "max_tracer_supported": "0.10.9",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "avsc",
+    "integration": "avsc",
+    "minimum_tracer_supported": "5.0.0",
+    "max_tracer_supported": "5.7.9",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "aws-sdk",
+    "integration": "aws-sdk",
+    "minimum_tracer_supported": "2.1.35",
+    "max_tracer_supported": "2.1693.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "bullmq",
+    "integration": "bullmq",
+    "minimum_tracer_supported": "5.66.0",
+    "max_tracer_supported": "5.66.5",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "bunyan",
+    "integration": "bunyan",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "2.0.5",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "cassandra-driver",
+    "integration": "cassandra-driver",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "4.8.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "child_process",
+    "integration": "child_process",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "connect",
+    "integration": "connect",
+    "minimum_tracer_supported": "2.2.2",
+    "max_tracer_supported": "3.7.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "couchbase",
+    "integration": "couchbase",
+    "minimum_tracer_supported": "2.6.12",
+    "max_tracer_supported": "4.6.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "cypress",
+    "integration": "cypress",
+    "minimum_tracer_supported": "12.0.0",
+    "max_tracer_supported": "15.13.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "dns",
+    "integration": "dns",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "durable-functions",
+    "integration": "azure-durable-functions",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.3.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "elasticsearch",
+    "integration": "elasticsearch",
+    "minimum_tracer_supported": "10.0.0",
+    "max_tracer_supported": "16.7.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "express",
+    "integration": "express",
+    "minimum_tracer_supported": "4.0.0",
+    "max_tracer_supported": "5.2.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "fastify",
+    "integration": "fastify",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "5.7.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "find-my-way",
+    "integration": "find-my-way",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "9.4.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "graphql",
+    "integration": "graphql",
+    "minimum_tracer_supported": "0.10.0",
+    "max_tracer_supported": "16.12.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "hapi",
+    "integration": "hapi",
+    "minimum_tracer_supported": "16.0.0",
+    "max_tracer_supported": "18.1.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "hono",
+    "integration": "hono",
+    "minimum_tracer_supported": "4.0.0",
+    "max_tracer_supported": "4.11.7",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "http",
+    "integration": "http",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "http2",
+    "integration": "http2",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "https",
+    "integration": "http",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "ioredis",
+    "integration": "ioredis",
+    "minimum_tracer_supported": "2.0.0",
+    "max_tracer_supported": "5.9.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "iovalkey",
+    "integration": "iovalkey",
+    "minimum_tracer_supported": "0.0.1",
+    "max_tracer_supported": "0.3.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "jest-circus",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "jest-config",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "jest-environment-jsdom",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "jest-environment-node",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "jest-runtime",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "jest-worker",
+    "integration": "jest",
+    "minimum_tracer_supported": "28.0.0",
+    "max_tracer_supported": "30.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "kafkajs",
+    "integration": "kafkajs",
+    "minimum_tracer_supported": "1.4.0",
+    "max_tracer_supported": "2.2.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "koa",
+    "integration": "koa",
+    "minimum_tracer_supported": "2.0.0",
+    "max_tracer_supported": "3.1.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "koa-router",
+    "integration": "koa",
+    "minimum_tracer_supported": "7.0.0",
+    "max_tracer_supported": "14.0.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mariadb",
+    "integration": "mariadb",
+    "minimum_tracer_supported": "2.0.4",
+    "max_tracer_supported": "3.4.5",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "memcached",
+    "integration": "memcached",
+    "minimum_tracer_supported": "2.2.0",
+    "max_tracer_supported": "2.2.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "microgateway-core",
+    "integration": "microgateway-core",
+    "minimum_tracer_supported": "2.1.0",
+    "max_tracer_supported": "3.3.7",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mocha",
+    "integration": "mocha",
+    "minimum_tracer_supported": "8.0.0",
+    "max_tracer_supported": "11.7.5",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mocha-each",
+    "integration": "mocha",
+    "minimum_tracer_supported": "2.0.1",
+    "max_tracer_supported": "2.0.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "moleculer",
+    "integration": "moleculer",
+    "minimum_tracer_supported": "0.14.0",
+    "max_tracer_supported": "0.14.35",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mongodb",
+    "integration": "mongodb-core",
+    "minimum_tracer_supported": "3.3.0",
+    "max_tracer_supported": "7.0.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mongodb-core",
+    "integration": "mongodb-core",
+    "minimum_tracer_supported": "2.0.0",
+    "max_tracer_supported": "3.2.7",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mongoose",
+    "integration": "mongoose",
+    "minimum_tracer_supported": "4.6.4",
+    "max_tracer_supported": "9.1.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mysql",
+    "integration": "mysql",
+    "minimum_tracer_supported": "2.0.0",
+    "max_tracer_supported": "2.18.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "mysql2",
+    "integration": "mysql2",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "3.18.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "net",
+    "integration": "net",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "next",
+    "integration": "next",
+    "minimum_tracer_supported": "10.2.0",
+    "max_tracer_supported": "16.1.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "node:dns",
+    "integration": "dns",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "node:http",
+    "integration": "http",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "node:http2",
+    "integration": "http2",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "node:https",
+    "integration": "http",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "node:net",
+    "integration": "net",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "nyc",
+    "integration": "nyc",
+    "minimum_tracer_supported": "17.0.0",
+    "max_tracer_supported": "17.1.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "openai",
+    "integration": "openai",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "6.18.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "oracledb",
+    "integration": "oracledb",
+    "minimum_tracer_supported": "5.0.0",
+    "max_tracer_supported": "6.10.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "pg",
+    "integration": "pg",
+    "minimum_tracer_supported": "8.0.3",
+    "max_tracer_supported": "8.17.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "pino",
+    "integration": "pino",
+    "minimum_tracer_supported": "2.0.0",
+    "max_tracer_supported": "10.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "pino-pretty",
+    "integration": "pino",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "13.1.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "playwright",
+    "integration": "playwright",
+    "minimum_tracer_supported": "1.38.0",
+    "max_tracer_supported": "1.57.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "protobufjs",
+    "integration": "protobufjs",
+    "minimum_tracer_supported": "6.8.0",
+    "max_tracer_supported": "8.0.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "redis",
+    "integration": "redis",
+    "minimum_tracer_supported": "0.12.0",
+    "max_tracer_supported": "5.10.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "restify",
+    "integration": "restify",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "11.1.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "rhea",
+    "integration": "rhea",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "3.0.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "router",
+    "integration": "router",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "2.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "selenium-webdriver",
+    "integration": "selenium",
+    "minimum_tracer_supported": "4.11.0",
+    "max_tracer_supported": "4.39.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "sharedb",
+    "integration": "sharedb",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "5.2.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "tedious",
+    "integration": "tedious",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "19.2.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "tinypool",
+    "integration": "vitest",
+    "minimum_tracer_supported": "0.8.0",
+    "max_tracer_supported": "2.1.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "undici",
+    "integration": "undici",
+    "minimum_tracer_supported": "4.4.1",
+    "max_tracer_supported": "7.18.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "vitest",
+    "integration": "vitest",
+    "minimum_tracer_supported": "1.6.0",
+    "max_tracer_supported": "4.1.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "winston",
+    "integration": "winston",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "3.19.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "workerpool",
+    "integration": "mocha",
+    "minimum_tracer_supported": "6.0.0",
+    "max_tracer_supported": "10.0.1",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "ws",
+    "integration": "ws",
+    "minimum_tracer_supported": "8.0.0",
+    "max_tracer_supported": "8.19.0",
+    "auto-instrumented": "True"
+  }
+]

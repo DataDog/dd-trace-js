@@ -67,7 +67,6 @@ function getEnabled (Plugin) {
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
-    this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
 
@@ -104,7 +103,7 @@ module.exports = class PluginManager {
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
-      ...this._getSharedConfig(name),
+      ...this.#getSharedConfig(name),
       ...pluginConfig,
     })
   }
@@ -121,8 +120,11 @@ module.exports = class PluginManager {
     this.loadPlugin(name)
   }
 
-  // like instrumenter.enable()
-  configure (config = {}) {
+  /**
+   * Like instrumenter.enable()
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  configure (config) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
@@ -148,7 +150,7 @@ module.exports = class PluginManager {
   }
 
   // TODO: figure out a better way to handle this
-  _getSharedConfig (name) {
+  #getSharedConfig (name) {
     const {
       logInjection,
       serviceMapping,
@@ -161,9 +163,9 @@ module.exports = class PluginManager {
       dsmEnabled,
       clientIpEnabled,
       clientIpHeader,
-      memcachedCommandEnabled,
-      ciVisibilityTestSessionName,
-      ciVisAgentlessLogSubmissionEnabled,
+      DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TEST_SESSION_NAME,
+      DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       isTestDynamicInstrumentationEnabled,
       isServiceUserProvided,
       middlewareTracingEnabled,
@@ -172,19 +174,19 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       resourceRenamingEnabled,
-    } = this._tracerConfig
+    } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
       codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
-      memcachedCommandEnabled,
+      DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       site,
       url,
       headers: headerTags || [],
       clientIpHeader,
-      ciVisibilityTestSessionName,
-      ciVisAgentlessLogSubmissionEnabled,
+      DD_TEST_SESSION_NAME,
+      DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       isTestDynamicInstrumentationEnabled,
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,

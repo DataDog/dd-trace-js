@@ -1,8 +1,12 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realDateNow = Date.now.bind(Date)
+const realSetTimeout = setTimeout
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const {
   addIntelligentTestRunnerSpanTags,
@@ -33,6 +37,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -112,7 +117,7 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       this.libraryConfig = null
@@ -229,7 +234,7 @@ class CucumberPlugin extends CiPlugin {
       // Time we give the breakpoint to be hit
       if (promises && this.runningTestProbe) {
         promises.hitBreakpointPromise = new Promise((resolve) => {
-          setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+          realSetTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
         })
       }
 
@@ -252,8 +257,8 @@ class CucumberPlugin extends CiPlugin {
           const { file, line, stackIndex } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
-          const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
-          while (Date.now() < waitUntil) {
+          const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
+          while (realDateNow() < waitUntil) {
             // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
             // However, Cucumber doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
             // fall back to a fixed syncronous delay.
@@ -303,10 +308,15 @@ class CucumberPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      finalStatus,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
+
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')

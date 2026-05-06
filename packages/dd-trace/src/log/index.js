@@ -1,55 +1,27 @@
 'use strict'
+
 const { inspect } = require('util')
+
+const { defaults } = require('../config/defaults')
 const { isTrue } = require('../util')
 const { getValueFromEnvSources } = require('../config/helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
-const { memoize } = require('./utils')
 
 const config = {
-  enabled: false,
+  enabled: defaults.DD_TRACE_DEBUG,
   logger: undefined,
-  logLevel: 'debug',
+  logLevel: defaults.logLevel,
 }
 
-// in most places where we know we want to mute a log we use log.error() directly
+// In most places where we know we want to mute a log we use log.error() directly
 const NO_TRANSMIT = new LogConfig(false)
 
 const log = {
   LogConfig,
   NO_TRANSMIT,
   NoTransmitError,
-
-  /**
-   * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
-   */
-  getConfig () {
-    return { ...config }
-  },
-
-  use (logger) {
-    config.logger = logger
-    logWriter.use(logger)
-    return log
-  },
-
-  toggle (enabled, logLevel) {
-    config.enabled = enabled
-    config.logLevel = logLevel
-    logWriter.toggle(enabled, logLevel)
-    return log
-  },
-
-  reset () {
-    logWriter.reset()
-    log._deprecate = memoize((code, message) => {
-      publishFormatted(errorChannel, null, message)
-      return true
-    })
-
-    return log
-  },
 
   trace (...args) {
     if (traceChannel.hasSubscribers) {
@@ -66,6 +38,8 @@ const log = {
 
       publishFormatted(traceChannel, null, stack.join('\n'))
     }
+    // TODO: Why do we allow chaining here? This is likely not used anywhere.
+    // If it is used, that seems like a mistake.
     return log
   },
 
@@ -102,31 +76,20 @@ const log = {
     return log
   },
 
-  deprecate (code, message) {
-    return log._deprecate(code, message)
-  },
-
-  isEnabled (fleetStableConfigValue, localStableConfigValue) {
-    return isTrue(
-      fleetStableConfigValue ??
+  configure (options) {
+    config.logger = options.logger
+    config.logLevel = options.logLevel ??
+        getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
+        config.logLevel
+    config.enabled = isTrue(
       getValueFromEnvSources('DD_TRACE_DEBUG') ??
-      (getValueFromEnvSources('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
-      localStableConfigValue ??
-      config.enabled
+      // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      (process.env.OTEL_LOG_LEVEL === 'debug' || config.enabled)
     )
-  },
+    logWriter.configure(config.enabled, config.logLevel, options.logger)
 
-  getLogLevel (
-    optionsValue,
-    fleetStableConfigValue,
-    localStableConfigValue
-  ) {
-    return optionsValue ??
-      fleetStableConfigValue ??
-      getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
-      getValueFromEnvSources('OTEL_LOG_LEVEL') ??
-      localStableConfigValue ??
-      config.logLevel
+    return config.enabled
   },
 }
 
@@ -150,8 +113,6 @@ function getErrorLog (err) {
   return err
 }
 
-log.reset()
-
-log.toggle(log.isEnabled(), log.getLogLevel())
+log.configure({})
 
 module.exports = log

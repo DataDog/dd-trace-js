@@ -3,12 +3,12 @@
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
+const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
-const ignore = require('../../../../../vendor/dist/ignore')
 
 const id = require('../../id')
 const {
@@ -88,7 +88,23 @@ const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
+const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
+
+// Matches patterns that are almost certainly runtime-generated values in test names:
+// - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
+// - UUIDs (8-4-4-4-12 hex)
+// - ISO 8601 dates (2024-03-23) or date-times (2024-03-23T14:30)
+// - Random ports on localhost, 127.0.0.1, or 0.0.0.0
+// - Math.random() float values (10+ decimal digits after 0.)
+const DYNAMIC_NAME_RE = new RegExp(
+  String.raw`\b1[6-9]\d{8,11}\b|` +
+  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
+  String.raw`\b\d{4}-\d{2}-\d{2}|` +
+  String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{4,5}\b|` +
+  String.raw`\b0\.\d{10,}`,
+  'i'
+)
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
@@ -120,6 +136,7 @@ const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
 const JEST_WORKER_TELEMETRY_PAYLOAD_CODE = 63
+const JEST_WORKER_QUARANTINE_PAYLOAD_CODE = 64
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -200,6 +217,8 @@ const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
+const MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS = 10
+
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
@@ -245,6 +264,7 @@ module.exports = {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
@@ -260,6 +280,7 @@ module.exports = {
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -337,6 +358,16 @@ module.exports = {
   POSSIBLE_BASE_BRANCHES,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  collectTestOptimizationSummariesFromTraces,
+  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  formatAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  formatDynamicNamesSummary,
+  logTestOptimizationSummary,
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -648,24 +679,146 @@ function getCodeOwnersFileEntries (rootDir) {
     const trimmed = content.trim()
     if (trimmed === '') continue
     const [pattern, ...owners] = trimmed.split(/\s+/)
-    entries.push({ pattern, owners })
+    entries.push(setCodeOwnersPatternRegex({ pattern, owners }))
   }
   // Reverse because rules defined last take precedence
   return entries.reverse()
 }
 
-const codeOwnersPerFileName = new Map()
+const codeOwnersPerEntries = new WeakMap()
+
+/**
+ * @param {string} character
+ * @returns {string}
+ */
+function escapeRegexCharacter (character) {
+  return character.replaceAll(/[|\\{}()[\]^$+*?.]/g, String.raw`\$&`)
+}
+
+/**
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function hasUnescapedWildcard (pattern) {
+  for (let i = 0; i < pattern.length; i++) {
+    const character = pattern[i]
+    if (character === '\\') {
+      i++
+    } else if (character === '*' || character === '?') {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {string} pattern
+ * @returns {string}
+ */
+function codeOwnersPatternToRegexSource (pattern) {
+  let source = ''
+  for (let i = 0; i < pattern.length; i++) {
+    const character = pattern[i]
+
+    if (character === '\\') {
+      const escapedCharacter = pattern[i + 1]
+      source += escapedCharacter === undefined
+        ? escapeRegexCharacter(character)
+        : escapeRegexCharacter(escapedCharacter)
+      i++
+    } else if (character === '*') {
+      if (pattern[i + 1] === '*') {
+        if (pattern[i + 2] === '/') {
+          source += '(?:.*/)?'
+          i += 2
+        } else {
+          source += '.*'
+          i++
+        }
+      } else {
+        source += '[^/]*'
+      }
+    } else if (character === '?') {
+      source += '[^/]'
+    } else {
+      source += escapeRegexCharacter(character)
+    }
+  }
+  return source
+}
+
+/**
+ * @param {string} pattern
+ * @returns {RegExp|null}
+ */
+function getCodeOwnersPatternRegex (pattern) {
+  if (!pattern || pattern[0] === '!') {
+    return null
+  }
+
+  const directoryOnly = pattern.endsWith('/')
+  const normalizedPattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '')
+  const anchored = pattern.startsWith('/') || normalizedPattern.includes('/')
+
+  if (!normalizedPattern) {
+    return null
+  }
+
+  const lastSlashIndex = normalizedPattern.lastIndexOf('/')
+  const lastSegment = lastSlashIndex === -1 ? normalizedPattern : normalizedPattern.slice(lastSlashIndex + 1)
+  const descendantSuffix = directoryOnly || !hasUnescapedWildcard(lastSegment) ? '(?:/.*)?' : ''
+  const patternSource = codeOwnersPatternToRegexSource(normalizedPattern)
+  const regexSource = anchored
+    ? `^${patternSource}${descendantSuffix}$`
+    : `(?:^|/)${patternSource}${descendantSuffix}$`
+
+  return new RegExp(regexSource)
+}
+
+function setCodeOwnersPatternRegex (entry) {
+  Object.defineProperty(entry, 'regex', {
+    configurable: true,
+    value: getCodeOwnersPatternRegex(entry.pattern),
+    writable: true,
+  })
+  return entry
+}
+
+/**
+ * Match a repository-relative filename against a CODEOWNERS pattern.
+ * See GitHub's CODEOWNERS pattern rules:
+ * https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+ *
+ * @param {RegExp|null} regex
+ * @param {string} filename
+ * @returns {boolean}
+ */
+function isCodeOwnersPatternMatch (regex, filename) {
+  if (!regex || !filename) {
+    return false
+  }
+
+  const normalizedFilename = filename.replaceAll('\\', '/').replace(/^\/+/, '')
+  return regex.test(normalizedFilename)
+}
 
 function getCodeOwnersForFilename (filename, entries) {
   if (!entries) {
     return null
   }
-  if (codeOwnersPerFileName.has(filename)) {
+  let codeOwnersPerFileName = codeOwnersPerEntries.get(entries)
+
+  if (!codeOwnersPerFileName) {
+    codeOwnersPerFileName = new Map()
+    codeOwnersPerEntries.set(entries, codeOwnersPerFileName)
+  } else if (codeOwnersPerFileName.has(filename)) {
     return codeOwnersPerFileName.get(filename)
   }
+
   for (const entry of entries) {
     try {
-      const isResponsible = ignore().add(entry.pattern).ignores(filename)
+      const regex = entry.regex === undefined ? setCodeOwnersPatternRegex(entry).regex : entry.regex
+      const isResponsible = isCodeOwnersPatternMatch(regex, filename)
       if (isResponsible) {
         const codeOwners = JSON.stringify(entry.owners)
         codeOwnersPerFileName.set(filename, codeOwners)
@@ -911,8 +1064,12 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
 }
 
 function getTestSessionName (config, trimmedCommand, envTags) {
-  if (config.ciVisibilityTestSessionName) {
-    return config.ciVisibilityTestSessionName
+  if (config.DD_TEST_SESSION_NAME) {
+    return config.DD_TEST_SESSION_NAME
+  }
+  const lageTestSessionName = getLageTestSessionName()
+  if (lageTestSessionName) {
+    return lageTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
     return `${envTags[CI_JOB_NAME]}-${trimmedCommand}`
@@ -1176,6 +1333,319 @@ function getModifiedFilesFromDiff (diff) {
     return null
   }
   return result
+}
+
+/**
+ * @typedef {object} AttemptToFixExecutionResult
+ * @property {string} name
+ * @property {number} executions
+ * @property {number} failedCount
+ * @property {boolean} isDisabled
+ * @property {boolean} isQuarantined
+ */
+
+/**
+ * @typedef {Map<string, AttemptToFixExecutionResult>} AttemptToFixExecutions
+ */
+
+/**
+ * Formats a test name for user-facing Test Optimization summaries.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @returns {string}
+ */
+function formatTestOptimizationName (testSuite, testName) {
+  return testSuite ? `${testSuite} › ${testName}` : testName
+}
+
+/**
+ * Renders a bounded bullet list for Test Optimization summaries.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
+ */
+function formatTestOptimizationList (items) {
+  const shown = items.slice(0, MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS)
+  const more = items.length - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+}
+
+/**
+ * Logs a compact message when an attempt-to-fix test execution starts.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @param {Set<string>} [loggedAttemptToFixTests]
+ */
+function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTests) {
+  if (!testName) return
+
+  const name = formatTestOptimizationName(testSuite, testName)
+  if (loggedAttemptToFixTests) {
+    if (loggedAttemptToFixTests.has(name)) return
+
+    loggedAttemptToFixTests.add(name)
+  }
+
+  // eslint-disable-next-line no-console -- Intentional user-facing attempt-to-fix progress report
+  console.warn(`Datadog Test Optimization: attempting to fix ${name}`)
+}
+
+/**
+ * Records a single attempt-to-fix execution for the end-of-session user summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @param {{
+ *   testSuite?: string,
+ *   testName: string,
+ *   status: string,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
+ * }} execution
+ */
+function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
+  if (!execution?.testName) return
+
+  const { testSuite, testName, status, isDisabled, isQuarantined } = execution
+  const name = formatTestOptimizationName(testSuite, testName)
+  let result = attemptToFixExecutions.get(name)
+
+  if (!result) {
+    result = {
+      name,
+      executions: 0,
+      failedCount: 0,
+      isDisabled: false,
+      isQuarantined: false,
+    }
+    attemptToFixExecutions.set(name, result)
+  }
+
+  result.executions++
+  result.isDisabled = result.isDisabled || !!isDisabled
+  result.isQuarantined = result.isQuarantined || !!isQuarantined
+
+  if (status === 'fail') {
+    result.failedCount++
+  }
+}
+
+function collectDynamicNameFromTraceSpan (span, newTestsWithDynamicNames) {
+  const meta = span.meta
+  if (meta?.[TEST_HAS_DYNAMIC_NAME] !== 'true') return
+
+  const suite = meta[TEST_SUITE]
+  const name = meta[TEST_NAME]
+  if (suite && name) {
+    newTestsWithDynamicNames.add(`${suite} › ${name}`)
+  }
+}
+
+function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions) {
+  const meta = span.meta
+  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') return
+
+  recordAttemptToFixExecution(attemptToFixExecutions, {
+    testSuite: meta[TEST_SUITE],
+    testName: meta[TEST_NAME],
+    status: meta[TEST_STATUS],
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+  })
+}
+
+/**
+ * Scans serialized worker trace payloads and populates Test Optimization summary data.
+ * Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {{
+ *   newTestsWithDynamicNames?: Set<string>,
+ *   attemptToFixExecutions?: AttemptToFixExecutions
+ * }} summaries
+ */
+function collectTestOptimizationSummariesFromTraces (data, summaries) {
+  const { newTestsWithDynamicNames, attemptToFixExecutions } = summaries
+
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (newTestsWithDynamicNames) {
+          collectDynamicNameFromTraceSpan(span, newTestsWithDynamicNames)
+        }
+        if (attemptToFixExecutions) {
+          collectAttemptToFixExecutionFromTraceSpan(span, attemptToFixExecutions)
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+/**
+ * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
+ * and populates the provided Set. Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
+ */
+function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
+  collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
+}
+
+/**
+ * Scans serialized worker trace payloads for attempt-to-fix test spans.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ */
+function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) {
+  collectTestOptimizationSummariesFromTraces(data, { attemptToFixExecutions })
+}
+
+function getAttemptToFixManagementNotes (result) {
+  const notes = []
+
+  if (result.isDisabled) {
+    notes.push('Test was marked as disabled but was run because it is attempt to fix.')
+  }
+  if (result.isQuarantined) {
+    notes.push('Test was marked as quarantined but was not quarantined because it is attempt to fix.')
+  }
+
+  return notes
+}
+
+function hasAttemptToFixManagementNotes (result) {
+  return result.isDisabled || result.isQuarantined
+}
+
+function addAttemptToFixResultLine (lines, result) {
+  lines.push(`  • ${result.name}`)
+
+  for (const note of getAttemptToFixManagementNotes(result)) {
+    lines.push(`    ${note}`)
+  }
+}
+
+/**
+ * Formats the attempt-to-fix end-of-session summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @returns {string}
+ */
+function formatAttemptToFixSummary (attemptToFixExecutions) {
+  if (attemptToFixExecutions.size === 0) return ''
+
+  const results = [...attemptToFixExecutions.values()]
+  const failedResults = results.filter(result => result.failedCount > 0)
+  const totalExecutions = results.reduce((total, result) => total + result.executions, 0)
+
+  if (failedResults.length === 0) {
+    const lines = [
+      `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`,
+    ]
+
+    for (const result of results) {
+      if (hasAttemptToFixManagementNotes(result)) {
+        addAttemptToFixResultLine(lines, result)
+      }
+    }
+
+    return lines.join('\n')
+  }
+
+  const totalFailedExecutions = failedResults.reduce(
+    (total, result) => total + result.failedCount,
+    0
+  )
+  const lines = [
+    `Attempt to fix failed: ${totalFailedExecutions} of ${totalExecutions} execution(s) failed ` +
+      `across ${failedResults.length} of ${results.length} test(s).`,
+  ]
+
+  for (const result of failedResults) {
+    addAttemptToFixResultLine(lines, result)
+  }
+  for (const result of results) {
+    if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+      addAttemptToFixResultLine(lines, result)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Formats the dynamic-name warning section of the Test Optimization summary.
+ *
+ * @param {Set<string>} newTestsWithDynamicNames
+ * @returns {string}
+ */
+function formatDynamicNamesSummary (newTestsWithDynamicNames) {
+  if (newTestsWithDynamicNames.size === 0) return ''
+
+  const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+  return (
+    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+    'dynamic data (timestamps, UUIDs, etc.).\n' +
+    'Tests with changing names are always treated as new on every run, ' +
+    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+    'Consider using stable, deterministic test names.\n\n' +
+    formatTestOptimizationList(items)
+  )
+}
+
+/**
+ * Logs a single Test Optimization session summary.
+ *
+ * @param {{
+ *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   newTestsWithDynamicNames?: Set<string>,
+ *   extraSections?: string[]
+ * }} summary
+ */
+function logTestOptimizationSummary (summary) {
+  const { attemptToFixExecutions, newTestsWithDynamicNames, extraSections = [] } = summary
+  const sections = []
+  const attemptToFixSummary = attemptToFixExecutions
+    ? formatAttemptToFixSummary(attemptToFixExecutions)
+    : ''
+  const dynamicNamesSummary = newTestsWithDynamicNames
+    ? formatDynamicNamesSummary(newTestsWithDynamicNames)
+    : ''
+
+  if (attemptToFixSummary) sections.push(attemptToFixSummary)
+  sections.push(...extraSections.filter(Boolean))
+  if (dynamicNamesSummary) sections.push(dynamicNamesSummary)
+
+  if (sections.length === 0) return
+
+  const line = '-'.repeat(50)
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
+
+  if (attemptToFixExecutions) {
+    attemptToFixExecutions.clear()
+  }
+  if (newTestsWithDynamicNames) {
+    newTestsWithDynamicNames.clear()
+  }
+}
+
+/**
+ * Logs a "Datadog Test Optimization" warning about new tests with dynamic names.
+ * Clears the Set after logging. No-op if the Set is empty.
+ *
+ * @param {Set<string>} newTestsWithDynamicNames
+ */
+function logDynamicNamesWarning (newTestsWithDynamicNames) {
+  logTestOptimizationSummary({ newTestsWithDynamicNames })
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {

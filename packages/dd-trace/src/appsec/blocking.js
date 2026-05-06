@@ -1,14 +1,38 @@
 'use strict'
 
+const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const log = require('../log')
+const web = require('../plugins/util/web')
 const blockedTemplates = require('./blocked_templates')
 const { updateBlockFailureMetric } = require('./telemetry')
 
-const detectedSpecificEndpoints = {}
+// Bounded by the LRU as defense-in-depth: getSpecificKey already keys on the
+// resolved route (or the path with the query string stripped) so cardinality
+// follows the routing table, not the URL space.
+const SPECIFIC_ENDPOINT_CACHE_MAX = 16_384
+const detectedSpecificEndpoints = new LRUCache({ max: SPECIFIC_ENDPOINT_CACHE_MAX })
 
-let templateHtml = blockedTemplates.html
-let templateJson = blockedTemplates.json
-let templateGraphqlJson = blockedTemplates.graphqlJson
+const templateKeyword = '[security_response_id]'
+
+const templates = {
+  html: {
+    body: null,
+    idIndex: -1,
+    type: 'text/html; charset=utf-8',
+  },
+  json: {
+    body: null,
+    idIndex: -1,
+    type: 'application/json',
+  },
+  graphqlJson: {
+    body: null,
+    idIndex: -1,
+    type: 'application/json',
+  },
+}
+
+setTemplates()
 
 let defaultBlockingActionParameters
 
@@ -17,15 +41,21 @@ const responseBlockedSet = new WeakSet()
 const blockDelegations = new WeakMap()
 
 const specificBlockingTypes = {
-  GRAPHQL: 'graphql',
+  GRAPHQL: 'graphqlJson',
 }
 
-function getSpecificKey (method, url) {
-  return `${method}+${url}`
+function getSpecificKey (req) {
+  const route = web.getContext(req)?.paths?.join('')
+  if (route) return `${req.method}+${route}`
+
+  // Strip the query string so unique parameters do not balloon the cache.
+  const url = req.originalUrl || req.url || ''
+  const queryStart = url.indexOf('?')
+  return `${req.method}+${queryStart === -1 ? url : url.slice(0, queryStart)}`
 }
 
-function addSpecificEndpoint (method, url, type) {
-  detectedSpecificEndpoints[getSpecificKey(method, url)] = type
+function addSpecificEndpoint (req, type) {
+  detectedSpecificEndpoints.set(getSpecificKey(req), type)
 }
 
 function getBlockWithRedirectData (actionParameters) {
@@ -33,30 +63,23 @@ function getBlockWithRedirectData (actionParameters) {
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
   }
-  const headers = {
-    Location: actionParameters.location,
+
+  const headers = { Location: actionParameters.location }
+
+  if (headers.Location) {
+    headers.Location = headers.Location.replace(templateKeyword, actionParameters.security_response_id ?? '')
   }
 
   return { headers, statusCode }
-}
-
-function getSpecificBlockingData (type) {
-  switch (type) {
-    case specificBlockingTypes.GRAPHQL:
-      return {
-        type: 'application/json',
-        body: templateGraphqlJson,
-      }
-  }
 }
 
 function getBlockWithContentData (req, specificType, actionParameters) {
   let type
   let body
 
-  const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
+  const specificBlockingType = specificType || detectedSpecificEndpoints.get(getSpecificKey(req))
   if (specificBlockingType) {
-    const specificBlockingContent = getSpecificBlockingData(specificBlockingType)
+    const specificBlockingContent = getTemplate(specificBlockingType, actionParameters)
     type = specificBlockingContent?.type
     body = specificBlockingContent?.body
   }
@@ -65,23 +88,17 @@ function getBlockWithContentData (req, specificType, actionParameters) {
     // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
     const accept = req.headers.accept?.split(',').map((str) => str.split(';', 1)[0].trim())
 
+    let templateName = 'json'
+
     if (!actionParameters || actionParameters.type === 'auto') {
       if (accept?.includes('text/html') && !accept.includes('application/json')) {
-        type = 'text/html; charset=utf-8'
-        body = templateHtml
-      } else {
-        type = 'application/json'
-        body = templateJson
+        templateName = 'html'
       }
-    } else {
-      if (actionParameters.type === 'html') {
-        type = 'text/html; charset=utf-8'
-        body = templateHtml
-      } else {
-        type = 'application/json'
-        body = templateJson
-      }
+    } else if (actionParameters.type === 'html') {
+      templateName = 'html'
     }
+
+    ({ type, body } = getTemplate(templateName, actionParameters))
   }
 
   const statusCode = actionParameters?.status_code || 403
@@ -164,12 +181,38 @@ function getBlockingAction (actions) {
   return actions?.redirect_request || actions?.block_request
 }
 
+/**
+ * @param {import('../config/config-base')} [config] - Tracer configuration
+ */
 function setTemplates (config) {
-  templateHtml = config.appsec.blockedTemplateHtml || blockedTemplates.html
+  templates.html.body = config?.appsec?.blockedTemplateHtml
+  templates.json.body = config?.appsec?.blockedTemplateJson
+  templates.graphqlJson.body = config?.appsec?.blockedTemplateGraphql
 
-  templateJson = config.appsec.blockedTemplateJson || blockedTemplates.json
+  for (const type of Object.keys(templates)) {
+    const template = templates[type]
 
-  templateGraphqlJson = config.appsec.blockedTemplateGraphql || blockedTemplates.graphqlJson
+    // set default template if not set by config
+    if (!template.body) template.body = blockedTemplates[type]
+
+    template.idIndex = template.body.indexOf(templateKeyword)
+
+    if (template.idIndex !== -1) {
+      template.body = [
+        template.body.slice(0, template.idIndex),
+        template.body.slice(template.idIndex + templateKeyword.length),
+      ]
+    }
+  }
+}
+
+function getTemplate (type, actionParameters) {
+  const template = templates[type]
+  if (template.idIndex === -1) return template
+
+  const body = template.body[0] + (actionParameters?.security_response_id ?? '') + template.body[1]
+
+  return { body, type: template.type }
 }
 
 function isBlocked (res) {

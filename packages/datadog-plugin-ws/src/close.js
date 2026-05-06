@@ -47,7 +47,7 @@ class WSClosePlugin extends TracingPlugin {
     }
 
     if (isPeerClose && traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
-      span.setTag('_dd.dm.service', spanTags['service.name'] || service)
+      span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
       span.setTag('_dd.dm.resource', spanTags['resource.name'] || `websocket ${path}`)
       span.setTag('_dd.dm.inherited', 1)
     }
@@ -57,11 +57,13 @@ class WSClosePlugin extends TracingPlugin {
   }
 
   bindAsyncStart (ctx) {
+    if (!ctx.span) return ctx.parentStore
     if (!ctx.isPeerClose) ctx.span.finish()
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    if (!ctx.span) return
     ctx.span.finish()
   }
 

@@ -1,23 +1,30 @@
 'use strict'
 
 const assert = require('assert')
+const dc = require('node:diagnostics_channel')
+const events = require('node:events')
 const fs = require('fs')
 const { platform } = require('os')
 const path = require('path')
 const util = require('util')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it, Runner } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
 const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
-const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
+
+// dd-trace's mocha CI Visibility hook adds extra Runner listeners.
+if (dc.channel('ci:mocha:test:finish').hasSubscribers) {
+  Runner.prototype.setMaxListeners(events.defaultMaxListeners + 2)
+}
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
@@ -27,7 +34,11 @@ exports.withNamingSchema = withNamingSchema
 exports.withPeerService = withPeerService
 exports.insertVersionDep = insertVersionDep
 
-const testedPlugins = agent.testedPlugins
+// Lazily load the fake agent. It pre-warms the tracer module graph on require,
+// which would leak global state (instrumentation hooks, URL shims, etc.) into
+// specs that never use it (e.g. packages/dd-trace/test/ritm.spec.js).
+let _agent
+const getAgent = () => (_agent ??= require('../plugins/agent'))
 
 function withNamingSchema (
   spanProducerFn,
@@ -61,14 +72,14 @@ function withNamingSchema (
 
         hooks(versionName, false)
 
-        const { opName, serviceName } = expected[versionName]
+        const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
           this.retries(3)
           this.timeout(25000)
 
           return new Promise((resolve, reject) => {
-            const agentPromise = agent
+            const agentPromise = getAgent()
               .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
@@ -80,6 +91,22 @@ function withNamingSchema (
 
                 assert.strictEqual(span.name, expectedOpName)
                 assert.strictEqual(span.service, expectedServiceName)
+
+                const tracerService = defaultTracerService || Nomenclature.config.service
+
+                if (span.service !== tracerService) {
+                  assert.notStrictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be present when a service override is active`
+                  )
+                } else {
+                  assert.strictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be absent when the service matches the default`
+                  )
+                }
               }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
@@ -106,20 +133,35 @@ function withNamingSchema (
 
       hooks('v0', true)
 
-      const { serviceName } = expected.v1
+      const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
         this.retries(3)
         this.timeout(15000)
 
         return new Promise((resolve, reject) => {
-          const agentPromise = agent
+          const agentPromise = getAgent()
             .assertSomeTraces(traces => {
               const span = traces[0][0]
               const expectedServiceName = typeof serviceName === 'function'
                 ? serviceName()
                 : serviceName
               assert.strictEqual(span.service, expectedServiceName)
+
+              const tracerService = defaultTracerService || Nomenclature.config.service
+              if (span.service !== tracerService) {
+                assert.notStrictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be present when a service override is active`
+                )
+              } else {
+                assert.strictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be absent when the service matches the default`
+                )
+              }
             }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
@@ -165,7 +207,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       )
 
       await Promise.all([
-        agent.assertSomeTraces(traces => {
+        getAgent().assertSomeTraces(traces => {
           const span = traces[0][0]
           assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
           assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
@@ -264,6 +306,7 @@ function withVersions (plugin, modules, range, cb) {
         before(() => {
           // set plugin name and version to later report to test agent regarding tested integrations and their tested
           // range of versions
+          const testedPlugins = getAgent().testedPlugins
           const lastPlugin = testedPlugins.at(-1)
           if (
             !lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== testCase.resolvedVersion
@@ -374,7 +417,7 @@ exports.mochaHooks = {
     process.exit = ORIGINAL_PROCESS_EXIT
   },
   afterEach () {
-    agent.reset()
+    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)

@@ -33,7 +33,7 @@ const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 
 /**
  * Initializes OpenTelemetry Logs support
- * @param {Config} config - Tracer configuration instance
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryLogs (config) {
   // Build resource attributes
@@ -60,18 +60,18 @@ function initializeOpenTelemetryLogs (config) {
 
   // Create OTLP exporter using resolved config values
   const exporter = new OtlpHttpLogExporter(
-    config.otelLogsUrl,
-    config.otelLogsHeaders,
-    config.otelLogsTimeout,
-    config.otelLogsProtocol,
+    config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+    config.OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+    config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+    config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
     resourceAttributes
   )
 
   // Create batch processor for exporting logs to Datadog Agent
   const processor = new BatchLogRecordProcessor(
     exporter,
-    config.otelBatchTimeout,
-    config.otelMaxExportBatchSize
+    config.OTEL_BSP_SCHEDULE_DELAY,
+    config.OTEL_BSP_MAX_EXPORT_BATCH_SIZE
   )
 
   // Create logger provider with processor for Datadog Agent export
