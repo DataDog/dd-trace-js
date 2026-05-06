@@ -106,7 +106,7 @@ jobs:
       PLUGINS: ldapjs
     services:
       openldap:
-        image: bitnamilegacy/openldap:latest
+        image: bitnamilegacy/openldap@sha256:687f14a22b5c74fb057a57221acdbe7b8c82e2d3619fc380db3af48ec4aa04ed # latest
         ports:
           - "1389:1389"
           - "1636:1636"
@@ -140,7 +140,7 @@ jobs:
       id-token: write
     services:
       postgres:
-        image: postgres:9.5
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -174,7 +174,7 @@ jobs:
       id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -283,7 +283,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -314,7 +314,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -556,7 +556,7 @@ jobs:
       id-token: write
     services:
       kafka:
-        image: apache/kafka:3.9.1
+        image: apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed # 3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"

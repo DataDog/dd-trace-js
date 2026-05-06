@@ -1,16 +1,16 @@
 services:
   aerospike:
-    image: aerospike:ce-6.4.0.3
+    image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
   azurite:
-    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite:3.35.0
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite@sha256:647c63a91102a9d8e8000aab803436e1fc85fbb285e7ce830a82ee5d6661cf37 # 3.35.0
     ports:
       - "127.0.0.1:10000:10000"
       - "127.0.0.1:10001:10001"
       - "127.0.0.1:10002:10002"
   azureeventhubsemulator:
-    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/eventhubs-emulator@sha256:25ec4141efb69933a0c82e6a787fa147a3895519e7d236d4c41ba568e03100eb # 2.1.0
     volumes:
       - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
     ports:
@@ -21,7 +21,7 @@ services:
       METADATA_SERVER: azurite
       ACCEPT_EULA: "Y"
   azureservicebusemulator:
-    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/servicebus-emulator@sha256:353913ece3d9124cebd40f4b91d00dd197846b8cf86eae9a4790698709c64a1d # 1.1.2
     volumes:
       - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
     ports:
@@ -32,7 +32,7 @@ services:
       MSSQL_SA_PASSWORD: "Localtestpass1!"
       SQL_SERVER: azuresqledge
   azuresqledge:
-    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge:1.0.7
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge@sha256:1dcc88d2d9e555d0addb0636648d0da033206978d7c5c4da044c904a0f06f58b # 1.0.7
     platform: linux/amd64
     ports:
       - "127.0.0.1:1433:1433"
@@ -40,12 +40,12 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Localtestpass1!"
   couchbase:
-    image: ghcr.io/datadog/couchbase-server-sandbox:latest
+    image: ghcr.io/datadog/couchbase-server-sandbox@sha256:4ffbf2bc9785a9c7c6ddd7580226280a2a9f1f08c689999f5dff7958e71ad97e # latest
     ports:
       - "127.0.0.1:8091-8095:8091-8095"
       - "127.0.0.1:11210:11210"
   postgres:
-    image: postgres:9.5-alpine
+    image: postgres@sha256:b1d91bceef1fbbd64ea5d8afc3d257fbc4ffe23c5b3425ccc72b52f9c500fbb6 # 9.5-alpine
     environment:
       - POSTGRES_PASSWORD=postgres
     ports:
@@ -54,52 +54,52 @@ services:
     # A working MSSQL server is not available on ARM.
     # This image provides _most_ of sqlserver functionalities, but
     # does not support stored procedures (corresponding tests will fail)
-    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge:1.0.7
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-sql-edge@sha256:1dcc88d2d9e555d0addb0636648d0da033206978d7c5c4da044c904a0f06f58b # 1.0.7
     environment:
       - "ACCEPT_EULA=Y"
       - "SA_PASSWORD=DD_HUNTER2"
     ports:
       - "127.0.0.1:1433:1433"
   mysql:
-    image: mariadb:10.4
+    image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
     environment:
       - MYSQL_ALLOW_EMPTY_PASSWORD=yes
       - MYSQL_DATABASE=db
     ports:
       - "127.0.0.1:3306:3306"
   redis:
-    image: redis:7.0-alpine
+    image: redis@sha256:c9d92d840fd011c908f040592857c724ae6d877f2aba5c40ad963276507386b2 # 7.0-alpine
     ports:
       - "127.0.0.1:6379:6379"
   mongo:
-    image: circleci/mongo:4.4
+    image: circleci/mongo@sha256:ce33f29bababa5d2775f8e945ca0ba8754b727a2251b96eb3eed501628cb7b65 # 4.4
     platform: linux/amd64
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "127.0.0.1:27017:27017"
   mongo-prisma:
-    image: prismagraphql/mongo-single-replica:4.4.3-bionic
+    image: prismagraphql/mongo-single-replica@sha256:3efd76778f3db22e167e4c5a4ceaae335bdc23a84e82dc3c8b44a39e61d93a24 # 4.4.3-bionic
     platform: linux/amd64
     ports:
       - "127.0.0.1:27017:27017"
   oracledb:
-    image: quillbuilduser/oracle-18-xe
+    image: quillbuilduser/oracle-18-xe@sha256:c98893106a4af2294dad1eab5e7d6c31d03d14e8f0cd7ad40075dded1da4d158
     ports:
       - "127.0.0.1:1521:1521"
       - "127.0.0.1:5500:5500"
   elasticsearch:
-    image: elasticsearch:7.17.22
+    image: elasticsearch@sha256:432f21444d8b70a4ab5fc64f9ef7112aaf0c21361948f2deb26d7a5c7333cf35 # 7.17.22
     environment:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
     ports:
       - "127.0.0.1:9200:9200"
   rabbitmq:
-    image: rabbitmq:3.6-alpine
+    image: rabbitmq@sha256:ebe7ba2c73c719aaa78db416910b8a6d615cae519bbf0e26a65a76c29cd52729 # 3.6-alpine
     ports:
       - "127.0.0.1:5672:5672"
   qpid:
-    image: scholzj/qpid-cpp:1.38.0
+    image: scholzj/qpid-cpp@sha256:480142b4c1a64861f9974492d4f7ecdc3d565cd5e60e6a96d34e44f0bf47e043 # 1.38.0
     command: -p 5673
     environment:
       - QPIDD_ADMIN_USERNAME=admin
@@ -107,15 +107,15 @@ services:
     ports:
       - "127.0.0.1:5673:5673"
   memcached:
-    image: memcached:1.5-alpine
+    image: memcached@sha256:6627e971255440a1bd789ca709d8c6c767b98ad4ba0b29d49c7949ba3275cbf9 # 1.5-alpine
     ports:
       - "11211:11211"
   cassandra:
-    image: cassandra:3-focal
+    image: cassandra@sha256:61cbfa672b254e8fc82ece6bfd434ef7a2000e39e32f8f03c9ee4700cd9973a5 # 3-focal
     ports:
       - "127.0.0.1:9042:9042"
   limitd:
-    image: ghcr.io/rochdev/limitd
+    image: ghcr.io/rochdev/limitd@sha256:3315deb2a9fba6d9753b26363947992c2c7b1465aba7352b4595c76a197aaeff # latest
     environment:
       - BUCKET_1_NAME=user
       - BUCKET_1_SIZE=10
@@ -123,11 +123,11 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: ghcr.io/ridedott/pubsub-emulator
+    image: ghcr.io/ridedott/pubsub-emulator@sha256:072d9ce6d89c5aa178e945c227cefdd98dc7a31ab10e027926fc7d55e70198bc # latest
     ports:
       - "127.0.0.1:8081:8081"
   localstack:
-    image: localstack/localstack:3.0.2
+    image: localstack/localstack@sha256:e606c4421419030b12d63a59f1211f57f5b0fbf7e9ce769e6250ee62ff4f9293 # 3.0.2
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:
@@ -144,7 +144,7 @@ services:
   localstack-legacy:
     # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
     # To-Do: Debug localstack / lambda and localstack / S3
-    image: localstack/localstack:1.1.0
+    image: localstack/localstack@sha256:934a0d7fdab229160afa488eb2f9af2cf760d6982e14fcf86eb2c976195763b6 # 1.1.0
     ports:
       - "127.0.0.1:4567:4567" # Edge
     environment:
@@ -160,7 +160,7 @@ services:
       - LAMBDA_EXECUTOR=local
   kafka:
     platform: linux/arm64
-    image: apache/kafka:3.9.1
+    image: apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed # 3.9.1
     ports:
       - "127.0.0.1:9092:9092"
       - "127.0.0.1:9093:9093"
@@ -177,7 +177,7 @@ services:
       - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
   opensearch:
-    image: opensearchproject/opensearch:2
+    image: opensearchproject/opensearch@sha256:3a73623acf3cdd566ad7d0c6c06190a528e6b8a5d54fe1f4327258e32bd8df26 # 2
     environment:
       - plugins.security.disabled=true
       - discovery.type=single-node
@@ -185,7 +185,7 @@ services:
     ports:
       - "127.0.0.1:9201:9200"
   openldap:
-    image: bitnami/openldap:latest
+    image: bitnami/openldap:latest # TODO: pin to SHA once Bitnami re-publishes (image no longer available on Docker Hub)
     ports:
       - "127.0.0.1:1389:1389"
       - "127.0.0.1:1636:1636"
@@ -196,7 +196,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.47.0
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent@sha256:97889b6e685f0d8591988f3bbcd1a6939a5afc50e1b21604de403964d4ccd9e0 # v1.47.0
     ports:
       - "127.0.0.1:9126:9126"
       - "127.0.0.1:4318:4318"
