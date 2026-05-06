@@ -40,6 +40,18 @@ class Crashtracker {
     } catch (e) {
       log.error('Error initializing crashtracker', e)
     }
+
+    this.#trackUnhandledExceptions()
+  }
+
+  #trackUnhandledExceptions () {
+    process.once('uncaughtExceptionMonitor', (error, origin) => {
+      try {
+        binding.reportUncaughtExceptionMonitor(error, origin)
+      } catch (e) {
+        process.stderr.write('Error reporting uncaught exception to crashtracker', e)
+      }
+    })
   }
 
   withProfilerSerializing (f) {

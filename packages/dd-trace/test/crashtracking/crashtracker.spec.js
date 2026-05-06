@@ -39,6 +39,7 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'init')
     sinon.stub(binding, 'updateConfig')
     sinon.stub(binding, 'updateMetadata')
+    sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       '../log': log,
@@ -49,6 +50,8 @@ describeNotWindows('crashtracker', () => {
     binding.init.restore()
     binding.updateConfig.restore()
     binding.updateMetadata.restore()
+    binding.reportUncaughtExceptionMonitor.restore()
+    process.removeAllListeners('uncaughtExceptionMonitor')
   })
 
   describe('start', () => {
@@ -111,6 +114,31 @@ describeNotWindows('crashtracker', () => {
       crashtracker.configure(null)
 
       crashtracker.configure(config)
+    })
+  })
+
+  describe('uncaughtExceptionMonitor', () => {
+    it('should register a listener on start', () => {
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+      crashtracker.start(config)
+
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
+    })
+
+    it('should not register a listener when start is called multiple times', () => {
+      crashtracker.start(config)
+      crashtracker.start(config)
+
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
+    })
+
+    it('should forward the error and origin to the binding', () => {
+      crashtracker.start(config)
+
+      const error = new Error('boom')
+      process.emit('uncaughtExceptionMonitor', error, 'uncaughtException')
+
+      sinon.assert.calledOnceWithExactly(binding.reportUncaughtExceptionMonitor, error, 'uncaughtException')
     })
   })
 
