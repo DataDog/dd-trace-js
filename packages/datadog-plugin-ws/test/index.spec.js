@@ -25,11 +25,38 @@ function findSpan (traces, predicate) {
   return undefined
 }
 
+function closeWsClient (ws) {
+  if (!ws) return
+  // Drop any test-supplied error listeners so a forced close doesn't trip
+  // the test runner via an unhandled 'error' event.
+  ws.removeAllListeners('error')
+  ws.on('error', () => {})
+  // `terminate()` is a no-op once the socket is CLOSED; otherwise it
+  // destroys the underlying TCP socket so the server-side close handshake
+  // can complete promptly.
+  ws.terminate()
+}
+
 function closeWsServer (server) {
   for (const ws of server.clients) {
     ws.terminate()
   }
-  return new Promise(resolve => server.close(resolve))
+  // Bound `server.close()` so a stuck connection can't hang the afterEach
+  // for the full mocha hook timeout. The terminate() above destroys the
+  // server-side sockets, so a 1s ceiling is plenty for clean close events
+  // to propagate; if it isn't, we fall through and let the next test's
+  // beforeEach run on a fresh port (clientPort is incremented per test).
+  return new Promise(resolve => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(finish, 1000)
+    server.close(finish)
+  })
 }
 
 describe('Plugin', () => {
@@ -112,10 +139,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -470,10 +495,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -582,10 +605,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -631,10 +652,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -732,10 +751,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
