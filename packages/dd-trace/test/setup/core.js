@@ -2,6 +2,17 @@
 
 require('./mocha-hooks')
 
+if (process.env.CI) {
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+  const reportDir = path.join(os.tmpdir(), 'node-reports')
+  fs.mkdirSync(reportDir, { recursive: true })
+  process.report.reportOnFatalError = true
+  process.report.reportOnUncaughtException = true
+  process.report.directory = reportDir
+}
+
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.

@@ -25,35 +25,10 @@ const MAX_SERVICE_LENGTH = 100
 // MAX_TYPE_LENGTH the maximum length a span type can have
 const MAX_TYPE_LENGTH = 100
 
-// TODO (bengl) Pretty much everything in this file should happen in
-// `format.js`, so that we're not iterating over all the spans and modifying
-// them yet again.
-
-// normally the agent truncates the resource and parses it in certain scenarios (e.g. SQL Queries)
-function truncateSpan (span, shouldTruncateResourceName = true) {
-  if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
+function truncateSpan (span) {
+  if (span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
     span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
   }
-  for (let metaKey of Object.keys(span.meta)) {
-    const val = span.meta[metaKey]
-    if (metaKey.length > MAX_META_KEY_LENGTH) {
-      delete span.meta[metaKey]
-      metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
-      span.meta[metaKey] = val
-    }
-    if (val && val.length > MAX_META_VALUE_LENGTH) {
-      span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`
-    }
-  }
-  for (let metricsKey of Object.keys(span.metrics)) {
-    const val = span.metrics[metricsKey]
-    if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
-      delete span.metrics[metricsKey]
-      metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-      span.metrics[metricsKey] = val
-    }
-  }
-
   return span
 }
 

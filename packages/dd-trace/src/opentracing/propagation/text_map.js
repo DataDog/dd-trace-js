@@ -299,7 +299,7 @@ class TextMapPropagator {
     const {
       _sampling: { priority, mechanism },
       _tracestate: ts = new TraceState(),
-      _trace: { origin, tags },
+      _trace: { origin, tags: traceTags },
     } = spanContext
 
     carrier[traceparentKey] = spanContext.toTraceparent()
@@ -326,8 +326,8 @@ class TextMapPropagator {
         state.set('o', originValue)
       }
 
-      for (const key of Object.keys(tags)) {
-        const tagValueRaw = tags[key]
+      for (const key of Object.keys(traceTags)) {
+        const tagValueRaw = traceTags[key]
         if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
@@ -435,9 +435,11 @@ class TextMapPropagator {
     }
 
     if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'ignore') {
-      context._links = []
+      // `context` is null when no extractor matched; the fallback below picks up
+      // the SQSD context if present, otherwise the request runs untraced.
+      if (context) context._links = []
     } else {
-      if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'restart') {
+      if (this._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'restart' && context) {
         context._links = []
         context._links.push({
           context,
@@ -528,14 +530,19 @@ class TextMapPropagator {
 
   _extractTraceparentContext (carrier) {
     const headerValue = carrier[traceparentKey]
-    if (!headerValue) {
+    if (typeof headerValue !== 'string') {
       return null
     }
     const matches = headerValue.trim().match(traceparentExpr)
-    if (matches?.length) {
-      const [version, traceId, spanId, flags, tail] = matches.slice(1)
+    if (matches !== null) {
+      const [, version, traceId, spanId, flags, tail] = matches
       const traceparent = { version }
-      const tracestate = TraceState.fromString(carrier.tracestate)
+      // W3C Trace Context §3.3.1.1: multiple tracestate fields MUST be combined per RFC 7230 §3.2.2.
+      // `filter` drops non-string members (Symbol, throwing-toString) that would crash `join`.
+      const rawTracestate = Array.isArray(carrier.tracestate)
+        ? carrier.tracestate.filter(item => typeof item === 'string').join(',')
+        : carrier.tracestate
+      const tracestate = TraceState.fromString(rawTracestate)
       if (invalidSegment.test(traceId)) return null
       if (invalidSegment.test(spanId)) return null
 
@@ -549,7 +556,7 @@ class TextMapPropagator {
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
         isRemote: true,
-        sampling: { priority: Number.parseInt(flags, 10) & 1 ? 1 : 0 },
+        sampling: { priority: Number.parseInt(flags, 16) & 1 ? 1 : 0 },
         traceparent,
         tracestate,
       })
@@ -575,7 +582,7 @@ class TextMapPropagator {
               break
             }
             case 'o':
-              spanContext._trace.origin = value
+              spanContext._trace.origin = value.replaceAll('~', '=')
               break
             case 't.dm': {
               const mechanism = Math.abs(Number.parseInt(value, 10))
