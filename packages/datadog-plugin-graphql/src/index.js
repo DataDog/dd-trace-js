@@ -6,7 +6,6 @@ const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLValidatePlugin = require('./validate')
-const GraphQLResolvePlugin = require('./resolve')
 
 class GraphQLPlugin extends CompositePlugin {
   static id = 'graphql'
@@ -15,7 +14,9 @@ class GraphQLPlugin extends CompositePlugin {
       execute: GraphQLExecutePlugin,
       parse: GraphQLParsePlugin,
       validate: GraphQLValidatePlugin,
-      resolve: GraphQLResolvePlugin,
+      // resolve plugin is absorbed into execute: per-field data is recorded
+      // synchronously in wrapResolve, and all graphql.resolve spans are
+      // materialized at execute end.
     }
   }
 
@@ -65,8 +66,9 @@ function getHooks ({ hooks }) {
   const execute = hooks?.execute ?? noop
   const parse = hooks?.parse ?? noop
   const validate = hooks?.validate ?? noop
+  const resolve = hooks?.resolve
 
-  return { execute, parse, validate }
+  return { execute, parse, validate, resolve }
 }
 
 module.exports = GraphQLPlugin
