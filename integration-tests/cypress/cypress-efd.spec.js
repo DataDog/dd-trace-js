@@ -24,6 +24,7 @@ const {
   TEST_NAME,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
+  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
@@ -272,6 +273,8 @@ moduleTypes.forEach(({
             assert.strictEqual(slowTests.length, 1)
             assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
             assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(slowTests[0].meta[TEST_FINAL_STATUS], 'pass')
             assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
           }, 30_000)
 
