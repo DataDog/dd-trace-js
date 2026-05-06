@@ -11,13 +11,6 @@ const CHECKED_EXTENSIONS = new Set(['.yml', '.yaml'])
 // Matches `image: <value>` where the value is on the same line (not a bare `image:` key)
 const IMAGE_LINE_RE = /^\s*image:\s+(\S+)\s*(?:#.*)?$/
 
-// Images that genuinely cannot be SHA-pinned at this time.
-// Keep this list as short as possible; every entry needs a justification comment.
-const ALLOWED_UNPINNED = new Set([
-  // No longer published to Docker Hub; needs migration to the new registry first.
-  'bitnami/openldap:latest',
-])
-
 /**
  * @returns {string[]}
  */
@@ -44,9 +37,6 @@ for (const file of listFilesFromGit()) {
 
     // Skip already-pinned references
     if (ref.includes('@sha256:')) continue
-
-    // Skip known exceptions that cannot currently be pinned
-    if (ALLOWED_UNPINNED.has(ref)) continue
 
     violations.push({ file: file.replaceAll('\\', '/'), line: i + 1, text: lines[i].trim() })
   }

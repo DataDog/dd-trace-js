@@ -185,7 +185,7 @@ services:
     ports:
       - "127.0.0.1:9201:9200"
   openldap:
-    image: bitnami/openldap:latest # TODO: pin to SHA once Bitnami re-publishes (image no longer available on Docker Hub)
+    image: bitnamilegacy/openldap@sha256:687f14a22b5c74fb057a57221acdbe7b8c82e2d3619fc380db3af48ec4aa04ed # latest
     ports:
       - "127.0.0.1:1389:1389"
       - "127.0.0.1:1636:1636"
