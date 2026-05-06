@@ -3,11 +3,11 @@
 const assert = require('node:assert/strict')
 const proxyquire = require('proxyquire').noCallThru()
 
-describe('server checkpoint hooks', () => {
+describe('execute checkpoint hooks', () => {
   it('saves a checkpoint on pending termination even when the handler never settles', async () => {
     const checkpointSaveCalls = []
 
-    const AwsDurableExecutionSdkJsServerPlugin = proxyquire('../src/server', {
+    const AwsDurableExecutionSdkJsExecutePlugin = proxyquire('../src/execute', {
       './trace-checkpoint': {
         maybeSaveTraceContextCheckpoint: async (...args) => {
           checkpointSaveCalls.push(args)
@@ -21,7 +21,7 @@ describe('server checkpoint hooks', () => {
           active () {
             return {
               context () {
-                return { _parentId: 123n }
+                return { _spanId: 456n }
               },
             }
           },
@@ -29,11 +29,11 @@ describe('server checkpoint hooks', () => {
       },
     }
 
-    const plugin = new AwsDurableExecutionSdkJsServerPlugin(tracer, {})
+    const plugin = new AwsDurableExecutionSdkJsExecutePlugin(tracer, {})
     plugin.startSpan = (_name, _options, ctx) => {
       const span = {
         context () {
-          return { _parentId: 123n }
+          return { _spanId: 456n }
         },
       }
       if (ctx && typeof ctx === 'object') {
@@ -86,7 +86,7 @@ describe('server checkpoint hooks', () => {
     assert.equal(checkpointSaveCalls.length, 1)
     assert.equal(checkpointSaveCalls[0][0], tracer)
     assert.equal(checkpointSaveCalls[0][2], durableContext)
-    assert.equal(checkpointSaveCalls[0][3], '123')
+    assert.equal(checkpointSaveCalls[0][3], '456')
     assert.equal(checkpointSaveCalls[0][4], invocationEvent)
     assert.equal(checkpointSaveCalls[0][5].Status, 'PENDING')
   })
@@ -94,7 +94,7 @@ describe('server checkpoint hooks', () => {
   it('does not save a checkpoint for non-pending termination reasons', async () => {
     const checkpointSaveCalls = []
 
-    const AwsDurableExecutionSdkJsServerPlugin = proxyquire('../src/server', {
+    const AwsDurableExecutionSdkJsExecutePlugin = proxyquire('../src/execute', {
       './trace-checkpoint': {
         maybeSaveTraceContextCheckpoint: async (...args) => {
           checkpointSaveCalls.push(args)
@@ -108,7 +108,7 @@ describe('server checkpoint hooks', () => {
           active () {
             return {
               context () {
-                return { _parentId: 123n }
+                return { _spanId: 456n }
               },
             }
           },
@@ -116,11 +116,11 @@ describe('server checkpoint hooks', () => {
       },
     }
 
-    const plugin = new AwsDurableExecutionSdkJsServerPlugin(tracer, {})
+    const plugin = new AwsDurableExecutionSdkJsExecutePlugin(tracer, {})
     plugin.startSpan = (_name, _options, ctx) => {
       const span = {
         context () {
-          return { _parentId: 123n }
+          return { _spanId: 456n }
         },
       }
       if (ctx && typeof ctx === 'object') {
@@ -169,38 +169,29 @@ describe('server checkpoint hooks', () => {
     assert.equal(checkpointSaveCalls.length, 0)
   })
 
-  it('creates a durable root span on first invocation and finishes execute before root', () => {
-    const AwsDurableExecutionSdkJsServerPlugin = proxyquire('../src/server', {
+  it('starts aws.durable.execute and finishes it on asyncEnd', () => {
+    const AwsDurableExecutionSdkJsExecutePlugin = proxyquire('../src/execute', {
       './trace-checkpoint': {
         maybeSaveTraceContextCheckpoint: async () => {},
       },
     })
 
     const tracer = {}
-    const plugin = new AwsDurableExecutionSdkJsServerPlugin(tracer, {})
+    const plugin = new AwsDurableExecutionSdkJsExecutePlugin(tracer, {})
     const startCalls = []
-    const finishOrder = []
-
-    const rootSpan = {
-      finish () {
-        finishOrder.push('root')
-      },
-    }
+    let finishCount = 0
     const executeSpan = {
       context () {
-        return { _parentId: 999n }
+        return { _spanId: 999n }
       },
+      setTag () {},
       finish () {
-        finishOrder.push('execute')
+        finishCount++
       },
     }
 
     plugin.startSpan = (name, options, ctx) => {
       startCalls.push({ name, options, ctx })
-      if (name === 'aws.durable-execution') {
-        return rootSpan
-      }
-
       if (ctx && typeof ctx === 'object') {
         ctx.currentStore = { span: executeSpan }
       }
@@ -228,36 +219,30 @@ describe('server checkpoint hooks', () => {
 
     plugin.bindStart(ctx)
 
-    assert.equal(startCalls.length, 2)
-    assert.equal(startCalls[0].name, 'aws.durable-execution')
-    assert.equal(startCalls[0].options.startTime, 1710000000000)
-    assert.equal(startCalls[1].name, 'aws.durable_execution.execute')
-    assert.equal(startCalls[1].options.childOf, rootSpan)
+    assert.equal(startCalls.length, 1)
+    assert.equal(startCalls[0].name, 'aws.durable.execute')
 
-    plugin.finish(ctx)
-    assert.deepEqual(finishOrder, ['execute', 'root'])
-
-    // finish() may be invoked twice by tracingChannel; ensure no double finish.
-    plugin.finish(ctx)
-    assert.deepEqual(finishOrder, ['execute', 'root'])
+    ctx.result = { Status: 'SUCCEEDED' }
+    plugin.asyncEnd(ctx)
+    assert.equal(finishCount, 1)
   })
 
-  it('does not create a durable root span on replay invocations', () => {
-    const AwsDurableExecutionSdkJsServerPlugin = proxyquire('../src/server', {
+  it('starts execute span on replay invocations', () => {
+    const AwsDurableExecutionSdkJsExecutePlugin = proxyquire('../src/execute', {
       './trace-checkpoint': {
         maybeSaveTraceContextCheckpoint: async () => {},
       },
     })
 
     const tracer = {}
-    const plugin = new AwsDurableExecutionSdkJsServerPlugin(tracer, {})
+    const plugin = new AwsDurableExecutionSdkJsExecutePlugin(tracer, {})
     const startedSpanNames = []
 
     plugin.startSpan = (name, _options, ctx) => {
       startedSpanNames.push(name)
       const executeSpan = {
         context () {
-          return { _parentId: 123n }
+          return { _spanId: 123n }
         },
       }
       if (ctx && typeof ctx === 'object') {
@@ -291,6 +276,6 @@ describe('server checkpoint hooks', () => {
 
     plugin.bindStart(ctx)
 
-    assert.deepEqual(startedSpanNames, ['aws.durable_execution.execute'])
+    assert.deepEqual(startedSpanNames, ['aws.durable.execute'])
   })
 })
