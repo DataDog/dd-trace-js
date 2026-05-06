@@ -240,8 +240,7 @@ class TracingPlugin extends Plugin {
 /**
  * Wrap each user-supplied hook so that the span argument is marked as
  * user-visible before reaching user code. The hook can mutate the span via
- * the public API (setTag, addTags, etc.); without the mark, those calls would
- * be indistinguishable from internal instrumentation.
+ * the public API (setTag, addTags, etc.)
  *
  * @param {Record<string, Function>} hooks
  * @returns {Record<string, Function>}

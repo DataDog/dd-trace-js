@@ -7,14 +7,8 @@ const SOURCE_MANUAL = 'm'
 const USER_VISIBLE = Symbol('dd.userVisible')
 
 /**
- * Mark a span as user-visible, i.e. handed out to the user via a public-facing
- * API surface (e.g. tracer.startSpan, tracer.trace, an OTel bridge span, or a
- * plugin `hooks.*` callback). Internal instrumentation must never call this
- * directly.
- *
- * The mark is stored as a non-enumerable Symbol property so the lookup in the
- * hot path of `_addTags` is a single property read rather than a WeakSet hash
- * lookup, and so the field is not visible to enumeration or JSON serialization.
+ * Symbol property keeps the hot-path lookup in `_addTags` a single read
+ * instead of a WeakSet hash, and stays invisible to enumeration and JSON.
  *
  * @template T
  * @param {T} span - The span to mark, or a falsy value (returned untouched).
@@ -36,9 +30,6 @@ function isUserVisible (span) {
 }
 
 /**
- * Cheap structural check: does the given key/value blob contain a service
- * override?
- *
  * @param {Record<string, unknown> | null | undefined} blob
  * @returns {boolean}
  */
@@ -48,14 +39,8 @@ function hasService (blob) {
 }
 
 /**
- * Apply user-source stamps to a span when a tag write looks like a manual
- * override. The cheap structural check runs first so the user-visible read is
- * amortized over the rare path. New "stamp X when user sets Y" rules should
- * be added here as additional `if`/`else if` branches; callers stay one-line.
- *
  * @param {object} span - The DatadogSpan instance receiving the tags.
- * @param {Record<string, unknown> | null | undefined} blob - The key/value
- *   pairs being written.
+ * @param {Record<string, unknown> | null | undefined} blob - The key/value pairs being written.
  */
 function applyUserSourceStamps (span, blob) {
   if (hasService(blob) && isUserVisible(span)) {
@@ -64,10 +49,8 @@ function applyUserSourceStamps (span, blob) {
 }
 
 /**
- * Return a new options object with `_dd.svc_src` stamped as manual when the
- * user explicitly set a service via options. Returns the original object
- * untouched when no service was supplied so the common path stays free of
- * allocations.
+ * Returns the original object untouched when no service was supplied so the
+ * common path stays free of allocations.
  *
  * @template {Record<string, unknown> | undefined} T
  * @param {T} options
