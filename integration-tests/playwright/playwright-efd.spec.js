@@ -207,6 +207,56 @@ versions.forEach((version) => {
         ])
       })
 
+      it('uses the retry count from the matching slow_test_retries bucket', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 1,
+              '30s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          playwright: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const slowTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'efd duration retries slightly slow test'
+            )
+            assert.strictEqual(slowTests.length, 1)
+            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+          }, 45_000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-efd-duration',
+              PLAYWRIGHT_WORKERS: '1',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
       it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
         receiver.setSettings({
           early_flake_detection: {
