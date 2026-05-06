@@ -9,6 +9,16 @@ services:
       - "127.0.0.1:10000:10000"
       - "127.0.0.1:10001:10001"
       - "127.0.0.1:10002:10002"
+  azurecosmosemulator:
+    image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
+    ports:
+      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:1234:1234"
+    environment:
+        ACCEPT_EULA: "Y"
+        BLOB_SERVER: azurite
+        METADATA_SERVER: azurite
   azureeventhubsemulator:
     image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
     volumes:

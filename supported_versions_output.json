@@ -21,6 +21,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@azure/cosmos",
+    "integration": "azure-cosmos",
+    "minimum_tracer_supported": "4.4.1",
+    "max_tracer_supported": "4.9.2",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@azure/event-hubs",
     "integration": "azure-event-hubs",
     "minimum_tracer_supported": "6.0.0",

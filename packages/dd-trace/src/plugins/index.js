@@ -4,6 +4,7 @@ const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get '@azure/cosmos' () { return require('../../../datadog-plugin-azure-cosmos/src') },
   get '@azure/event-hubs' () { return require('../../../datadog-plugin-azure-event-hubs/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
   get '@modelcontextprotocol/sdk' () { return require('../../../datadog-plugin-modelcontextprotocol-sdk/src') },

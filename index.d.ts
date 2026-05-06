@@ -230,6 +230,7 @@ interface Plugins {
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
@@ -2335,6 +2336,12 @@ declare namespace tracer {
        */
       [key: string]: boolean | Object | undefined;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * @azure/cosmos module
+     */
+    interface azure_cosmos extends Integration {}
 
     /**
      * This plugin automatically instruments the

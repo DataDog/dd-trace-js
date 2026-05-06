@@ -2170,6 +2170,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_AZURE_COSMOS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_AZURE_DURABLE_FUNCTIONS_ENABLED": [
       {
         "implementation": "B",
