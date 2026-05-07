@@ -181,9 +181,10 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           } else {
             // can't happen, the only way to this to happen is
             // if the JSON has a value starting with the value of STRINGIFY_RANGE_KEY
-            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length))
-            outputLength += cleanLength + STRINGIFY_SENSITIVE_KEY.length
-            pos = rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length
+            // if the JSON has a value starting with the value of STRINGIFY_RANGE_KEY
+            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_RANGE_KEY.length))
+            outputLength += cleanLength + STRINGIFY_RANGE_KEY.length
+            pos = rangeKeyIndex + STRINGIFY_RANGE_KEY.length
           }
         }
 
