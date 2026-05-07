@@ -1,0 +1,15 @@
+{
+  "name": "plugin-graphql-signature",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "same-document": { "env": { "VARIANT": "same-document" } },
+    "rotating-documents": {
+      "baseline": "same-document",
+      "env": { "VARIANT": "rotating-documents" }
+    }
+  }
+}
