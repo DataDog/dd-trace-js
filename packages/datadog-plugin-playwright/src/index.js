@@ -491,7 +491,7 @@ class PlaywrightPlugin extends CiPlugin {
       [TEST_SOURCE_START]: testSourceLine,
     }
     if (testSourceFile) {
-      extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
+      extraTags[TEST_SOURCE_FILE] = testSourceFile
     }
     if (browserName) {
       // Added as parameter too because it should affect the test fingerprint
