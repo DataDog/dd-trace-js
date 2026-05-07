@@ -55,4 +55,70 @@ describe('bullmq producer telemetry metadata injection', () => {
     })
     sinon.assert.notCalled(log.warn)
   })
+
+  it('skips Queue.add producer instrumentation when the filter rejects the job', () => {
+    const instance = buildPluginInstance()
+    const filter = sinon.stub().returns(false)
+    const ctx = { arguments: ['skip', { id: 1 }, { attempts: 1 }] }
+
+    instance.config = { filter }
+
+    assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
+    sinon.assert.calledOnceWithExactly(filter, 'skip', { id: 1 }, { attempts: 1 })
+    sinon.assert.notCalled(instance.tracer.inject)
+  })
+
+  it('logs an error and uses the default filter when filter is not a function', () => {
+    const [QueueAddPlugin] = plugins
+    const baseBullmqProto = Object.getPrototypeOf(QueueAddPlugin.prototype)
+    const parentProto = Object.getPrototypeOf(baseBullmqProto)
+    const superConfigure = sinon.stub(parentProto, 'configure')
+
+    try {
+      const instance = Object.create(QueueAddPlugin.prototype)
+      instance.configure({ filter: 'not-a-function' })
+
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[0], /Expected `filter` to be a function/)
+      const passedConfig = superConfigure.firstCall.args[0]
+      assert.strictEqual(typeof passedConfig.filter, 'function')
+      assert.strictEqual(passedConfig.filter(), true)
+    } finally {
+      superConfigure.restore()
+    }
+  })
+
+  it('only handles Queue.addBulk jobs allowed by the filter', () => {
+    const [, QueueAddBulkPlugin] = plugins
+    const tracer = {
+      inject: sinon.stub().callsFake((span, format, carrier) => {
+        carrier['x-datadog-trace-id'] = '1'
+      }),
+    }
+    const instance = new QueueAddBulkPlugin(tracer, {})
+    const firstJob = { name: 'skip', data: { id: 1 }, opts: {} }
+    const secondJob = { name: 'keep', data: { id: 2 }, opts: {} }
+    const filter = sinon.stub().callsFake(jobName => jobName !== 'skip')
+    const ctx = {
+      self: { name: 'test-queue' },
+      arguments: [[firstJob, secondJob]],
+    }
+
+    instance.config = { filter }
+    instance.startSpan = sinon.stub().callsFake((options, ctx) => {
+      ctx.currentStore = { span: {} }
+      return ctx.currentStore.span
+    })
+
+    assert.deepStrictEqual(instance.bindStart(ctx), ctx.currentStore)
+
+    assert.strictEqual(firstJob.opts.telemetry, undefined)
+    assert.deepStrictEqual(JSON.parse(secondJob.opts.telemetry.metadata), {
+      _datadog: { 'x-datadog-trace-id': '1' },
+    })
+    sinon.assert.calledWithExactly(filter.firstCall, 'skip', { id: 1 }, firstJob.opts)
+    sinon.assert.calledWithExactly(filter.secondCall, 'keep', { id: 2 }, secondJob.opts)
+    sinon.assert.calledTwice(filter)
+    assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 1)
+  })
 })
