@@ -208,6 +208,7 @@
     "typescript": "6.0.2",
     "undici": "7.18.2",
     "vitest": "4.1.0",
+    "webpack": "5.106.2",
     "when": "3.7.8",
     "winston": "3.19.0",
     "workerpool": "10.0.1",
