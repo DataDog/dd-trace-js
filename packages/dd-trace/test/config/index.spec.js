@@ -664,7 +664,7 @@ describe('Config', () => {
       logLevel: 'debug',
       middlewareTracingEnabled: true,
       plugins: true,
-      protocolVersion: '0.4',
+      protocolVersion: DD_MAJOR < 6 ? '0.4' : '0.5',
       tracing: true,
       tags: {
         service: 'node',
@@ -807,7 +807,7 @@ describe('Config', () => {
       { name: 'DD_PROFILING_ENABLED', value: 'false', origin: 'default' },
       { name: 'DD_PROFILING_EXPORTERS', value: 'agent', origin: 'default' },
       { name: 'DD_PROFILING_SOURCE_MAP', value: true, origin: 'default' },
-      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'default' },
+      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: DD_MAJOR < 6 ? '0.4' : '0.5', origin: 'default' },
       {
         name: 'DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP',
         value: config.queryStringObfuscation,

@@ -21,6 +21,9 @@ if (DD_MAJOR >= 6) {
   supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName =
     supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames?.[0]
   delete supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames
+
+  // The 0.5 msgpack protocol is faster on the agent side; v5 keeps 0.4 as the conservative default.
+  supportedConfigurations.DD_TRACE_AGENT_PROTOCOL_VERSION[0].default = '0.5'
 } else {
   // Default value for DD_TRACE_STARTUP_LOGS is 'false' in older major versions.
   // This is special handled here until a better solution is found.

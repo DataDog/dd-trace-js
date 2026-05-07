@@ -4,6 +4,17 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 5.0 to 6.0
+
+### `DD_TRACE_AGENT_PROTOCOL_VERSION` defaults to `0.5`
+
+The default agent protocol version flips from `0.4` to `0.5` (msgpack v2). The
+0.5 encoder is faster on the agent side and is the long-time recommended
+default. v5 keeps `0.4` for backwards compatibility. Set
+`DD_TRACE_AGENT_PROTOCOL_VERSION=0.4` (or `protocolVersion: '0.4'` on
+`tracer.init({...})`) to opt back into the older encoder if your agent is
+pinned below the version that supports `0.5`.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported
