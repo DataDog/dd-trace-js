@@ -4,6 +4,7 @@ const dns = require('dns')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
+const { applyMajorVersionAliasFilters } = require('./major-version-filters')
 const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
 const {
   supportedConfigurations,
@@ -13,6 +14,8 @@ let log
 let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
+
+applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
 if (DD_MAJOR >= 6) {
   // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is not supported

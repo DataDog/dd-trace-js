@@ -766,12 +766,6 @@ declare namespace tracer {
       enableGetRumData?: boolean
 
       /**
-       * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
-       * @deprecated Please use the non-experimental `iast` option instead.
-       */
-      iast?: boolean | IastOptions
-
-      /**
        * Configuration of the AppSec. Can be a boolean as an alias to `appsec.enabled`.
        * @deprecated Please use the non-experimental `appsec` option instead.
        */
