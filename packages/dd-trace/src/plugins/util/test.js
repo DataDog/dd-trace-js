@@ -318,6 +318,7 @@ module.exports = {
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
+  getMaxEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -1043,6 +1044,22 @@ function getEfdRetryCount (durationMs, slowTestRetries) {
     }
   }
   return 0 // ≥ 5 min — abort
+}
+
+/**
+ * Returns the maximum retry count configured by the backend for EFD.
+ *
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @returns {number}
+ */
+function getMaxEfdRetryCount (slowTestRetries) {
+  let maxRetries = 0
+  for (const retryCount of Object.values(slowTestRetries || {})) {
+    if (retryCount > maxRetries) {
+      maxRetries = retryCount
+    }
+  }
+  return maxRetries
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
