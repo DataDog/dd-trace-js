@@ -21,7 +21,7 @@ describe('Plugin', () => {
     withVersions('memcached', 'memcached', version => {
       afterEach(() => {
         memcached?.end()
-        agent.close({ ritmReset: false })
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {

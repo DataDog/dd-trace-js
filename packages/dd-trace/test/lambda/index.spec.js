@@ -52,7 +52,7 @@ const closeAgent = () => {
   delete require.cache[require.resolve('../../src/lambda/runtime/patch.js')]
   delete require.cache[require.resolve('../../src/lambda')]
 
-  agent.close({ ritmReset: true })
+  return agent.close({ ritmReset: true })
 }
 
 describe('lambda', () => {

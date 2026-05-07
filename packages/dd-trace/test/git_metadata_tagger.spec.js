@@ -27,7 +27,7 @@ describe('git metadata tagging', () => {
   })
 
   afterEach(() => {
-    agent.close()
+    return agent.close()
   })
 
   afterEach(() => {

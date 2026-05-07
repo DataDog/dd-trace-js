@@ -17,7 +17,7 @@ describe('dd-trace', () => {
   })
 
   afterEach(() => {
-    agent.close()
+    return agent.close()
   })
 
   it('should record and send a trace to the agent', () => {
