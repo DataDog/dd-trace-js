@@ -25,11 +25,28 @@ function findSpan (traces, predicate) {
   return undefined
 }
 
+function closeWsClient (ws) {
+  if (!ws) return
+  ws.removeAllListeners('error')
+  ws.on('error', () => {})
+  ws.terminate()
+}
+
 function closeWsServer (server) {
   for (const ws of server.clients) {
     ws.terminate()
   }
-  return new Promise(resolve => server.close(resolve))
+  return new Promise(resolve => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(finish, 1000)
+    server.close(finish)
+  })
 }
 
 describe('Plugin', () => {
@@ -112,10 +129,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -145,6 +160,22 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation and remove broken handler', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(sendSpan, 'Should have a websocket.send span')
+            assertObjectContains(sendSpan, {
+              name: 'websocket.send',
+              type: 'websocket',
+              resource: `websocket /${route}`,
+              service: 'some',
+              parent_id: 0n,
+              error: 0,
+              meta: {
+                'span.kind': 'producer',
+              },
+            })
+          })
+
           wsServer.on('connection', (ws) => {
             connectionReceived = true
             ws.send('test message')
@@ -164,21 +195,7 @@ describe('Plugin', () => {
 
           client.off('message', brokenHandler)
 
-          return agent.assertSomeTraces(traces => {
-            const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
-            assert.ok(sendSpan, 'Should have a websocket.send span')
-            assertObjectContains(sendSpan, {
-              name: 'websocket.send',
-              type: 'websocket',
-              resource: `websocket /${route}`,
-              service: 'some',
-              parent_id: 0n,
-              error: 0,
-              meta: {
-                'span.kind': 'producer',
-              },
-            })
-          })
+          return tracePromise
         })
 
         it('should handle removing a listener that was never added', (done) => {
@@ -310,6 +327,15 @@ describe('Plugin', () => {
         })
 
         it('should instrument message receiving', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const receiveSpan = findSpan(traces, s => s.name === 'websocket.receive')
+            assert.ok(receiveSpan, 'Should have a websocket.receive span')
+            assertObjectContains(receiveSpan, {
+              name: 'websocket.receive',
+              resource: `websocket /${route}`,
+            })
+          })
+
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               assert.strictEqual(data.toString(), 'test message from client')
@@ -327,17 +353,7 @@ describe('Plugin', () => {
               throw error
             })
 
-          return Promise.race([
-            errorPromise,
-            agent.assertSomeTraces(traces => {
-              const receiveSpan = findSpan(traces, s => s.name === 'websocket.receive')
-              assert.ok(receiveSpan, 'Should have a websocket.receive span')
-              assertObjectContains(receiveSpan, {
-                name: 'websocket.receive',
-                resource: `websocket /${route}`,
-              })
-            }),
-          ])
+          return Promise.race([errorPromise, tracePromise])
         })
 
         it('should trace a receive span for each message', () => {
@@ -435,6 +451,13 @@ describe('Plugin', () => {
         })
 
         it('should instrument connection close', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assert.ok(
+              findSpan(traces, s => s.name === 'websocket.close'),
+              'Should have a websocket.close span'
+            )
+          })
+
           wsServer.on('connection', (ws) => {
             ws.close()
           })
@@ -442,12 +465,7 @@ describe('Plugin', () => {
           connectClient()
           client.removeAllListeners()
 
-          return agent.assertSomeTraces(traces => {
-            assert.ok(
-              findSpan(traces, s => s.name === 'websocket.close'),
-              'Should have a websocket.close span'
-            )
-          })
+          return tracePromise
         })
       })
 
@@ -470,28 +488,39 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should work with custom service configuration', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, s => s.name === 'web.request' && s.type === 'websocket')
+            assert.ok(span, 'Should have a web.request websocket span')
+            assert.strictEqual(span.service, 'custom-ws-service')
+          })
+
           wsServer.on('connection', (ws) => {
           })
           connectClient()
           messageReceived = false
 
-          return agent.assertSomeTraces(traces => {
-            const span = findSpan(traces, s => s.name === 'web.request' && s.type === 'websocket')
-            assert.ok(span, 'Should have a web.request websocket span')
-            assert.strictEqual(span.service, 'custom-ws-service')
-          })
+          return tracePromise
         })
 
         it('should trace messages when traceWebsocketMessagesEnabled is set to true', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(span, 'Should have a websocket.send span')
+            assertObjectContains(span, {
+              name: 'websocket.send',
+              type: 'websocket',
+              resource: `websocket /${route}`,
+              service: 'custom-ws-service',
+            })
+          })
+
           wsServer.on('connection', (ws) => {
             ws.send('test message')
           })
@@ -502,19 +531,20 @@ describe('Plugin', () => {
             assert.strictEqual(data.toString(), 'test message')
           })
 
-          return agent.assertSomeTraces(traces => {
-            const span = findSpan(traces, s => s.name === 'websocket.send')
-            assert.ok(span, 'Should have a websocket.send span')
-            assertObjectContains(span, {
-              name: 'websocket.send',
-              type: 'websocket',
-              resource: `websocket /${route}`,
-              service: 'custom-ws-service',
-            })
-          })
+          return tracePromise
         })
 
         it('should trace received messages when traceWebsocketMessagesEnabled is set to true', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(span, 'Should have a websocket.send span')
+            assertObjectContains(span, {
+              service: 'custom-ws-service',
+              name: 'websocket.send',
+              type: 'websocket',
+            })
+          })
+
           messageReceived = false
           wsServer.on('connection', (ws) => {
             ws.send('test message')
@@ -532,7 +562,11 @@ describe('Plugin', () => {
             messageReceived = true
           })
 
-          return agent.assertSomeTraces(traces => {
+          return tracePromise
+        })
+
+        it('should trace send messages when messages are not received', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
             const span = findSpan(traces, s => s.name === 'websocket.send')
             assert.ok(span, 'Should have a websocket.send span')
             assertObjectContains(span, {
@@ -541,9 +575,7 @@ describe('Plugin', () => {
               type: 'websocket',
             })
           })
-        })
 
-        it('should trace send messages when messages are not received', () => {
           messageReceived = false
           wsServer.on('connection', (ws) => {
             ws.send('test message')
@@ -557,15 +589,7 @@ describe('Plugin', () => {
             messageReceived = true
           })
 
-          return agent.assertSomeTraces(traces => {
-            const span = findSpan(traces, s => s.name === 'websocket.send')
-            assert.ok(span, 'Should have a websocket.send span')
-            assertObjectContains(span, {
-              service: 'custom-ws-service',
-              name: 'websocket.send',
-              type: 'websocket',
-            })
-          })
+          return tracePromise
         })
       })
       describe('with WebSocket Messages Disabled', () => {
@@ -582,10 +606,8 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
@@ -631,15 +653,25 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should not inherit sampling decisions from root trace', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, s =>
+              s.name === 'websocket.receive' && s.type === 'websocket'
+            )
+            assert.ok(span, 'Should have a websocket.receive span')
+            assert.strictEqual(span.meta['span.kind'], 'consumer')
+            assert.ok(
+              !('_dd.dm.inherited' in span.meta) || span.meta['_dd.dm.inherited'] !== 1,
+              'websocket.receive should not inherit sampling decision'
+            )
+          })
+
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               assert.strictEqual(data.toString(), 'test message from client')
@@ -652,21 +684,29 @@ describe('Plugin', () => {
             client.send('test message from client')
           })
 
-          return agent.assertSomeTraces(traces => {
-            const span = findSpan(traces, s =>
-              s.name === 'websocket.receive' && s.type === 'websocket'
-            )
-            assert.ok(span, 'Should have a websocket.receive span')
-            assert.strictEqual(span.meta['span.kind'], 'consumer')
-            assert.ok(
-              !('_dd.dm.inherited' in span.meta) || span.meta['_dd.dm.inherited'] !== 1,
-              'websocket.receive should not inherit sampling decision'
-            )
-          })
+          return tracePromise
         })
 
         it('should have span links', () => {
           let firstTraceId
+          const firstTracePromise = agent.assertFirstTraceSpan(trace => {
+            firstTraceId = trace.trace_id
+          }, { timeoutMs: 3000 })
+          const someTracesPromise = agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, s =>
+              s.name === 'websocket.send' && s.meta?.['_dd.span_links']
+            )
+            assert.ok(span, 'Should have a websocket.send span with span links')
+            const metaData = JSON.parse(span.meta['_dd.span_links'])
+            const spanId = BigInt('0x' + metaData[0].span_id)
+            assert.strictEqual(spanId, firstTraceId)
+            assertObjectContains(span, {
+              service: 'custom-ws-service',
+              name: 'websocket.send',
+              type: 'websocket',
+            })
+          }, { timeoutMs: 3000 })
+
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               assert.strictEqual(data.toString(), 'With a great big hug...')
@@ -676,29 +716,11 @@ describe('Plugin', () => {
 
           connectClient()
 
-          client.on('open', () => {
-          })
-
           client.on('message', (data) => {
             client.send('With a great big hug...')
           })
-          agent.assertFirstTraceSpan(trace => {
-            firstTraceId = Number(trace.trace_id)
-          })
-          return agent.assertSomeTraces(traces => {
-            const span = findSpan(traces, s =>
-              s.name === 'websocket.send' && s.meta?.['_dd.span_links']
-            )
-            assert.ok(span, 'Should have a websocket.send span with span links')
-            const metaData = JSON.parse(span.meta['_dd.span_links'])
-            const spanId = Number(BigInt('0x' + metaData[0].span_id))
-            assert.strictEqual(spanId, firstTraceId)
-            assertObjectContains(span, {
-              service: 'custom-ws-service',
-              name: 'websocket.send',
-              type: 'websocket',
-            })
-          })
+
+          return Promise.all([firstTracePromise, someTracesPromise])
         })
       })
 
@@ -732,28 +754,16 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          if (client) {
-            client.removeAllListeners('error')
-            client.on('error', () => {})
-          }
+          closeWsClient(client)
+          client = undefined
           await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should add span pointers to producer spans', async () => {
-          wsServer.on('connection', (ws) => {
-            ws.send('test message with pointer')
-          })
-
-          connectClient()
-
-          client.on('message', (data) => {
-            assert.strictEqual(data.toString(), 'test message with pointer')
-          })
-
           let didFindPointerLink = false
 
-          await agent.assertSomeTraces(traces => {
+          const tracePromise = agent.assertSomeTraces(traces => {
             const producerSpan = findSpan(traces, s => s.name === 'websocket.send')
             assert.ok(producerSpan, 'Should have a websocket.send span')
             assert.strictEqual(producerSpan.service, 'ws-with-pointers')
@@ -782,25 +792,25 @@ describe('Plugin', () => {
             assert.strictEqual(attributes['ptr.hash'].length, 57)
           })
 
-          assert.strictEqual(didFindPointerLink, true)
-        })
-
-        it('should add span pointers to consumer spans', async () => {
           wsServer.on('connection', (ws) => {
-            ws.on('message', (data) => {
-              assert.strictEqual(data.toString(), 'client message with pointer')
-            })
+            ws.send('test message with pointer')
           })
 
           connectClient()
 
-          client.on('open', () => {
-            client.send('client message with pointer')
+          client.on('message', (data) => {
+            assert.strictEqual(data.toString(), 'test message with pointer')
           })
 
+          await tracePromise
+
+          assert.strictEqual(didFindPointerLink, true)
+        })
+
+        it('should add span pointers to consumer spans', async () => {
           let didFindPointerLink = false
 
-          await agent.assertSomeTraces(traces => {
+          const tracePromise = agent.assertSomeTraces(traces => {
             const consumerSpan = findSpan(traces, s => s.name === 'websocket.receive')
             assert.ok(consumerSpan, 'Should have a websocket.receive span')
             assert.strictEqual(consumerSpan.service, 'ws-with-pointers')
@@ -828,6 +838,20 @@ describe('Plugin', () => {
             assert.strictEqual(attributes['ptr.hash'].length, 57)
           })
 
+          wsServer.on('connection', (ws) => {
+            ws.on('message', (data) => {
+              assert.strictEqual(data.toString(), 'client message with pointer')
+            })
+          })
+
+          connectClient()
+
+          client.on('open', () => {
+            client.send('client message with pointer')
+          })
+
+          await tracePromise
+
           assert.strictEqual(didFindPointerLink, true)
         })
 
@@ -835,19 +859,7 @@ describe('Plugin', () => {
           const testMessage = 'test message'
           const hashes = new Set()
 
-          wsServer.on('connection', (ws) => {
-            ws.send(testMessage)
-            // Send a second message to test counter increment
-            setTimeout(() => ws.send(testMessage), 10)
-          })
-
-          connectClient()
-
-          client.on('message', (data) => {
-            assert.strictEqual(data.toString(), testMessage)
-          })
-
-          return agent.assertSomeTraces(traces => {
+          const tracePromise = agent.assertSomeTraces(traces => {
             for (const trace of traces) {
               for (const span of trace) {
                 if (span.name !== 'websocket.send') continue
@@ -867,6 +879,20 @@ describe('Plugin', () => {
               assert.ok(hashes.size >= 2, 'Multiple messages should have different hashes')
             }
           })
+
+          wsServer.on('connection', (ws) => {
+            ws.send(testMessage)
+            // Send a second message to test counter increment
+            setTimeout(() => ws.send(testMessage), 10)
+          })
+
+          connectClient()
+
+          client.on('message', (data) => {
+            assert.strictEqual(data.toString(), testMessage)
+          })
+
+          return tracePromise
         })
       })
     })
