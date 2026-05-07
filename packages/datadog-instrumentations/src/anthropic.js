@@ -8,10 +8,10 @@ const anthropicTracingChannel = tracingChannel('apm:anthropic:request')
 const onStreamedChunkCh = channel('apm:anthropic:request:chunk')
 
 function wrapStreamIterator (iterator, ctx) {
-  return function () {
-    const itr = iterator.apply(this, arguments)
-    shimmer.wrap(itr, 'next', next => function () {
-      return next.apply(this, arguments)
+  return function (...args) {
+    const itr = iterator.apply(this, args)
+    shimmer.wrap(itr, 'next', next => function (...args) {
+      return next.apply(this, args)
         .then(res => {
           const { done, value: chunk } = res
           onStreamedChunkCh.publish({ ctx, chunk, done })
@@ -33,12 +33,12 @@ function wrapStreamIterator (iterator, ctx) {
 }
 
 function wrapCreate (create) {
-  return function () {
+  return function (...args) {
     if (!anthropicTracingChannel.start.hasSubscribers) {
-      return create.apply(this, arguments)
+      return create.apply(this, args)
     }
 
-    const options = arguments[0]
+    const options = args[0]
     const stream = options.stream
 
     const ctx = { options, resource: 'create', baseUrl: this._client?.baseURL }
@@ -46,14 +46,14 @@ function wrapCreate (create) {
     return anthropicTracingChannel.start.runStores(ctx, () => {
       let apiPromise
       try {
-        apiPromise = create.apply(this, arguments)
+        apiPromise = create.apply(this, args)
       } catch (error) {
         finish(ctx, null, error)
         throw error
       }
 
-      shimmer.wrap(apiPromise, 'parse', parse => function () {
-        return parse.apply(this, arguments)
+      shimmer.wrap(apiPromise, 'parse', parse => function (...args) {
+        return parse.apply(this, args)
           .then(response => {
             if (stream) {
               shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
