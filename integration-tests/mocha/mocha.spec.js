@@ -2287,6 +2287,70 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    it('retries callback-style async tests', async () => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const callbackTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/mocha-callback-test.js'
+          )
+
+          assert.strictEqual(callbackTests.length, NUM_RETRIES_EFD + 1)
+          callbackTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          })
+
+          const retriedTests = callbackTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            SHOULD_CHECK_RESULTS: '1',
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/mocha-callback-test.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     it('uses the retry count from the matching slow_test_retries bucket', async () => {
       receiver.setKnownTests({
         mocha: {},
