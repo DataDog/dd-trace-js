@@ -53,6 +53,7 @@ env:
 jobs:
   run-nightly:
     strategy:
+      fail-fast: false
       matrix:
         workflow:
           - apm-integrations
