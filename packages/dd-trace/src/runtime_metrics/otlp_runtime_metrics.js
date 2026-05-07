@@ -123,13 +123,10 @@ module.exports = {
     lastElu = null
   },
 
-  // Noop methods expected by the rest of the tracer when this module
-  // replaces the DogStatsD runtime_metrics module.
-  track () {},
-  boolean () {},
-  histogram () {},
-  count () {},
-  gauge () {},
+  // increment/decrement are called from opentracing/span.js and opentracing/tracer.js
+  // for span counters; the OTLP path doesn't surface them, so noop them here to keep
+  // the existing call sites working without branching on which runtime metrics module
+  // is active.
   increment () {},
   decrement () {},
 }
