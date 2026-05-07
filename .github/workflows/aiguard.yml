@@ -93,6 +93,7 @@ jobs:
   integration:
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     strategy:
+      fail-fast: false
       matrix:
         version: [maintenance, active, latest]
     runs-on: ubuntu-latest

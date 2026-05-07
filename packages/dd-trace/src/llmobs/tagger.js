@@ -12,6 +12,7 @@ const {
   INPUT_DOCUMENTS,
   OUTPUT_VALUE,
   METADATA,
+  COST_TAGS,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -42,6 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { validateCostTags } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -120,6 +122,11 @@ class LLMObsTagger {
     // apply annotation context tags
     const tags = annotationContext?.tags
     if (tags) this.tagSpanTags(span, tags)
+
+    // apply after tags so only keys present at span start are accepted.
+    if (annotationContext?.costTags != null) {
+      this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
+    }
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
@@ -231,6 +238,32 @@ class LLMObsTagger {
       Object.assign(currentTags, tags)
     } else {
       this._setTag(span, TAGS, tags)
+    }
+  }
+
+  /**
+   * Validates and tags cost tag keys on an LLMObs span. Cost tag references are validated against
+   * the span's already-applied tags, which are read from the registry.
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} costTags Raw user-provided cost tags; validated here.
+   * @param {'annotate' | 'annotation_context'} source
+   */
+  tagCostTags (span, costTags, source) {
+    const spanTags = registry.get(span)?.[TAGS] || {}
+    const validatedCostTags = validateCostTags(span, costTags, source, spanTags)
+    if (!validatedCostTags.length) return
+
+    // Might consider switching to a `Set` if per-span cost tag cardinality grows large enough that
+    // this `.includes`/`.push` merge becomes a hot spot
+    const currentCostTags = registry.get(span)?.[COST_TAGS]
+    if (currentCostTags) {
+      for (const costTag of validatedCostTags) {
+        if (!currentCostTags.includes(costTag)) {
+          currentCostTags.push(costTag)
+        }
+      }
+    } else {
+      this._setTag(span, COST_TAGS, validatedCostTags)
     }
   }
 

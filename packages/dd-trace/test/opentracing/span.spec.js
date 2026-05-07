@@ -298,6 +298,25 @@ describe('Span', () => {
         baz: 'valid',
       })
     })
+
+    it('seeds links from constructor fields.links and sanitizes their attributes', () => {
+      const seed = new Span(tracer, processor, prioritySampler, { operationName: 'seed' })
+      span = new Span(tracer, processor, prioritySampler, {
+        operationName: 'with-links',
+        links: [
+          { context: seed.context(), attributes: { color: 'blue', extras: [1, 2] } },
+          { context: seed.context(), attributes: undefined },
+        ],
+      })
+
+      assert.strictEqual(span._links.length, 2)
+      assert.deepStrictEqual(span._links[0].attributes, {
+        color: 'blue',
+        'extras.0': '1',
+        'extras.1': '2',
+      })
+      assert.deepStrictEqual(span._links[1].attributes, {})
+    })
   })
 
   describe('span pointers', () => {

@@ -26,13 +26,13 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getEfdRetryCount,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
   getFormattedJestTestParameters,
   getJestTestName,
   getJestSuitesToRun,
-  getEfdRetryCount,
 } = require('../../datadog-plugin-jest/src/util')
 const { addHook, channel } = require('./helpers/instrument')
 
