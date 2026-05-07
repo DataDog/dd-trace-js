@@ -1,0 +1,47 @@
+name: WS Stress Test
+
+on:
+  push:
+    branches:
+      - brian.marks/fix-ws-plugin-flake
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Number of test iterations per runner"
+        required: false
+        default: "25"
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  ws-stress:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runner: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      fail-fast: false
+    env:
+      PLUGINS: ws
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - name: Stress test ws (runner ${{ matrix.runner }}, ${{ inputs.iterations || 25 }} iterations)
+        run: |
+          ITERATIONS=${{ inputs.iterations || 25 }}
+          FAILURES=0
+          for i in $(seq 1 $ITERATIONS); do
+            echo "=== Iteration $i/$ITERATIONS (runner ${{ matrix.runner }}) ==="
+            npm run test:plugins:ci
+            STATUS=$?
+            if [ $STATUS -ne 0 ]; then
+              FAILURES=$((FAILURES + 1))
+              echo "FAILURE on iteration $i (exit $STATUS)"
+            fi
+          done
+          echo "Runner ${{ matrix.runner }}: $FAILURES/$ITERATIONS iterations failed"
+          [ $FAILURES -eq 0 ]
+        shell: bash
