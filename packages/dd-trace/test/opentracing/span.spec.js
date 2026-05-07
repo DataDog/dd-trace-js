@@ -245,7 +245,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      span.addLink(span2.context())
+      span.addLink({ context: span2.context() })
       assert.ok(Object.hasOwn(span, '_links'))
       assert.strictEqual(span._links.length, 1)
     })
@@ -258,7 +258,7 @@ describe('Span', () => {
         foo: 'bar',
         baz: 'qux',
       }
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, attributes)
     })
 
@@ -273,7 +273,7 @@ describe('Span', () => {
         qux: [1, 2, 3],
       }
 
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, {
         foo: 'true',
         bar: 'hi',
@@ -293,7 +293,7 @@ describe('Span', () => {
         baz: 'valid',
       }
 
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, {
         baz: 'valid',
       })
