@@ -4,6 +4,9 @@ const log = require('../../dd-trace/src/log')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 
+const defaultFilter = () => true
+const filteredJobs = Symbol('bullmq.filteredJobs')
+
 // Customer-controlled metadata may be malformed JSON. Returning a fresh `{}`
 // on parse failure keeps the publish path alive instead of throwing into
 // `Queue.add` / `Queue.addBulk`.
@@ -31,6 +34,10 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
   }
 
   bindStart (ctx) {
+    if (!this.isEnabled(ctx)) {
+      return { noop: true }
+    }
+
     const { resource, meta } = this.getSpanData(ctx)
     const span = this.startSpan({
       resource,
@@ -46,6 +53,25 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     this.injectTraceContext(span, ctx)
 
     return ctx.currentStore
+  }
+
+  configure (config) {
+    if (typeof config === 'boolean') {
+      return super.configure(config)
+    }
+
+    if (config?.filter !== undefined && typeof config.filter !== 'function') {
+      log.error('Expected `filter` to be a function. Overriding filter property to default.')
+    }
+
+    return super.configure({
+      ...config,
+      filter: typeof config?.filter === 'function' ? config.filter : defaultFilter,
+    })
+  }
+
+  isEnabled (ctx) {
+    throw new Error('isEnabled must be implemented by subclass')
   }
 
   getSpanData (ctx) {
@@ -86,6 +112,10 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 
 class QueueAddPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:Queue_add'
+
+  isEnabled (ctx) {
+    return this.config.filter(ctx.arguments?.[0], ctx.arguments?.[1], ctx.arguments?.[2])
+  }
 
   getSpanData (ctx) {
     const queueName = ctx.self?.name || 'bullmq'
@@ -128,38 +158,69 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
 class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:Queue_addBulk'
 
+  isEnabled (ctx) {
+    const jobs = this.#getFilteredJobs(ctx)
+    return jobs === undefined || jobs.length > 0
+  }
+
+  #getFilteredJobs (ctx) {
+    if (Object.hasOwn(ctx, filteredJobs)) return ctx[filteredJobs]
+
+    const jobs = ctx.arguments?.[0]
+    if (!Array.isArray(jobs)) return
+
+    const allowedJobs = []
+    for (const job of jobs) {
+      if (job && this.config.filter(job.name, job.data, job.opts)) {
+        allowedJobs.push(job)
+      }
+    }
+
+    ctx[filteredJobs] = allowedJobs
+    return allowedJobs
+  }
+
   operationName () {
     return 'bullmq.addBulk'
   }
 
   getSpanData (ctx) {
     const queueName = ctx.self?.name || 'bullmq'
-    const jobs = ctx.arguments?.[0]
+    const jobs = this.#getFilteredJobs(ctx)
     return {
       resource: queueName,
       meta: {
         'messaging.destination.name': ctx.self?.name,
-        'messaging.batch.message_count': Array.isArray(jobs) ? jobs.length : undefined,
+        'messaging.batch.message_count': jobs?.length,
       },
     }
   }
 
   injectTraceContext (span, ctx) {
-    const jobs = ctx.arguments?.[0]
-    if (!Array.isArray(jobs)) return
+    const jobs = this.#getFilteredJobs(ctx)
+    if (!jobs) return
 
-    const cache = []
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job) continue
+    for (const job of jobs) {
       job.opts = job.opts || {}
-      cache[i] = this._injectIntoOpts(span, job.opts)
+      this._injectIntoOpts(span, job.opts)
+    }
+  }
+
+  getDsmData (ctx) {
+    const jobs = this.#getFilteredJobs(ctx) || []
+    const payloadSize = jobs.reduce((total, job) => {
+      return total + (job?.data ? getMessageSize(job.data) : 0)
+    }, 0)
+    return {
+      queueName: ctx.self?.name || 'bullmq',
+      payloadSize,
+      optsTarget: jobs[0]?.opts,
     }
     ctx._ddMetadata = cache
   }
 
   setProducerCheckpoint (span, ctx) {
-    const jobs = ctx.arguments?.[0] || []
+    const jobs = this.#getFilteredJobs(ctx) || []
     const queueName = ctx.self?.name || 'bullmq'
     const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
     const cache = ctx._ddMetadata
@@ -179,6 +240,11 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 
 class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:FlowProducer_add'
+
+  isEnabled (ctx) {
+    const flow = ctx.arguments?.[0]
+    return this.config.filter(flow?.name, flow?.data, flow?.opts)
+  }
 
   getSpanData (ctx) {
     const flow = ctx.arguments?.[0]
