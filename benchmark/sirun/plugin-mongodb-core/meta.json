@@ -1,0 +1,15 @@
+{
+  "name": "plugin-mongodb-core",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "mixed-ops": { "env": { "VARIANT": "mixed-ops" } },
+    "deep-aggregate": {
+      "baseline": "mixed-ops",
+      "env": { "VARIANT": "deep-aggregate" }
+    }
+  }
+}
