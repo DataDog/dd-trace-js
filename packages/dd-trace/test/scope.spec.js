@@ -6,7 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 const { Span } = require('../../../vendor/dist/opentracing')
-const { PublicSpan } = require('../src/opentracing/public/span')
+const { PublicSpan, unwrap } = require('../src/opentracing/public/span')
 require('./setup/core')
 const Scope = require('../src/scope')
 
@@ -135,15 +135,16 @@ describe('Scope', () => {
 
     it('should handle errors', () => {
       const error = new Error('boom')
+      const innerSpan = unwrap(span)
 
-      sinon.spy(span._span, 'setTag')
+      sinon.spy(innerSpan, 'setTag')
 
       try {
         scope.activate(span, () => {
           throw error
         })
       } catch (e) {
-        sinon.assert.calledWith(span._span.setTag, 'error', e)
+        sinon.assert.calledWith(innerSpan.setTag, 'error', e)
       }
     })
   })

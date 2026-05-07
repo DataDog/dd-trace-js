@@ -45,27 +45,6 @@ function probeCreatePrivateSymbol () {
   }
 }
 
-function createPrivateMap (name) {
-  let sym
-
-  if (createPrivateSymbol) {
-    try {
-      sym = createPrivateSymbol(name)
-    } catch {
-      createPrivateSymbol = null
-    }
-  }
-
-  // if creating a private symbol was unsuccessful we fallback to a WeakMap
-  if (!sym) return new WeakMap()
-
-  return {
-    get (target) { return target?.[sym] },
-    set (target, value) { if (target) target[sym] = value },
-    has (target) { return !!target && sym in target },
-  }
-}
-
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -145,7 +124,6 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
-  createPrivateMap,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
 }

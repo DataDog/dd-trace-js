@@ -5,7 +5,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
-const { PublicSpan } = require('./opentracing/public/span')
+const { PublicSpan, unwrap } = require('./opentracing/public/span')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
@@ -60,9 +60,7 @@ class DatadogTracer extends Tracer {
 
   trace (name, options, fn) {
     options = { childOf: this.scope().active(), ...options }
-    if (options?.childOf instanceof PublicSpan) {
-      options.childOf = options.childOf?._span
-    }
+    options.childOf = unwrap(options.childOf)
 
     const span = new PublicSpan(this.startSpan(name, options))
 

@@ -9,7 +9,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const { storage } = require('../../datadog-core')
 const Tracer = require('../src/tracer')
-const Span = require('../src/opentracing/span')
+const { PublicSpan } = require('../src/opentracing/public/span')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -53,7 +53,7 @@ describe('Tracer', () => {
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
-        assert.ok(span._span instanceof Span)
+        assert.ok(span instanceof PublicSpan)
         assert.strictEqual(span.context()._name, 'name')
       })
     })
@@ -69,7 +69,7 @@ describe('Tracer', () => {
       }
 
       tracer.trace('name', options, span => {
-        assert.ok(span._span instanceof Span)
+        assert.ok(span instanceof PublicSpan)
         assertObjectContains(span.context()._tags, options.tags)
         assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
@@ -140,7 +140,7 @@ describe('Tracer', () => {
       let span
 
       tracer.trace('name', {}, (_span) => {
-        span = _span._span
+        span = _span
         sinon.spy(span, 'finish')
       })
 
@@ -153,8 +153,8 @@ describe('Tracer', () => {
 
       try {
         tracer.trace('name', {}, _span => {
-          span = _span._span
-          tags = _span.context()._tags
+          span = _span
+          tags = span.context()._tags
           sinon.spy(span, 'finish')
           throw new Error('boom')
         })
@@ -174,7 +174,7 @@ describe('Tracer', () => {
         let done
 
         tracer.trace('name', {}, (_span, _done) => {
-          span = _span._span
+          span = _span
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -193,8 +193,8 @@ describe('Tracer', () => {
         let done
 
         tracer.trace('name', {}, (_span, _done) => {
-          span = _span._span
-          tags = _span.context()._tags
+          span = _span
+          tags = span.context()._tags
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -221,7 +221,7 @@ describe('Tracer', () => {
 
         tracer
           .trace('name', {}, _span => {
-            span = _span._span
+            span = _span
             sinon.spy(span, 'finish')
             return promise
           })
@@ -242,8 +242,8 @@ describe('Tracer', () => {
 
         tracer
           .trace('name', {}, _span => {
-            span = _span._span
-            tags = _span.context()._tags
+            span = _span
+            tags = span.context()._tags
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
@@ -328,7 +328,7 @@ describe('Tracer', () => {
 
     it('should wait for the callback to be called before finishing the span', done => {
       const fn = tracer.wrap('name', {}, sinon.spy(function (cb) {
-        const span = tracer.scope().active()._span
+        const span = tracer.scope().active()
 
         sinon.spy(span, 'finish')
 

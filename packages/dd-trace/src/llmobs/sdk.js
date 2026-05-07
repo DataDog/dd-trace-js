@@ -7,6 +7,7 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
+const { unwrap } = require('../opentracing/public/span')
 
 const { storage: storageCore } = require('../../../datadog-core')
 const {
@@ -118,12 +119,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span._span, { kind, ...llmobsOptions }, () => fn(span, cb))
+        this._activate(unwrap(span), { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span._span, { kind, ...llmobsOptions }, () => fn(span))
+      this._activate(unwrap(span), { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -219,11 +220,11 @@ class LLMObs extends NoopLLMObs {
 
     if (!span) {
       span = this._active()
-    } else if (!options && !(span?._span instanceof Span)) {
+    } else if (!options && !(unwrap(span) instanceof Span)) {
       options = span
       span = this._active()
     } else {
-      span = span._span
+      span = unwrap(span)
     }
 
     let err = ''
@@ -303,7 +304,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   exportSpan (span) {
-    span = span ? span._span : this._active()
+    span = span ? unwrap(span) : this._active()
     let err = ''
     try {
       if (!span) {

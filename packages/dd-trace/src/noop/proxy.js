@@ -4,7 +4,7 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
-const { PublicSpan } = require('../opentracing/public/span')
+const { PublicSpan, unwrap } = require('../opentracing/public/span')
 const { SVC_SRC_KEY } = require('../../src/constants')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
@@ -89,18 +89,16 @@ class NoopProxy {
       options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
     }
 
-    if (options?.childOf instanceof PublicSpan) {
-      options = { ...options, childOf: options.childOf._span }
+    const childOf = unwrap(options?.childOf)
+    if (childOf !== undefined) {
+      options = { ...options, childOf }
     }
 
     return new PublicSpan(this._tracer.startSpan(name, options))
   }
 
   inject (context, format, carrier) {
-    if (context instanceof PublicSpan) {
-      context = context._span
-    }
-    return this._tracer.inject(context, format, carrier)
+    return this._tracer.inject(unwrap(context), format, carrier)
   }
 
   extract () {

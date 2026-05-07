@@ -1,84 +1,89 @@
 'use strict'
 
 const { SVC_SRC_KEY } = require('../../constants')
-const { createPrivateMap } = require('../../util')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
 
-const cache = createPrivateMap('dd.publicSpan')
+const sym = Symbol('dd.publicSpan')
+let unwrap
 
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
  * external usage and acting accordingly.
  */
 class PublicSpan {
-  constructor (span) {
-    const cached = cache.get(span)
-    if (cached) return cached
+  #span
 
-    this._span = span
-    cache.set(span, this)
+  constructor (span) {
+    if (span[sym]) return span[sym]
+
+    this.#span = span
+    span[sym] = this
   }
 
   context () {
-    return this._span.context.apply(this._span, arguments)
+    return this.#span.context.apply(this.#span, arguments)
   }
 
   tracer () {
-    return this._span.tracer.apply(this._span, arguments)
+    return this.#span.tracer.apply(this.#span, arguments)
   }
 
   setOperationName () {
-    this._span.setOperationName.apply(this._span, arguments)
+    this.#span.setOperationName.apply(this.#span, arguments)
     return this
   }
 
   setBaggageItem () {
-    this._span.setBaggageItem.apply(this._span, arguments)
+    this.#span.setBaggageItem.apply(this.#span, arguments)
     return this
   }
 
   getBaggageItem () {
-    return this._span.getBaggageItem.apply(this._span, arguments)
+    return this.#span.getBaggageItem.apply(this.#span, arguments)
   }
 
   setTag (key, value) {
     if (key === SERVICE_KEY || key === SERVICE_NAME_KEY) {
-      this._span.setTag(SVC_SRC_KEY, 'm')
+      this.#span.setTag(SVC_SRC_KEY, 'm')
     }
-    this._span.setTag(key, value)
+    this.#span.setTag(key, value)
     return this
   }
 
   addTags (tags) {
     if (tags && (tags[SERVICE_KEY] || tags[SERVICE_NAME_KEY])) {
-      this._span.setTag(SVC_SRC_KEY, 'm')
+      this.#span.setTag(SVC_SRC_KEY, 'm')
     }
-    this._span.addTags(tags)
+    this.#span.addTags(tags)
     return this
   }
 
   addLink () {
-    return this._span.addLink.apply(this._span, arguments)
+    return this.#span.addLink.apply(this.#span, arguments)
   }
 
   addLinks () {
-    return this._span.addLinks.apply(this._span, arguments)
+    return this.#span.addLinks.apply(this.#span, arguments)
   }
 
   log () {
-    this._span.log.apply(this._span, arguments)
+    this.#span.log.apply(this.#span, arguments)
     return this
   }
 
   logEvent () {
-    return this._span.logEvent.apply(this._span, arguments)
+    return this.#span.logEvent.apply(this.#span, arguments)
   }
 
   finish () {
-    return this._span.finish.apply(this._span, arguments)
+    return this.#span.finish.apply(this.#span, arguments)
+  }
+
+  static {
+    unwrap = (value) => value instanceof PublicSpan ? value.#span : value
   }
 }
 
-module.exports = { PublicSpan }
+module.exports = { PublicSpan, unwrap }

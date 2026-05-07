@@ -6,6 +6,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 require('./setup/core')
+const { unwrap } = require('../src/opentracing/public/span')
 
 describe('TracerProxy', () => {
   let Proxy
@@ -680,7 +681,7 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.startSpan, 'a', 'b')
-        assert.deepEqual(returnValue._span, { id: 'span' })
+        assert.deepEqual(unwrap(returnValue), { id: 'span' })
       })
 
       it('should set service source override tag when returned span does a setTag', () => {
@@ -984,7 +985,7 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.startSpan, 'a', 'b')
-        assert.deepEqual(returnValue._span, { id: 'span' })
+        assert.deepEqual(unwrap(returnValue), { id: 'span' })
       })
 
       it('should set service source override tag when returned span does a setTag', () => {
