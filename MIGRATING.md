@@ -4,6 +4,29 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 5.0 to 6.0
+
+### AppSec v1 user-login SDK methods removed from types
+
+`tracer.appsec.trackUserLoginSuccessEvent` and
+`tracer.appsec.trackUserLoginFailureEvent` are no longer part of the v6
+TypeScript surface. Switch to the v2 shape on
+`tracer.appsec.eventTrackingV2`:
+
+```js
+// Before
+tracer.appsec.trackUserLoginSuccessEvent({ id: 'user-1', login: 'alice' })
+tracer.appsec.trackUserLoginFailureEvent('alice', true)
+
+// After
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('alice', { id: 'user-1' })
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('alice', true)
+```
+
+The runtime methods still exist on the `Appsec` class through the v6 line so
+existing code keeps working; usage continues to be tracked via the
+`login_success` / `login_failure` SDK telemetry counters with `version: v1`.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported
