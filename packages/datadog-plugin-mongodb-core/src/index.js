@@ -173,9 +173,10 @@ function limitDepth (input) {
       } else if (shouldSimplify(child)) {
         output[key] = child
       } else {
+        output[key] = {}
         queue.push({
           input: child,
-          output: output[key] = {},
+          output: output[key],
           depth: nextDepth,
         })
       }

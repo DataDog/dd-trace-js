@@ -24,17 +24,14 @@ function wrapTransportPrototype (Transport) {
 addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16 <8', '>=8'] }, Transport => {
   shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
   shimmer.wrap(Transport.prototype, 'getConnection', createWrapGetConnection('elasticsearch'))
-  return Transport
 })
 
 addHook({ name: 'elasticsearch', file: 'src/lib/transport.js', versions: ['>=10'] }, Transport => {
   shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
-  return Transport
 })
 
 addHook({ name: 'elasticsearch', file: 'src/lib/connection_pool.js', versions: ['>=10'] }, ConnectionPool => {
-  shimmer.wrap(ConnectionPool.prototype, 'select', createWrapSelect('elasticsearch'))
-  return ConnectionPool
+  shimmer.wrap(ConnectionPool.prototype, 'select', createWrapSelect())
 })
 
 function createWrapGetConnection (name) {

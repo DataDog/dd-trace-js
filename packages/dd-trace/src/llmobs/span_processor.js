@@ -39,9 +39,15 @@ const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
 class LLMObservabilitySpan {
-  constructor () {
+  /**
+   * @param {string} kind span kind
+   */
+  constructor (kind) {
     this.input = []
     this.output = []
+
+    /** @type {string} */
+    this.kind = kind
 
     this._tags = {}
   }
@@ -115,7 +121,6 @@ class LLMObsSpanProcessor {
   }
 
   format (span) {
-    const llmObsSpan = new LLMObservabilitySpan()
     let inputType, outputType
 
     const spanTags = span.context()._tags
@@ -145,14 +150,18 @@ class LLMObsSpanProcessor {
     }
 
     if (mlObsTags[TOOL_DEFINITIONS]) {
-      this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions = [])
+      meta.tool_definitions = []
+      this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions)
     }
+
+    const llmObsSpan = new LLMObservabilitySpan(spanKind)
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
       llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
     } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
-      input.documents = mlObsTags[INPUT_DOCUMENTS]
+      llmObsSpan.input = mlObsTags[INPUT_DOCUMENTS].map(doc => ({ content: doc.text, role: '' }))
+      inputType = 'documents'
     } else if (mlObsTags[INPUT_VALUE]) {
       llmObsSpan.input = [{ role: '', content: mlObsTags[INPUT_VALUE] }]
       inputType = 'value'
@@ -162,7 +171,8 @@ class LLMObsSpanProcessor {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
     } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
-      output.documents = mlObsTags[OUTPUT_DOCUMENTS]
+      llmObsSpan.output = mlObsTags[OUTPUT_DOCUMENTS].map(doc => ({ content: doc.text, role: '' }))
+      outputType = 'documents'
     } else if (mlObsTags[OUTPUT_VALUE]) {
       llmObsSpan.output = [{ role: '', content: mlObsTags[OUTPUT_VALUE] }]
       outputType = 'value'
@@ -194,6 +204,11 @@ class LLMObsSpanProcessor {
         input.messages = processedSpan.input
       } else if (inputType === 'value') {
         input.value = processedSpan.input[0].content
+      } else if (inputType === 'documents') {
+        input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
+          ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
+          text: processedDocument.content,
+        }))
       }
     }
 
@@ -202,6 +217,11 @@ class LLMObsSpanProcessor {
         output.messages = processedSpan.output
       } else if (outputType === 'value') {
         output.value = processedSpan.output[0].content
+      } else if (outputType === 'documents') {
+        output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
+          ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
+          text: processedDocument.content,
+        }))
       }
     }
 

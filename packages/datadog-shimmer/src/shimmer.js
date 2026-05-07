@@ -267,7 +267,13 @@ function assertMethod (target, name, method) {
  * @throws {Error} If the target is a class constructor.
  */
 function assertNotClass (target) {
-  if (Function.prototype.toString.call(target).startsWith('class')) {
+  // Class constructors have a non-writable `prototype` property; functions have a
+  // writable one and arrows / async / method-shorthand have none at all. The
+  // `'prototype' in target` gate skips the descriptor lookup for the no-prototype
+  // shapes; the `in` operator is cheaper than reading `target.prototype` since
+  // it returns a boolean instead of materialising the prototype reference.
+  if ('prototype' in target &&
+      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }
