@@ -131,7 +131,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when handling', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.handle')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')

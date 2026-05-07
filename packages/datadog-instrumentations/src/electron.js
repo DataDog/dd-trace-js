@@ -110,7 +110,7 @@ function createWrapRemoveAllListeners (mappings) {
         for (const key of Object.keys(mappings)) delete mappings[key]
       }
 
-      return removeAllListeners.apply(this, channel)
+      return removeAllListeners.call(this, channel)
     }
   }
 }
