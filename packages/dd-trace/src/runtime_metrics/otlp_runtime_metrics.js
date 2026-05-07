@@ -13,6 +13,7 @@ let eventLoopHistogram = null
 let lastCpuUsage = null
 let lastTime = 0
 let lastElu = null
+let cpuCount = 0
 
 module.exports = {
   /**
@@ -23,17 +24,11 @@ module.exports = {
 
     try {
       const { metrics } = require('@opentelemetry/api')
-      const meterProvider = metrics.getMeterProvider()
-
-      if (!meterProvider) {
-        log.error('OTLP runtime metrics: MeterProvider not available, OTel metrics pipeline may not be initialized.')
-        return
-      }
-
-      meter = meterProvider.getMeter(METER_NAME)
+      meter = metrics.getMeterProvider().getMeter(METER_NAME)
 
       lastCpuUsage = process.cpuUsage()
       lastTime = performance.now()
+      cpuCount = os.cpus().length
 
       const trackEventLoop = config.runtimeMetrics?.eventLoop !== false
       if (trackEventLoop && monitorEventLoopDelay) {
@@ -64,13 +59,12 @@ module.exports = {
         const now = performance.now()
         const elapsed = (now - lastTime) / 1000
         const cpuUsage = process.cpuUsage()
-        const numCpus = os.cpus().length
 
         if (elapsed > 0 && lastCpuUsage) {
           const userDelta = (cpuUsage.user - lastCpuUsage.user) / 1e6
           const systemDelta = (cpuUsage.system - lastCpuUsage.system) / 1e6
-          result.observe(userDelta / (elapsed * numCpus), { 'process.cpu.state': 'user' })
-          result.observe(systemDelta / (elapsed * numCpus), { 'process.cpu.state': 'system' })
+          result.observe(userDelta / (elapsed * cpuCount), { 'process.cpu.state': 'user' })
+          result.observe(systemDelta / (elapsed * cpuCount), { 'process.cpu.state': 'system' })
         }
 
         lastCpuUsage = cpuUsage
@@ -121,21 +115,29 @@ module.exports = {
     lastCpuUsage = null
     lastTime = 0
     lastElu = null
+    cpuCount = 0
   },
 
-  // increment/decrement are called from opentracing/span.js and opentracing/tracer.js
-  // for span counters; the OTLP path doesn't surface them, so noop them here to keep
-  // the existing call sites working without branching on which runtime metrics module
-  // is active.
+  // Called from opentracing/span.js and tracer.js. Names are DD-proprietary, so noop here.
   increment () {},
   decrement () {},
 }
 
+/**
+ * @param {string} name
+ * @param {string} description
+ * @param {(stats: import('node:v8').HeapInfo) => number} getValue
+ */
 function defineHeapStat (name, description, getValue) {
   const m = meter.createObservableUpDownCounter(name, { unit: 'By', description })
   m.addCallback((result) => result.observe(getValue(v8.getHeapStatistics())))
 }
 
+/**
+ * @param {string} name
+ * @param {string} description
+ * @param {(space: import('node:v8').HeapSpaceInfo) => number} getValue
+ */
 function defineHeapSpaceStat (name, description, getValue) {
   const m = meter.createObservableUpDownCounter(name, { unit: 'By', description })
   m.addCallback((result) => {
@@ -145,6 +147,11 @@ function defineHeapSpaceStat (name, description, getValue) {
   })
 }
 
+/**
+ * @param {string} name
+ * @param {string} description
+ * @param {(histogram: import('node:perf_hooks').IntervalHistogram) => number} getValue
+ */
 function defineEventLoopDelay (name, description, getValue) {
   const m = meter.createObservableGauge(name, { unit: 's', description })
   m.addCallback((result) => {
