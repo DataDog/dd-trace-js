@@ -610,7 +610,10 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 
       const idxYarn = s.run.indexOf('yarn ')
       const idxNpm = s.run.indexOf('npm ')
-      const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+      let idx = idxNpm
+      if (idxYarn !== -1) {
+        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
+      }
       if (idx > 0) {
         const prefix = s.run.slice(0, idx)
         const assigns = parseInlineAssignments(prefix)
@@ -1182,7 +1185,6 @@ function main () {
             pushError(
               `${i.workflowFile}#${i.jobId}: PLUGINS includes "${p}" but packages/datadog-plugin-${p} does not exist`
             )
-            continue
           }
         }
       }

@@ -310,9 +310,8 @@ class Sqs extends BaseAwsSdkPlugin {
       MessageAttributes: params.MessageAttributes,
     })
     const queue = queueUrl.slice(queueUrl.lastIndexOf('/') + 1)
-    const dataStreamsContext = this.tracer
+    return this.tracer
       .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-    return dataStreamsContext
   }
 }
 

@@ -1063,10 +1063,7 @@ class CypressPlugin {
           rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
-        if (this.testSuiteSpan) {
-          return suitePayload
-        }
-        this.testSuiteSpan = this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
+        this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {
