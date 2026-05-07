@@ -2300,7 +2300,17 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation {}
+    interface bullmq extends Instrumentation {
+      /**
+       * Custom filter function used to decide whether a BullMQ producer operation should be instrumented.
+       *
+       * @param jobName - The BullMQ job name.
+       * @param data - The BullMQ job data.
+       * @param opts - The BullMQ job options.
+       * @returns true to instrument the producer operation, false to skip it.
+       */
+      filter?: (jobName?: string, data?: unknown, opts?: unknown) => boolean;
+    }
 
     interface bunyan extends Integration {}
 
