@@ -201,6 +201,41 @@ const prismaClientConfigs = [{
       'db.type': 'mssql',
     },
   },
+},
+{
+  name: 'prisma-generator v7 pg adapter with OTel TracerProvider registration',
+  serverFile: 'server-ts-v7-otel.mjs',
+  schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
+  configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
+  env: {
+    PRISMA_CLIENT_OUTPUT: './generated/prisma',
+    DATABASE_URL: TEST_DATABASE_URL,
+  },
+  ts: true,
+  skipMigrateReset: true,
+  customTest: {
+    title: 'uses active OTel span IDs in Prisma DBM traceparent comments',
+    async run ({ agent, config }) {
+      let stdout = ''
+      const proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        sandboxCwd(),
+        config.serverFile,
+        agent.port,
+        { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env },
+        undefined,
+        data => {
+          stdout += data.toString()
+        }
+      )
+
+      const marker = stdout.match(/TRACEPARENT_OK:(00-[a-f0-9]{32}-[a-f0-9]{16}-01)/)
+      assert.ok(marker, `Expected TRACEPARENT_OK output marker, got: ${stdout}`)
+      assert.notStrictEqual(marker[1], '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01')
+      assert.notStrictEqual(marker[1], '00-00000000000000000000000000000000-0000000000000000-01')
+
+      return proc
+    },
+  },
 }]
 
 describe('esm', () => {
@@ -238,13 +273,15 @@ describe('esm', () => {
 
         useSandbox(deps, false, paths)
 
-        before(function () {
-          variants = varySandbox(config.serverFile, config.ts ? 'PrismaClient' : 'prismaLib',
-            config.ts ? 'PrismaClient' : undefined, config.importPath, config.ts)
-          if (!variants[config.variant]) {
-            throw new Error(`Unknown variant ${config.variant} for ${config.name}`)
-          }
-        })
+        if (!config.customTest) {
+          before(function () {
+            variants = varySandbox(config.serverFile, config.ts ? 'PrismaClient' : 'prismaLib',
+              config.ts ? 'PrismaClient' : undefined, config.importPath, config.ts)
+            if (!variants[config.variant]) {
+              throw new Error(`Unknown variant ${config.variant} for ${config.name}`)
+            }
+          })
+        }
 
         beforeEach(async function () {
           this.timeout(60000)
@@ -303,127 +340,48 @@ describe('esm', () => {
           await agent?.stop()
         })
 
-        const variant = config.variant
-        it(`is instrumented with ${variant} import`, async function () {
-          this.timeout(60000)
-          const dbSpanExpectation = config.dbSpan || {
-            name: config.configFile ? 'pg.query' : 'prisma.engine',
-            service: config.configFile ? 'node-postgres' : 'node-prisma',
-            meta: {
-              'db.user': 'postgres',
-              'db.name': 'postgres',
-              'db.type': 'postgres',
-            },
-          }
-          const res = agent.assertMessageReceived(({ headers, payload }) => {
-            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assertObjectContains(payload, [[{
-              name: 'prisma.client',
-              resource: 'User.create',
-              service: 'node-prisma',
-            }], [dbSpanExpectation]])
+        if (config.customTest) {
+          it(config.customTest.title, async function () {
+            this.timeout(60000)
+            proc = await config.customTest.run({ agent, config })
           })
+        } else {
+          const variant = config.variant
+          it(`is instrumented with ${variant} import`, async function () {
+            this.timeout(60000)
+            const dbSpanExpectation = config.dbSpan || {
+              name: config.configFile ? 'pg.query' : 'prisma.engine',
+              service: config.configFile ? 'node-postgres' : 'node-prisma',
+              meta: {
+                'db.user': 'postgres',
+                'db.name': 'postgres',
+                'db.type': 'postgres',
+              },
+            }
+            const res = agent.assertMessageReceived(({ headers, payload }) => {
+              assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+              assertObjectContains(payload, [[{
+                name: 'prisma.client',
+                resource: 'User.create',
+                service: 'node-prisma',
+              }], [dbSpanExpectation]])
+            })
 
-          const procPromise = spawnPluginIntegrationTestProcAndExpectExit(
-            sandboxCwd(),
-            variants[variant],
-            agent.port,
-            { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
-          )
+            const procPromise = spawnPluginIntegrationTestProcAndExpectExit(
+              sandboxCwd(),
+              variants[variant],
+              agent.port,
+              { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
+            )
 
-          await Promise.all([
-            procPromise.then((res) => {
-              proc = res
-            }),
-            res,
-          ])
-        })
-      })
-    })
-  })
-
-  describe('prisma-generator v7 pg adapter with OTel TracerProvider registration', () => {
-    const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
-    if (!isNodeSupported) {
-      return
-    }
-
-    withVersions('prisma', '@prisma/client', '7.0.0', version => {
-      const config = {
-        serverFile: 'server-ts-v7-otel.mjs',
-        schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
-        configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
-        env: {
-          PRISMA_CLIENT_OUTPUT: './generated/prisma',
-          DATABASE_URL: TEST_DATABASE_URL,
-        },
-      }
-      const paths = [
-        './packages/datadog-plugin-prisma/test/integration-test/*',
-        config.schema,
-        config.configFile,
-      ]
-      const deps = [`@prisma/client@${version}`]
-      for (const ext of externals['@prisma/client']) {
-        if (ext.node && !semifies(semver.clean(process.version), ext.node)) continue
-        if (ext.dep === '@prisma/client') {
-          deps.push(`${ext.name}@${version}`)
-        } else if (ext.dep || ext.node) {
-          deps.push(ext.name)
+            await Promise.all([
+              procPromise.then((res) => {
+                proc = res
+              }),
+              res,
+            ])
+          })
         }
-      }
-
-      useSandbox(deps, false, paths)
-
-      beforeEach(async function () {
-        this.timeout(60000)
-        agent = await new FakeAgent().start()
-        const cwd = sandboxCwd()
-        const commands = [
-          './node_modules/.bin/prisma db push --accept-data-loss',
-          './node_modules/.bin/prisma generate',
-          './node_modules/.bin/tsc ./generated/**/*.ts' +
-            ' --outDir ./dist' +
-            ' --target ES2023' +
-            ' --module ESNext' +
-            ' --strict true' +
-            ' --moduleResolution bundler' +
-            ' --esModuleInterop true',
-        ]
-
-        execSync(commands.join(' && '), {
-          cwd,
-          stdio: 'inherit',
-          env: {
-            ...process.env,
-            ...config.env,
-          },
-        })
-      })
-
-      afterEach(async () => {
-        proc?.kill()
-        await agent?.stop()
-      })
-
-      it('uses active OTel span IDs in Prisma DBM traceparent comments', async function () {
-        this.timeout(60000)
-        let stdout = ''
-        await spawnPluginIntegrationTestProcAndExpectExit(
-          sandboxCwd(),
-          config.serverFile,
-          agent.port,
-          { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env },
-          undefined,
-          data => {
-            stdout += data.toString()
-          }
-        )
-
-        const marker = stdout.match(/TRACEPARENT_OK:(00-[a-f0-9]{32}-[a-f0-9]{16}-01)/)
-        assert.ok(marker, `Expected TRACEPARENT_OK output marker, got: ${stdout}`)
-        assert.notStrictEqual(marker[1], '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01')
-        assert.notStrictEqual(marker[1], '00-00000000000000000000000000000000-0000000000000000-01')
       })
     })
   })
