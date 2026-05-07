@@ -8,7 +8,7 @@ const path = require('node:path')
 const { scriptLabel } = require('./runtime')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
-const parallelScript = path.join(repoRoot, 'scripts', 'mocha-parallel-files.js')
+const mochaBin = path.join(repoRoot, 'node_modules', 'mocha', 'bin', 'mocha.js')
 const mergeScript = path.join(__dirname, 'merge-lcov.js')
 const registerScript = path.join(__dirname, 'register.js')
 
@@ -25,7 +25,7 @@ rmSync(`${process.env.DD_TEST_SANDBOX_TARBALL_PATH}.lock`, { force: true })
 const spawnOptions = { cwd: repoRoot, env: process.env, stdio: 'inherit' }
 const mochaResult = spawnSync(
   process.execPath,
-  [parallelScript, '--require', registerScript, ...process.argv.slice(2)],
+  [mochaBin, '--require', registerScript, ...process.argv.slice(2)],
   spawnOptions,
 )
 const mergeResult = spawnSync(process.execPath, [mergeScript], spawnOptions)
