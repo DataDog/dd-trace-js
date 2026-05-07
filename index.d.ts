@@ -3739,9 +3739,9 @@ declare namespace tracer {
       output: { content: string, role?: string }[]
 
       /**
-       * Get a tag from the span or its parent.
+       * Get a tag from the span.
        * @param key The key of the tag to get.
-       * @returns The value of the tag, or `undefined` if the tag does not exist on the span or its direct parent.
+       * @returns The value of the tag, or `undefined` if the tag does not exist.
        */
       getTag (key: string): string | undefined
     }
