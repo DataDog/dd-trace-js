@@ -932,7 +932,8 @@ describe('otlp_runtime_metrics', () => {
           type,
           opts,
           addCallback (cb) {
-            (callbacks[name] = callbacks[name] || []).push(cb)
+            if (!callbacks[name]) callbacks[name] = []
+            callbacks[name].push(cb)
           },
         }
         createdInstruments[name] = instrument
