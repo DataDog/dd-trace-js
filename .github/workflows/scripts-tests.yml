@@ -1,0 +1,23 @@
+name: Scripts Tests
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+  push:
+    branches: [master, mq-working-branch-master-*]
+    paths:
+      - "scripts/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scripts-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - run: npm run test:scripts

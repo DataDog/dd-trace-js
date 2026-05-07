@@ -140,6 +140,20 @@ try {
     pass('none')
   }
 
+  // The v5 line ships the frozen v5 type surface even after master's `index.d.ts` has dropped
+  // types in the v6 cleanup. Run before `npm version` so the swap and version bump land in
+  // separate commits and the version commit stays single-purpose.
+  if (releaseLine === '5') {
+    start('Swap to v5 type surface')
+
+    run('node scripts/release/swap-v5-types.js')
+    // Skip the commit when the working tree is clean (idempotent re-run, or master's
+    // `index.d.ts` already matches `index.d.v5.ts`).
+    run('git diff --quiet -- index.d.ts || git commit -uno -m "chore(types): swap to v5 type surface" index.d.ts')
+
+    pass()
+  }
+
   // Update package.json with new version.
   run(`npm version --allow-same-version --git-tag-version=false ${newVersion}`)
   run(`git commit -uno -m v${newVersion} package.json || exit 0`)
