@@ -53,7 +53,11 @@ describe('Config', () => {
   }
 
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-  const getConfig = (options) => {
+  const getConfig = (options, overrides = {}) => {
+    const {
+      ddMajor = DD_MAJOR,
+    } = overrides
+
     log = proxyquire('../../src/log', {})
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
@@ -77,6 +81,7 @@ describe('Config', () => {
       'node:fs': fs,
       './helper': configHelper,
       '../pkg': pkg,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
   }
 
@@ -165,10 +170,8 @@ describe('Config', () => {
   describe('property surface', () => {
     // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
     const INTERNAL_RUNTIME_PROPERTIES = [
-      'commitSHA',
       'debug',
       'isServiceNameInferred',
-      'repositoryUrl',
       'sampler',
       'stableConfig',
     ]
@@ -3126,118 +3129,6 @@ describe('Config', () => {
     })
   })
 
-  context('sci embedding', () => {
-    const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
-    const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
-    const DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties')
-    const DD_GIT_FOLDER_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder')
-    let ddTags
-    beforeEach(() => {
-      ddTags = process.env.DD_TAGS
-    })
-    afterEach(() => {
-      delete process.env.DD_GIT_PROPERTIES_FILE
-      delete process.env.DD_GIT_COMMIT_SHA
-      delete process.env.DD_GIT_REPOSITORY_URL
-      delete process.env.DD_TRACE_GIT_METADATA_ENABLED
-      delete process.env.DD_GIT_FOLDER_PATH
-      process.env.DD_TAGS = ddTags
-    })
-    it('reads DD_GIT_* env vars', () => {
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('reads DD_GIT_* env vars and filters out user data', () => {
-      process.env.DD_GIT_REPOSITORY_URL = 'https://user:password@github.com/DataDog/dd-trace-js.git'
-      const config = getConfig({})
-      assert.strictEqual(config.repositoryUrl, 'https://github.com/DataDog/dd-trace-js.git')
-    })
-    it('reads DD_TAGS env var', () => {
-      process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`
-      process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('reads git.properties if it is available', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('does not crash if git.properties is not available', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-
-      // Should not throw
-      const config = getConfig({})
-      assert.ok(config !== null && typeof config === 'object' && !Array.isArray(config))
-    })
-    it('does not read git.properties if env vars are passed', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
-    })
-    it('still reads git.properties if one of the env vars is missing', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('reads git.properties and filters out credentials', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties.credentials')
-      const config = getConfig({})
-      assertObjectContains(config, {
-        commitSHA: '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d',
-        repositoryUrl: 'https://github.com/datadog/dd-trace-js',
-      })
-    })
-    it('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', () => {
-      process.env.DD_TRACE_GIT_METADATA_ENABLED = 'false'
-      const config = getConfig({})
-      assert.ok(!(Object.hasOwn(config, 'commitSHA')))
-      assert.ok(!(Object.hasOwn(config, 'repositoryUrl')))
-    })
-    it('reads .git/ folder if it is available', () => {
-      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
-      const config = getConfig({})
-      assertObjectContains(config, {
-        repositoryUrl: 'git@github.com:DataDog/dd-trace-js.git',
-        commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
-      })
-    })
-    it('does not crash if .git/ folder is not available', () => {
-      process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
-
-      // Should not throw
-      const config = getConfig({})
-      assert.ok(config !== null && typeof config === 'object' && !Array.isArray(config))
-    })
-    it('does not read .git/ folder if env vars are passed', () => {
-      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
-    })
-    it('still reads .git/ if one of the env vars is missing', () => {
-      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
-      process.env.DD_GIT_REPOSITORY_URL = 'git@github.com:DataDog/dummy-dd-trace-js.git'
-      const config = getConfig({})
-      assertObjectContains(config, {
-        commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
-        repositoryUrl: 'git@github.com:DataDog/dummy-dd-trace-js.git',
-      })
-    })
-  })
-
   context('llmobs config', () => {
     it('should disable llmobs by default', () => {
       const config = getConfig()
@@ -3904,7 +3795,7 @@ rules:
       assert.strictEqual(config.service, 'explicit-service')
     })
 
-    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy', () => {
+    it('should use NX_TASK_TARGET_PROJECT by default in v6', () => {
       const cases = ['false', '0', undefined]
 
       for (const ddIsNx of cases) {
@@ -3917,7 +3808,26 @@ rules:
         process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
         pkg.name = 'default-service'
 
-        const config = getConfig()
+        const config = getConfig(undefined, { ddMajor: 6 })
+
+        assert.strictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy in v5', () => {
+      const cases = ['false', '0', undefined]
+
+      for (const ddIsNx of cases) {
+        if (ddIsNx === undefined) {
+          delete process.env.DD_ENABLE_NX_SERVICE_NAME
+        } else {
+          process.env.DD_ENABLE_NX_SERVICE_NAME = ddIsNx
+        }
+
+        process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+        pkg.name = 'default-service'
+
+        const config = getConfig(undefined, { ddMajor: 5 })
 
         assert.strictEqual(config.service, 'default-service')
         assert.notStrictEqual(config.service, 'my-nx-project')
@@ -3954,24 +3864,31 @@ rules:
       assert.strictEqual(config.service, 'node')
     })
 
-    it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+    it('should warn about v6 behavior change in v5 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
       delete process.env.DD_ENABLE_NX_SERVICE_NAME
       delete process.env.DD_SERVICE
       pkg.name = 'default-service'
 
-      getConfig()
+      getConfig(undefined, { ddMajor: 5 })
 
-      if (DD_MAJOR < 6) {
-        assert.strictEqual(log.warn.called, true)
-        const warningMessage = log.warn.args[0][0]
-        assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
-        assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
-        assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
-      } else {
-        // In v6+, no warning should be issued
-        assert.strictEqual(log.warn.called, false)
-      }
+      assert.strictEqual(log.warn.called, true)
+      const warningMessage = log.warn.args[0][0]
+      assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
+      assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
+      assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
+    })
+
+    it('should not warn in v6 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      delete process.env.DD_ENABLE_NX_SERVICE_NAME
+      delete process.env.DD_SERVICE
+      pkg.name = 'default-service'
+
+      const config = getConfig(undefined, { ddMajor: 6 })
+
+      assert.strictEqual(config.service, 'my-nx-project')
+      assert.strictEqual(log.warn.called, false)
     })
 
     it('should not warn when DD_ENABLE_NX_SERVICE_NAME is explicitly set', () => {

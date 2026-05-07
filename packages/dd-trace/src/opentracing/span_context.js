@@ -30,6 +30,7 @@ class DatadogSpanContext {
       tags: {},
     }
     this._otelSpanContext = undefined
+    this._otelActiveSpan = undefined
   }
 
   [util.inspect.custom] () {

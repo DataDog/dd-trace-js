@@ -691,7 +691,8 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {},
+  tags: { team: 'ml' },
+  costTags: ['team'],
   prompt: {
     id: '123',
     version: '1.0.0',
@@ -703,7 +704,8 @@ llmobs.annotate(span, {
   outputData: 'output',
   metadata: {},
   metrics: {},
-  tags: {}
+  tags: { team: 'ml' },
+  costTags: ['team']
 })
 
 

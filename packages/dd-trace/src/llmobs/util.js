@@ -1,14 +1,25 @@
 'use strict'
 
+const log = require('../log')
 const { SPAN_KINDS } = require('./constants/tags')
 
+// LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
+// looking for the first non-ASCII char; if there is none, hand the input
+// straight back. Otherwise pick up the slow path from the byte that needed
+// escaping. ~5x faster on typical prompt strings than the per-char `+=`
+// loop the function used to do unconditionally.
 function encodeUnicode (str = '') {
-  let result = ''
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i)
-    result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[i]
+  for (let index = 0; index < str.length; index++) {
+    if (str.charCodeAt(index) > 127) {
+      let result = str.slice(0, index)
+      for (; index < str.length; index++) {
+        const code = str.charCodeAt(index)
+        result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[index]
+      }
+      return result
+    }
   }
-  return result
+  return str
 }
 
 function validateKind (kind) {
@@ -20,6 +31,57 @@ function validateKind (kind) {
   }
 
   return kind
+}
+
+/**
+ * Validates cost tag keys and records telemetry for the annotation source.
+ * @param {import('../opentracing/span')} span
+ * @param {unknown} costTags
+ * @param {string} source
+ * @param {Record<string, unknown>} spanTags
+ * @returns {string[]}
+ */
+function validateCostTags (span, costTags, source, spanTags) {
+  // Lazy-required to avoid the `index.js -> telemetry -> tagger -> util` module cycle.
+  const telemetry = require('./telemetry')
+
+  telemetry.recordCostTagsAnnotated(span, source)
+
+  if (!Array.isArray(costTags)) {
+    log.warn('costTags must be an array of strings. Ignoring value.')
+    telemetry.recordCostTagsSubmitted(span, 1, source, 'error', 'non_list')
+    return []
+  }
+
+  const validatedCostTags = new Set()
+  let nonStringEntries = 0
+  let missingSpanTags = 0
+
+  for (const costTag of costTags) {
+    if (typeof costTag !== 'string') {
+      log.warn('costTags entries must be strings. Skipping entry %s.', costTag)
+      nonStringEntries++
+      continue
+    }
+    if (!Object.hasOwn(spanTags, costTag)) {
+      log.warn('costTags entry "%s" must reference a key present in span tags. Skipping entry.', costTag)
+      missingSpanTags++
+      continue
+    }
+    validatedCostTags.add(costTag)
+  }
+
+  if (nonStringEntries) {
+    telemetry.recordCostTagsSubmitted(span, nonStringEntries, source, 'error', 'non_string_entry')
+  }
+  if (missingSpanTags) {
+    telemetry.recordCostTagsSubmitted(span, missingSpanTags, source, 'error', 'missing_span_tag')
+  }
+  if (validatedCostTags.size) {
+    telemetry.recordCostTagsSubmitted(span, validatedCostTags.size, source, 'success')
+  }
+
+  return [...validatedCostTags]
 }
 
 // extracts the argument names from a function string
@@ -174,9 +236,22 @@ function spanHasError (span) {
   return !!(tags.error || tags['error.type'])
 }
 
+// LLM SDKs stream tool-call argument JSON across SSE chunks; a malformed
+// accumulation would otherwise throw straight into the chunk subscriber.
+function safeJsonParse (value, fallback) {
+  if (typeof value !== 'string') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback === undefined ? value : fallback
+  }
+}
+
 module.exports = {
   encodeUnicode,
+  validateCostTags,
   validateKind,
   getFunctionArguments,
+  safeJsonParse,
   spanHasError,
 }

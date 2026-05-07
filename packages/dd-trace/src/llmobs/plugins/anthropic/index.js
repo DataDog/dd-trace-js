@@ -1,6 +1,7 @@
 'use strict'
 
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
+const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
 const { appendMessage } = require('./util')
 
@@ -47,6 +48,8 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             const { type } = contentBlock
             if (type === 'text') {
               response.content.push({ type, text: contentBlock.text })
+            } else if (type === 'thinking') {
+              response.content.push({ type, thinking: contentBlock.thinking ?? '' })
             } else if (type === 'tool_use') {
               response.content.push({ type, name: contentBlock.name, input: '', id: contentBlock.id })
             }
@@ -56,20 +59,29 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             const { delta } = chunk
             if (!delta) continue
 
-            const { text } = delta
-            if (text) response.content[response.content.length - 1].text += text
+            const lastBlock = response.content[response.content.length - 1]
+            if (!lastBlock) continue
 
-            const partialJson = delta.partial_json
-            if (partialJson && delta.type === 'input_json_delta') {
-              response.content[response.content.length - 1].input += partialJson
+            if (delta.type === 'thinking_delta') {
+              const { thinking } = delta
+              if (thinking) lastBlock.thinking += thinking
+            } else if (delta.type === 'signature_delta') {
+              // Signature is for internal verification only; skip it.
+            } else if (delta.type === 'input_json_delta') {
+              const partialJson = delta.partial_json
+              if (partialJson) lastBlock.input += partialJson
+            } else {
+              const { text } = delta
+              if (text) lastBlock.text += text
             }
             break
           }
           case 'content_block_stop': {
-            const type = response.content[response.content.length - 1].type
-            if (type === 'tool_use') {
-              const input = response.content[response.content.length - 1].input ?? '{}'
-              response.content[response.content.length - 1].input = JSON.parse(input)
+            const lastBlock = response.content[response.content.length - 1]
+            if (!lastBlock) break
+            if (lastBlock.type === 'tool_use') {
+              const input = lastBlock.input ?? '{}'
+              lastBlock.input = safeJsonParse(input, {})
             }
             break
           }
@@ -167,18 +179,17 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
 
     const outputMessages = []
     for (const block of content) {
+      if (block.type === 'thinking') {
+        outputMessages.push({ content: block.thinking ?? '', role: 'reasoning' })
+        continue
+      }
       const { text } = block
       if (typeof text === 'string') {
         outputMessages.push({ content: text, role })
       } else if (block.type === 'tool_use') {
-        let input = block.input
-        if (typeof input === 'string') {
-          input = JSON.parse(input)
-        }
-
         const toolCall = {
           name: block.name,
-          arguments: input,
+          arguments: safeJsonParse(block.input, {}),
           toolId: block.id,
           type: block.type,
         }

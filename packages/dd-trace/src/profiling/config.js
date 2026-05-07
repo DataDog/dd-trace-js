@@ -4,6 +4,7 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 
 const satisfies = require('../../../../vendor/dist/semifies')
+const getGitMetadata = require('../git_metadata')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
@@ -38,10 +39,10 @@ class Config {
       ...getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata()),
     }
 
-    // Add source code integration tags if available
-    if (options.repositoryUrl && options.commitSHA) {
-      this.tags[GIT_REPOSITORY_URL] = options.repositoryUrl
-      this.tags[GIT_COMMIT_SHA] = options.commitSHA
+    const { commitSHA, repositoryUrl } = getGitMetadata(options)
+    if (repositoryUrl && commitSHA) {
+      this.tags[GIT_REPOSITORY_URL] = repositoryUrl
+      this.tags[GIT_COMMIT_SHA] = commitSHA
     }
 
     // Normalize from seconds to milliseconds. Default must be longer than a minute.

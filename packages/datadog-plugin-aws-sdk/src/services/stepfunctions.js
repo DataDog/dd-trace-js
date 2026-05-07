@@ -38,25 +38,23 @@ class Stepfunctions extends BaseAwsSdkPlugin {
 
   requestInject (span, request) {
     const operation = request.operation
-    if (operation === 'startExecution' || operation === 'startSyncExecution') {
-      if (!request.params || !request.params.input) {
-        return
-      }
+    if ((operation !== 'startExecution' && operation !== 'startSyncExecution') || !request.params?.input) return
 
-      const input = request.params.input
+    const input = request.params.input
+    // Cheap object-shape gate: only inject into JSON object payloads,
+    // matching the prior `typeof inputObj === 'object'` check without the
+    // round-trip parse.
+    if (typeof input !== 'string' || input.length < 2 || input[input.length - 1] !== '}') return
 
-      try {
-        const inputObj = JSON.parse(input)
-        if (inputObj !== null && typeof inputObj === 'object') {
-          // We've parsed the input JSON string
-          inputObj._datadog = {}
-          this.tracer.inject(span, 'text_map', inputObj._datadog)
-          const newInput = JSON.stringify(inputObj)
-          request.params.input = newInput
-        }
-      } catch {
-        log.info('Unable to treat input as JSON')
-      }
+    const injected = {}
+    this.tracer.inject(span, 'text_map', injected)
+
+    // `injectFieldIntoJsonObject` is the only throwing call path
+    // (`JSON.parse` slow path for non-trivial JSON shapes).
+    try {
+      request.params.input = BaseAwsSdkPlugin.injectFieldIntoJsonObject(input, '_datadog', injected)
+    } catch {
+      log.info('Unable to treat input as JSON')
     }
   }
 }

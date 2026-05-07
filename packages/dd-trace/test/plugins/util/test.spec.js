@@ -22,6 +22,8 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
@@ -90,6 +92,16 @@ describe('getTestSuitePath', () => {
 describe('getTestSessionName', () => {
   let originalEnv
 
+  function getTestSessionNameWithMajor (ddMajor) {
+    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+      '../../../../version': { DD_MAJOR: ddMajor },
+    })
+
+    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+      '../../ci-visibility/lage': lage,
+    }).getTestSessionName
+  }
+
   beforeEach(() => {
     originalEnv = { ...process.env }
     delete process.env.DD_ENABLE_LAGE_PACKAGE_NAME
@@ -119,6 +131,20 @@ describe('getTestSessionName', () => {
     process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
 
     assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
+  })
+
+  it('returns the current Lage package name by default in v6', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(6)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package')
+  })
+
+  it('does not return the current Lage package name by default in v5', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(5)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'jest')
   })
 })
 
@@ -931,6 +957,41 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     assert.strictEqual(isFaulty, true)
+  })
+})
+
+describe('getEfdRetryCount', () => {
+  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+
+  it('returns retries for the matching duration bucket', () => {
+    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
+    assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
+    assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
+    assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
+  })
+
+  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
+    assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
+    assert.strictEqual(getEfdRetryCount(0, {}), 0)
+    assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
+    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
+  })
+})
+
+describe('getMaxEfdRetryCount', () => {
+  it('returns the largest retry count from slow test retry buckets', () => {
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
+  })
+
+  it('preserves an explicit all-zero configuration', () => {
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
+  })
+
+  it('returns 0 when no slow test retry buckets are configured', () => {
+    assert.strictEqual(getMaxEfdRetryCount({}), 0)
+    assert.strictEqual(getMaxEfdRetryCount(undefined), 0)
   })
 })
 

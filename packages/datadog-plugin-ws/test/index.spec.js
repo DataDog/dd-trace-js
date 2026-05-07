@@ -25,6 +25,13 @@ function findSpan (traces, predicate) {
   return undefined
 }
 
+function closeWsServer (server) {
+  for (const ws of server.clients) {
+    ws.terminate()
+  }
+  return new Promise(resolve => server.close(resolve))
+}
+
 describe('Plugin', () => {
   let WebSocket
   let wsServer
@@ -105,6 +112,11 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -124,6 +136,7 @@ describe('Plugin', () => {
           // Trigger setSocket
           const newClient = new WebSocket(`ws://localhost:${clientPort}/test`)
           newClient.on('open', () => newClient.close())
+          newClient.on('error', () => {})
 
           const store = await promise
 
@@ -457,6 +470,11 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -564,6 +582,11 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -608,6 +631,11 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -704,6 +732,11 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+          await closeWsServer(wsServer)
           await agent.close({ ritmReset: false, wipe: true })
         })
 

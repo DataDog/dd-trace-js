@@ -8,11 +8,13 @@ const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
  * either.
  */
 class MsgpackChunk {
+  #minSize
+
   constructor (minSize = DEFAULT_MIN_SIZE) {
     this.buffer = Buffer.allocUnsafe(minSize)
     this.view = new DataView(this.buffer.buffer)
     this.length = 0
-    this._minSize = minSize
+    this.#minSize = minSize
   }
 
   write (value) {
@@ -50,13 +52,14 @@ class MsgpackChunk {
 
   reserve (size) {
     if (this.length + size > this.buffer.length) {
-      this._resize(this._minSize * Math.ceil((this.length + size) / this._minSize))
+      const minSize = this.#minSize
+      this.#resize(minSize * Math.ceil((this.length + size) / minSize))
     }
 
     this.length += size
   }
 
-  _resize (size) {
+  #resize (size) {
     const oldBuffer = this.buffer
 
     this.buffer = Buffer.allocUnsafe(size)

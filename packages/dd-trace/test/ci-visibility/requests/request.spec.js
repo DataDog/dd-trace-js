@@ -57,4 +57,19 @@ describe('ci-visibility/requests/request', () => {
       })
     })
   })
+
+  it('should retry on a transient network error and succeed on the next attempt', (done) => {
+    nock('http://localhost:8126')
+      .post('/path')
+      .replyWithError({ code: 'ECONNRESET' })
+      .post('/path')
+      .reply(200, 'ok')
+
+    request('{}', { url: 'http://localhost:8126', path: '/path' }, (err, res, statusCode) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(res, 'ok')
+      assert.strictEqual(statusCode, 200)
+      done()
+    })
+  })
 })

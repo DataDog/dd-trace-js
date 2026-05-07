@@ -1,11 +1,15 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
 const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -35,6 +39,8 @@ const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
 const testsStatuses = new Map()
+const efdRetryCountByTestFullName = new Map()
+const efdSlowAbortedTests = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
 
@@ -70,17 +76,97 @@ function isNewTest (test, knownTests) {
   return !testsForSuite.includes(testName)
 }
 
-function retryTest (test, numRetries, tags) {
+function setEfdRetryCountForTest (test, duration, slowTestRetries) {
+  const testName = getTestFullName(test)
+  if (efdRetryCountByTestFullName.has(testName)) {
+    return
+  }
+  const retryCount = getEfdRetryCount(duration, slowTestRetries || {})
+  efdRetryCountByTestFullName.set(testName, retryCount)
+  if (retryCount === 0) {
+    efdSlowAbortedTests.add(testName)
+  }
+}
+
+function wrapOriginalEfdTest (test, slowTestRetries) {
+  if (test._ddEfdDurationWrapped || typeof test.fn !== 'function') {
+    return
+  }
+  test._ddEfdDurationWrapped = true
+  const originalFn = test.fn
+  test.fn = function () {
+    const start = performance.now()
+    const recordDuration = () => {
+      setEfdRetryCountForTest(test, performance.now() - start, slowTestRetries)
+    }
+
+    if (originalFn.length > 0) {
+      const args = Array.prototype.slice.call(arguments)
+      const done = args[0]
+      args[0] = function () {
+        recordDuration()
+        return done.apply(this, arguments)
+      }
+      return originalFn.apply(this, args)
+    }
+
+    try {
+      const result = originalFn.apply(this, arguments)
+      if (result?.then) {
+        return result.then(value => {
+          recordDuration()
+          return value
+        }, error => {
+          recordDuration()
+          throw error
+        })
+      }
+      recordDuration()
+      return result
+    } catch (error) {
+      recordDuration()
+      throw error
+    }
+  }
+}
+
+function retryTest (test, numRetries, tags, slowTestRetries) {
   const suite = test.parent
+  const isEfdRetry = tags.includes('_ddIsEfdRetry')
+  if (isEfdRetry) {
+    wrapOriginalEfdTest(test, slowTestRetries)
+  }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     suite.addTest(clonedTest)
+    if (isEfdRetry) {
+      clonedTest._ddEfdRetryIndex = retryIndex + 1
+      const originalFn = clonedTest.fn
+      if (typeof originalFn === 'function') {
+        clonedTest.fn = function () {
+          const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(clonedTest))
+          if (efdRetryCount !== undefined && clonedTest._ddEfdRetryIndex > efdRetryCount) {
+            clonedTest._ddShouldSkipEfdRetry = true
+            this.skip()
+          }
+          return originalFn.apply(this, arguments)
+        }
+      }
+    }
     for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
       }
     }
   }
+}
+
+function getConfiguredEfdRetryCount (config) {
+  const { earlyFlakeDetectionSlowTestRetries } = config
+  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
+    return config.earlyFlakeDetectionNumRetries
+  }
+  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
 }
 
 function getSuitesByTestFile (root) {
@@ -215,6 +301,17 @@ function getOnTestHandler (isMain) {
       _ddIsModified: isModified,
     } = test
 
+    test._ddStartTime = performance.now()
+
+    if (isEfdRetry) {
+      const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(test))
+      if (efdRetryCount !== undefined && test._ddEfdRetryIndex > efdRetryCount) {
+        test.pending = true
+        test._ddShouldSkipEfdRetry = true
+        return
+      }
+    }
+
     const testInfo = {
       testName: test.fullTitle(),
       testSuiteAbsolutePath,
@@ -273,6 +370,7 @@ function getFinalStatus ({
   isAttemptToFix,
   isLastAttemptToFix,
   attemptToFixPassed,
+  hasPassedAnyEfdAttempt,
   isQuarantined,
   isDisabled,
 }) {
@@ -301,7 +399,7 @@ function getFinalStatus ({
     return hasFailedAllRetries ? 'fail' : 'pass'
   }
   if (isEfdRetry && isLastEfdRetry) {
-    return hasFailedAllRetries ? 'fail' : 'pass'
+    return hasPassedAnyEfdAttempt ? 'pass' : 'fail'
   }
   if (isAttemptToFix && isLastAttemptToFix) {
     return attemptToFixPassed ? 'pass' : 'fail'
@@ -314,6 +412,15 @@ function getTestFinishInfo (test, status, config, error) {
   let attemptToFixFailed = false
 
   const testName = getTestFullName(test)
+  if (
+    config.isEarlyFlakeDetectionEnabled &&
+    (test._ddIsNew || test._ddIsModified) &&
+    !test._ddIsEfdRetry &&
+    !efdRetryCountByTestFullName.has(testName)
+  ) {
+    const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
+    setEfdRetryCountForTest(test, duration, config.earlyFlakeDetectionSlowTestRetries)
+  }
 
   if (testsStatuses.get(testName)) {
     testsStatuses.get(testName).push(status)
@@ -323,12 +430,14 @@ function getTestFinishInfo (test, status, config, error) {
   const testStatuses = testsStatuses.get(testName)
 
   const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
-  const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
+  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? getConfiguredEfdRetryCount(config)
+  const isLastEfdRetry = testStatuses.length === efdRetryCount + 1
   const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
 
   // Needed for the getFinalStatus call. This is because EFD does NOT tag as
   // EFD retry the first run of the test. It only tags as retries the clones
-  const isEfdRetry = test._ddIsEfdRetry || (test._ddIsNew && config.isEarlyFlakeDetectionEnabled)
+  const isEfdRetry =
+    test._ddIsEfdRetry || ((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled)
 
   if (test._ddIsAttemptToFix && isLastAttempt) {
     if (testStatuses.includes('fail')) {
@@ -341,7 +450,7 @@ function getTestFinishInfo (test, status, config, error) {
     }
   }
 
-  if (test._ddIsEfdRetry && isLastEfdRetry &&
+  if (test._ddIsEfdRetry && efdRetryCount > 0 && isLastEfdRetry &&
     testStatuses.every(status => status === 'fail')) {
     hasFailedAllRetries = true
   }
@@ -370,6 +479,7 @@ function getTestFinishInfo (test, status, config, error) {
     isAttemptToFix: _ddIsAttemptToFix,
     isLastAttemptToFix: isLastAttempt,
     attemptToFixPassed,
+    hasPassedAnyEfdAttempt: testStatuses.includes('pass'),
     isQuarantined: _ddIsQuarantined,
     isDisabled: _ddIsDisabled,
   })
@@ -391,11 +501,15 @@ function getTestFinishInfo (test, status, config, error) {
     isAttemptToFixRetry,
     isAtrRetry,
     finalStatus,
+    earlyFlakeAbortReason: efdSlowAbortedTests.has(testName) ? 'slow' : undefined,
   }
 }
 
 function getOnTestEndHandler (config) {
   return async function (test) {
+    if (test._ddShouldSkipEfdRetry) {
+      return
+    }
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
 
@@ -518,6 +632,9 @@ function getOnTestRetryHandler (config) {
 
 function getOnPendingHandler () {
   return function (test) {
+    if (test._ddShouldSkipEfdRetry) {
+      return
+    }
     const testStartLine = testToStartLine.get(test)
     const {
       file: testSuiteAbsolutePath,
@@ -587,8 +704,9 @@ function getRunTestsWrapper (runTests, config) {
               if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
                 retryTest(
                   test,
-                  config.earlyFlakeDetectionNumRetries,
-                  ['_ddIsModified', '_ddIsEfdRetry']
+                  getConfiguredEfdRetryCount(config),
+                  ['_ddIsModified', '_ddIsEfdRetry'],
+                  config.earlyFlakeDetectionSlowTestRetries
                 )
               }
             }
@@ -606,8 +724,9 @@ function getRunTestsWrapper (runTests, config) {
           if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
             retryTest(
               test,
-              config.earlyFlakeDetectionNumRetries,
-              ['_ddIsNew', '_ddIsEfdRetry']
+              getConfiguredEfdRetryCount(config),
+              ['_ddIsNew', '_ddIsEfdRetry'],
+              config.earlyFlakeDetectionSlowTestRetries
             )
           }
         }

@@ -19,10 +19,9 @@ class DataStreamsCheckpointer {
     if (!this.config.dsmEnabled) return
 
     const ctx = this.dsmProcessor.setCheckpoint(
-      ['type:' + type, 'topic:' + target, 'direction:out', 'manual_checkpoint:true'],
+      ['direction:out', 'type:' + type, 'topic:' + target, 'manual_checkpoint:true'],
       null,
-      DataStreamsContext.getDataStreamsContext(),
-      null
+      DataStreamsContext.getDataStreamsContext()
     )
     DataStreamsContext.setDataStreamsContext(ctx)
 
@@ -45,17 +44,12 @@ class DataStreamsCheckpointer {
     const parentCtx = this.tracer.extract('text_map_dsm', carrier)
     DataStreamsContext.setDataStreamsContext(parentCtx)
 
-    const tags = ['type:' + type, 'topic:' + source, 'direction:in']
+    const tags = ['direction:in', 'type:' + type, 'topic:' + source]
     if (manualCheckpoint) {
       tags.push('manual_checkpoint:true')
     }
 
-    const ctx = this.dsmProcessor.setCheckpoint(
-      tags,
-      null,
-      parentCtx,
-      null
-    )
+    const ctx = this.dsmProcessor.setCheckpoint(tags, null, parentCtx)
     DataStreamsContext.setDataStreamsContext(ctx)
 
     return ctx
