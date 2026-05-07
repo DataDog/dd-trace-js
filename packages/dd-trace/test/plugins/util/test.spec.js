@@ -967,13 +967,16 @@ describe('getEfdRetryCount', () => {
     assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
     assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
     assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
     assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
     assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
   })
 
-  it('returns 0 when the matching bucket is 0 or the test is too slow', () => {
+  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
     assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
+    assert.strictEqual(getEfdRetryCount(0, {}), 0)
     assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
+    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
   })
 })
 
