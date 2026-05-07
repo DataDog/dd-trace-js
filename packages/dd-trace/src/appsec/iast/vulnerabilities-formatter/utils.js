@@ -111,18 +111,17 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
       const segments = []
       let outputLength = 0
       let pos = 0
-      const rangeKeyToFind = `${STRINGIFY_RANGE_KEY}`
-      let rangeKeyIndex = value.indexOf(rangeKeyToFind)
+      let rangeKeyIndex = value.indexOf(STRINGIFY_RANGE_KEY)
 
       while (rangeKeyIndex > -1) {
-        let theRest = value.slice(rangeKeyIndex)
+        let remainingStringValue = value.slice(rangeKeyIndex)
         let cleanLength = rangeKeyIndex - pos
 
-        if (theRest.startsWith(STRINGIFY_SENSITIVE_NOT_STRING_KEY)) {
+        if (remainingStringValue.startsWith(STRINGIFY_SENSITIVE_NOT_STRING_KEY)) {
           rangeKeyIndex--
           cleanLength--
-          theRest = value.slice(rangeKeyIndex)
-          const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING.exec(theRest)
+          remainingStringValue = value.slice(rangeKeyIndex)
+          const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING.exec(remainingStringValue)
 
           if (regexRes?.index === 0) {
             const matchValue = regexRes[0]
@@ -143,8 +142,8 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
             outputLength += cleanLength + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1
             pos = rangeKeyIndex + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1
           }
-        } else if (theRest.startsWith(STRINGIFY_SENSITIVE_KEY)) {
-          const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE.exec(theRest)
+        } else if (remainingStringValue.startsWith(STRINGIFY_SENSITIVE_KEY)) {
+          const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE.exec(remainingStringValue)
           if (regexRes?.index === 0) {
             const start = outputLength + cleanLength
 
@@ -163,7 +162,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
             pos = rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length
           }
         } else {
-          const regexRes = REGEX_FOR_STRINGIFY_RANGE.exec(theRest)
+          const regexRes = REGEX_FOR_STRINGIFY_RANGE.exec(remainingStringValue)
           if (regexRes?.index === 0) {
             const start = outputLength + cleanLength
             const rangesId = regexRes[1]
@@ -188,7 +187,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           }
         }
 
-        rangeKeyIndex = value.indexOf(rangeKeyToFind, pos)
+        rangeKeyIndex = value.indexOf(STRINGIFY_RANGE_KEY, pos)
       }
 
       segments.push(value.slice(pos))
