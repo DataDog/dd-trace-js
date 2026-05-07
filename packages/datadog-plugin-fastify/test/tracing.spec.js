@@ -278,7 +278,8 @@ describe('Plugin', () => {
             let error
 
             app.get('/user', (request, reply) => {
-              reply.send(error = new Error('boom'))
+              error = new Error('boom')
+              reply.send(error)
             })
 
             app.listen({ host, port: 0 }, () => {
@@ -357,7 +358,8 @@ describe('Plugin', () => {
             let error
 
             app.addHook('onRequest', (request, reply, next) => {
-              next(error = new Error('boom'))
+              error = new Error('boom')
+              next(error)
             })
 
             app.get('/user', (request, reply) => {
@@ -433,7 +435,8 @@ describe('Plugin', () => {
               let error
 
               app.get('/user', (request, reply) => {
-                return Promise.reject(error = new Error('boom'))
+                error = new Error('boom')
+                return Promise.reject(error)
               })
 
               app.listen({ host, port: 0 }, () => {
@@ -471,7 +474,8 @@ describe('Plugin', () => {
                 reply.send()
               })
               app.get('/user', (request, reply) => {
-                throw (error = new Error('boom'))
+                error = new Error('boom')
+                throw error
               })
 
               app.listen({ host, port: 0 }, () => {
@@ -545,7 +549,8 @@ describe('Plugin', () => {
               let error
 
               app.addHook('onRequest', (request, reply, next) => {
-                throw (error = new Error('boom'))
+                error = new Error('boom')
+                throw error
               })
 
               app.get('/user', (request, reply) => {

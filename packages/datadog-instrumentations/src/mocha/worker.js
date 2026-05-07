@@ -33,9 +33,11 @@ addHook({
       config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
       config.knownTests = this.options._ddKnownTests
       config.earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
+      config.earlyFlakeDetectionSlowTestRetries = this.options._ddEfdSlowTestRetries ?? {}
       delete this.options._ddIsEfdEnabled
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
+      delete this.options._ddEfdSlowTestRetries
       delete this.options._ddIsKnownTestsEnabled
     }
     if (this.options._ddIsImpactedTestsEnabled) {
