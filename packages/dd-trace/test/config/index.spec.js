@@ -536,6 +536,13 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
+  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set, even when its value matches the default', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+  })
+
   it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
     const config = getConfig()
