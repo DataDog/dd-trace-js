@@ -27,11 +27,14 @@ jobs:
   aerospike:
     name: aerospike (${{ matrix.aerospike-version }}, node-${{ matrix.node-version }})
     strategy:
+      fail-fast: false
       matrix:
         node-version: [eol]
         range: [">=4.0.0 <5.2.0"]
         aerospike-version: [ce-5.7.0.15]
-        image: ["aerospike@sha256:f1fbfd8788f840fc10805690bd1352b4a99acbc4c6d113912357b4211dcf56a4"] # ce-5.7.0.15
+        image: [
+            "aerospike@sha256:f1fbfd8788f840fc10805690bd1352b4a99acbc4c6d113912357b4211dcf56a4",
+          ] # ce-5.7.0.15
         test-image: [ubuntu-22.04]
         include:
           - node-version: 18
@@ -250,6 +253,7 @@ jobs:
 
   confluentinc-kafka-javascript:
     strategy:
+      fail-fast: false
       matrix:
         # using node versions matrix since this plugin testing fails due to install differences between node versions
         node-version: [18, 20, 22]
@@ -328,6 +332,7 @@ jobs:
 
   couchbase:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [eol]
         range:
@@ -561,6 +566,7 @@ jobs:
 
   http:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, maintenance, latest]
     runs-on: ubuntu-latest
@@ -616,6 +622,7 @@ jobs:
 
   kafkajs:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
     runs-on: ubuntu-latest
@@ -1096,6 +1103,7 @@ jobs:
 
   prisma:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - node-version: 18

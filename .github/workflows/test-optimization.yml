@@ -39,6 +39,7 @@ jobs:
 
   integration:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
@@ -72,6 +73,7 @@ jobs:
 
   integration-playwright:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
@@ -136,6 +138,7 @@ jobs:
 
   integration-mocha:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
         # "oldest" is 5.2.0 in <=5 and 8.0.0 in >=6
@@ -166,6 +169,7 @@ jobs:
 
   integration-jest:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
         # "oldest" is 24.8.0 in <=5 and 28.0.0 in >=6
@@ -196,6 +200,7 @@ jobs:
 
   integration-cucumber:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
         cucumber-version: [7.0.0, latest]
@@ -225,6 +230,7 @@ jobs:
 
   integration-selenium:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
     runs-on: ubuntu-latest
@@ -270,6 +276,7 @@ jobs:
 
   integration-cypress:
     strategy:
+      fail-fast: false
       matrix:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
@@ -347,6 +354,7 @@ jobs:
     permissions:
       id-token: write
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
     env:
