@@ -39,6 +39,7 @@ jobs:
 
   integration:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
@@ -72,6 +73,7 @@ jobs:
 
   integration-playwright:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
@@ -82,6 +84,7 @@ jobs:
           - playwright-test-management
           - playwright-active-test-span
           - playwright-impacted-tests
+          - playwright-final-status
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
@@ -136,6 +139,7 @@ jobs:
 
   integration-mocha:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
         # "oldest" is 5.2.0 in <=5 and 8.0.0 in >=6
@@ -166,10 +170,16 @@ jobs:
 
   integration-jest:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
         # "oldest" is 24.8.0 in <=5 and 28.0.0 in >=6
         jest-version: [oldest, latest]
+        spec:
+          - jest.core
+          - jest.itr-efd
+          - jest.test-management
+    name: integration-jest (${{ matrix.jest-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -188,6 +198,7 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
@@ -196,6 +207,7 @@ jobs:
 
   integration-cucumber:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
         cucumber-version: [7.0.0, latest]
@@ -225,6 +237,7 @@ jobs:
 
   integration-selenium:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
     runs-on: ubuntu-latest
@@ -270,6 +283,7 @@ jobs:
 
   integration-cypress:
     strategy:
+      fail-fast: false
       matrix:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
@@ -347,8 +361,14 @@ jobs:
     permissions:
       id-token: write
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, latest]
+        spec:
+          - vitest.core
+          - vitest.test-management
+          - vitest.advanced
+    name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -364,6 +384,7 @@ jobs:
       - run: yarn test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:

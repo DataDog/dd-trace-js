@@ -47,6 +47,7 @@ jobs:
     permissions:
       id-token: write
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, maintenance, active, latest]
     steps:

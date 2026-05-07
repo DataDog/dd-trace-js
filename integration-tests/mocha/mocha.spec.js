@@ -2287,7 +2287,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
-    it('uses the retry count from the matching slow_test_retries bucket', (done) => {
+    it('uses the retry count from the matching slow_test_retries bucket', async () => {
       receiver.setKnownTests({
         mocha: {},
       })
@@ -2339,11 +2339,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
     })
 
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
