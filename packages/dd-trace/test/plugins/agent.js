@@ -429,15 +429,9 @@ module.exports = {
 
     plugins = pluginNames
 
-    // Capture the tracer created in this load() so that a late-firing
-    // 'close' from this server does not clobber state that belongs to
-    // a subsequent load() invocation. agent.close() is not always
-    // awaited, so the previous server's close event can land after the
-    // next load() has already reassigned `tracer`. Each load() builds
-    // a fresh `tracer` via proxyquire, so identity-equality on the
-    // tracer reference uniquely identifies this load(); the integration
-    // name is gated on the same check because it can repeat across
-    // loads of the same plugin and is not safe to compare by string.
+    // Capture the tracer at load() time; agent.close() is sometimes not
+    // awaited, so this server's close event can land after the next
+    // load() has already reassigned the module-level tracer.
     const loadedTracer = tracer
     server.on('close', () => {
       if (tracer === loadedTracer) {
