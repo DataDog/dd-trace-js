@@ -13,32 +13,10 @@ name: "CodeQL"
 
 on:
   push:
-    # Exclude merge-queue branches: PRs are already scanned before merge.
-    branches: [master]
-    # Mirror the paths-ignore in .github/codeql_config.yml so the workflow
-    # does not launch at all (and avoids GitHub API calls) when only
-    # non-production files change.
-    paths-ignore:
-      - 'benchmark/**'
-      - 'integration-tests/**'
-      - 'node-upstream-tests/**'
-      - 'packages/**/test/**'
-      - 'scripts/**'
-      - 'vendor/dist/**'
-      - 'docs/**'
-      - '**.md'
+    branches: [master, mq-working-branch-master-*]
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [master]
-    paths-ignore:
-      - 'benchmark/**'
-      - 'integration-tests/**'
-      - 'node-upstream-tests/**'
-      - 'packages/**/test/**'
-      - 'scripts/**'
-      - 'vendor/dist/**'
-      - 'docs/**'
-      - '**.md'
 
 jobs:
   analyze:
@@ -60,7 +38,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
+        uses: github/codeql-action/init@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
         with:
           languages: ${{ matrix.language }}
           config-file: .github/codeql_config.yml
@@ -70,7 +48,7 @@ jobs:
           # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
+        uses: github/codeql-action/autobuild@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
+        uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3

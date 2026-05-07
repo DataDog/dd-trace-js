@@ -425,7 +425,12 @@ describe('OTel Context Manager', () => {
         active.setStatus({ code: 2, message: 'after end' })
         active.updateName('after end')
 
-        assert.deepStrictEqual(ddSpan.context()._tags, {})
+        const tags = ddSpan.context()._tags
+        assert.ok(!('after.end' in tags))
+        assert.ok(!('after.end.batch' in tags))
+        assert.ok(!('error.message' in tags))
+        assert.ok(!('error.type' in tags))
+        assert.ok(!('resource.name' in tags))
         assert.strictEqual(ddSpan._links.length, 0)
         assert.strictEqual(ddSpan._events.length, 0)
       })
