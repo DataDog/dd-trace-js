@@ -7,8 +7,8 @@
   "instructions": true,
   "variants": {
     "without-log": { "env": { "DD_TRACE_DEBUG": "false" } },
-    "skip-log": { "env": { "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "error" } },
-    "with-debug": { "env": { "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "debug" } },
-    "with-error": { "env": { "WITH_LEVEL": "error", "DD_TRACE_LOG_LEVEL": "error"  } }
+    "skip-log": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "error" } },
+    "with-debug": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "debug" } },
+    "with-error": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "error", "DD_TRACE_LOG_LEVEL": "error" } }
   }
 }

@@ -2,6 +2,15 @@
 
 // TODO: Update setup script to not leave agent process running in background.
 
+const assert = require('node:assert/strict')
+
+// AgentExporter and several other internals register exit handlers via
+// `globalThis[Symbol.for('dd-trace')].beforeExitHandlers`. The shared registry
+// is normally created by `require('dd-trace')` (entry point); since the bench
+// imports the src files directly to keep init cost out of the hot path, the
+// registry has to be primed manually. Same shape as `llmobs/index.js`.
+globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
+
 const hostname = require('os').hostname()
 const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
@@ -59,7 +68,15 @@ for (let i = 0, parent = null; i < 30; i++) {
   parent = createSpan(parent)
 }
 
-let iterations = 0
+// Pre-flight sanity: confirm one process() call advances the writer's queue.
+// Catches the silent breakage where a refactor wires the bench at a no-op
+// surface (e.g. processor or exporter accepting input but discarding it).
+const writerCountBefore = exporter._writer?._encoder?.count?.() ?? 0
+sp.process(finished[0])
+const writerCountAfter = exporter._writer?._encoder?.count?.() ?? 0
+assert.ok(writerCountAfter > writerCountBefore, 'span processor did not advance encoder count')
+
+let iterations = 1
 function processSpans () {
   sp.process(finished[0])
   trace.finished = finished

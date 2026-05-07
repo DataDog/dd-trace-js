@@ -1,6 +1,13 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+
+// `debugger.start()` writes `globalThis[Symbol.for('dd-trace')].utilTypes`. The
+// shared registry is normally created by `require('dd-trace')` (entry point);
+// the bench imports the src files directly to keep init cost out of the hot
+// path, so the registry has to be primed manually. Same shape as
+// `llmobs/index.js` and `exporting-pipeline/index.js`.
+globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const getConfig = require('../../../packages/dd-trace/src/config')
 const { start } = require('../../../packages/dd-trace/src/debugger')
@@ -33,3 +40,7 @@ const rc = {
 }
 
 start(config, rc)
+
+// Pre-flight sanity: confirm `start()` populated the shared registry. Catches
+// the silent breakage where a refactor moves the write or skips the start path.
+assert.ok(globalThis[Symbol.for('dd-trace')].utilTypes, 'debugger.start did not populate utilTypes')
