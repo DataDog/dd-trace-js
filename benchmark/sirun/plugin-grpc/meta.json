@@ -1,0 +1,15 @@
+{
+  "name": "plugin-grpc",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "method-metadata": { "env": { "VARIANT": "method-metadata" } },
+    "peer-parse": {
+      "baseline": "method-metadata",
+      "env": { "VARIANT": "peer-parse" }
+    }
+  }
+}
