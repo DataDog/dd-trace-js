@@ -828,7 +828,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -864,7 +863,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -902,7 +900,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {

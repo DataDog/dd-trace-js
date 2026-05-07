@@ -47,17 +47,16 @@ describe('Plugin', () => {
       ])
     )
 
-    const gateway = new ApolloGateway({
+    return new ApolloGateway({
       localServiceList: fixtures,
       buildService (service) {
         return localDataSources[service.name]
       },
     })
-    return gateway
   }
 
   async function execute (executor, source, variables, operationName) {
-    const resp = await executor({
+    return executor({
       source,
       document: gql(source),
       request: {
@@ -68,7 +67,6 @@ describe('Plugin', () => {
       context: null,
       cache: {},
     })
-    return resp
   }
 
   function gateway () {

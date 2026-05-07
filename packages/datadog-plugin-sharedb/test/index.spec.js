@@ -116,8 +116,8 @@ describe('Plugin', () => {
           const receiveSpy = sinon.spy((request, next) => {
             next()
             if (!isDone) {
-              done()
               isDone = true
+              done()
             }
           })
           backend.use('receive', receiveSpy)
@@ -135,8 +135,8 @@ describe('Plugin', () => {
           const receiveSpy = sinon.spy((request, next) => {
             next()
             if (!isDone) {
-              done()
               isDone = true
+              done()
             }
           })
           backend.use('receive', receiveSpy)

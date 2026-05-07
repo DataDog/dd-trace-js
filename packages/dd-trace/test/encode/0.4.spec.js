@@ -130,8 +130,13 @@ describe('encode', () => {
     })
 
     it('should log adding an encoded trace to the buffer if enabled', () => {
-      encoder._debugEncoding = true
-      encoder.encode(data)
+      const debugConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, DD_TRACE_ENCODING_DEBUG: true })
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+        '../log': logger,
+        '../config': debugConfig,
+      })
+      const debugEncoder = new AgentEncoder(writer)
+      debugEncoder.encode(data)
 
       const message = logger.debug.firstCall.args[0]()
 
@@ -192,6 +197,42 @@ describe('encode', () => {
       })
     })
 
+    it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
+      // Force enough unique strings to overflow the 2 MB initial chunk so
+      // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
+      // entry is left pointing at a now-orphaned ArrayBuffer; the public
+      // surface does not expose this retention directly.
+      const longSuffix = 'x'.repeat(80)
+      const dataToEncode = []
+      for (let i = 0; i < 30000; i++) {
+        dataToEncode.push({
+          trace_id: id('1234abcd1234abcd'),
+          span_id: id('1234abcd1234abcd'),
+          parent_id: id('1234abcd1234abcd'),
+          name: 'name',
+          resource: 'resource',
+          service: 'service',
+          type: 'foo',
+          error: 0,
+          meta: { [`k_${i}_${longSuffix}`]: `v_${i}_${longSuffix}` },
+          metrics: {},
+          start: 0,
+          duration: 1,
+        })
+      }
+      const initialBuffer = encoder._stringBytes.buffer
+
+      encoder.encode(dataToEncode)
+
+      const finalBuffer = encoder._stringBytes.buffer
+      assert.notStrictEqual(initialBuffer, finalBuffer, '_stringBytes must have resized for this test to be meaningful')
+      let staleEntries = 0
+      for (const key of Object.keys(encoder._stringMap)) {
+        if (encoder._stringMap[key].buffer !== finalBuffer.buffer) staleEntries++
+      }
+      assert.strictEqual(staleEntries, 0)
+    })
+
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
       const topLevelEvents = [
         { name: 'Something went so wrong', time_unix_nano: 1000000 },
@@ -214,6 +255,29 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       assert.deepStrictEqual(trace[0].meta.events, encodedLink)
+    })
+
+    it('should encode span events whose name is not a string without throwing', () => {
+      // `addEvent` does not type-check `name`. The legacy stringifier must
+      // tolerate the same inputs `JSON.stringify` did before the rewrite.
+      const events = [
+        { name: undefined, time_unix_nano: 1000000 },
+        { name: null, time_unix_nano: 2000000, attributes: { ok: true } },
+        { name: 42, time_unix_nano: 3000000 },
+        { name: true, time_unix_nano: 4000000 },
+        { name: ['array', 'name'], time_unix_nano: 5000000 },
+        { name: { nested: 'object' }, time_unix_nano: 6000000 },
+        { name: Symbol('event'), time_unix_nano: 7000000 },
+        { name: 'plain', time_unix_nano: 8000000 },
+      ]
+
+      data[0].span_events = events
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      assert.strictEqual(decoded[0][0].meta.events, JSON.stringify(events))
     })
 
     it('should encode spanLinks', () => {
