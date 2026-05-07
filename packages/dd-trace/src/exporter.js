@@ -17,6 +17,8 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/agentless')
     case exporters.AGENT_PROXY:
       return require('./ci-visibility/exporters/agent-proxy')
+    case exporters.WASM:
+      return require('./exporters/wasm')
     case exporters.JEST_WORKER:
     case exporters.CUCUMBER_WORKER:
     case exporters.MOCHA_WORKER:
