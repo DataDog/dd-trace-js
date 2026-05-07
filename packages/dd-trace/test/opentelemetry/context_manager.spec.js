@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
+const { assertObjectContains, ANY_STRING } = require('../../../../integration-tests/helpers')
 const { getAllBaggageItems, removeAllBaggageItems, removeBaggageItem, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
@@ -204,6 +205,235 @@ describe('OTel Context Manager', () => {
       const activeSpan = trace.getActiveSpan()
       assert.strictEqual(activeSpan, span)
       span.end()
+    })
+  })
+
+  describe('with an active Datadog span', () => {
+    const ddTracer = require('../../')
+
+    it('exposes the active span via trace.getActiveSpan() and forwards writes', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        assert.ok(active)
+        assert.strictEqual(active.isRecording(), true)
+
+        active.setAttribute('my.otel.attr', 'ok')
+        active.setAttributes({ 'my.otel.attrs': 'ok2' })
+
+        active.addLink({
+          context: {
+            traceId: '0123456789abcdef0123456789abcdef',
+            spanId: '0123456789abcdef',
+            traceFlags: 1,
+          },
+          attributes: { foo: 'bar' },
+        })
+
+        active.setStatus({ code: 2, message: 'status boom' })
+
+        assert.strictEqual(ddSpan._links.length, 1)
+        assert.deepStrictEqual({
+          tags: {
+            'my.otel.attr': ddSpan.context()._tags['my.otel.attr'],
+            'my.otel.attrs': ddSpan.context()._tags['my.otel.attrs'],
+            'error.message': ddSpan.context()._tags['error.message'],
+          },
+          link: {
+            traceId: ddSpan._links[0].context.toTraceId(true),
+            spanId: ddSpan._links[0].context.toSpanId(true),
+            attributes: ddSpan._links[0].attributes,
+          },
+        }, {
+          tags: {
+            'my.otel.attr': 'ok',
+            'my.otel.attrs': 'ok2',
+            'error.message': 'status boom',
+          },
+          link: {
+            traceId: '0123456789abcdef0123456789abcdef',
+            spanId: '0123456789abcdef',
+            attributes: { foo: 'bar' },
+          },
+        })
+
+        active.recordException(new Error('boom'))
+        assert.strictEqual(ddSpan.context()._tags['error.message'], 'boom')
+      })
+    })
+
+    it('addEvent normalizes OTel time/attribute inputs onto the Datadog span', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        assert.ok(active)
+
+        const hrTime = /** @type {[number, number]} */ ([1700000000, 500000000])
+        const hrTimeMs = hrTime[0] * 1e3 + hrTime[1] / 1e6
+        const date = new Date(1700000000000)
+
+        active.addEvent('with-hr-time', hrTime)
+        active.addEvent('with-date', date)
+        active.addEvent('with-attrs-and-hr-time', { code: 42 }, hrTime)
+
+        // Single equality guards: no array-indexed attribute leak on the time-only forms,
+        // numeric startTime (not hrTime array) so span_format's Math.round(startTime * 1e6)
+        // cannot produce NaN.
+        assert.deepStrictEqual(ddSpan._events, [
+          { name: 'with-hr-time', startTime: hrTimeMs },
+          { name: 'with-date', startTime: date.getTime() },
+          { name: 'with-attrs-and-hr-time', attributes: { code: 42 }, startTime: hrTimeMs },
+        ])
+      })
+    })
+
+    it('recordException forwards a user-supplied hrTime timestamp as ms', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        assert.ok(active)
+
+        const hrTime = /** @type {[number, number]} */ ([1700000500, 250000000])
+        const hrTimeMs = hrTime[0] * 1e3 + hrTime[1] / 1e6
+
+        active.recordException(new Error('boom'), hrTime)
+
+        assertObjectContains(ddSpan._events.at(-1), {
+          name: 'Error',
+          startTime: hrTimeMs,
+          attributes: {
+            'exception.message': 'boom',
+            'exception.stacktrace': ANY_STRING,
+          },
+        })
+      })
+    })
+
+    it('end() on the proxy does not finish the Datadog span', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        active.end()
+        assert.strictEqual(ddSpan._duration, undefined)
+      })
+    })
+
+    it('addLinks forwards every valid link and skips invalid contexts', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+
+        active.addLinks([
+          {
+            context: {
+              traceId: '0123456789abcdef0123456789abcdef',
+              spanId: '0123456789abcdef',
+              traceFlags: 1,
+            },
+            attributes: { tag: 'first' },
+          },
+          { context: undefined, attributes: { skipped: 'yes' } },
+          {
+            context: {
+              traceId: 'fedcba9876543210fedcba9876543210',
+              spanId: 'fedcba9876543210',
+            },
+            attributes: { tag: 'second' },
+          },
+        ])
+
+        assert.strictEqual(ddSpan._links.length, 2)
+        assert.deepStrictEqual(
+          ddSpan._links.map(({ context, attributes }) => ({
+            traceId: context.toTraceId(true),
+            spanId: context.toSpanId(true),
+            attributes,
+          })),
+          [
+            {
+              traceId: '0123456789abcdef0123456789abcdef',
+              spanId: '0123456789abcdef',
+              attributes: { tag: 'first' },
+            },
+            {
+              traceId: 'fedcba9876543210fedcba9876543210',
+              spanId: 'fedcba9876543210',
+              attributes: { tag: 'second' },
+            },
+          ]
+        )
+      })
+    })
+
+    it('addLinks ignores non-array input', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        active.addLinks(undefined)
+        active.addLinks('not an array')
+        assert.strictEqual(ddSpan._links.length, 0)
+      })
+    })
+
+    it('caches the proxy so repeated calls return the same object', () => {
+      ddTracer.trace('dd-active', () => {
+        assert.strictEqual(trace.getActiveSpan(), trace.getActiveSpan())
+      })
+    })
+
+    it('updateName updates resource.name on the DD span, not the operation name', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        active.updateName('renamed')
+
+        const ddContext = ddSpan.context()
+        assert.strictEqual(ddContext._name, 'dd-active')
+        assert.strictEqual(ddContext._tags['resource.name'], 'renamed')
+      })
+    })
+
+    describe('setStatus precedence (OTel spec)', () => {
+      it('OK locks subsequent ERROR and UNSET writes', () => {
+        ddTracer.trace('dd-active-ok', (ddSpan) => {
+          const active = trace.getActiveSpan()
+          active.setStatus({ code: 1 })
+          active.setStatus({ code: 2, message: 'late error' })
+          active.setStatus({ code: 0, message: 'late unset' })
+
+          assert.ok(!('error.message' in ddSpan.context()._tags))
+        })
+      })
+
+      it('ERROR can be replaced by a later ERROR with a fresh message', () => {
+        ddTracer.trace('dd-active-error', (ddSpan) => {
+          const active = trace.getActiveSpan()
+          active.setStatus({ code: 2, message: 'first error' })
+          active.setStatus({ code: 2, message: 'second error' })
+
+          assert.strictEqual(ddSpan.context()._tags['error.message'], 'second error')
+        })
+      })
+    })
+
+    it('mutation methods are all no-ops once the underlying DD span has finished', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const active = trace.getActiveSpan()
+        ddSpan.finish()
+
+        active.setAttribute('after.end', 'no')
+        active.setAttributes({ 'after.end.batch': 'no' })
+        active.addLink({
+          context: { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), traceFlags: 1 },
+        })
+        active.addLinks([{ context: { traceId: 'c'.repeat(32), spanId: 'd'.repeat(16) } }])
+        active.addEvent('after.end.event')
+        active.recordException(new Error('after end'))
+        active.setStatus({ code: 2, message: 'after end' })
+        active.updateName('after end')
+
+        const tags = ddSpan.context()._tags
+        assert.ok(!('after.end' in tags))
+        assert.ok(!('after.end.batch' in tags))
+        assert.ok(!('error.message' in tags))
+        assert.ok(!('error.type' in tags))
+        assert.ok(!('resource.name' in tags))
+        assert.strictEqual(ddSpan._links.length, 0)
+        assert.strictEqual(ddSpan._events.length, 0)
+      })
     })
   })
 })

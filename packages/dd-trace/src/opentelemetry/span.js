@@ -13,16 +13,9 @@ const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
+const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
-const {
-  addOtelEvent,
-  addOtelLink,
-  addOtelLinks,
-  applyOtelStatus,
-  recordException,
-  setOtelAttribute,
-  setOtelAttributes,
-} = require('./span-helpers')
+const { setOtelOperationName } = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -124,10 +117,7 @@ function spanNameMapper (spanName, kind, attributes) {
  * OTel-bridge span backed by a `DatadogSpan`. `Tracer` constructs these on the OTel API
  * surface; the underlying DD span carries the lifecycle.
  */
-class Span {
-  // OTel SpanStatusCode: 0 = UNSET, 1 = OK, 2 = ERROR. Tracked for OK-is-final precedence.
-  #statusCode = 0
-
+class Span extends BridgeSpanBase {
   /**
    * @param {import('./tracer')} parentTracer
    * @param {import('@opentelemetry/api').Context} context
@@ -153,7 +143,7 @@ class Span {
     const hrStartTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const startTime = hrTimeToMilliseconds(hrStartTime)
 
-    this._ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
+    const ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
       operationName: spanNameMapper(spanName, kind, attributes),
       context: spanContext._ddContext,
       startTime,
@@ -166,6 +156,8 @@ class Span {
       },
       links,
     }, _tracer._debug)
+
+    super(ddSpan)
 
     if (attributes) {
       this.setAttributes(attributes)
@@ -208,42 +200,6 @@ class Span {
   }
 
   /**
-   * @param {string} key
-   * @param {import('@opentelemetry/api').AttributeValue} value
-   */
-  setAttribute (key, value) {
-    setOtelAttribute(this._ddSpan, key, value)
-    return this
-  }
-
-  /**
-   * @param {import('@opentelemetry/api').Attributes} attributes
-   */
-  setAttributes (attributes) {
-    setOtelAttributes(this._ddSpan, attributes)
-    return this
-  }
-
-  /**
-   * Accepts the OTel `Link` shape and the deprecated `(SpanContext, Attributes)` form.
-   *
-   * @param {import('@opentelemetry/api').Link | import('@opentelemetry/api').SpanContext} link
-   * @param {import('@opentelemetry/api').Attributes} [attrs]
-   */
-  addLink (link, attrs) {
-    addOtelLink(this._ddSpan, link, attrs)
-    return this
-  }
-
-  /**
-   * @param {import('@opentelemetry/api').Link[]} links
-   */
-  addLinks (links) {
-    addOtelLinks(this._ddSpan, links)
-    return this
-  }
-
-  /**
    * @param {string} ptrKind
    * @param {string} ptrDir
    * @param {string} ptrHash
@@ -264,20 +220,10 @@ class Span {
   }
 
   /**
-   * @param {import('@opentelemetry/api').SpanStatus} status
-   */
-  setStatus (status) {
-    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status)
-    return this
-  }
-
-  /**
    * @param {string} name
    */
   updateName (name) {
-    if (!this.ended) {
-      this._ddSpan.setOperationName(name)
-    }
+    setOtelOperationName(this._ddSpan, name)
     return this
   }
 
@@ -297,34 +243,8 @@ class Span {
     this._spanProcessor.onEnd(this)
   }
 
-  isRecording () {
-    return this.ended === false
-  }
-
-  /**
-   * @param {string} name
-   * @param {import('@opentelemetry/api').Attributes | import('@opentelemetry/api').TimeInput} [attributesOrStartTime]
-   * @param {import('@opentelemetry/api').TimeInput} [startTime]
-   */
-  addEvent (name, attributesOrStartTime, startTime) {
-    addOtelEvent(this._ddSpan, name, attributesOrStartTime, startTime)
-    return this
-  }
-
-  /**
-   * @param {import('@opentelemetry/api').Exception} exception
-   * @param {import('@opentelemetry/api').TimeInput} [timeInput]
-   */
-  recordException (exception, timeInput) {
-    recordException(this._ddSpan, exception, timeInput)
-  }
-
   get duration () {
     return this._ddSpan._duration
-  }
-
-  get ended () {
-    return this.duration !== undefined
   }
 }
 

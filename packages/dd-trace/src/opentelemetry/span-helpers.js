@@ -268,6 +268,32 @@ function applyOtelStatus (ddSpan, currentCode, status) {
   return code
 }
 
+/**
+ * OTel `updateName` for OTel-created bridge spans: writes the DD operation name, matching
+ * the OTel SDK semantic that `updateName` updates the canonical span identifier.
+ *
+ * @param {import('../opentracing/span')} ddSpan
+ * @param {string} name
+ */
+function setOtelOperationName (ddSpan, name) {
+  if (!isWritable(ddSpan)) return
+
+  ddSpan.setOperationName(name)
+}
+
+/**
+ * OTel `updateName` for DD-native spans the bridge did not create: writes `resource.name`
+ * so the operation name (and the backend metric aggregation it drives) stays stable.
+ *
+ * @param {import('../opentracing/span')} ddSpan
+ * @param {string} name
+ */
+function setOtelResource (ddSpan, name) {
+  if (!isWritable(ddSpan)) return
+
+  ddSpan.setTag('resource.name', name)
+}
+
 module.exports = {
   addOtelEvent,
   addOtelLink,
@@ -277,4 +303,6 @@ module.exports = {
   recordException,
   setOtelAttribute,
   setOtelAttributes,
+  setOtelOperationName,
+  setOtelResource,
 }
