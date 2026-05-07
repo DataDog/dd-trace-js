@@ -536,7 +536,7 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set, even when its value matches the default', () => {
+  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     const config = getConfig()
