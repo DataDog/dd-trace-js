@@ -400,6 +400,8 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pg', { appendComment: true });
+tracer.use('pg', { truncate: true });
+tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
