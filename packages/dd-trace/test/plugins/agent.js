@@ -591,7 +591,7 @@ module.exports = {
 
     listener.close()
     listener = null
-    sockets.forEach(socket => socket.end())
+    sockets.forEach(socket => socket.destroy())
     sockets = []
     agent = null
     traceHandlers.clear()
@@ -612,9 +612,11 @@ module.exports = {
 
     tracer.llmobs.disable()
 
+    const closingServer = this.server
     return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-      this.server.on('close', () => {
-        this.server = null
+      closingServer.on('close', () => {
+        // Only null the reference if a newer agent.load() hasn't already replaced it.
+        if (this.server === closingServer) this.server = null
 
         resolve()
       })
