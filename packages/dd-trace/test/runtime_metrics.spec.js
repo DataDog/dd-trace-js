@@ -957,8 +957,6 @@ describe('otlp_runtime_metrics', () => {
     otlpMetrics.stop()
   })
 
-  // Locks in the metric set, instrument types, and units against the OTel semconv.
-  // .NET's SubmitsOtlpRuntimeMetrics snapshot test asserts the same shape.
   it('registers all 14 OTel-native metrics with spec-correct types, units, and callbacks', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
 
@@ -1016,10 +1014,9 @@ describe('otlp_runtime_metrics', () => {
   })
 })
 
-// End-to-end through the real MeterProvider + PeriodicMetricReader + OtlpTransformer
-// — mirrors .NET's SystemRuntimeMetricsFlowThroughOtlpPipeline which verifies the
-// OTLP wire shape (sum-vs-gauge), since that's what an upstream OTLP collector cares
-// about. forceFlush triggers export synchronously so the test doesn't depend on time.
+// End-to-end pipeline flow: builds a real MeterProvider + PeriodicMetricReader +
+// OtlpTransformer, captures the OTLP payload, asserts wire shape (sum vs gauge).
+// forceFlush exports synchronously so the test doesn't rely on time.
 describe('OTLP runtime metrics — pipeline flow', () => {
   const EXPECTED = [
     'v8js.memory.heap.used', 'v8js.memory.heap.limit',

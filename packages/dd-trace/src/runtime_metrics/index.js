@@ -20,8 +20,6 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    // Use OTLP runtime metrics with OTel-native naming when the OTel metrics
-    // pipeline is active. DogStatsD runtime metrics are skipped to avoid double-reporting.
     runtimeMetrics = config.otelMetricsEnabled
       ? require('./otlp_runtime_metrics')
       : require('./runtime_metrics')
