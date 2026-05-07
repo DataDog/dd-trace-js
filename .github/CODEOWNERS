@@ -209,9 +209,7 @@
 /packages/dd-trace/test/analytics_sampler.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/custom-metrics.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/process-tags.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/runtime_metrics.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/otlp_runtime_metrics.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/otlp_runtime_metrics.flow.spec.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/*runtime_metrics*.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/scope.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/span_format.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/span_processor.spec.js @DataDog/apm-sdk-capabilities-js
