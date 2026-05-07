@@ -137,21 +137,33 @@ describe('request', function () {
     })
   })
 
-  // TODO: use fake timers to avoid delaying tests
-  it('should timeout after 2 seconds by default', function (done) {
-    nock('http://localhost:80')
-      .put('/path')
-      .times(2)
-      .delay(2001)
-      .reply(200)
+  // Live timeout → abort → retry → 'socket hang up' is covered by
+  // `should have a configurable timeout` below at timeout: 100. Here we only
+  // need to pin the default constant, which is faster and avoids waiting
+  // for a real timer.
+  it('defaults the request timeout to 2 seconds', (done) => {
+    const sandbox = sinon.createSandbox()
+    const realRequest = http.request
+    let observedTimeout
+    sandbox.replace(http, 'request', function (...args) {
+      const req = realRequest.apply(this, args)
+      const originalSetTimeout = req.setTimeout
+      req.setTimeout = function (timeout, callback) {
+        observedTimeout = timeout
+        return originalSetTimeout.call(this, timeout, callback)
+      }
+      return req
+    })
+
+    nock('http://localhost:80').put('/path').reply(200, 'OK')
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-    }, err => {
-      assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'socket hang up')
-      done()
+    }, (err) => {
+      sandbox.restore()
+      assert.strictEqual(observedTimeout, 2000)
+      done(err)
     })
   })
 
@@ -192,9 +204,11 @@ describe('request', function () {
   })
 
   it('should retry', (done) => {
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
     nock('http://localhost:80')
       .put('/path')
-      .replyWithError({ code: 'ECONNRESET' })
+      .replyWithError(error)
       .put('/path')
       .reply(200, 'OK')
 
@@ -374,30 +388,45 @@ describe('request', function () {
       })
   })
 
+  // unix:<path> URLs go through parseUrl(), which extracts the socket path
+  // and hands it to http.request via options.socketPath. Assert that mapping
+  // directly via the http.request spy.
   it('should parse unix domain sockets properly', (done) => {
     const sock = '/tmp/unix_socket'
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
 
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
         method: 'PUT',
       },
-      (err, _) => {
-        assert.strictEqual(err.address, sock)
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, sock)
         done()
       })
   })
 
   it('should parse windows named pipes properly', (done) => {
     const pipe = '//./pipe/datadogtrace'
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
 
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
         method: 'PUT',
       },
-      (err, _) => {
-        assert.strictEqual(err.address, pipe)
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, pipe)
         done()
       })
   })
