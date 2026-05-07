@@ -16,6 +16,7 @@ const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+const { DD_MAJOR } = require('../../../../../version')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -62,6 +63,7 @@ describe('TextMapPropagator', () => {
       '../../telemetry/metrics': telemetryMetrics,
     })
     config = getConfigFresh({ DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512 })
+    config.legacyBaggageEnabled = true
     propagator = new TextMapPropagator(config)
     textMap = {
       'x-datadog-trace-id': '123',
@@ -556,6 +558,7 @@ describe('TextMapPropagator', () => {
           inject: ['datadog', 'tracecontext'],
         },
       })
+      config.legacyBaggageEnabled = true
       propagator = new TextMapPropagator(config)
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1918,6 +1921,49 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(extracted.toTraceId(), '123')
         assert.strictEqual(extracted.toSpanId(), '456')
       })
+    })
+  })
+
+  describe('legacyBaggageEnabled default', () => {
+    const itV5 = DD_MAJOR < 6 ? it : it.skip
+    const itV6 = DD_MAJOR < 6 ? it.skip : it
+
+    itV5('emits and extracts ot-baggage-* on v5', () => {
+      removeAllBaggageItems()
+      const freshConfig = getConfigFresh({ DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512 })
+      const freshPropagator = new TextMapPropagator(freshConfig)
+
+      assert.strictEqual(freshConfig.legacyBaggageEnabled, true)
+
+      const injectCarrier = {}
+      freshPropagator.inject(createContext({ baggageItems: { foo: 'bar' } }), injectCarrier)
+      assert.strictEqual(injectCarrier['ot-baggage-foo'], 'bar')
+
+      const extracted = freshPropagator.extract({
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        'ot-baggage-foo': 'bar',
+      })
+      assert.deepStrictEqual(extracted._baggageItems, { foo: 'bar' })
+    })
+
+    itV6('skips ot-baggage-* on v6 unless explicitly opted in', () => {
+      removeAllBaggageItems()
+      const freshConfig = getConfigFresh({ DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512 })
+      const freshPropagator = new TextMapPropagator(freshConfig)
+
+      assert.strictEqual(freshConfig.legacyBaggageEnabled, false)
+
+      const injectCarrier = {}
+      freshPropagator.inject(createContext({ baggageItems: { foo: 'bar' } }), injectCarrier)
+      assert.strictEqual(injectCarrier['ot-baggage-foo'], undefined)
+
+      const extracted = freshPropagator.extract({
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        'ot-baggage-foo': 'bar',
+      })
+      assert.deepStrictEqual(extracted._baggageItems, {})
     })
   })
 })

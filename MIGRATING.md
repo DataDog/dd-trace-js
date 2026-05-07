@@ -17,7 +17,19 @@ programmatic option. Set `DD_IAST_SECURITY_CONTROLS_CONFIGURATION` instead.
 The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`,
 `iovalkey`, and `redis` plugin interfaces are no longer part of the v6 TypeScript
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
-names for several majors.
+names for several majors
+
+### `legacyBaggageEnabled` default is now `false`
+
+The legacy `ot-baggage-*` propagation headers are no longer emitted or
+extracted by default. The W3C `baggage` header remains the default carrier for
+baggage. Set `legacyBaggageEnabled: true` (or `DD_TRACE_LEGACY_BAGGAGE_ENABLED=true`)
+to opt back in if a downstream consumer still depends on the legacy shape.
+
+### `DD_TRACE_STARTUP_LOGS` defaults to `true`
+
+Startup configuration is logged to the console by default. Set
+`DD_TRACE_STARTUP_LOGS=false` to silence it.
 
 ## 4.0 to 5.0
 
@@ -29,9 +41,9 @@ our support policy.
 
 ### Update `trace<T>` TypeScript declaration
 
-The TypeScript declaration for `trace<T>` has been updated to enforce 
-that calls to `tracer.trace(name, fn)` must receive a function which takes at least 
-the span object. Previously the span was technically optional when it should not have 
+The TypeScript declaration for `trace<T>` has been updated to enforce
+that calls to `tracer.trace(name, fn)` must receive a function which takes at least
+the span object. Previously the span was technically optional when it should not have
 been as the span must be handled.
 
 ## 3.0 to 4.0
@@ -154,21 +166,21 @@ point, there should be no impact as no application is expected to be using them.
 
 #### Cypress
 
-`dd-trace/cypress/plugin` and `dd-trace/cypress/support` are removed, so you won't 
+`dd-trace/cypress/plugin` and `dd-trace/cypress/support` are removed, so you won't
 be able to use them for your `cypress` instrumentation. Use `dd-trace/ci/cypress/plugin`
-and `dd-trace/ci/cypress/support` instead for your plugin and support configuration 
-respectively. 
+and `dd-trace/ci/cypress/support` instead for your plugin and support configuration
+respectively.
 
 #### Jest
 
 The use of `'dd-trace/ci/jest/env'` in [`testEnvironment`](https://jestjs.io/docs/configuration#testenvironment-string)
-is no longer supported. 
+is no longer supported.
 To instrument `jest` tests now, add `'-r dd-trace/ci/init'` to the `NODE_OPTIONS` environment
 variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' yarn test`.
 
 #### Mocha
 
-The use of `--require dd-trace/ci/init` as a `mocha` flag is no longer supported. 
+The use of `--require dd-trace/ci/init` as a `mocha` flag is no longer supported.
 To instrument `mocha` tests now, add `'-r dd-trace/ci/init'` to the `NODE_OPTIONS` environment
 variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' yarn test`.
 

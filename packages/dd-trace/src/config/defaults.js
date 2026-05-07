@@ -14,7 +14,17 @@ let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
 
-if (DD_MAJOR < 6) {
+if (DD_MAJOR >= 6) {
+  // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is not supported
+  // in newer major versions. This is special handled here until a better solution is found.
+  // TODO: Remove the programmatic configuration from supported-configurations.json once v5 is not supported anymore.
+  supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName =
+    supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames?.[0]
+  delete supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames
+  // v5 keeps emitting and extracting the legacy `ot-baggage-*` headers; v6 stops by default
+  // and only honours an explicit opt-in. Override the JSON default until v5 is dropped.
+  supportedConfigurations.DD_TRACE_LEGACY_BAGGAGE_ENABLED[0].default = 'false'
+} else {
   // Default value for DD_TRACE_STARTUP_LOGS is 'false' in older major versions.
   // TODO: Remove this here once v5 is not supported anymore.
   supportedConfigurations.DD_TRACE_STARTUP_LOGS[0].default = 'false'
