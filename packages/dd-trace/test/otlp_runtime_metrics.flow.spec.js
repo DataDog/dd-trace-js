@@ -9,10 +9,10 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const { metrics } = require('@opentelemetry/api')
 
-const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
-const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
-const OtlpTransformer = require('../../src/opentelemetry/metrics/otlp_transformer')
-const otlpRuntimeMetrics = require('../../src/runtime_metrics/otlp_runtime_metrics')
+const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
+const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
+const OtlpTransformer = require('../src/opentelemetry/metrics/otlp_transformer')
+const otlpRuntimeMetrics = require('../src/runtime_metrics/otlp_runtime_metrics')
 
 const EXPECTED_METRICS = [
   'v8js.memory.heap.used',

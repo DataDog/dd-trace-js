@@ -45,7 +45,7 @@ describe('otlp_runtime_metrics', () => {
       },
     }
 
-    otlpMetrics = proxyquire('../../src/runtime_metrics/otlp_runtime_metrics', {
+    otlpMetrics = proxyquire('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: {
           getMeterProvider () {
