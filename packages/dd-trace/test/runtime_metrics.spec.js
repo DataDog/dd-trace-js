@@ -9,10 +9,15 @@ const util = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
+const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
+const OtlpTransformer = require('../src/opentelemetry/metrics/otlp_transformer')
+const otlpRuntimeMetrics = require('../src/runtime_metrics/otlp_runtime_metrics')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -885,5 +890,205 @@ function createGarbage (count = 50) {
         })
       })
     })
+  })
+})
+
+// OTel-native runtime metrics path: registered when DD_METRICS_OTEL_ENABLED=true.
+// Source of truth for metric names/types/units:
+//   https://github.com/open-telemetry/semantic-conventions/blob/main/model/v8js/metrics.yaml
+//   https://github.com/open-telemetry/semantic-conventions/blob/main/model/nodejs/metrics.yaml
+//   https://github.com/open-telemetry/semantic-conventions/blob/main/model/process/metrics.yaml
+describe('otlp_runtime_metrics', () => {
+  // Spec partition: which instrument type each metric must use.
+  const SPEC = {
+    'v8js.memory.heap.used': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.limit': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.space.available_size': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.space.physical_size': { type: 'updowncounter', unit: 'By' },
+    'process.memory.usage': { type: 'updowncounter', unit: 'By' },
+    'process.cpu.utilization': { type: 'gauge', unit: '1' },
+    'nodejs.eventloop.delay.min': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.max': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.mean': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.stddev': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.p50': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.p90': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.p99': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.utilization': { type: 'gauge', unit: '1' },
+  }
+
+  let otlpMetrics
+  let createdInstruments
+  let callbacks
+
+  beforeEach(() => {
+    createdInstruments = {}
+    callbacks = {}
+
+    function makeFactory (type) {
+      return (name, opts) => {
+        const instrument = {
+          name,
+          type,
+          opts,
+          addCallback (cb) {
+            (callbacks[name] = callbacks[name] || []).push(cb)
+          },
+        }
+        createdInstruments[name] = instrument
+        return instrument
+      }
+    }
+
+    const mockMeter = {
+      createObservableGauge: makeFactory('gauge'),
+      createObservableUpDownCounter: makeFactory('updowncounter'),
+    }
+
+    otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+      '@opentelemetry/api': {
+        metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
+      },
+      '../log': { debug () {}, error () {} },
+    })
+  })
+
+  afterEach(() => {
+    otlpMetrics.stop()
+  })
+
+  // Locks in the metric set, instrument types, and units against the OTel semconv.
+  // .NET's SubmitsOtlpRuntimeMetrics snapshot test asserts the same shape.
+  it('registers all 14 OTel-native metrics with spec-correct types, units, and callbacks', () => {
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    const expected = Object.keys(SPEC)
+    assert.deepStrictEqual(Object.keys(createdInstruments).sort(), expected.slice().sort())
+
+    for (const [name, { type, unit }] of Object.entries(SPEC)) {
+      const inst = createdInstruments[name]
+      assert.strictEqual(inst.type, type, `${name} should be ${type}`)
+      assert.strictEqual(inst.opts.unit, unit, `${name} unit should be ${unit}`)
+      assert.ok(callbacks[name]?.length, `${name} should register a callback`)
+      assert.ok(!name.startsWith('runtime.node.'), `${name} should not use DD-proprietary naming`)
+    }
+  })
+
+  it('observes positive values and emits required attributes', () => {
+    otlpMetrics.start({ runtimeMetrics: {} })
+
+    const heap = []
+    callbacks['v8js.memory.heap.used'][0]({ observe: (v, a) => heap.push({ v, a }) })
+    assert.ok(heap[0].v > 0, 'heap used should be positive')
+
+    const rss = []
+    callbacks['process.memory.usage'][0]({ observe: v => rss.push(v) })
+    assert.ok(rss[0] > 0, 'RSS should be positive')
+
+    const spaces = []
+    callbacks['v8js.memory.heap.space.available_size'][0]({
+      observe: (v, a) => spaces.push(a?.['v8js.heap.space.name']),
+    })
+    assert.ok(spaces.includes('new_space') && spaces.includes('old_space'),
+      'heap space metrics should carry v8js.heap.space.name')
+
+    // Two calls: first sets baseline, second produces user+system delta points.
+    callbacks['process.cpu.utilization'][0]({ observe () {} })
+    const cpu = []
+    callbacks['process.cpu.utilization'][0]({
+      observe: (v, a) => cpu.push(a?.['process.cpu.state']),
+    })
+    assert.deepStrictEqual(cpu.sort(), ['system', 'user'])
+  })
+
+  it('skips event loop metrics when disabled and is restartable', () => {
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: false } })
+    for (const name of Object.keys(SPEC)) {
+      if (name.startsWith('nodejs.eventloop.')) {
+        assert.ok(!createdInstruments[name], `${name} should not be created`)
+      }
+    }
+
+    otlpMetrics.stop()
+    for (const k of Object.keys(createdInstruments)) delete createdInstruments[k]
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    assert.strictEqual(Object.keys(createdInstruments).length, 14, 'should register again after stop')
+  })
+})
+
+// End-to-end through the real MeterProvider + PeriodicMetricReader + OtlpTransformer
+// — mirrors .NET's SystemRuntimeMetricsFlowThroughOtlpPipeline which verifies the
+// OTLP wire shape (sum-vs-gauge), since that's what an upstream OTLP collector cares
+// about. forceFlush triggers export synchronously so the test doesn't depend on time.
+describe('OTLP runtime metrics — pipeline flow', () => {
+  const EXPECTED = [
+    'v8js.memory.heap.used', 'v8js.memory.heap.limit',
+    'v8js.memory.heap.space.available_size', 'v8js.memory.heap.space.physical_size',
+    'process.memory.usage', 'process.cpu.utilization',
+    'nodejs.eventloop.delay.min', 'nodejs.eventloop.delay.max', 'nodejs.eventloop.delay.mean',
+    'nodejs.eventloop.delay.stddev', 'nodejs.eventloop.delay.p50',
+    'nodejs.eventloop.delay.p90', 'nodejs.eventloop.delay.p99',
+    'nodejs.eventloop.utilization',
+  ]
+  const SUM_METRICS = new Set([
+    'v8js.memory.heap.used', 'v8js.memory.heap.limit',
+    'v8js.memory.heap.space.available_size', 'v8js.memory.heap.space.physical_size',
+    'process.memory.usage',
+  ])
+
+  class CapturingExporter {
+    constructor () { this.exports = [] }
+    export (metricsMap, callback) {
+      this.exports.push([...metricsMap.values()])
+      if (typeof callback === 'function') callback()
+    }
+  }
+
+  let reader
+  let exporter
+
+  beforeEach(() => {
+    exporter = new CapturingExporter()
+    reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+    metrics.setGlobalMeterProvider(new MeterProvider({ reader }))
+  })
+
+  afterEach(() => {
+    otlpRuntimeMetrics.stop()
+    if (reader && !reader._isShutdown) reader.shutdown()
+    metrics.disable()
+  })
+
+  it('flushes all 14 metrics with correct wire shape (sum vs gauge) and scope name', () => {
+    otlpRuntimeMetrics.start({ runtimeMetrics: { enabled: true, eventLoop: true } })
+    reader.forceFlush()
+
+    const transformer = new OtlpTransformer({}, 'http/json')
+    const wire = {}
+    let scopeName
+    for (const batch of exporter.exports) {
+      const json = JSON.parse(transformer.transformMetrics(batch).toString())
+      for (const rm of json.resourceMetrics) {
+        for (const sm of rm.scopeMetrics) {
+          scopeName = scopeName || sm.scope?.name
+          for (const m of sm.metrics) {
+            wire[m.name] = m
+          }
+        }
+      }
+    }
+
+    assert.deepStrictEqual(Object.keys(wire).sort(), EXPECTED.slice().sort())
+    assert.strictEqual(scopeName, 'datadog.runtime_metrics')
+
+    for (const name of EXPECTED) {
+      const m = wire[name]
+      if (SUM_METRICS.has(name)) {
+        assert.ok('sum' in m, `${name} should serialize as sum`)
+        assert.strictEqual(m.sum.isMonotonic, false, `${name} should be non-monotonic`)
+      } else {
+        assert.ok('gauge' in m, `${name} should serialize as gauge`)
+      }
+    }
   })
 })

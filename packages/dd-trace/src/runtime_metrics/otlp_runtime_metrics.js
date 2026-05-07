@@ -26,6 +26,15 @@ let lastTime = 0
 let lastElu = null
 
 module.exports = {
+  /**
+   * Registers the OTel-native runtime metric instruments (v8js.*, nodejs.*, process.*)
+   * with the global OTel MeterProvider. Idempotent — calling start() while already
+   * running stops first and re-registers.
+   *
+   * @param {import('../config/config-base')} config - Tracer configuration. Reads
+   *   `config.runtimeMetrics.eventLoop` to gate event-loop metric registration.
+   * @returns {void}
+   */
   start (config) {
     this.stop()
 
@@ -205,6 +214,12 @@ module.exports = {
     }
   },
 
+  /**
+   * Releases the event-loop histogram, drops references to the meter, and clears
+   * cached CPU/ELU baselines. Idempotent.
+   *
+   * @returns {void}
+   */
   stop () {
     if (eventLoopHistogram) {
       eventLoopHistogram.disable()
