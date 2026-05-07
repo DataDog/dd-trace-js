@@ -330,7 +330,6 @@ module.exports = {
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
-    const loadedTracer = tracer
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -400,7 +399,8 @@ module.exports = {
     /** @type {(this: server, event: string, ...args: unknown[]) => boolean} */
     const originalEmit = emit
     server.emit = function (event, ...args) {
-      return storage('legacy').run({ noop: true }, () => originalEmit.call(this, event, ...args))
+      storage('legacy').enterWith({ noop: true })
+      return originalEmit.call(this, event, ...args)
     }
 
     server.on('connection', socket => sockets.push(socket))
@@ -431,11 +431,7 @@ module.exports = {
     plugins = pluginNames
 
     server.on('close', () => {
-      // Only null the tracer if it hasn't been replaced by a newer agent.load() cycle.
-      // Without this guard, the old server's close event (firing during await wait(1) in
-      // a new load cycle) would nullify the newly-assigned tracer, causing tracer.init()
-      // to throw and agent.load() to hang forever.
-      if (tracer === loadedTracer) tracer = null
+      tracer = null
       dsmStats = []
       currentIntegrationName = null
     })
@@ -612,11 +608,9 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    const closingServer = this.server
     return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-      closingServer.on('close', () => {
-        // Only null the reference if a newer agent.load() hasn't already replaced it.
-        if (this.server === closingServer) this.server = null
+      this.server.on('close', () => {
+        this.server = null
 
         resolve()
       })
