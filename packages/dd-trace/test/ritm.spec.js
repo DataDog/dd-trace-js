@@ -19,7 +19,7 @@ describe('Ritm', () => {
     moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
     Module.prototype.require = new Proxy(Module.prototype.require, {
-      apply (target, thisArg, argArray) {
+      apply(target, thisArg, argArray) {
         if (argArray[0] === mockedModuleName) {
           return {
             version: '1.0.0',
@@ -31,15 +31,15 @@ describe('Ritm', () => {
       },
     })
 
-    function onRequire () { }
+    function onRequire() { }
     Hook(['util'], onRequire)
     Hook(['module-a'], onRequire)
     Hook(['module-b'], onRequire)
-    Hook(['http'], function onRequire (exports, name, basedir) {
+    Hook(['http'], function onRequire(exports, name, basedir) {
       exports.foo = 1
       return exports
     })
-    Hook(['./ritm-tests/relative/module-c'], function onRequire (exports) {
+    Hook(['./ritm-tests/relative/module-c'], function onRequire(exports) {
       exports.foo = 1
       return exports
     })
@@ -123,5 +123,30 @@ describe('Ritm', () => {
     assert.equal(require('./ritm-tests/relative/module-c').foo, 1)
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
+  })
+
+  it('should use moduleId as cache key for node:-prefixed built-ins', () => {
+    // Populate RITM cache keyed by normalized moduleId 'util'
+    require('util')
+
+    // Simulate require.cache having an entry for the node:-prefixed filename.
+    // In Node.js 18+, Module._resolveFilename('node:util') returns 'node:util',
+    // so filename differs from moduleId ('util'). Before the fix, the cache
+    // comparison accessed cache[filename] ('node:util') which was undefined,
+    // causing: TypeError: undefined is not an object (evaluating 'cache[filename].original')
+    const prefixedKey = 'node:util'
+    const saved = require.cache[prefixedKey]
+    require.cache[prefixedKey] = { exports: { patched: true } }
+
+    try {
+      const result = require('node:util')
+      assert.deepStrictEqual(result, { patched: true })
+    } finally {
+      if (saved) {
+        require.cache[prefixedKey] = saved
+      } else {
+        delete require.cache[prefixedKey]
+      }
+    }
   })
 })
