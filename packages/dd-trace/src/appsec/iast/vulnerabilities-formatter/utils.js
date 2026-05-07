@@ -118,6 +118,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
         let cleanLength = rangeKeyIndex - pos
 
         if (remainingStringValue.startsWith(STRINGIFY_SENSITIVE_NOT_STRING_KEY)) {
+          // In this case, we want to remove also the previous " char, because the value is not an string
           rangeKeyIndex--
           cleanLength--
           remainingStringValue = value.slice(rangeKeyIndex)
@@ -179,7 +180,6 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
             pos = rangeKeyIndex + regexRes[0].length
           } else {
             // can't happen, the only way to this to happen is
-            // if the JSON has a value starting with the value of STRINGIFY_RANGE_KEY
             // if the JSON has a value starting with the value of STRINGIFY_RANGE_KEY
             segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_RANGE_KEY.length))
             outputLength += cleanLength + STRINGIFY_RANGE_KEY.length
