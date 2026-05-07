@@ -2,6 +2,11 @@
 const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+const { isEmpty } = require('../util')
+
+function recordDataAsString (data) {
+  return Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data).toString('utf8')
+}
 
 class Kinesis extends BaseAwsSdkPlugin {
   static id = 'kinesis'
@@ -90,14 +95,14 @@ class Kinesis extends BaseAwsSdkPlugin {
     const record = response.Records[0]
 
     try {
-      const decodedData = JSON.parse(Buffer.from(record.Data).toString())
+      const decodedData = JSON.parse(recordDataAsString(record.Data))
 
       return {
         maybeChildOf: this.tracer.extract('text_map', decodedData._datadog),
         parsedAttributes: decodedData._datadog,
       }
-    } catch (e) {
-      log.error('Kinesis error extracting response', e)
+    } catch (error) {
+      log.error('Kinesis error extracting response', error)
     }
   }
 
@@ -107,27 +112,32 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (operation !== 'getRecords') return
     if (!response || !response.Records || !response.Records[0]) return
 
-    // we only want to set the payloadSize on the span if we have one message, not repeatedly
+    // Only attribute payloadSize to the span when there is a single record.
     span = response.Records.length > 1 ? null : span
 
+    const tags = streamName
+      ? ['direction:in', `topic:${streamName}`, 'type:kinesis']
+      : ['direction:in', 'type:kinesis']
+
     for (const record of response.Records) {
-      const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
+      let parsedAttributes
+      try {
+        parsedAttributes = JSON.parse(recordDataAsString(record.Data))
+      } catch {
+        // Non-JSON record. Skip DSM context for this entry; the
+        // checkpoint payload size below is still reported.
+      }
 
       const payloadSize = getSizeOrZero(record.Data)
       if (parsedAttributes?._datadog) {
         this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
       }
-      const tags = streamName
-        ? ['direction:in', `topic:${streamName}`, 'type:kinesis']
-        : ['direction:in', 'type:kinesis']
-      this.tracer
-        .setCheckpoint(tags, span, payloadSize)
+      this.tracer.setCheckpoint(tags, span, payloadSize)
     }
   }
 
-  // AWS-SDK will b64 kinesis payloads
-  // or will accept an already b64 encoded payload
-  // This method handles both
+  // AWS-SDK base64-encodes kinesis payloads but also accepts an already
+  // base64-encoded payload; both shapes land here.
   _tryParse (body) {
     try {
       return JSON.parse(body)
@@ -135,7 +145,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       log.info('Not JSON string. Trying Base64 encoded JSON string')
     }
     try {
-      return JSON.parse(Buffer.from(body, 'base64').toString('ascii'), true)
+      return JSON.parse(Buffer.from(body, 'base64').toString('ascii'))
     } catch {
       return null
     }
@@ -179,36 +189,36 @@ class Kinesis extends BaseAwsSdkPlugin {
     }
 
     const ddInfo = {}
-    // for now, we only want to inject to the first message, this may change for batches in the future
-    if (injectTraceContext) { this.tracer.inject(span, 'text_map', ddInfo) }
+    // For now we only inject to the first message; batches may change later.
+    if (injectTraceContext) {
+      this.tracer.inject(span, 'text_map', ddInfo)
+    }
 
-    // set DSM hash if enabled
     if (this.config.dsmEnabled) {
       parsedData._datadog = ddInfo
-      const dataStreamsContext = this.setDSMCheckpoint(span, parsedData, stream)
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      const dataStreamsContext = this.setDSMCheckpoint(span, params, stream)
+      if (dataStreamsContext) {
+        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      }
     }
 
-    if (Object.keys(ddInfo).length !== 0) {
-      parsedData._datadog = ddInfo
-      const finalData = Buffer.from(JSON.stringify(parsedData))
-      const byteSize = finalData.length
-      // Kinesis max payload size is 1MB
-      // So we must ensure adding DD context won't go over that (512b is an estimate)
-      if (byteSize >= 1_048_576) {
-        log.info('Payload size too large to pass context')
-        return
-      }
-      params.Data = finalData
+    if (isEmpty(ddInfo)) return
+
+    parsedData._datadog = ddInfo
+    const serialized = JSON.stringify(parsedData)
+    const byteSize = Buffer.byteLength(serialized, 'utf8')
+    // Kinesis max payload size is 1 MiB; bail if our context push tipped us over.
+    if (byteSize >= 1_048_576) {
+      log.info('Payload size too large to pass context')
+      return
     }
+    params.Data = Buffer.from(serialized, 'utf8')
   }
 
-  setDSMCheckpoint (span, parsedData, stream) {
-    // get payload size of request data
-    const payloadSize = Buffer.byteLength(JSON.stringify(parsedData))
-    const dataStreamsContext = this.tracer
+  setDSMCheckpoint (span, params, stream) {
+    const payloadSize = getSizeOrZero(params.Data)
+    return this.tracer
       .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
-    return dataStreamsContext
   }
 }
 

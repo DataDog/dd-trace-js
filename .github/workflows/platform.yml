@@ -32,7 +32,14 @@ jobs:
           - name: npm
             install: npm install
           - name: pnpm
-            install: pnpm add
+            install: >-
+              pnpm
+              --allow-build=@datadog/native-appsec
+              --allow-build=@datadog/native-iast-taint-tracking
+              --allow-build=@datadog/native-metrics
+              --allow-build=@datadog/pprof
+              --allow-build=dd-trace
+              add
           - name: yarn
             install: yarn add
           - name: yarn-berry
