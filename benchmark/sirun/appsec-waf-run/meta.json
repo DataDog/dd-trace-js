@@ -1,0 +1,15 @@
+{
+  "name": "appsec-waf-run",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "persistent-only": { "env": { "VARIANT": "persistent-only" } },
+    "persistent-and-ephemeral": {
+      "baseline": "persistent-only",
+      "env": { "VARIANT": "persistent-and-ephemeral" }
+    }
+  }
+}
