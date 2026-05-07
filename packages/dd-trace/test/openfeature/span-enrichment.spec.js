@@ -74,7 +74,7 @@ describe('SpanEnrichmentState', () => {
       for (let i = 0; i < MAX_SUBJECTS; i++) {
         assert.strictEqual(state.addSubject(`user-${i}`, i), true)
       }
-      // 26th subject should fail
+      // 11th subject should fail (MAX_SUBJECTS = 10)
       assert.strictEqual(state.addSubject('user-new', 999), false)
     })
 
@@ -92,7 +92,7 @@ describe('SpanEnrichmentState', () => {
       assert.strictEqual(state.addDefault('my-flag', 'my-value'), true)
       const tags = state.toSpanTags()
       const defaults = JSON.parse(tags.ffe_defaults)
-      assert.strictEqual(defaults['my-flag'], 'coded-default: my-value')
+      assert.strictEqual(defaults['my-flag'], 'coded-default:my-value')
     })
 
     it('should truncate values to MAX_DEFAULT_VALUE_LENGTH', () => {
@@ -118,7 +118,7 @@ describe('SpanEnrichmentState', () => {
       const tags = state.toSpanTags()
       const defaults = JSON.parse(tags.ffe_defaults)
       // Should still have first value
-      assert.strictEqual(defaults['my-flag'], 'coded-default: value1')
+      assert.strictEqual(defaults['my-flag'], 'coded-default:value1')
     })
 
     it('should handle non-string default values', () => {
@@ -126,8 +126,8 @@ describe('SpanEnrichmentState', () => {
       state.addDefault('num-flag', 42)
       const tags = state.toSpanTags()
       const defaults = JSON.parse(tags.ffe_defaults)
-      assert.strictEqual(defaults['bool-flag'], 'coded-default: true')
-      assert.strictEqual(defaults['num-flag'], 'coded-default: 42')
+      assert.strictEqual(defaults['bool-flag'], 'coded-default:true')
+      assert.strictEqual(defaults['num-flag'], 'coded-default:42')
     })
   })
 
@@ -201,12 +201,12 @@ describe('SpanEnrichmentState', () => {
 describe('constants', () => {
   it('should have correct limit values', () => {
     assert.strictEqual(MAX_SERIAL_IDS, 128)
-    assert.strictEqual(MAX_SUBJECTS, 25)
+    assert.strictEqual(MAX_SUBJECTS, 10)
     assert.strictEqual(MAX_DEFAULTS, 5)
     assert.strictEqual(MAX_DEFAULT_VALUE_LENGTH, 64)
   })
 
   it('should have correct prefix', () => {
-    assert.strictEqual(CODED_DEFAULT_PREFIX, 'coded-default: ')
+    assert.strictEqual(CODED_DEFAULT_PREFIX, 'coded-default:')
   })
 })
