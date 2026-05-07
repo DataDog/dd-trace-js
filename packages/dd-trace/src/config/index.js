@@ -3,7 +3,6 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const { URL } = require('node:url')
-const path = require('node:path')
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -12,7 +11,6 @@ const { DD_MAJOR } = require('../../../../version')
 const log = require('../log')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
@@ -22,8 +20,6 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
-  require('./git_properties')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -39,6 +35,7 @@ const {
   parseErrors,
   generateTelemetry,
 } = require('./defaults')
+const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
@@ -213,10 +210,6 @@ class Config extends ConfigBase {
     this.#applyCalculated()
 
     warnWrongOtelSettings()
-
-    if (this.DD_TRACE_GIT_METADATA_ENABLED) {
-      this.#loadGitMetadata()
-    }
 
     parseErrors.clear()
   }
@@ -512,8 +505,8 @@ class Config extends ConfigBase {
       } else {
         const NX_TASK_TARGET_PROJECT = getEnvironmentVariable('NX_TASK_TARGET_PROJECT')
         if (NX_TASK_TARGET_PROJECT) {
-          if (this.DD_ENABLE_NX_SERVICE_NAME) {
-            setAndTrack(this, 'service', NX_TASK_TARGET_PROJECT)
+          if (DD_MAJOR >= 6 || this.DD_ENABLE_NX_SERVICE_NAME) {
+            setAndTrack(this, 'service', normalizeService(NX_TASK_TARGET_PROJECT) || 'node')
             isServiceNameInferred = true
           } else if (DD_MAJOR < 6) {
             log.warn(
@@ -536,7 +529,7 @@ class Config extends ConfigBase {
             )
           : undefined
 
-        setAndTrack(this, 'service', serverlessName || pkg.name || 'node')
+        setAndTrack(this, 'service', normalizeService(serverlessName) || normalizeService(pkg.name) || 'node')
         this.tags.service ??= /** @type {string} */ (this.service)
         isServiceNameInferred = true
       }
@@ -626,52 +619,6 @@ class Config extends ConfigBase {
     setAndTrack(this, 'tags', this.tags)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
-  }
-
-  // TODO: Move outside of config. This is unrelated to the config system.
-  #loadGitMetadata () {
-    // Try to read Git metadata from the environment variables
-    this.repositoryUrl = removeUserSensitiveInfo(this.DD_GIT_REPOSITORY_URL ?? this.tags[GIT_REPOSITORY_URL])
-    this.commitSHA = this.DD_GIT_COMMIT_SHA ?? this.tags[GIT_COMMIT_SHA]
-
-    // Otherwise, try to read Git metadata from the git.properties file
-    if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_PROPERTIES_FILE = this.DD_GIT_PROPERTIES_FILE
-      const gitPropertiesFile = DD_GIT_PROPERTIES_FILE ?? `${process.cwd()}/git.properties`
-      try {
-        const gitPropertiesString = fs.readFileSync(gitPropertiesFile, 'utf8')
-        const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-        this.commitSHA ??= commitSHA
-        this.repositoryUrl ??= repositoryUrl
-      } catch (error) {
-        // Only log error if the user has set a git.properties path
-        if (DD_GIT_PROPERTIES_FILE) {
-          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', gitPropertiesFile, error)
-        }
-      }
-    }
-
-    // Otherwise, try to read Git metadata from the .git/ folder
-    const DD_GIT_FOLDER_PATH = this.DD_GIT_FOLDER_PATH
-    const gitFolderPath = DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
-
-    if (!this.repositoryUrl) {
-      // Try to read git config (repository URL)
-      const gitConfigPath = path.join(gitFolderPath, 'config')
-      try {
-        const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
-        if (gitConfigContent) {
-          this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
-        }
-      } catch (error) {
-        // Only log error if the user has set a .git/ path
-        if (DD_GIT_FOLDER_PATH) {
-          log.error('Error reading git config: %s', gitConfigPath, error)
-        }
-      }
-    }
-    // Try to read git HEAD (commit SHA)
-    this.commitSHA ??= resolveGitHeadSHA(gitFolderPath)
   }
 }
 

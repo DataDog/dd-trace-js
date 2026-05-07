@@ -33,6 +33,8 @@ if (isMainThread) {
   }
 }
 
+// `leak` is intentionally populated to anchor allocations in the OOM fixture.
+// eslint-disable-next-line sonarjs/no-unused-collection
 const leak = []
 let count = 0
 

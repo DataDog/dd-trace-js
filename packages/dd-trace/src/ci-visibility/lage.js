@@ -2,6 +2,7 @@
 
 const { getEnvironmentVariable } = require('../config/helper')
 const { isTrue } = require('../util')
+const { DD_MAJOR } = require('../../../../version')
 
 /**
  * Returns the current Lage package name if the Lage package name override is enabled.
@@ -9,7 +10,7 @@ const { isTrue } = require('../util')
  * @returns {string|undefined}
  */
 function getLagePackageName () {
-  if (!isTrue(getEnvironmentVariable('DD_ENABLE_LAGE_PACKAGE_NAME'))) {
+  if (DD_MAJOR < 6 && !isTrue(getEnvironmentVariable('DD_ENABLE_LAGE_PACKAGE_NAME'))) {
     return
   }
 

@@ -81,7 +81,7 @@ const {
   ERROR_STACK,
   ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
-const { VERSION: ddTraceVersion } = require('../../version')
+const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
 const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summary ${runTestsCommand}`
@@ -89,7 +89,11 @@ const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
 
-const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
+const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
+const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
+const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
+const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
+const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
@@ -921,13 +925,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       it('tests with retries', async () => {
         // retry handler was released in mocha@6.0.0
         // so the reported data changes between mocha versions
-        const isLatestMocha = MOCHA_VERSION === 'latest'
-
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(tests.length, 16)
             } else {
               // In old mocha (< 6.0.0), retries.js reports only final results (2 tests).
@@ -939,7 +941,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const eventuallyPassingTests = tests.filter(t =>
               t.meta[TEST_NAME] === 'mocha-test-retries will be retried and pass'
             )
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(eventuallyPassingTests.length, 3)
             } else {
               assert.strictEqual(eventuallyPassingTests.length, 1)
@@ -949,14 +951,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               t.meta[TEST_NAME] === 'mocha-test-retries will be retried and fail' &&
               t.meta[TEST_STATUS] === 'fail'
             )
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(failedTests.length, 5)
             } else {
               assert.strictEqual(failedTests.length, 1)
             }
 
             // With afterEach hooks — retry tags should still be set correctly
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               const hooksPassTests = tests.filter(t =>
                 t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and pass'
               )
@@ -2283,6 +2285,128 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           done()
         }).catch(done)
       })
+    })
+
+    it('retries callback-style async tests', async () => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const callbackTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/mocha-callback-test.js'
+          )
+
+          assert.strictEqual(callbackTests.length, NUM_RETRIES_EFD + 1)
+          callbackTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          })
+
+          const retriedTests = callbackTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            SHOULD_CHECK_RESULTS: '1',
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/mocha-callback-test.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('uses the retry count from the matching slow_test_retries bucket', async () => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+            '10s': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const instantTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/instant-test.js'
+          )
+          assert.strictEqual(instantTests.length, 3)
+          assert.strictEqual(
+            instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+            2
+          )
+
+          const slowTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/mocha-slightly-slow-test.js'
+          )
+          assert.strictEqual(slowTests.length, 1)
+          assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+          assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+        }, 25_000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/instant-test.js',
+              './test-early-flake-detection/mocha-slightly-slow-test.js',
+            ]),
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
     })
 
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
@@ -5342,7 +5466,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        if (MOCHA_VERSION === 'latest') {
+        if (supportsMochaRetryEvents) {
           assert.strictEqual(tests.length, 3)
           const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.strictEqual(failedTests.length, 2)

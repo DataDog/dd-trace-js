@@ -8,6 +8,7 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const { isEmpty } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   incrementWafInitMetric,
@@ -170,7 +171,9 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // Basic collection
   if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
 
-  const responseHeaders = Object.keys(storedResponseHeaders).length === 0
+  // Skip the spread when the stored side is empty -- common during the early
+  // request lifecycle when no upstream response headers have been captured.
+  const responseHeaders = isEmpty(storedResponseHeaders)
     ? res.getHeaders()
     : { ...storedResponseHeaders, ...res.getHeaders() }
 
@@ -506,7 +509,9 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
   if (!rootSpan) return
 
   if (metricsQueue.size) {
-    rootSpan.addTags(Object.fromEntries(metricsQueue))
+    for (const [key, value] of metricsQueue) {
+      rootSpan.setTag(key, value)
+    }
 
     keepTrace(rootSpan, ASM)
 

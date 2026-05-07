@@ -141,7 +141,7 @@ describe('Plugin', () => {
           memcached.get('test', err => err && done(err))
         })
 
-        it('should support redundancy', done => {
+        it('should support redundancy', function (done) {
           memcached = new Memcached({
             'localhost:11211': 1,
             'other:11211': 1,
@@ -152,21 +152,21 @@ describe('Plugin', () => {
 
           try {
             memcached.del('test', err => err && done(err))
-
-            agent
-              .assertFirstTraceSpan({
-                meta: {
-                  'out.host': 'localhost',
-                  'network.destination.port': '11211',
-                  component: 'memcached',
-                },
-              })
-              .then(done)
-              .catch(done)
-          } catch (e) {
+          } catch {
             // Bug in memcached will throw. Skip test when this happens.
-            done()
+            this.skip()
           }
+
+          agent
+            .assertFirstTraceSpan({
+              meta: {
+                'out.host': 'localhost',
+                'network.destination.port': '11211',
+                component: 'memcached',
+              },
+            })
+            .then(done)
+            .catch(done)
         })
 
         withNamingSchema(

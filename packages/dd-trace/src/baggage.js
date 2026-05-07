@@ -66,8 +66,18 @@ function removeAllBaggageItems () {
   return EMPTY_STORE
 }
 
+/**
+ * @param {BaggageStore} items Frozen in place; do not mutate after.
+ */
+function setAllBaggageItems (items) {
+  Object.freeze(items)
+  baggageStorage.enterWith(items)
+  return items
+}
+
 module.exports = {
   setBaggageItem,
+  setAllBaggageItems,
   getBaggageItem,
   getAllBaggageItems,
   removeBaggageItem,

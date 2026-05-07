@@ -207,24 +207,26 @@ jobs:
           DIR: ${{ runner.temp }}/supported-integrations
         run: |
           set -euo pipefail
-          variables="$(jq -c -n \
+          # gh's `-f variables=<json>` does not parse the value as JSON; build
+          # the `{query, variables}` body with jq and pipe via `--input -`.
+          jq -nc \
             --arg repo "$GITHUB_REPOSITORY" \
             --arg branch "$BRANCH" \
             --arg expected "$EXPECTED" \
             --arg json "$(base64 -w 0 "$DIR/supported_versions_output.json")" \
             --arg csv "$(base64 -w 0 "$DIR/supported_versions_table.csv")" \
-            '{ input: {
-              branch: { repositoryNameWithOwner: $repo, branchName: $branch },
-              message: { headline: "chore: update supported-integrations" },
-              expectedHeadOid: $expected,
-              fileChanges: { additions: [
-                { path: "supported_versions_output.json", contents: $json },
-                { path: "supported_versions_table.csv", contents: $csv }
-              ] }
-            } }')"
-          gh api graphql \
-            -f query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { url } } }' \
-            -f "variables=$variables" >/dev/null
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { url } } }",
+              variables: { input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                message: { headline: "chore: update supported-integrations" },
+                expectedHeadOid: $expected,
+                fileChanges: { additions: [
+                  { path: "supported_versions_output.json", contents: $json },
+                  { path: "supported_versions_table.csv", contents: $csv }
+                ] }
+              } }
+            }' | gh api graphql --input - >/dev/null
 
   yarn-dedupe:
     runs-on: ubuntu-latest

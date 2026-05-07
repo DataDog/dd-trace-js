@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../dd-trace/src/log')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 
@@ -68,13 +69,13 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
       const ddCarrier = metadata._datadog
       if (!ddCarrier) return
 
-      // Clean up only our _datadog key, preserve other metadata
-      delete metadata._datadog
+      // Avoid `delete`'s hidden-class transition; JSON.stringify also omits undefined values.
+      metadata._datadog = undefined
       job.opts.telemetry.metadata = JSON.stringify(metadata)
 
       return ddCarrier
-    } catch {
-      // Ignore malformed metadata
+    } catch (error) {
+      log.warn('bullmq: skipping _datadog extract on malformed telemetry.metadata: %s', error.message)
     }
   }
 }

@@ -85,7 +85,6 @@
 "node-gyp-build","https://github.com/prebuild/node-gyp-build","['MIT']","['Mathias Buus']"
 "opentracing","https://github.com/opentracing/opentracing-javascript","['Apache-2.0']","['opentracing']"
 "oxc-parser","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
-"path-to-regexp","https://github.com/pillarjs/path-to-regexp","['MIT']","['pillarjs']"
 "pprof-format","https://github.com/DataDog/pprof-format","['MIT']","['Datadog Inc.']"
 "protobufjs","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
 "queue-tick","https://github.com/mafintosh/queue-tick","['MIT']","['Mathias Buus']"
