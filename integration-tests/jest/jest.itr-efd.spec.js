@@ -1033,6 +1033,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       it(
         'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',
         async () => {
+          receiver.setSettings({ known_tests_enabled: true })
           receiver.setKnownTestsResponseCode(404)
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1056,6 +1057,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       it(
         'tags session and children with _dd.ci.library_configuration_error.test_management_tests when request fails',
         async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTestsResponseCode(404)
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {

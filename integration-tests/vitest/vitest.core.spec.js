@@ -40,13 +40,9 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   VITEST_POOL,
   TEST_IS_TEST_FRAMEWORK_WORKER,
-  GIT_COMMIT_SHA,
-  GIT_REPOSITORY_URL,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
-  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
@@ -331,28 +327,7 @@ versions.forEach((version) => {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-      it(
-        'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails 4xx',
-        async () => {
-          receiver.setSkippableSuitesResponseCode(404)
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
-              const testEvent = events.find(event => event.type === 'test')
-              assert.ok(testEvent, 'should have test event')
-              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
-            })
-          childProcess = exec('./node_modules/.bin/vitest run', {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          })
-          await Promise.all([eventsPromise, once(childProcess, 'exit')])
-        })
+      // No skippable_tests test: vitest does not request skippable suites (TIA unsupported).
 
       it(
         'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',

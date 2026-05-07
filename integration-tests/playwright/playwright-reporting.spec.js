@@ -36,7 +36,6 @@ const {
   TEST_NAME,
   DD_CAPABILITIES_IMPACTED_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -131,35 +130,7 @@ versions.forEach((version) => {
             await Promise.all([eventsPromise, once(childProcess, 'exit')])
           })
 
-        it(
-          'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails 4xx',
-          async () => {
-            const envVars = reportMethod === 'agentless'
-              ? getCiVisAgentlessConfig(receiver.port)
-              : getCiVisEvpProxyConfig(receiver.port)
-            receiver.setSkippableSuitesResponseCode(404)
-            const eventsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
-                const testEvent = events.find(event => event.type === 'test')
-                assert.ok(testEvent, 'should have test event')
-                assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
-              })
-            childProcess = exec(
-              './node_modules/.bin/playwright test -c playwright.config.js',
-              {
-                cwd,
-                env: {
-                  ...envVars,
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  DD_TEST_SESSION_NAME: 'my-test-session',
-                },
-              }
-            )
-            await Promise.all([eventsPromise, once(childProcess, 'exit')])
-          })
+        // No skippable_tests test: playwright does not request skippable suites (TIA unsupported).
 
         it(
           'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',
