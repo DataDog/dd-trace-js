@@ -9,9 +9,16 @@ const tags = require('../../../../../ext/tags')
 const { getConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { DD_MAJOR } = require('../../../../../version')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const TraceState = require('./tracestate')
+
+// v6 aligns with the OTel `b3` propagator spec: `'b3'` means single-header, `'b3multi'` means
+// multi-header. v5 keeps the older shape where `'b3'` means multi and `'b3 single header'` is the
+// single-header form.
+const B3_SINGLE_KEY = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
+const B3_MULTI_KEY = DD_MAJOR >= 6 ? 'b3multi' : 'b3'
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -78,10 +85,17 @@ class TextMapPropagator {
   constructor (config) {
     this._config = config
 
-    // TODO: should match "b3 single header" in next major
-    const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
-    // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    this.#extractB3Context = envName === 'OTEL_PROPAGATORS' ? this._extractB3SingleContext : this._extractB3MultiContext
+    // v6: `'b3'` is always single-header. v5: env-name decides — OTEL_PROPAGATORS callers expect
+    // single, the legacy `DD_TRACE_PROPAGATION_STYLE` callers expect multi.
+    if (DD_MAJOR >= 6) {
+      this.#extractB3Context = this._extractB3SingleContext
+    } else {
+      const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
+      // eslint-disable-next-line eslint-rules/eslint-env-aliases
+      this.#extractB3Context = envName === 'OTEL_PROPAGATORS'
+        ? this._extractB3SingleContext
+        : this._extractB3MultiContext
+    }
   }
 
   /**
@@ -262,9 +276,10 @@ class TextMapPropagator {
   }
 
   _injectB3MultipleHeaders (spanContext, carrier) {
-    const hasB3 = this._hasPropagationStyle('inject', 'b3')
-    const hasB3multi = this._hasPropagationStyle('inject', 'b3multi')
-    if (!(hasB3 || hasB3multi)) return
+    // `'b3multi'` is recognised on both versions; `B3_MULTI_KEY` is `'b3'` on v5 and `'b3multi'` on v6.
+    const hasB3multi = this._hasPropagationStyle('inject', 'b3multi') ||
+      this._hasPropagationStyle('inject', B3_MULTI_KEY)
+    if (!hasB3multi) return
 
     carrier[b3TraceKey] = this._getB3TraceId(spanContext)
     carrier[b3SpanKey] = spanContext._spanId.toString(16)
@@ -280,7 +295,7 @@ class TextMapPropagator {
   }
 
   _injectB3SingleHeader (spanContext, carrier) {
-    const hasB3SingleHeader = this._hasPropagationStyle('inject', 'b3 single header')
+    const hasB3SingleHeader = this._hasPropagationStyle('inject', B3_SINGLE_KEY)
     if (!hasB3SingleHeader) return null
 
     const traceId = this._getB3TraceId(spanContext)
@@ -394,7 +409,9 @@ class TextMapPropagator {
         case 'tracecontext':
           extractedContext = this._extractTraceparentContext(carrier)
           break
-        case 'b3 single header': // TODO: delete in major after singular "b3"
+        case 'b3 single header':
+          // v6 routes the canonical `'b3'` to single-header extract directly via `#extractB3Context`,
+          // so this case only fires in v5 where the legacy spelling is still accepted.
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':

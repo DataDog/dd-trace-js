@@ -131,7 +131,12 @@ describe('Config', () => {
       delete process.env.DATADOG_API_KEY
     })
 
-    it('should log deprecation warning for deprecated configurations', async () => {
+    // The legacy `DD_PROFILING_EXPERIMENTAL_*` and `DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED`
+    // aliases are dropped in v6 (defaults.js removes them under `DD_MAJOR >= 6`); the deprecation
+    // warning path therefore only fires on v5.
+    const itLegacyAlias = DD_MAJOR < 6 ? it : it.skip
+
+    itLegacyAlias('should log deprecation warning for deprecated configurations', async () => {
       process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
       getEnvironmentVariables()
       const [warning] = await once(process, 'warning')
@@ -143,21 +148,23 @@ describe('Config', () => {
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
     })
 
-    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', async () => {
-      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
-      assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
-      const config = getConfig()
-      assert.strictEqual(config.runtimeMetricsRuntimeId, true)
-      assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
-      delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+    itLegacyAlias(
+      'should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED',
+      async () => {
+        process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+        assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+        const config = getConfig()
+        assert.strictEqual(config.runtimeMetricsRuntimeId, true)
+        assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
+        delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
 
-      const [warning] = await once(process, 'warning')
-      assert.strictEqual(warning.name, 'DeprecationWarning')
-      assert.match(
-        warning.message,
-        /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
-      )
-    })
+        const [warning] = await once(process, 'warning')
+        assert.strictEqual(warning.name, 'DeprecationWarning')
+        assert.match(
+          warning.message,
+          /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+        )
+      })
 
     it('should pass through random envs', async () => {
       process.env.FOOBAR = 'true'
@@ -1713,19 +1720,23 @@ describe('Config', () => {
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
-
     if (DD_MAJOR < 6) {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
       sinon.assert.calledOnce(log.warn)
     } else {
-      sinon.assert.calledTwice(log.warn)
+      // In v6 `experimental.b3` is no longer parsed, so the calculated push doesn't fire and the
+      // propagation styles stay at the explicit input (`tracePropagationStyle: { inject: ['datadog'], ... }`).
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
+      sinon.assert.calledThrice(log.warn)
       sinon.assert.calledWithExactly(
         log.warn,
         'Unknown option %s with value %o',
         'iast.securityControlsConfiguration',
         'SANITIZER:CODE_INJECTION:sanitizer.js:method',
       )
+      sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'experimental.b3', true)
     }
     sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'enabled', false)
 

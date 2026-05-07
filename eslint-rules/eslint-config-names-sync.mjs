@@ -9,6 +9,9 @@ const { DD_MAJOR } = require('../version.js')
 const { applyMajorVersionAliasFilters } = require('../packages/dd-trace/src/config/major-version-filters.js')
 
 const IGNORED_CONFIGURATION_NAMES = new Set([
+  // `experimental.b3` is gone from `index.d.ts` in v6 (defaults.js drops the env var entirely
+  // under `DD_MAJOR >= 6`); v5 still consumes it through `supported-configurations.json`.
+  'experimental.b3',
   'tracePropagationStyle',
   'tracing',
 ])

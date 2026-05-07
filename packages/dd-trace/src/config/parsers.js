@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 
+const { DD_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
 
 let warnInvalidValue
@@ -9,8 +10,12 @@ function setWarnInvalidValue (fn) {
   warnInvalidValue = fn
 }
 
+// v6 drops the legacy `'b3 single header'` propagation style. The string `'b3'` is now the OTel
+// single-header form, and multi-header propagation goes through `'b3multi'` (which v5 already
+// supports). v5 keeps accepting both names for backwards compatibility.
 const VALID_PROPAGATION_STYLES = new Set([
-  'datadog', 'tracecontext', 'b3', 'b3 single header', 'b3multi', 'baggage', 'none',
+  'datadog', 'tracecontext', 'b3', 'b3multi', 'baggage', 'none',
+  ...(DD_MAJOR < 6 ? ['b3 single header'] : []),
 ])
 
 const RENAMED_OTEL_TAGS = new Map(
