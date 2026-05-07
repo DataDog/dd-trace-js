@@ -330,6 +330,7 @@ module.exports = {
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
+    const loadedTracer = tracer
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -430,7 +431,11 @@ module.exports = {
     plugins = pluginNames
 
     server.on('close', () => {
-      tracer = null
+      // Only null the tracer if it hasn't been replaced by a newer agent.load() cycle.
+      // Without this guard, the old server's close event (firing during await wait(1) in
+      // a new load cycle) would nullify the newly-assigned tracer, causing tracer.init()
+      // to throw and agent.load() to hang forever.
+      if (tracer === loadedTracer) tracer = null
       dsmStats = []
       currentIntegrationName = null
     })

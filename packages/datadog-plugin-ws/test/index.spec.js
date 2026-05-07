@@ -32,6 +32,13 @@ function closeWsClient (ws) {
   ws.terminate()
 }
 
+function closeAgent () {
+  return Promise.race([
+    agent.close({ ritmReset: false, wipe: true }),
+    new Promise(resolve => setTimeout(resolve, 3000)),
+  ])
+}
+
 function closeWsServer (server) {
   for (const ws of server.clients) {
     ws.terminate()
@@ -103,7 +110,7 @@ describe('Plugin', () => {
         })
 
         after(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeAgent()
         })
       })
 
@@ -132,7 +139,7 @@ describe('Plugin', () => {
           closeWsClient(client)
           client = undefined
           await closeWsServer(wsServer)
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeAgent()
         })
 
         it('should not retain the connection span during socket setup', async () => {
@@ -491,7 +498,7 @@ describe('Plugin', () => {
           closeWsClient(client)
           client = undefined
           await closeWsServer(wsServer)
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeAgent()
         })
 
         it('should work with custom service configuration', () => {
@@ -609,7 +616,7 @@ describe('Plugin', () => {
           closeWsClient(client)
           client = undefined
           await closeWsServer(wsServer)
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeAgent()
         })
 
         it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
@@ -656,7 +663,7 @@ describe('Plugin', () => {
           closeWsClient(client)
           client = undefined
           await closeWsServer(wsServer)
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeAgent()
         })
 
         it('should not inherit sampling decisions from root trace', () => {
@@ -757,7 +764,7 @@ describe('Plugin', () => {
           closeWsClient(client)
           client = undefined
           await closeWsServer(wsServer)
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeAgent()
         })
 
         it('should add span pointers to producer spans', async () => {
