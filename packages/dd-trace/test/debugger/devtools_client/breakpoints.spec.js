@@ -748,9 +748,9 @@ describe('breakpoints', function () {
  * Generate a probe config
  *
  * @param {object} [config] Optional configuration object.
- * @param {string} [config.id='probe-1'] The probe ID.
- * @param {number} [config.version=1] The probe version.
- * @param {object} [config.where = { sourceFile: 'test.js', lines: ['10'] }] The location information.
+ * @param {string} [config.id] The probe ID.
+ * @param {number} [config.version] The probe version.
+ * @param {object} [config.where ] }] The location information.
  * @param {object} [config.when] The condition for the probe.
  *   { json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' } by default.
  * @returns {{ id: string; version: number; where: object; when: object; }}
