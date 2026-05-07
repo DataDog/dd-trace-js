@@ -1,0 +1,15 @@
+{
+  "name": "plugin-pg",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "mixed-queries": { "env": { "VARIANT": "mixed-queries" } },
+    "repeated-prepared": {
+      "baseline": "mixed-queries",
+      "env": { "VARIANT": "repeated-prepared" }
+    }
+  }
+}
