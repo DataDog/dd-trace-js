@@ -437,8 +437,8 @@ module.exports = {
       if (tracer === loadedTracer) {
         tracer = null
         currentIntegrationName = null
+        dsmStats = []
       }
-      dsmStats = []
     })
 
     return promise
