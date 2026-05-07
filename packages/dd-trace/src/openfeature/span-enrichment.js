@@ -3,10 +3,10 @@
 const { encodeDeltaVarint, hashTargetingKey } = require('./encoding')
 
 const MAX_SERIAL_IDS = 128
-const MAX_SUBJECTS = 25
+const MAX_SUBJECTS = 10
 const MAX_DEFAULTS = 5
 const MAX_DEFAULT_VALUE_LENGTH = 64
-const CODED_DEFAULT_PREFIX = 'coded-default: '
+const CODED_DEFAULT_PREFIX = 'coded-default:'
 
 /**
  * Manages feature flag enrichment state for a single root span.
