@@ -481,8 +481,9 @@ export default [
       'sonarjs/single-character-alternation': 'error',
       'sonarjs/test-check-exception': 'error',
 
+      'sonarjs/duplicates-in-character-class': 'error',
+
       // --- Rules to check later ------------------
-      'sonarjs/duplicates-in-character-class': 'off', // 86 errors
       'sonarjs/no-code-after-done': 'off', // 13 errors
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
       'sonarjs/no-identical-functions': 'off', // 25 errors
