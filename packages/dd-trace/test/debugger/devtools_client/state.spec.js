@@ -244,8 +244,8 @@ describe('getStackFromCallFrames', function () {
    *
    * @param {object} options - Configuration options
    * @param {Array<object>} options.scripts - Scripts to register
-   * @param {Function} options.getOriginalPosition - Source map resolution function
-   * @param {Function} [options.loadSourceMapSync] - Source map loader function
+   * @param {(...args: unknown[]) => unknown} options.getOriginalPosition - Source map resolution function
+   * @param {(...args: unknown[]) => unknown} [options.loadSourceMapSync] - Source map loader function
    * @returns {object} - The state module
    */
   function createState ({ scripts, getOriginalPosition, loadSourceMapSync = () => ({ sources: [] }) }) {

@@ -119,11 +119,11 @@ function createWrapEmit (emit) {
 }
 
 /**
- * @param {Function} setSocket
+ * @param {(...args: unknown[]) => unknown} setSocket
  * @returns {(...args: unknown[]) => unknown}
  */
 /**
- * @param {Function} on
+ * @param {(...args: unknown[]) => unknown} on
  * @returns {(...args: unknown[]) => unknown}
  */
 function wrapReceiverOn (on) {
@@ -188,7 +188,7 @@ addHook({
  * finished connection span is retained for the entire lifetime of the WebSocket
  * (via ACF -> handle -> WeakMap).
  *
- * @param {Function} setSocket
+ * @param {(...args: unknown[]) => unknown} setSocket
  * @returns {(...args: unknown[]) => unknown}
  */
 function wrapSetSocket (setSocket) {

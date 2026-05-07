@@ -448,7 +448,7 @@ module.exports = {
 
   /**
    * Register handler to be executed on each agent call, multiple times
-   * @param {Function} handler
+   * @param {(...args: unknown[]) => unknown} handler
    */
   subscribe (handler) {
     traceHandlers.add({ handler })
@@ -456,7 +456,7 @@ module.exports = {
 
   /**
    * Remove a handler
-   * @param {Function} handler
+   * @param {(...args: unknown[]) => unknown} handler
    */
   unsubscribe (handler) {
     for (const traceHandler of traceHandlers) {

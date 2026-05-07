@@ -3,6 +3,10 @@
 const { getEnvironmentVariable } = require('../dd-trace/src/config/helper')
 const { parseUserLandFrames } = require('../dd-trace/src/plugins/util/stacktrace')
 
+/**
+ * @typedef {(...args: unknown[]) => unknown} Callable
+ */
+
 const ENTRY_SPAN_STACK_FRAMES_LIMIT = 1
 const EXIT_SPAN_STACK_FRAMES_LIMIT =
   Number(getEnvironmentVariable('_DD_CODE_ORIGIN_FOR_SPANS_EXIT_SPAN_MAX_USER_FRAMES')) || 8
@@ -13,7 +17,7 @@ module.exports = {
 }
 
 /**
- * @param {Function} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
+ * @param {Callable} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
  *   collected.
  * @returns {Record<string, string>}
  */
@@ -22,7 +26,7 @@ function entryTags (topOfStackFunc) {
 }
 
 /**
- * @param {Function} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
+ * @param {Callable} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
  *   collected.
  * @returns {Record<string, string>}
  */
@@ -33,7 +37,7 @@ function exitTags (topOfStackFunc) {
 /**
  * @param {'entry'|'exit'} type - The type of code origin.
  * @param {number} limit - The maximum number of stack frames to include in the tags.
- * @param {Function} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
+ * @param {Callable} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
  *   collected.
  * @returns {Record<string, string>}
  */

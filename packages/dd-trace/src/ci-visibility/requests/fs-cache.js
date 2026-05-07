@@ -145,7 +145,7 @@ function touchLock (cacheKey) {
  * Returns a function that stops the heartbeat and releases the lock.
  *
  * @param {string} cacheKey
- * @returns {Function}
+ * @returns {(...args: unknown[]) => unknown}
  */
 function startLockHeartbeat (cacheKey) {
   const interval = setInterval(() => touchLock(cacheKey), CACHE_LOCK_HEARTBEAT_MS)
@@ -175,8 +175,8 @@ function isLockStale (cacheKey) {
  * Polls until the cache file appears or the timeout is reached.
  *
  * @param {string} cacheKey
- * @param {Function} fetchFn - function(done) that fetches from the API
- * @param {Function} done - callback(err, ...results)
+ * @param {(...args: unknown[]) => unknown} fetchFn - function(done) that fetches from the API
+ * @param {(...args: unknown[]) => unknown} done - callback(err, ...results)
  */
 function waitForCache (cacheKey, fetchFn, done) {
   const poll = () => {
@@ -215,9 +215,9 @@ function waitForCache (cacheKey, fetchFn, done) {
  * When enabled, checks cache → acquires lock → fetches → writes cache → releases lock.
  *
  * @param {string} cacheKey - Unique cache key for this request
- * @param {Function} fetchFn - function(cacheKey, done) that performs the API request.
+ * @param {(...args: unknown[]) => unknown} fetchFn - function(cacheKey, done) that performs the API request.
  *   Must call writeToCache(cacheKey, data) on success before calling done(null, data).
- * @param {Function} done - callback(err, ...results)
+ * @param {(...args: unknown[]) => unknown} done - callback(err, ...results)
  */
 function withCache (cacheKey, fetchFn, done) {
   if (!isCacheEnabled()) {

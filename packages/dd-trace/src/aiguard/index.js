@@ -43,7 +43,11 @@ function disable () {
 /**
  * Handles channel messages with pre-converted messages.
  *
- * @param {{messages: Array<object>, resolve: Function, reject: Function}} ctx
+ * @param {{
+ *   messages: Array<object>,
+ *   resolve: (...args: unknown[]) => unknown,
+ *   reject: (...args: unknown[]) => unknown,
+ * }} ctx
  */
 function onEvaluate (ctx) {
   if (!ctx.messages?.length) {

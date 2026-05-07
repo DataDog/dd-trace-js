@@ -712,7 +712,7 @@ module.exports = class CiPlugin extends Plugin {
    * Uploads coverage reports if enabled. This is the common logic used by plugins.
    * @param {object} options - Upload options
    * @param {string} options.rootDir - The root directory where coverage reports are located
-   * @param {Function} [options.onDone] - Callback to signal completion
+   * @param {(...args: unknown[]) => unknown} [options.onDone] - Callback to signal completion
    */
   uploadCoverageReports ({ rootDir, onDone }) {
     const done = onDone || (() => {})

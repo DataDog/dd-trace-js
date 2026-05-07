@@ -279,7 +279,7 @@ export default [
       // no-defaults: This should be activated, since the defaults will not be picked up in a description.
       'jsdoc/no-defaults': 'off',
       'jsdoc/no-undefined-types': 'off',
-      'jsdoc/reject-function-type': 'off',
+      'jsdoc/reject-function-type': 'error',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
       'jsdoc/require-param': 'off',

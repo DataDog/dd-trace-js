@@ -37,7 +37,7 @@ class OtlpHttpLogExporter extends OtlpHttpExporterBase {
    * Exports log records via OTLP over HTTP.
    *
    * @param {LogRecord[]} logRecords - Array of enriched log records to export
-   * @param {Function} resultCallback - Callback function for export result
+   * @param {(...args: unknown[]) => unknown} resultCallback - Callback function for export result
    *
    * @returns {void}
    */

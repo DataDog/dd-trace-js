@@ -114,7 +114,7 @@ function getKnownTests ({
  * @param {string} params.runtimeVersion
  * @param {object} [params.custom]
  * @param {string | null} params.cacheKey
- * @param {Function} done
+ * @param {(...args: unknown[]) => unknown} done
  */
 function fetchFromApi ({
   url,

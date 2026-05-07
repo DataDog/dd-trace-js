@@ -184,7 +184,7 @@ class PeriodicMetricReader {
   /**
    * Collects measurements and exports metrics.
    *
-   * @param {Function} [callback] - Called after export completes
+   * @param {(...args: unknown[]) => unknown} [callback] - Called after export completes
    */
   #collectAndExport (callback = () => {}) {
     // Atomically drain measurements for export. New measurements can be recorded
@@ -425,7 +425,7 @@ class MetricAggregator {
    * @param {AggregatedMetric} metric - The metric to find or create a data point for
    * @param {Attributes} attributes - The attributes of the metric
    * @param {string} attrKey - The attribute key
-   * @param {Function} createInitialDataPoint - Function to create an initial data point
+   * @param {(...args: unknown[]) => unknown} createInitialDataPoint - Function to create an initial data point
    * @returns {NumberDataPoint|HistogramDataPoint} - The data point
    */
   #findOrCreateDataPoint (metric, attributes, attrKey, createInitialDataPoint) {

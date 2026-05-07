@@ -1825,8 +1825,8 @@ function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
  * Wrap `createScriptTransformer` to temporarily hide Datadog-specific
  * `testEnvironmentOptions` keys while Jest builds its transform config.
  *
- * @param {Function} createScriptTransformer
- * @returns {Function}
+ * @param {(...args: unknown[]) => unknown} createScriptTransformer
+ * @returns {(...args: unknown[]) => unknown}
  */
 function wrapCreateScriptTransformer (createScriptTransformer) {
   return function (config) {

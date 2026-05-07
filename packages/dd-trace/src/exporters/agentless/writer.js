@@ -54,7 +54,7 @@ class AgentlessWriter extends BaseWriter {
 
   /**
    * Flushes accumulated traces to the intake as a single request.
-   * @param {Function} [done] - Callback when send completes
+   * @param {(...args: unknown[]) => unknown} [done] - Callback when send completes
    */
   flush (done = () => {}) {
     if (!request.writable) {
@@ -89,7 +89,7 @@ class AgentlessWriter extends BaseWriter {
    * Sends the encoded payload to the intake endpoint.
    * @param {Buffer} data - The encoded JSON payload
    * @param {number} count - Number of traces in the payload
-   * @param {Function} done - Callback when complete
+   * @param {(...args: unknown[]) => unknown} done - Callback when complete
    */
   _sendPayload (data, count, done) {
     if (!data || data.length === 0) {

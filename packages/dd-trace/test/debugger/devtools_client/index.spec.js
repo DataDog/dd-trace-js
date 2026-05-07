@@ -26,7 +26,7 @@ const event = {
 describe('onPause', function () {
   /**
    * @typedef {{
-   *   on: sinon.SinonSpy & { args: Array<[string, Function]> },
+   *   on: sinon.SinonSpy & { args: Array<[string, (...args: unknown[]) => unknown]> },
    *   post: sinon.SinonSpy,
    *   emit: sinon.SinonSpy,
    *   '@noCallThru'?: boolean
@@ -36,7 +36,7 @@ describe('onPause', function () {
   let session
   /** @type {sinon.SinonSpy} */
   let send
-  /** @type {Function} */
+  /** @type {(...args: unknown[]) => unknown} */
   let onPaused
   /** @type {sinon.SinonSpy} */
   let ackReceived

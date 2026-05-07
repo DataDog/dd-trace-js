@@ -399,7 +399,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} options.filePath - Path to the coverage report file
    * @param {string} options.format - Format of the coverage report
    * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
-   * @param {Function} callback - Callback function (err)
+   * @param {(...args: unknown[]) => unknown} callback - Callback function (err)
    */
   uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
     if (!this._codeCoverageReportUrl) {

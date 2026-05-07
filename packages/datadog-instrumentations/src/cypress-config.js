@@ -109,10 +109,10 @@ function injectSupportFile (config) {
  * the `ci:cypress:setup-node-events` diagnostic channel, avoiding direct
  * tracer references in the instrumentation layer.
  *
- * @param {Function} on Cypress event registration function
+ * @param {(...args: unknown[]) => unknown} on Cypress event registration function
  * @param {object} config Cypress resolved config object
- * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
- * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
+ * @param {(...args: unknown[]) => unknown[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
+ * @param {(...args: unknown[]) => unknown[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
  * @returns {object} the config object (possibly modified)
  */
 function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers) {
@@ -169,8 +169,8 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
 }
 
 /**
- * @param {Function|undefined} originalSetupNodeEvents
- * @returns {Function}
+ * @param {(...args: unknown[]) => unknown|undefined} originalSetupNodeEvents
+ * @returns {(...args: unknown[]) => unknown}
  */
 function wrapSetupNodeEvents (originalSetupNodeEvents) {
   return function ddSetupNodeEvents (on, config) {
@@ -370,7 +370,7 @@ function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
  * via the defineConfig shimmer.
  *
  * @param {object|undefined} options
- * @returns {{ options: object|undefined, cleanup: Function }}
+ * @returns {{ options: object|undefined, cleanup: (...args: unknown[]) => unknown }}
  */
 function wrapCliConfigFileOptions (options) {
   const noop = { options, cleanup: () => {} }

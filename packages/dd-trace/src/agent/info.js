@@ -16,7 +16,7 @@ module.exports = {
 /**
  * Fetches agent information from the /info endpoint
  * @param {URL} url - The agent URL
- * @param {Function} callback - Callback function with signature (err, agentInfo)
+ * @param {(...args: unknown[]) => unknown} callback - Callback function with signature (err, agentInfo)
  */
 function fetchAgentInfo (url, callback) {
   const urlKey = url.href

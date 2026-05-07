@@ -87,7 +87,7 @@ class DatadogTracingHelper {
 
   /**
    * @param {object} options
-   * @param {Function} callback
+   * @param {(...args: unknown[]) => unknown} callback
    * @returns {unknown}
    */
   runInChildSpan (options, callback) {

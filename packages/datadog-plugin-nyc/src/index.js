@@ -66,7 +66,7 @@ class NycPlugin extends CiPlugin {
   /**
    * Handles the coverage report by discovering and uploading it if enabled.
    * @param {string} rootDir - The root directory where coverage reports are located.
-   * @param {Function} [onDone] - Callback to signal completion.
+   * @param {(...args: unknown[]) => unknown} [onDone] - Callback to signal completion.
    */
   handleCoverageReport (rootDir, onDone) {
     const done = onDone || (() => {})

@@ -271,7 +271,7 @@ function getBreakpointInfo ({ deployedFile, sourceFile = deployedFile, stackInde
  * Test helper for basic input messages with remote config and tracing.
  *
  * @param {DebuggerTestEnvironment} t - The test environment.
- * @param {Function} done - The mocha done callback.
+ * @param {(...args: unknown[]) => unknown} done - The mocha done callback.
  */
 function testBasicInput (t, done) {
   t.triggerBreakpoint()
@@ -284,7 +284,7 @@ function testBasicInput (t, done) {
  *
  * @param {DebuggerTestEnvironment} t - The test environment.
  * @param {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} probe - The probe config.
- * @param {Function} done - The mocha done callback.
+ * @param {(...args: unknown[]) => unknown} done - The mocha done callback.
  */
 function testBasicInputWithoutRC (t, probe, done) {
   t.triggerBreakpoint()
@@ -295,7 +295,7 @@ function testBasicInputWithoutRC (t, probe, done) {
  * Setup assertion listeners for basic input tests with tracing integration.
  *
  * @param {DebuggerTestEnvironment} t - The test environment.
- * @param {Function} done - The mocha done callback.
+ * @param {(...args: unknown[]) => unknown} done - The mocha done callback.
  * @param {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} [probe] - Optional probe
  *   config to use instead of t.rcConfig.config.
  */

@@ -131,7 +131,7 @@ class ObservableInstrument extends Instrument {
   /**
    * Adds a callback to invoke during metric collection.
    *
-   * @param {Function} callback - Receives an ObservableResult to record observations
+   * @param {(...args: unknown[]) => unknown} callback - Receives an ObservableResult to record observations
    */
   addCallback (callback) {
     if (typeof callback !== 'function') return
@@ -142,7 +142,7 @@ class ObservableInstrument extends Instrument {
   /**
    * Removes a callback.
    *
-   * @param {Function} callback - The callback to remove
+   * @param {(...args: unknown[]) => unknown} callback - The callback to remove
    */
   removeCallback (callback) {
     const index = this.#callbacks.indexOf(callback)

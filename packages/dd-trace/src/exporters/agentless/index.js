@@ -115,7 +115,7 @@ class AgentlessExporter {
 
   /**
    * Flushes any pending traces immediately. Clears the batch timer.
-   * @param {Function} [done] - Callback when flush is complete
+   * @param {(...args: unknown[]) => unknown} [done] - Callback when flush is complete
    */
   flush (done = () => {}) {
     clearTimeout(this.#timer)

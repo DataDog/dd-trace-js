@@ -62,7 +62,7 @@ function crashFlush () {
 /**
  * Patches your AWS Lambda handler function to add some tracing support.
  *
- * @param {Function} lambdaHandler a Lambda handler function.
+ * @param {(...args: unknown[]) => unknown} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {

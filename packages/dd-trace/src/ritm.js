@@ -44,12 +44,12 @@ function normalizeModuleName (name) {
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {object} options hook options
- * @param {Function} onrequire callback to be executed upon encountering module
+ * @param {(...args: unknown[]) => unknown} onrequire callback to be executed upon encountering module
  */
 /**
  * @overload
  * @param {string[]} modules list of modules to hook into
- * @param {Function} onrequire callback to be executed upon encountering module
+ * @param {(...args: unknown[]) => unknown} onrequire callback to be executed upon encountering module
  */
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)

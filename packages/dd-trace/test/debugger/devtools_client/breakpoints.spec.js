@@ -15,7 +15,7 @@ describe('breakpoints', function () {
   /**
    * @type {{
    *   post: sinon.SinonStub;
-   *   on: Function;
+   *   on: (...args: unknown[]) => unknown;
    *   '@noCallThru': boolean;
    * }}
    */

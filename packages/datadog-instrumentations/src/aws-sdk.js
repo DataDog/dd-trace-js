@@ -65,11 +65,11 @@ function getChannelBag (suffix) {
   return bag
 }
 
-/** @type {WeakMap<Function, string>} */
+/** @type {WeakMap<(...args: unknown[]) => unknown, string>} */
 const clientNameCache = new WeakMap()
 
 /**
- * @param {Function} clientCtor
+ * @param {(...args: unknown[]) => unknown} clientCtor
  * @returns {string}
  */
 function getClientName (clientCtor) {
@@ -81,11 +81,11 @@ function getClientName (clientCtor) {
   return name
 }
 
-/** @type {WeakMap<Function, string>} */
+/** @type {WeakMap<(...args: unknown[]) => unknown, string>} */
 const operationCache = new WeakMap()
 
 /**
- * @param {Function} commandCtor
+ * @param {(...args: unknown[]) => unknown} commandCtor
  * @returns {string}
  */
 function getOperationName (commandCtor) {

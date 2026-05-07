@@ -69,7 +69,7 @@ class OtlpHttpExporterBase {
   /**
    * Sends the payload via HTTP request.
    * @param {Buffer|string} payload - The payload to send
-   * @param {Function} resultCallback - Callback for the result
+   * @param {(...args: unknown[]) => unknown} resultCallback - Callback for the result
    * @protected
    */
   sendPayload (payload, resultCallback) {

@@ -171,7 +171,7 @@ function isReporterPackageNewest (vitestPackage) {
  * Minified export keys change across versions, so we search by function/class name.
  * @param {object} pkg - The module exports object
  * @param {string} name - The `.name` value to look for
- * @returns {{ key: string, value: Function } | undefined}
+ * @returns {{ key: string, value: (...args: unknown[]) => unknown } | undefined}
  */
 function findExportByName (pkg, name) {
   for (const [key, value] of Object.entries(pkg)) {
@@ -283,8 +283,8 @@ function recordFinalAttemptToFixExecution (task, status, providedContext) {
 /**
  * Wraps a function so it runs inside the current test span context.
  * @param {object} task
- * @param {Function} fn
- * @returns {Function}
+ * @param {(...args: unknown[]) => unknown} fn
+ * @returns {(...args: unknown[]) => unknown}
  */
 function wrapTestScopedFn (task, fn) {
   return shimmer.wrapFunction(fn, fn => function () {

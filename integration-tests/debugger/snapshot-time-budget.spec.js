@@ -199,7 +199,7 @@ describe('Dynamic Instrumentation', function () {
  * @param {number} [config.maxPausedTime] - Optional maximum pause time in ms (skips timing assertion if not provided)
  * @param {number} config.breakpointIndex - Index of the breakpoint to test
  * @param {number} config.maxReferenceDepth - Maximum reference depth for snapshot
- * @param {Function} [assertFn] - Optional assertion function for the snapshot locals
+ * @param {(...args: unknown[]) => unknown} [assertFn] - Optional assertion function for the snapshot locals
  */
 function test ({ t, maxPausedTime, breakpointIndex, maxReferenceDepth }, assertFn) {
   const breakpoint = t.breakpoints[breakpointIndex]

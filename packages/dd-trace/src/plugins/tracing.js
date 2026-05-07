@@ -110,7 +110,7 @@ class TracingPlugin extends Plugin {
 
   /**
    * @param {string} eventName
-   * @param {Function} handler
+   * @param {(...args: unknown[]) => unknown} handler
    */
   addTraceSub (eventName, handler) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
@@ -119,7 +119,7 @@ class TracingPlugin extends Plugin {
 
   /**
    * @param {string} eventName
-   * @param {Function} transform
+   * @param {(...args: unknown[]) => unknown} transform
    */
   addTraceBind (eventName, transform) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`

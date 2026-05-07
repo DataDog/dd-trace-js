@@ -27,7 +27,7 @@ const patchDatadogLambdaModule = (datadogLambdaModule) => {
  * Datadog instrumentation by getting the Lambda handler from its
  * arguments.
  *
- * @param {Function} datadogHandler the Datadog Lambda handler to destructure.
+ * @param {(...args: unknown[]) => unknown} datadogHandler the Datadog Lambda handler to destructure.
  * @returns the datadogHandler with its arguments patched.
  */
 function patchDatadogLambdaHandler (datadogHandler) {
@@ -51,7 +51,7 @@ const patchLambdaModule = (handlerPath) => (lambdaModule) => {
 /**
  * Patches a Lambda handler in order to do Datadog instrumentation.
  *
- * @param {Function} lambdaHandler the Lambda handler to be patched.
+ * @param {(...args: unknown[]) => unknown} lambdaHandler the Lambda handler to be patched.
  * @returns a function which patches the given Lambda handler.
  */
 function patchLambdaHandler (lambdaHandler) {

@@ -123,7 +123,7 @@ class RemoteConfig {
    * It **implies subscription** (equivalent to calling `subscribeProducts(product)`).
    *
    * @param {string} product
-   * @param {Function} handler
+   * @param {(...args: unknown[]) => unknown} handler
    */
   setProductHandler (product, handler) {
     this.#handlers.set(product, handler)
@@ -201,7 +201,7 @@ class RemoteConfig {
   /**
    * Remove a previously-registered batch handler.
    *
-   * @param {Function} handler
+   * @param {(...args: unknown[]) => unknown} handler
    */
   removeBatchHandler (handler) {
     this.#batchHandlers.delete(handler)

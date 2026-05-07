@@ -16,7 +16,7 @@ const SMITHY_HOOK = globalThis[Symbol.for('_ddtrace_instrumentations')]['@smithy
  * @param {string} serviceId Suffix the wrapper feeds into the channel-name
  *   lookup; pick a unique one per test to keep diagnostic-channel state
  *   isolated.
- * @returns {Function}
+ * @returns {(...args: unknown[]) => unknown}
  */
 function makeFakeClientClass (serviceId) {
   class FakeClient {

@@ -141,7 +141,8 @@ function resolveClientDbConfig (clientConfig, datasourceName, runtimeDbConfig) {
  */
 const prismaHook = (runtime, versions, isIitm) => {
   /**
-   * @typedef {{ getPrismaClient?: (config: PrismaRuntimeConfig, ...args: unknown[]) => Function }} PrismaRuntime
+   * @typedef {(...args: unknown[]) => unknown} Callable
+   * @typedef {{ getPrismaClient?: (config: PrismaRuntimeConfig, ...args: unknown[]) => Callable }} PrismaRuntime
    */
   const prismaRuntime = /** @type {PrismaRuntime} */ (runtime)
   const originalGetPrismaClient = prismaRuntime.getPrismaClient

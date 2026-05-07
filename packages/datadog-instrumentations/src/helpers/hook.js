@@ -26,13 +26,13 @@ function getVersion (moduleBaseDir) {
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {object} hookOptions hook options
- * @param {Function} onrequire callback to be executed upon encountering module
+ * @param {(...args: unknown[]) => unknown} onrequire callback to be executed upon encountering module
  */
 /**
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {object} hookOptions hook options
- * @param {Function} onrequire callback to be executed upon encountering module
+ * @param {(...args: unknown[]) => unknown} onrequire callback to be executed upon encountering module
  */
 function Hook (modules, hookOptions, onrequire) {
   // TODO: Rewrite this to use class syntax. The same should be done for ritm.

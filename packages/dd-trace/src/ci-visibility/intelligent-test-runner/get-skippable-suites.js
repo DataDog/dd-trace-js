@@ -82,7 +82,7 @@ function getSkippableSuites ({
  * @param {object} [params.custom]
  * @param {string} [params.testLevel]
  * @param {string | null} params.cacheKey
- * @param {Function} done
+ * @param {(...args: unknown[]) => unknown} done
  */
 function fetchFromApi ({
   url,

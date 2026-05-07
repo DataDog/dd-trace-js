@@ -28,7 +28,7 @@ const UPLOAD_TIMEOUT_MS = 30_000
  * @param {URL} options.url - The base URL for the coverage report upload
  * @param {boolean} [options.isEvpProxy] - Whether to use EVP proxy for the upload
  * @param {string} [options.evpProxyPrefix] - The EVP proxy prefix (e.g., '/evp_proxy/v4')
- * @param {Function} callback - Callback function (err)
+ * @param {(...args: unknown[]) => unknown} callback - Callback function (err)
  */
 function uploadCoverageReport (
   { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },

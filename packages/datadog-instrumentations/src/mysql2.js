@@ -6,7 +6,7 @@ const shimmer = require('../../datadog-shimmer')
 const satisfies = require('../../../vendor/dist/semifies')
 const { channel, addHook } = require('./helpers/instrument')
 
-/** @type {WeakMap<object, Function>} */
+/** @type {WeakMap<object, (...args: unknown[]) => unknown>} */
 const wrappedOnResult = new WeakMap()
 
 /**
@@ -18,9 +18,9 @@ function resolveSqlString (sql) {
 }
 
 /**
- * @param {Function} Connection
+ * @param {(...args: unknown[]) => unknown} Connection
  * @param {string} version
- * @returns {Function}
+ * @returns {(...args: unknown[]) => unknown}
  */
 function wrapConnection (Connection, version) {
   const startCh = channel('apm:mysql2:query:start')
@@ -35,7 +35,7 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
 
-    const command = /** @type {{ execute?: Function, constructor?: { name?: string } }} */ (cmd)
+    const command = /** @type {{ execute?: (...args: unknown[]) => unknown, constructor?: { name?: string } }} */ (cmd)
     if (typeof command.execute !== 'function') return addCommand.apply(this, arguments)
 
     const name = command.constructor?.name
@@ -155,10 +155,10 @@ function wrapConnection (Connection, version) {
 
   /**
    * @param {object} cmd
-   * @param {Function} execute
+   * @param {(...args: unknown[]) => unknown} execute
    * @param {object} ctx
    * @param {object} config
-   * @returns {Function}
+   * @returns {(...args: unknown[]) => unknown}
    */
   function wrapExecute (cmd, execute, ctx, config) {
     return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
@@ -184,7 +184,7 @@ function wrapConnection (Connection, version) {
             finishCh.runStores(ctx, onResult, this, ...arguments)
           })
         } else {
-          const command = /** @type {{ once?: Function }} */ (this)
+          const command = /** @type {{ once?: (...args: unknown[]) => unknown }} */ (this)
           if (typeof command.once === 'function') {
             command.once(errorMonitor, error => {
               ctx.error = error
@@ -207,9 +207,9 @@ function wrapConnection (Connection, version) {
   }
 }
 /**
- * @param {Function} Pool
+ * @param {(...args: unknown[]) => unknown} Pool
  * @param {string} version
- * @returns {Function}
+ * @returns {(...args: unknown[]) => unknown}
  */
 function wrapPool (Pool, version) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
@@ -269,7 +269,7 @@ function wrapPool (Pool, version) {
 
       if (typeof cb === 'function') {
         process.nextTick(() => {
-          /** @type {Function} */ (cb)(abortController.signal.reason)
+          /** @type {(...args: unknown[]) => unknown} */ (cb)(abortController.signal.reason)
         })
       }
       return
@@ -282,8 +282,8 @@ function wrapPool (Pool, version) {
 }
 
 /**
- * @param {Function} PoolCluster
- * @returns {Function}
+ * @param {(...args: unknown[]) => unknown} PoolCluster
+ * @returns {(...args: unknown[]) => unknown}
  */
 function wrapPoolCluster (PoolCluster) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
@@ -341,7 +341,7 @@ function wrapPoolCluster (PoolCluster) {
 
           if (typeof cb === 'function') {
             process.nextTick(() => {
-              /** @type {Function} */ (cb)(abortController.signal.reason)
+              /** @type {(...args: unknown[]) => unknown} */ (cb)(abortController.signal.reason)
             })
           }
 

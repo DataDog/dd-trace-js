@@ -1,6 +1,10 @@
 'use strict'
 
 /**
+ * @typedef {(...args: unknown[]) => unknown} Callable
+ */
+
+/**
  * @type {Set<string | symbol>}
  */
 const skipMethods = new Set([
@@ -16,8 +20,8 @@ const nonConfigurableModuleExports = new WeakMap()
 /**
  * Copies properties from the original function to the wrapped function.
  *
- * @param {Function} original - The original function.
- * @param {Function} wrapped - The wrapped function.
+ * @param {Callable} original - The original function.
+ * @param {Callable} wrapped - The wrapped function.
  */
 function copyProperties (original, wrapped) {
   if (original.constructor !== wrapped.constructor) {
@@ -68,9 +72,9 @@ function copyObjectProperties (original, wrapped, skipKey) {
 /**
  * Wraps a function with a wrapper function.
  *
- * @param {Function} original - The original function to wrap.
- * @param {(original: Function) => Function} wrapper - The wrapper function.
- * @returns {Function} The wrapped function.
+ * @param {Callable} original - The original function to wrap.
+ * @param {(original: Callable) => Callable} wrapper - The wrapper function.
+ * @returns {Callable} The wrapped function.
  */
 function wrapFunction (original, wrapper) {
   if (typeof original !== 'function') return original
@@ -85,16 +89,16 @@ function wrapFunction (original, wrapper) {
 /**
  * Wraps a method of an object with a wrapper function.
  *
- * @param {Record<string | symbol, unknown> | Function | undefined} target - The target
+ * @param {Record<string | symbol, unknown> | Callable | undefined} target - The target
  * object.
  * @param {string | symbol} name - The property key of the method to wrap.
- * @param {(original: Function) => (...args: unknown[]) => unknown} wrapper - The wrapper function.
+ * @param {(original: Callable) => (...args: unknown[]) => unknown} wrapper - The wrapper function.
  * @param {{ replaceGetter?: boolean }} [options] - If `replaceGetter` is set to
  * true, the getter is accessed and the getter is replaced with one that just
  * returns the earlier retrieved value. Use with care! This may only be done in
  * case the getter absolutely has no side effect and no setter is defined for the
  * property.
- * @returns {Record<string | symbol, unknown> | Function | undefined} The target object with
+ * @returns {Record<string | symbol, unknown> | Callable | undefined} The target object with
  * the wrapped method.
  */
 function wrap (target, name, wrapper, options) {
@@ -207,11 +211,11 @@ function wrap (target, name, wrapper, options) {
  * Wraps multiple methods and or multiple objects with a wrapper function.
  * May also receive a single method or object or a single method name.
  *
- * @param {Array<Record<string | symbol, unknown> | Function> |
+ * @param {Array<Record<string | symbol, unknown> | Callable> |
  *         Record<string | symbol, unknown> |
- *         Function} targets - The target objects.
+ *         Callable} targets - The target objects.
  * @param {Array<string | symbol> | string | symbol} names - The property keys of the methods to wrap.
- * @param {(original: Function) => (...args: unknown[]) => unknown} wrapper - The wrapper function.
+ * @param {(original: Callable) => (...args: unknown[]) => unknown} wrapper - The wrapper function.
  */
 function massWrap (targets, names, wrapper) {
   targets = toArray(targets)
@@ -238,7 +242,7 @@ function toArray (maybeArray) {
 /**
  * Asserts that a method is a function.
  *
- * @param {Record<string | symbol, unknown> | Function} target - The target object.
+ * @param {Record<string | symbol, unknown> | Callable} target - The target object.
  * @param {string | symbol} name - The property key of the method.
  * @param {unknown} method - The method to assert.
  * @throws {Error} If the method is not a function.
@@ -263,7 +267,7 @@ function assertMethod (target, name, method) {
 /**
  * Asserts that a target is not a class constructor.
  *
- * @param {Function} target - The target function.
+ * @param {Callable} target - The target function.
  * @throws {Error} If the target is a class constructor.
  */
 function assertNotClass (target) {

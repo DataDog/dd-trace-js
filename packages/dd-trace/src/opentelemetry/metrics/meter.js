@@ -53,7 +53,7 @@ class Meter {
    *
    * @param {string} name - Instrument name (will be normalized to lowercase)
    * @param {string} type - Instrument type (e.g., 'counter', 'histogram', 'gauge')
-   * @param {Function} InstrumentClass - Constructor for the instrument type
+   * @param {(...args: unknown[]) => unknown} InstrumentClass - Constructor for the instrument type
    * @param {MetricOptions} [options] - Instrument options (description, unit, etc.)
    * @returns {Instrument} The instrument instance (new or cached)
    */
@@ -150,7 +150,7 @@ class Meter {
   /**
    * Adds a batch observable callback (not implemented).
    *
-   * @param {Function} callback - Batch observable callback
+   * @param {(...args: unknown[]) => unknown} callback - Batch observable callback
    * @param {Array} observables - Array of observable instruments
    */
   addBatchObservableCallback (callback, observables) {
@@ -160,7 +160,7 @@ class Meter {
   /**
    * Removes a batch observable callback (not implemented).
    *
-   * @param {Function} callback - Batch observable callback
+   * @param {(...args: unknown[]) => unknown} callback - Batch observable callback
    * @param {Array} observables - Array of observable instruments
    */
   removeBatchObservableCallback (callback, observables) {

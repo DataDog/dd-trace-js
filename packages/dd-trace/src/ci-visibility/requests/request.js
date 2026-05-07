@@ -43,7 +43,7 @@ function parseUrl (urlObjOrString) {
  *
  * @param {string} data - Request body (e.g. JSON string)
  * @param {object} options - { url, path?, method?, headers?, timeout? } (may be mutated)
- * @param {Function} callback - (err, res, statusCode) => void
+ * @param {(...args: unknown[]) => unknown} callback - (err, res, statusCode) => void
  */
 function request (data, options, callback) {
   const headers = options.headers ? { ...options.headers } : {}

@@ -88,7 +88,7 @@ function getTestManagementTests ({
  * @param {string} [params.commitHeadMessage]
  * @param {string} [params.branch]
  * @param {string | null} params.cacheKey
- * @param {Function} done
+ * @param {(...args: unknown[]) => unknown} done
  */
 function fetchFromApi ({
   url,

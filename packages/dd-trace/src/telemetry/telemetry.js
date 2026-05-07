@@ -18,7 +18,8 @@ const sessionPropagation = require('./session-propagation')
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
  */
 /**
- * @typedef {string | number | boolean | null | URL | Record<string, unknown> | unknown[] | Function} ConfigValue
+ * @typedef {string | number | boolean | null | URL | Record<string, unknown> | unknown[]
+ *   | ((...args: unknown[]) => unknown)} ConfigValue
  */
 /**
  * @typedef {{ [K in keyof processTags]: typeof processTags.tagsObject[K] }} ProcessTags

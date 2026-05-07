@@ -256,8 +256,9 @@ session.on('Debugger.paused', async ({ params }) => {
           message: error.message,
         }))
       }
+      const processLocals = /** @type {(...args: unknown[]) => unknown} */ (processLocalState)
       snapshot.captures = {
-        lines: { [probe.location.lines[0]]: { locals: /** @type {Function} */ (processLocalState)() } },
+        lines: { [probe.location.lines[0]]: { locals: processLocals() } },
       }
     } else if (probe.compiledCaptureExpressions !== undefined) {
       const expressionResult = /** @type {Map} */ (captureExpressionResults).get(probe.id)

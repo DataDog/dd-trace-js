@@ -215,8 +215,8 @@ module.exports = class FakeAgent extends EventEmitter {
    * Assert that a telemetry message is received.
    *
    * @param {object} options
-   * @param {Function} [options.fn] - Function called with each matching telemetry message. If it throws,
-   *     the error is collected and the listener stays alive for the next message. Defaults to a no-op.
+   * @param {(...args: unknown[]) => unknown} [options.fn] - Called with each matching message. If it throws, the
+   *     error is collected and the listener stays alive for the next message. Defaults to a no-op.
    * @param {string} options.requestType - The telemetry request type to match.
    * @param {number} [options.timeout=30_000] - Timeout in milliseconds before the promise rejects.
    * @param {number} [options.expectedMessageCount=1] - Number of matching messages to wait for.
