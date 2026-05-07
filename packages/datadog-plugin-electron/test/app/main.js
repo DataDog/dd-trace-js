@@ -19,9 +19,9 @@ app.on('ready', () => {
         case 'quit': return app.quit()
         case 'fetch': return onFetch(msg)
         case 'request': return onRequest(msg)
-        case 'send': return onSend(msg)
-        case 'receive': return onReceive(msg)
-        case 'handle': return onHandle(msg)
+        case 'send': return onSend()
+        case 'receive': return onReceive()
+        case 'handle': return onHandle()
       }
     } catch (e) {
       console.error(e)
