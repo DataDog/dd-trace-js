@@ -8,6 +8,8 @@
   "variants": {
     "extract-response-body": { "env": { "VARIANT": "extract-response-body" } },
     "eventbridge-inject-detail": { "env": { "VARIANT": "eventbridge-inject-detail" } },
-    "lambda-inject-no-context": { "env": { "VARIANT": "lambda-inject-no-context" } }
+    "lambda-inject-no-context": { "env": { "VARIANT": "lambda-inject-no-context" } },
+    "add-response-tags": { "env": { "VARIANT": "add-response-tags" } },
+    "bedrock-extract-text": { "env": { "VARIANT": "bedrock-extract-text" } }
   }
 }
