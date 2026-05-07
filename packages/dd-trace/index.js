@@ -30,9 +30,10 @@ if (!global._ddtrace) {
     configurable: true,
     writable: true,
   })
-
-  global._ddtrace.default = global._ddtrace
-  global._ddtrace.tracer = global._ddtrace
 }
 
 module.exports = global._ddtrace
+// Static aliases so cjs-module-lexer surfaces them as ESM named exports
+// (`import { tracer } from 'dd-trace'`).
+module.exports.tracer = global._ddtrace
+module.exports.default = global._ddtrace

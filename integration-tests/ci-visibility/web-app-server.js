@@ -6,7 +6,10 @@ const coverage = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 
 function createWebAppServer () {
   const server = http.createServer((req, res) => {
+    // Close after each response so browser drivers don't reuse a socket the
+    // server has already FIN'd between requests (keep-alive race → `socket hang up`).
     res.setHeader('Content-Type', 'text/html')
+    res.setHeader('Connection', 'close')
     res.writeHead(200)
     res.end(`
       <!DOCTYPE html>
@@ -32,23 +35,12 @@ function createWebAppServer () {
     `)
   })
 
-  // Increase connection backlog to handle multiple concurrent connections
-  server.maxConnections = 100
-
-  // Set keep-alive timeout (default is 5000ms, increase for stability)
-  server.keepAliveTimeout = 10000
-
-  // Set headers timeout (should be higher than keepAliveTimeout)
-  server.headersTimeout = 12000
-
-  // Handle server errors gracefully
-  server.on('error', (err) => {
+  server.on('error', (error) => {
     // eslint-disable-next-line no-console
-    console.error('Web app server error:', err)
+    console.error('Web app server error:', error)
   })
 
-  // Handle client errors gracefully
-  server.on('clientError', (err, socket) => {
+  server.on('clientError', (error, socket) => {
     if (socket.writable) {
       socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
     }
@@ -57,7 +49,5 @@ function createWebAppServer () {
   return server
 }
 
-// For backward compatibility, export a default instance
 module.exports = createWebAppServer()
-// Also export the factory function for creating fresh instances
 module.exports.createWebAppServer = createWebAppServer

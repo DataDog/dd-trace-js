@@ -39,7 +39,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
     metrics.disable()
     const config = getConfigFresh()
-    if (config.otelMetricsEnabled) {
+    if (config.DD_METRICS_OTEL_ENABLED) {
       const { initializeOpenTelemetryMetrics } =
         proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
       initializeOpenTelemetryMetrics(config)

@@ -41,8 +41,8 @@ describe('EvalMetricsHook', () => {
     })
   })
 
-  function makeConfig (otelMetricsEnabled = true) {
-    return { otelMetricsEnabled }
+  function makeConfig (DD_METRICS_OTEL_ENABLED = true) {
+    return { DD_METRICS_OTEL_ENABLED }
   }
 
   function hookContext (flagKey = 'flag') {

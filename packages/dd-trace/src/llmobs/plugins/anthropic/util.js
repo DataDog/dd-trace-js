@@ -3,6 +3,7 @@
 /**
  * @typedef {{type: 'text', text: string}} TextBlock
  * @typedef {{type: 'image'}} ImageBlock
+ * @typedef {{type: 'thinking', thinking: string, signature?: string}} ThinkingBlock
  * @typedef {{
  *  type: 'tool_use', text: string, name: string, id: string, input: string | Record<string, unknown>
  * }} ToolUseBlock
@@ -70,6 +71,8 @@ function appendMessage (messages, { role, content }) {
       messages.push({ content: block.text, role })
     } else if (block.type === 'image') {
       messages.push({ content: '([IMAGE DETECTED])', role })
+    } else if (block.type === 'thinking') {
+      messages.push({ content: block.thinking ?? '', role: 'reasoning' })
     } else if (block.type === 'tool_use') {
       const { text, name, id, type } = block
       let input = block.input

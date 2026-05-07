@@ -57,30 +57,47 @@ function readPluginMap () {
 }
 
 /**
- * Trigger every instrumentation referenced by `helpers/hooks.js` so each file's
- * top-level `addHook(...)` calls populate the shared registry, then collect the
- * union of declared version ranges per dependency. Orchestrion-js entries flow
- * through here too (each instrumentation forwards `getHooks(name)` to `addHook`).
- *
+ * @param {{ min: string, maxMajor: number | undefined }} engines
  * @returns {Map<string, Set<string>>}
  */
-function readInstrumentationRanges () {
-  const registry = require(INSTRUMENTATION_REGISTRY)
-  for (const value of Object.values(require(INSTRUMENTATION_HOOKS))) {
-    const fn = typeof value === 'function' ? value : value.fn
-    fn?.()
-  }
+function readInstrumentationRanges (engines) {
+  const profiles = new Set()
+  if (engines.min) profiles.add(engines.min)
+  if (engines.maxMajor !== undefined) profiles.add(`${engines.maxMajor}.0.0`)
 
+  const registry = require(INSTRUMENTATION_REGISTRY)
+  const hookFactories = Object.values(require(INSTRUMENTATION_HOOKS))
   const ranges = new Map()
-  for (const [name, entries] of Object.entries(registry)) {
-    const set = new Set()
-    for (const { versions } of entries) {
-      if (!Array.isArray(versions)) continue
-      for (const range of versions) {
-        if (range) set.add(range)
+
+  for (const profile of profiles) {
+    Object.defineProperty(process.versions, 'node', { value: profile, configurable: true })
+
+    // `helpers/instrument.js` closes over the registry reference, so reset
+    // the registry in place; drop the other instrumentation sources so they
+    // re-execute and re-evaluate `MIN_VERSION` under the simulated Node.
+    for (const key of Object.keys(registry)) delete registry[key]
+    for (const cached of Object.keys(require.cache)) {
+      if ((cached.includes('/datadog-instrumentations/src/') && !cached.includes('/helpers/')) ||
+          cached.endsWith('/version.js')) {
+        delete require.cache[cached]
       }
     }
-    if (set.size > 0) ranges.set(name, set)
+
+    for (const value of hookFactories) {
+      const factory = typeof value === 'function' ? value : value.fn
+      factory?.()
+    }
+
+    for (const [name, entries] of Object.entries(registry)) {
+      const set = ranges.get(name) ?? new Set()
+      for (const { versions } of entries) {
+        if (!Array.isArray(versions)) continue
+        for (const range of versions) {
+          if (range) set.add(range)
+        }
+      }
+      if (set.size > 0) ranges.set(name, set)
+    }
   }
   return ranges
 }
@@ -184,9 +201,9 @@ function toCsv (rows) {
 
 async function generateSupportedIntegrations () {
   const plugins = readPluginMap()
-  const ranges = readInstrumentationRanges()
-  const versions = JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies ?? {}
   const engines = parseEnginesRange(JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8')).engines.node)
+  const ranges = readInstrumentationRanges(engines)
+  const versions = JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies ?? {}
 
   const max = engines.maxMajor === undefined
     ? ''

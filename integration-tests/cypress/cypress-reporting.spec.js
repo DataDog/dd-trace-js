@@ -46,7 +46,9 @@ const {
 } = require('../../packages/datadog-plugin-cypress/src/source-map-utils')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
@@ -69,12 +71,12 @@ function compilePrecompiledTypeScriptSpecs (cwd, env) {
  */
 function configureCypressTypeScriptCompilation (cwd) {
   // Cypress's webpack preprocessor resolves TypeScript config from the spec directory.
+  // Cypress sets inlineSourceMap itself, so setting sourceMap here breaks Cypress 12.
   const tsconfig = {
     compilerOptions: {
       rootDir: '.',
       target: 'ES2020',
       module: 'commonjs',
-      sourceMap: true,
       skipLibCheck: true,
     },
   }
@@ -94,7 +96,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -104,9 +109,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -302,7 +307,7 @@ moduleTypes.forEach(({
       ])
     })
 
-    if (version === '6.7.0') {
+    if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
       it('logs a warning if using a deprecated version of cypress', async () => {
         let stdout = ''
         const {
@@ -331,7 +336,7 @@ moduleTypes.forEach(({
         ])
         assert.match(
           stdout,
-          /WARNING: dd-trace support for Cypress<10.2.0 is deprecated/
+          /WARNING: dd-trace support for Cypress<12.0.0 is deprecated/
         )
       })
     }
@@ -1465,7 +1470,7 @@ moduleTypes.forEach(({
           assert.ok(jsInvocationDetailsEvent, 'plain-js invocationDetails test event should exist')
           assert.strictEqual(
             jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START],
-            244,
+            243,
             'should keep invocationDetails line directly for plain JS specs without source maps'
           )
           assert.ok(

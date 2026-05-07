@@ -22,7 +22,7 @@ const propagator = new TextMapPropagator({
   baggageMaxBytes: 8192,
   tagsHeaderMaxLength: 512,
   tracePropagationExtractFirst: false,
-  tracePropagationBehaviorExtract: 'continue',
+  DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
   baggageTagKeys: ['user.id', 'session.id', 'account.id'],
 })
 

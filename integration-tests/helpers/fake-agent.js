@@ -178,6 +178,7 @@ module.exports = class FakeAgent extends EventEmitter {
     const errors = []
 
     const timeoutObj = setTimeout(() => {
+      this.removeListener('message', messageHandler)
       const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
@@ -276,6 +277,55 @@ module.exports = class FakeAgent extends EventEmitter {
     this.on('telemetry', messageHandler)
 
     return resultPromise
+  }
+
+  /**
+   * Collect span groups matching a predicate after firing a trigger.
+   *
+   * Attaches the listener before invoking `trigger`, so events emitted between request
+   * dispatch and listener registration are not missed.
+   *
+   * @param {object} options
+   * @param {() => Promise<unknown>} options.trigger Fired once the listener is in place.
+   * @param {(group: object[]) => boolean} options.predicate Group-level filter.
+   * @param {number} [options.expectedCount=1] Resolve after this many matching groups arrive.
+   * @param {number} [options.timeout=30_000] Timeout in milliseconds before the promise rejects.
+   * @returns {Promise<object[][]>} The matching groups, in arrival order.
+   */
+  collectGroups ({ trigger, predicate, expectedCount = 1, timeout = 30_000 }) {
+    const groups = []
+    let resolveResult
+    let rejectResult
+
+    const handler = ({ payload }) => {
+      for (const group of payload) {
+        if (predicate(group)) groups.push(group)
+      }
+      if (groups.length >= expectedCount) resolveResult(groups)
+    }
+
+    const timeoutObj = setTimeout(() => {
+      rejectResult(new Error(
+        `timed out waiting for ${expectedCount} matching span groups, got ${groups.length}`
+      ))
+    }, timeout)
+
+    const result = /** @type {Promise<object[][]>} */ (new Promise((resolve, reject) => {
+      resolveResult = (value) => {
+        clearTimeout(timeoutObj)
+        this.removeListener('message', handler)
+        resolve(value)
+      }
+      rejectResult = (error) => {
+        clearTimeout(timeoutObj)
+        this.removeListener('message', handler)
+        reject(error)
+      }
+    }))
+
+    this.on('message', handler)
+    trigger().catch(rejectResult)
+    return result
   }
 
   assertLlmObsPayloadReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {

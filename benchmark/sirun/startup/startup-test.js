@@ -56,7 +56,6 @@ if (Number(process.env.EVERYTHING)) {
     'nyc',
     'octokit',
     'opentracing',
-    'path-to-regexp',
     'pprof-format',
     'protobufjs',
     'proxyquire',

@@ -31,7 +31,9 @@ const {
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
@@ -42,7 +44,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -52,9 +57,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -481,6 +486,7 @@ moduleTypes.forEach(({
 
     it('correctly calculates test code owners when working directory is not repository root', async () => {
       let command
+      let testOutput = ''
 
       if (type === 'commonJS') {
         const commandSuffix = version === '6.7.0'
@@ -497,13 +503,27 @@ moduleTypes.forEach(({
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const test = events.find(event => event.type === 'test').content
-          const testSuite = events.find(event => event.type === 'test_suite_end').content
+          const testEvent = events.find(event => event.type === 'test')
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+          const eventSummary = JSON.stringify(events.map(event => ({
+            type: event.type,
+            resource: event.content.resource,
+            status: event.content.meta?.[TEST_STATUS],
+          })), null, 2)
+
+          assert.ok(testEvent, `expected a test event, got events: ${eventSummary}\nCypress output:\n${testOutput}`)
+          assert.ok(
+            testSuiteEvent,
+            `expected a test_suite_end event, got events: ${eventSummary}\nCypress output:\n${testOutput}`
+          )
+
+          const test = testEvent.content
+          const testSuite = testSuiteEvent.content
           // The test is in a subproject
           assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
           assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-        }, 25000)
+        }, 60000)
 
       childProcess = exec(
         command,
@@ -515,11 +535,18 @@ moduleTypes.forEach(({
           },
         }
       )
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
 
-      await Promise.all([
+      const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise,
       ])
+      assert.strictEqual(exitCode, 0, `cypress process should exit successfully\nCypress output:\n${testOutput}`)
     })
 
     it('tags new tests with dynamic names and logs a warning', async () => {

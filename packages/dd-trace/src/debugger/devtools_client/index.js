@@ -247,10 +247,6 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript',
     }
 
-    if (config.propagateProcessTags.enabled) {
-      snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
-    }
-
     if (probe.captureSnapshot) {
       if (fatalSnapshotErrors && fatalSnapshotErrors.length > 0) {
         // There was an error collecting the snapshot for this probe, let's not try again
@@ -327,7 +323,8 @@ session.on('Debugger.paused', async ({ params }) => {
 
     ackEmitting(probe)
 
-    send(message, logger, dd, snapshot)
+    send(message, logger, dd, snapshot,
+      config.propagateProcessTags.enabled ? processTags.serialized : undefined)
   }
 })
 

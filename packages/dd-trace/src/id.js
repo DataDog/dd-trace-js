@@ -7,19 +7,19 @@ const UINT_MAX = 4_294_967_296
 const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
-const map = Array.prototype.map
-const pad = byte => `${byte < 16 ? '0' : ''}${byte.toString(16)}`
-
 let batch = 0
 
 // Internal representation of a trace or span ID.
 class Identifier {
+  /** @type {number[] | Uint8Array} */
+  #buffer
+
   /**
    * @param {string} value
    * @param {number} [radix]
    */
   constructor (value, radix = 16) {
-    this._buffer = radix === 16
+    this.#buffer = radix === 16
       ? createBuffer(value)
       : fromString(value, radix)
   }
@@ -30,32 +30,32 @@ class Identifier {
    */
   toString (radix = 16) {
     return radix === 16
-      ? toHexString(this._buffer)
-      : toNumberString(this._buffer, radix)
+      ? Buffer.from(this.#buffer).toString('hex')
+      : toNumberString(this.#buffer, radix)
   }
 
   /**
    * @returns {bigint}
    */
   toBigInt () {
-    return Buffer.from(this._buffer).readBigUInt64BE(0)
+    return Buffer.from(this.#buffer).readBigUInt64BE(0)
   }
 
   /**
    * @returns {number[] | Uint8Array}
    */
   toBuffer () {
-    return this._buffer
+    return this.#buffer
   }
 
   /**
    * @returns {number[] | Uint8Array}
    */
   toArray () {
-    if (this._buffer.length === 8) {
-      return this._buffer
+    if (this.#buffer.length === 8) {
+      return this.#buffer
     }
-    return this._buffer.slice(-8)
+    return this.#buffer.slice(-8)
   }
 
   /**
@@ -70,12 +70,10 @@ class Identifier {
    * @returns {boolean}
    */
   equals (other) {
-    const length = this._buffer.length
-    const otherLength = other._buffer.length
-
-    // Only compare the bytes available in both IDs.
-    for (let i = length, j = otherLength; i >= 0 && j >= 0; i--, j--) {
-      if (this._buffer[i] !== other._buffer[j]) return false
+    // Big-endian suffix compare: when buffers differ in length, only the
+    // rightmost `min(this.length, other.length)` bytes are checked.
+    for (let i = this.#buffer.length - 1, j = other.#buffer.length - 1; i >= 0 && j >= 0; i--, j--) {
+      if (this.#buffer[i] !== other.#buffer[j]) return false
     }
 
     return true
@@ -172,15 +170,6 @@ function toNumberString (buffer, radix) {
   }
 
   return str
-}
-
-// Convert a buffer to a hexadecimal string.
-/**
- * @param {number[] | Uint8Array} buffer
- * @returns {string}
- */
-function toHexString (buffer) {
-  return map.call(buffer, pad).join('')
 }
 
 // Simple pseudo-random 64-bit ID generator.

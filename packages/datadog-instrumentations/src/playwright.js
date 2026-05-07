@@ -12,7 +12,9 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
@@ -76,9 +78,11 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
+let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -290,6 +294,32 @@ function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
 
+function getFinalStatus ({
+  isFinalExecution,
+  isDisabled,
+  isQuarantined,
+  isAtrRetry,
+  isEfdManagedTest,
+  isAttemptToFix,
+  hasFailedAllRetries,
+  hasFailedAttemptToFixRetries,
+  testStatus,
+}) {
+  if (!isFinalExecution) {
+    return
+  }
+  if (isDisabled || isQuarantined || testStatus === 'skip') {
+    return 'skip'
+  }
+  if (isAtrRetry || isEfdManagedTest) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isAttemptToFix) {
+    return hasFailedAttemptToFixRetries ? 'fail' : 'pass'
+  }
+  return testStatus
+}
+
 function getTestFullname (test) {
   let parent = test.parent
   const names = [test.title]
@@ -337,6 +367,11 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   // We disable retries by default if attemptToFix is true
   if (getTestProperties(test).attemptToFix) {
     test.retries = 0
+    logAttemptToFixTestExecution(
+      getTestSuitePath(testSuiteAbsolutePath, rootDir),
+      getTestFullname(test),
+      loggedAttemptToFixTests
+    )
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)
@@ -399,6 +434,20 @@ function testEndHandler ({
 
   const testProperties = getTestProperties(test)
 
+  if (testProperties.attemptToFix) {
+    test._ddHasFailedAttemptToFixRetries = false
+    test._ddHasFailedAllRetries = false
+    test._ddHasPassedAttemptToFixRetries = false
+
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: getTestSuitePath(test._requireFile, rootDir),
+      testName: getTestFullname(test),
+      status: testStatus,
+      isDisabled: testProperties.disabled,
+      isQuarantined: testProperties.quarantined,
+    })
+  }
+
   if (testStatuses.length === testManagementAttemptToFixRetries + 1 && testProperties.attemptToFix) {
     if (testStatuses.includes('fail')) {
       test._ddHasFailedAttemptToFixRetries = true
@@ -431,10 +480,26 @@ function testEndHandler ({
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
+    const isEfdManagedTest = (test._ddIsNew || test._ddIsModified) &&
+      !test._ddIsAttemptToFix &&
+      isEarlyFlakeDetectionEnabled
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
+
+    const finalStatus = getFinalStatus({
+      isFinalExecution: !testWillRetry(test, testStatus),
+      isDisabled: test._ddIsDisabled,
+      isQuarantined: test._ddIsQuarantined,
+      isAtrRetry,
+      isEfdManagedTest,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      testStatus,
+    })
+
     // if there is no testCtx, the skipped test will be created later
     if (testCtx) {
       testFinishCh.publish({
@@ -454,6 +519,7 @@ function testEndHandler ({
         hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
         isAtrRetry,
         isModified: test._ddIsModified,
+        finalStatus,
         ...testCtx.currentStore,
       })
     }
@@ -596,12 +662,16 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const test = getTestByTestId(dispatcher, testId)
 
       const isTimeout = status === 'timedOut'
+      const testStatus = STATUS_TO_TEST_STATUS[status]
       const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+      if (shouldCreateTestSpan && !testToCtx.has(test)) {
+        testBeginHandler(test, getBrowserNameFromProjects(projects, test), true)
+      }
       testEndHandler(
         {
           test,
           annotations,
-          testStatus: STATUS_TO_TEST_STATUS[status],
+          testStatus,
           error: errors && errors[0],
           isTimeout,
           shouldCreateTestSpan,
@@ -613,6 +683,27 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
         isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
+
+      // EFD retries (new or modified tests) are implemented as clones with retries=0,
+      // so testWillRetry always returns false for them. Instead, we track how many
+      // executions have been reported via testsToTestStatuses (updated by testEndHandler
+      // above) and mark the execution final once the count reaches the expected total.
+      // This mirrors how ATF finality is detected and centralizes the decision in the
+      // main process, so workers only need to act on the _ddIsFinalExecution flag.
+      const isEfdManagedTest = (test._ddIsNew || test._ddIsModified) &&
+        !test._ddIsAttemptToFix &&
+        isEarlyFlakeDetectionEnabled
+      let isFinalExecution
+      if (isEfdManagedTest) {
+        const testFqn = getTestFullyQualifiedName(test)
+        const efdTestStatuses = testsToTestStatuses.get(testFqn) || []
+        isFinalExecution = efdTestStatuses.length === earlyFlakeDetectionNumRetries + 1
+      } else if (test._ddIsAttemptToFix) {
+        isFinalExecution = !!(test._ddHasPassedAttemptToFixRetries || test._ddHasFailedAttemptToFixRetries)
+      } else {
+        isFinalExecution = !testWillRetry(test, testStatus)
+      }
+
       // We want to send the ddProperties to the worker
       worker.process.send({
         type: 'ddProperties',
@@ -629,6 +720,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
           _ddIsAtrRetry: isAtrRetry,
           _ddIsModified: test._ddIsModified,
+          _ddIsFinalExecution: isFinalExecution,
+          _ddIsEfdManagedTest: isEfdManagedTest,
         },
       })
     })
@@ -746,15 +839,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
+        const alreadyReported = testsReportedInGenerateSummary.has(test)
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser, true)
+        testBeginHandler(test, browser, !alreadyReported)
         testEndHandler({
           test,
           annotations: [],
           testStatus: 'skip',
           error: null,
           isTimeout: false,
-          shouldCreateTestSpan: true,
+          shouldCreateTestSpan: !alreadyReported,
           projects,
         })
       }
@@ -766,7 +860,6 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
       let totalFailedTestCount = 0
-      let totalAttemptToFixFailedTestCount = 0
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
@@ -780,16 +873,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         }
       }
 
-      for (const test of quarantinedOrDisabledTestsAttemptToFix) {
-        const testFqn = getTestFullyQualifiedName(test)
-        const testStatuses = testsToTestStatuses.get(testFqn)
-        // Only count as failed if the final status (after retries) is 'fail'
-        if (testStatuses && testStatuses[testStatuses.length - 1] === 'fail') {
-          totalAttemptToFixFailedTestCount += 1
-        }
-      }
-
-      const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
+      const totalIgnorableFailures = totalPureQuarantinedFailedTestCount
 
       if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
@@ -797,7 +881,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    logDynamicNamesWarning(newTestsWithDynamicNames)
+    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    loggedAttemptToFixTests.clear()
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
@@ -814,6 +899,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
     quarantinedButNotAttemptToFixFqns = new Set()
+    testsReportedInGenerateSummary = new Set()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -974,9 +1060,6 @@ addHook({
 
           if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {
             fileSuitesWithManagedTestsToProjects.set(fileSuite, getSuiteType(test, 'project'))
-          }
-          if (testProperties.disabled || testProperties.quarantined) {
-            quarantinedOrDisabledTestsAttemptToFix.push(test)
           }
         }
       }
@@ -1275,6 +1358,18 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
+    const finalStatus = getFinalStatus({
+      isFinalExecution: test._ddIsFinalExecution,
+      isDisabled: test._ddIsDisabled,
+      isQuarantined: test._ddIsQuarantined,
+      isAtrRetry: test._ddIsAtrRetry,
+      isEfdManagedTest: test._ddIsEfdManagedTest,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      testStatus: STATUS_TO_TEST_STATUS[status],
+    })
+
     testFinishCh.publish({
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
@@ -1294,6 +1389,7 @@ addHook({
       isAtrRetry: test._ddIsAtrRetry,
       isModified: test._ddIsModified,
       onDone,
+      finalStatus,
       ...testCtx.currentStore,
     })
 
@@ -1334,7 +1430,8 @@ function generateSummaryWrapper (generateSummary) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
       const didNotRun = test.outcome() === 'skipped' &&
         (!test.results.length || test.expectedStatus !== 'skipped')
-      if (didNotRun) {
+      if (didNotRun && !testsReportedInGenerateSummary.has(test)) {
+        testsReportedInGenerateSummary.add(test)
         const {
           _requireFile: testSuiteAbsolutePath,
           location: {

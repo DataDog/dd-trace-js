@@ -1,5 +1,7 @@
 'use strict'
 
+const { DD_MAJOR } = require('../../../../version')
+
 module.exports = {
   ai: [
     {
@@ -412,7 +414,7 @@ module.exports = {
   mocha: [
     {
       name: 'mocha',
-      versions: ['>=5.2.0', '>=8.0.0'],
+      versions: DD_MAJOR >= 6 ? ['>=8.0.0'] : ['>=5.2.0', '>=8.0.0'],
     },
     {
       name: 'mocha-each',

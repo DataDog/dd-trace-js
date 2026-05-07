@@ -24,6 +24,7 @@ env:
 jobs:
   sdk:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest

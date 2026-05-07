@@ -44,7 +44,7 @@ jobs:
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
       - id: slack
         run: echo "report=$(cat flakiness.txt)" >> $GITHUB_OUTPUT
-      - uses: slackapi/slack-github-action@03ea5433c137af7c0495bc0cad1af10403fc800c # v2.1.0
+      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
         if: github.event_name == 'schedule'
         with:
           method: chat.postMessage
