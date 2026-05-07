@@ -355,6 +355,11 @@ jobs:
     strategy:
       matrix:
         version: [oldest, latest]
+        spec:
+          - vitest.core
+          - vitest.test-management
+          - vitest.advanced
+    name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -370,6 +375,7 @@ jobs:
       - run: yarn test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
