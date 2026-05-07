@@ -392,6 +392,16 @@ function buildExpressServer (agent) {
     })
   })
 
+  app.put('/v0.5/traces', (req, res) => {
+    if (req.body.length === 0) return res.status(200).send()
+    res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+    const decoded = msgpack.decode(req.body, { useBigInt64: true })
+    agent.emit('message', {
+      headers: req.headers,
+      payload: expandV05TracePayload(decoded),
+    })
+  })
+
   app.post('/v0.7/config', (req, res) => {
     const {
       client: { products, state },
@@ -587,4 +597,63 @@ function buildExpressServer (agent) {
 function base64 (strOrObj) {
   const str = typeof strOrObj === 'string' ? strOrObj : JSON.stringify(strOrObj)
   return Buffer.from(str).toString('base64')
+}
+
+/**
+ * Re-expand a `/v0.5/traces` payload (`[stringTable, tracesByIndex]`,
+ * with each span as a 12-element positional array referencing strings by
+ * integer index) into the same shape `/v0.4/traces` produces. Lets every
+ * downstream listener keep the 0.4 shape it already understands.
+ *
+ * @param {[string[], unknown[][]]} body
+ * @returns {Array<Array<Record<string, unknown>>>}
+ */
+function expandV05TracePayload (body) {
+  const strings = body[0]
+  const traces = body[1]
+  const expanded = new Array(traces.length)
+  for (let i = 0; i < traces.length; i++) {
+    const trace = traces[i]
+    const expandedTrace = new Array(trace.length)
+    for (let j = 0; j < trace.length; j++) {
+      expandedTrace[j] = expandV05Span(strings, trace[j])
+    }
+    expanded[i] = expandedTrace
+  }
+  return expanded
+}
+
+/**
+ * @param {string[]} strings
+ * @param {unknown[]} span
+ */
+function expandV05Span (strings, span) {
+  const meta = {}
+  const rawMeta = span[9]
+  if (rawMeta) {
+    for (const indexKey of Object.keys(rawMeta)) {
+      meta[strings[Number(indexKey)]] = strings[rawMeta[indexKey]]
+    }
+  }
+  const metrics = {}
+  const rawMetrics = span[10]
+  if (rawMetrics) {
+    for (const indexKey of Object.keys(rawMetrics)) {
+      metrics[strings[Number(indexKey)]] = rawMetrics[indexKey]
+    }
+  }
+  return {
+    service: strings[span[0]],
+    name: strings[span[1]],
+    resource: strings[span[2]],
+    trace_id: span[3],
+    span_id: span[4],
+    parent_id: span[5],
+    start: span[6],
+    duration: span[7],
+    error: span[8],
+    meta,
+    metrics,
+    type: strings[span[11]],
+  }
 }

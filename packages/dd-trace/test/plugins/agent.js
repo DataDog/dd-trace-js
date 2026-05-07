@@ -134,6 +134,48 @@ function unformatSpanEvents (span) {
 }
 
 /**
+ * Re-expand a `/v0.5/traces` payload (`[stringTable, tracesByIndex]`,
+ * with each span as a 12-element positional array referencing strings by
+ * integer index) into the same shape `/v0.4/traces` produces (an array of
+ * trace arrays of span maps). Lets every existing handler keep the 0.4
+ * shape it already understands.
+ *
+ * @param {[string[], unknown[][]]} body
+ * @returns {Array<Array<Record<string, unknown>>>}
+ */
+function expandV05TracePayload (body) {
+  const strings = body[0]
+  return body[1].map(trace => trace.map(span => {
+    const meta = {}
+    if (span[9]) {
+      for (const k of Object.keys(span[9])) {
+        meta[strings[Number(k)]] = strings[span[9][k]]
+      }
+    }
+    const metrics = {}
+    if (span[10]) {
+      for (const k of Object.keys(span[10])) {
+        metrics[strings[Number(k)]] = span[10][k]
+      }
+    }
+    return {
+      service: strings[span[0]],
+      name: strings[span[1]],
+      resource: strings[span[2]],
+      trace_id: span[3],
+      span_id: span[4],
+      parent_id: span[5],
+      start: span[6],
+      duration: span[7],
+      error: span[8],
+      meta,
+      metrics,
+      type: strings[span[11]],
+    }
+  }))
+}
+
+/**
  * @param {express.Request} req
  * @param {express.Response} res
  */
@@ -360,7 +402,8 @@ module.exports = {
     })
 
     agent.put('/v0.5/traces', (req, res) => {
-      res.status(404).end()
+      req.body = expandV05TracePayload(req.body)
+      handleTraceRequest(req, res)
     })
 
     agent.put('/v0.4/traces', handleTraceRequest)
