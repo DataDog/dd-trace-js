@@ -19,21 +19,18 @@ describe('Plugin', () => {
   let tracer
   let api
   let gatewayPort
-  let proxyPort
-  let apiPort
 
   const startGateway = (cb) => {
-    const api = http.createServer((req, res) => res.end('OK'))
+    api = http.createServer((req, res) => res.end('OK'))
 
-    api.listen(apiPort, function () {
-      const apiPort = api.address().port
+    api.listen(function () {
+      const apiPort = (/** @type {import('net').AddressInfo} */ (api.address())).port
 
-      proxy.listen(proxyPort, function () {
-        const proxyPort = proxy.address().port
+      proxy.listen(function () {
+        const proxyPort = (/** @type {import('net').AddressInfo} */ (proxy.address())).port
 
         gateway = Gateway({
           edgemicro: {
-            port: gatewayPort,
             logging: { level: 'info', dir: os.tmpdir() },
             proxy: 'http://localhost:' + proxyPort,
           },
@@ -75,7 +72,7 @@ describe('Plugin', () => {
 
         beforeEach(done => {
           Gateway = require(`../../../versions/microgateway-core@${version}`).get()
-          gateway = startGateway(() => done())
+          startGateway(done)
         })
 
         it('should do automatic instrumentation', done => {
