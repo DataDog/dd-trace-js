@@ -483,13 +483,13 @@ export default [
 
       // --- Rules to check later ------------------
       'sonarjs/duplicates-in-character-class': 'off', // 86 errors
-      'sonarjs/no-code-after-done': 'off', // 13 errors
+      'sonarjs/no-code-after-done': 'error',
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
       'sonarjs/no-identical-functions': 'off', // 25 errors
       'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
-      'sonarjs/stable-tests': 'off',
+      'sonarjs/stable-tests': 'error',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
-      'sonarjs/updated-loop-counter': 'off', // 4 errors
+      'sonarjs/updated-loop-counter': 'error',
     },
   },
   {
@@ -749,6 +749,25 @@ export default [
     rules: {
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
+    },
+  },
+  {
+    // CI-visibility retry fixtures intentionally call `this.retries(N)` to
+    // exercise the dd-trace test-optimization retry code paths. The fixtures
+    // ARE the flaky tests that the plugin watches.
+    name: 'dd-trace/tests/ci-visibility-retry-fixtures',
+    files: [
+      'integration-tests/ci-visibility/jest-plugin-tests/**/*.js',
+      'integration-tests/ci-visibility/mocha-hooks/**/*.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/**/*.js',
+      'integration-tests/ci-visibility/mocha-retries-test-fn/**/*.js',
+      'integration-tests/ci-visibility/test-nested-hooks/**/*.js',
+    ],
+    plugins: {
+      sonarjs: eslintPluginSonar,
+    },
+    rules: {
+      'sonarjs/stable-tests': 'off',
     },
   },
   {
