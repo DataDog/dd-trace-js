@@ -485,7 +485,7 @@ export default [
       'sonarjs/duplicates-in-character-class': 'off', // 86 errors
       'sonarjs/no-code-after-done': 'off', // 13 errors
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
-      'sonarjs/no-identical-functions': 'off', // 25 errors
+      'sonarjs/no-identical-functions': 'error',
       'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
       'sonarjs/stable-tests': 'off',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
