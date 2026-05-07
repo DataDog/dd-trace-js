@@ -2863,13 +2863,13 @@ declare namespace tracer {
      * [mocha](https://mochajs.org/) module.
      */
     interface mocha extends Integration {}
-    
+
     /**
      * This plugin automatically instruments the
      * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
      */
     interface modelcontextprotocol_sdk extends Instrumentation {}
-    
+
     /**
      * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
@@ -3737,6 +3737,11 @@ declare namespace tracer {
     }
 
     interface LLMObservabilitySpan {
+      /**
+       * The span kind
+       */
+      kind: spanKind,
+
       /**
        * The input content associated with the span.
        */
