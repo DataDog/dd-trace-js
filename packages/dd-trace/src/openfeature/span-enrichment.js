@@ -67,7 +67,7 @@ class SpanEnrichmentState {
    * Add a default fallback for a flag not found in UFC.
    *
    * @param {string} flagKey - The flag key
-   * @param {*} defaultValue - The default value used
+   * @param {boolean|string|number|object} defaultValue - The default value used
    * @returns {boolean} True if added, false if limit reached
    */
   addDefault (flagKey, defaultValue) {
@@ -84,7 +84,7 @@ class SpanEnrichmentState {
     let codedValue = `${CODED_DEFAULT_PREFIX}${valueStr}`
 
     if (codedValue.length > MAX_DEFAULT_VALUE_LENGTH) {
-      codedValue = codedValue.substring(0, MAX_DEFAULT_VALUE_LENGTH)
+      codedValue = codedValue.slice(0, MAX_DEFAULT_VALUE_LENGTH)
     }
 
     this._defaults.set(flagKey, codedValue)
@@ -103,7 +103,7 @@ class SpanEnrichmentState {
   /**
    * Convert accumulated state to span tags.
    *
-   * @returns {Object} Object with ffe_flags_enc, ffe_subjects_enc, and ffe_defaults tags
+   * @returns {object} Object with ffe_flags_enc, ffe_subjects_enc, and ffe_defaults tags
    */
   toSpanTags () {
     const tags = {}
@@ -141,5 +141,5 @@ module.exports = {
   MAX_SUBJECTS,
   MAX_DEFAULTS,
   MAX_DEFAULT_VALUE_LENGTH,
-  CODED_DEFAULT_PREFIX
+  CODED_DEFAULT_PREFIX,
 }

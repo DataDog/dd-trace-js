@@ -11,7 +11,7 @@ const {
   MAX_SUBJECTS,
   MAX_DEFAULTS,
   MAX_DEFAULT_VALUE_LENGTH,
-  CODED_DEFAULT_PREFIX
+  CODED_DEFAULT_PREFIX,
 } = require('../../src/openfeature/span-enrichment')
 
 describe('SpanEnrichmentState', () => {

@@ -1,8 +1,8 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const { SpanEnrichmentState } = require('./span-enrichment')
 const log = require('../log')
+const { SpanEnrichmentState } = require('./span-enrichment')
 
 const finishCh = channel('dd-trace:span:finish')
 
@@ -38,10 +38,16 @@ class SpanEnrichmentHook {
   /**
    * Called by the OpenFeature SDK after every flag evaluation (success or error).
    *
-   * @param {{ flagKey: string, evaluationContext?: { targetingKey?: string } }} hookContext
-   *   - Hook context containing the flag key and evaluation context
-   * @param {{ flagMetadata?: { serialId?: number, doLog?: boolean }, reason?: string, value?: any }} evaluationDetails
-   *   - Full evaluation details including flag metadata
+   * @param {object} hookContext - Hook context containing the flag key and evaluation context
+   * @param {string} hookContext.flagKey - The flag key being evaluated
+   * @param {object} [hookContext.evaluationContext] - Evaluation context
+   * @param {string} [hookContext.evaluationContext.targetingKey] - Targeting key
+   * @param {object} evaluationDetails - Full evaluation details including flag metadata
+   * @param {object} [evaluationDetails.flagMetadata] - Metadata from the provider
+   * @param {number} [evaluationDetails.flagMetadata.serialId] - Serial ID from UFC
+   * @param {boolean} [evaluationDetails.flagMetadata.doLog] - Whether to log subject
+   * @param {string} [evaluationDetails.reason] - Evaluation reason
+   * @param {boolean|string|number|object} [evaluationDetails.value] - Evaluated value
    * @returns {void}
    */
   finally (hookContext, evaluationDetails) {

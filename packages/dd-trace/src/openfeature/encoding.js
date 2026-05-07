@@ -11,11 +11,11 @@ const crypto = require('crypto')
  */
 function encodeVarint (value) {
   const bytes = []
-  while (value > 0x7f) {
-    bytes.push((value & 0x7f) | 0x80) // Set continuation bit
+  while (value > 0x7F) {
+    bytes.push((value & 0x7F) | 0x80) // Set continuation bit
     value >>>= 7
   }
-  bytes.push(value & 0x7f) // Final byte without continuation bit
+  bytes.push(value & 0x7F) // Final byte without continuation bit
   return bytes
 }
 
@@ -66,5 +66,5 @@ function hashTargetingKey (targetingKey) {
 module.exports = {
   encodeVarint,
   encodeDeltaVarint,
-  hashTargetingKey
+  hashTargetingKey,
 }

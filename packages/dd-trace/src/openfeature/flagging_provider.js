@@ -26,8 +26,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._tracer = tracer
     this._config = config
 
-    this.hooks.push(new EvalMetricsHook(config))
-    this.hooks.push(new SpanEnrichmentHook(tracer))
+    this.hooks.push(new EvalMetricsHook(config), new SpanEnrichmentHook(tracer))
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.experimental.flaggingProvider.initializationTimeoutMs)
