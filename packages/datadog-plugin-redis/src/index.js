@@ -8,13 +8,15 @@ class RedisPlugin extends CachePlugin {
   static id = 'redis'
   static system = 'redis'
 
+  #serviceCache = new Map()
+
   constructor (...args) {
     super(...args)
     this._spanType = 'redis'
   }
 
   bindStart (ctx) {
-    const { db, command, args, connectionOptions, connectionName } = ctx
+    const { db, command, args, argsStartIndex, connectionOptions, connectionName } = ctx
 
     const resource = command
     const normalizedCommand = command.toUpperCase()
@@ -24,12 +26,12 @@ class RedisPlugin extends CachePlugin {
 
     this.startSpan({
       resource,
-      service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
+      service: this.#cachedServiceName(connectionName),
       type: this._spanType,
       meta: {
         'db.type': this._spanType,
         'db.name': db || '0',
-        [`${this._spanType}.raw_command`]: formatCommand(normalizedCommand, args),
+        [`${this._spanType}.raw_command`]: formatCommand(normalizedCommand, args, argsStartIndex),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port,
       },
@@ -39,32 +41,58 @@ class RedisPlugin extends CachePlugin {
   }
 
   configure (config) {
+    this.#serviceCache.clear()
     super.configure(normalizeConfig(config))
   }
+
+  /**
+   * @param {string | undefined} connectionName
+   * @returns {{ name: string, source: string | undefined }}
+   */
+  #cachedServiceName (connectionName) {
+    let cached = this.#serviceCache.get(connectionName)
+    if (cached === undefined) {
+      cached = this.serviceName({ pluginConfig: this.config, system: this.system, connectionName })
+      this.#serviceCache.set(connectionName, cached)
+    }
+    return cached
+  }
 }
 
-function formatCommand (command, args) {
+/**
+ * @param {string} command Uppercase command verb (e.g. `'GET'`).
+ * @param {ArrayLike<unknown> | undefined} args Args array; may include the verb at index 0 when
+ *   `argsStartIndex` is `1`.
+ * @param {number} [argsStartIndex] Index in `args` to start formatting from. Defaults to `0`.
+ * @returns {string}
+ */
+function formatCommand (command, args, argsStartIndex = 0) {
   if (!args || command === 'AUTH') return command
 
-  for (let i = 0, l = args.length; i < l; i++) {
-    if (typeof args[i] === 'function') continue
+  let result = command
+  for (let i = argsStartIndex, l = args.length; i < l; i++) {
+    const arg = args[i]
+    if (typeof arg === 'function') continue
 
-    command = `${command} ${formatArg(args[i])}`
-
-    if (command.length > 1000) return trim(command, 1000)
+    result = `${result} ${formatArg(arg)}`
+    if (result.length > 1000) return trim(result, 1000)
   }
 
-  return command
+  return result
 }
 
+/**
+ * @param {unknown} arg
+ * @returns {string}
+ */
 function formatArg (arg) {
-  switch (typeof arg) {
-    case 'string':
-    case 'number':
-      return trim(String(arg), 100)
-    default:
-      return '?'
+  if (typeof arg === 'string') {
+    return arg.length > 100 ? arg.slice(0, 97) + '...' : arg
   }
+  if (typeof arg === 'number') {
+    return trim(String(arg), 100)
+  }
+  return '?'
 }
 
 function trim (str, maxlen) {
@@ -93,3 +121,4 @@ function uppercaseAllEntries (entries) {
 }
 
 module.exports = RedisPlugin
+module.exports.formatCommand = formatCommand
