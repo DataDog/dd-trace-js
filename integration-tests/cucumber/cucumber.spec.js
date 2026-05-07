@@ -81,6 +81,13 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
 const version = process.env.CUCUMBER_VERSION || 'latest'
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
@@ -646,6 +653,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+            assertItrSkippingEnabledTags(payload.events, 'false')
           }, ({ url }) => url.endsWith('/api/v2/citestcycle')).then(() => done()).catch(done)
 
           childProcess = exec(
@@ -720,6 +728,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
               assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
               assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+              assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
               done()
             }).catch(done)
 
@@ -763,6 +772,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+            assertItrSkippingEnabledTags(payload.events, 'true')
           }, ({ url }) => url.endsWith('/api/v2/citestcycle')).then(() => done()).catch(done)
 
           childProcess = exec(
@@ -962,6 +972,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
               assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
               assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+              assertItrSkippingEnabledTags(events, 'true')
             }, 25000)
 
           childProcess = exec(
@@ -1130,6 +1141,7 @@ describe(`cucumber@${version} commonJS`, () => {
               tests.forEach(test => {
                 assert.ok(!test.meta[TEST_SUITE].includes('farewell'))
               })
+              assertItrSkippingEnabledTags(events, 'true')
             })
 
           childProcess = exec(

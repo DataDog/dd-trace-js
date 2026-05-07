@@ -21,6 +21,7 @@ const {
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
@@ -197,6 +198,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
+        config._ddItrSkippingEnabledTags = this.getSessionItrSkippingEnabledTags()
       }
     })
 
@@ -217,6 +219,7 @@ class JestPlugin extends CiPlugin {
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
+        _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -228,6 +231,7 @@ class JestPlugin extends CiPlugin {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
         // requestErrorTags from test env options may be undefined
         ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+        ...(itrSkippingEnabledTags !== undefined && itrSkippingEnabledTags !== null ? itrSkippingEnabledTags : {}),
       }
 
       if (_ddUnskippable) {
@@ -558,6 +562,10 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
+    const skippingEnabled = testSuiteSpan?.context()._tags?.[TEST_ITR_SKIPPING_ENABLED]
+    if (skippingEnabled !== undefined) {
+      extraTags[TEST_ITR_SKIPPING_ENABLED] = skippingEnabled
+    }
 
     return super.startTestSpan(name, suite, testSuiteSpan, extraTags)
   }

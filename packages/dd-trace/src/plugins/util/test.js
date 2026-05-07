@@ -239,6 +239,22 @@ function getSessionRequestErrorTags (sessionSpan) {
   return {}
 }
 
+/**
+ * Returns ITR skipping-enabled tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionItrSkippingEnabledTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[TEST_ITR_SKIPPING_ENABLED] !== undefined) {
+    return {
+      [TEST_ITR_SKIPPING_ENABLED]: tags[TEST_ITR_SKIPPING_ENABLED],
+    }
+  }
+  return {}
+}
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -349,6 +365,7 @@ module.exports = {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
   getSessionRequestErrorTags,
+  getSessionItrSkippingEnabledTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   checkShaDiscrepancies,
   getPullRequestDiff,

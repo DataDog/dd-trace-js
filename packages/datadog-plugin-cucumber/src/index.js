@@ -141,6 +141,7 @@ class CucumberPlugin extends CiPlugin {
           'cucumber'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })

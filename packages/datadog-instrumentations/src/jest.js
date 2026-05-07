@@ -1794,6 +1794,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddRepositoryRoot',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddItrSkippingEnabledTags',
   '_ddIsDiEnabled',
   '_ddIsKnownTestsEnabled',
   '_ddIsTestManagementTestsEnabled',
