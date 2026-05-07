@@ -18,33 +18,6 @@ function isEmpty (obj) {
   return true
 }
 
-let createPrivateSymbol = probeCreatePrivateSymbol()
-
-// Attempts to obtain a factory for V8's %CreatePrivateSymbol, a native runtime function that
-// produces a property key invisible to all reflection APIs (Object.getOwnPropertySymbols, Proxy, etc.).
-function probeCreatePrivateSymbol () {
-  // Primary path: --allow-natives-syntax may already be active.
-  try {
-    // eslint-disable-next-line no-new-func
-    return new Function('name', 'return %CreatePrivateSymbol(name)')
-  } catch {
-    // Alternate path: temporarily enable the flag ourselves, build the factory, then restore it
-    // so we don't leak the permissive flag to other code running in the same process.
-    try {
-      const v8 = require('v8')
-      v8.setFlagsFromString('--allow-natives-syntax')
-      try {
-        // eslint-disable-next-line no-new-func
-        return new Function('name', 'return %CreatePrivateSymbol(name)')
-      } finally {
-        v8.setFlagsFromString('--no-allow-natives-syntax')
-      }
-    } catch {
-      return null // Not V8, or native syntax unavailable, caller falls back to WeakMap.
-    }
-  }
-}
-
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'

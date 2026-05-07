@@ -6,7 +6,6 @@ const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
 
 const sym = Symbol('dd.publicSpan')
-let unwrap
 
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
@@ -81,9 +80,9 @@ class PublicSpan {
     return this.#span.finish.apply(this.#span, arguments)
   }
 
-  static {
-    unwrap = (value) => value instanceof PublicSpan ? value.#span : value
+  static unwrap (value) {
+    return value instanceof PublicSpan ? value.#span : value
   }
 }
 
-module.exports = { PublicSpan, unwrap }
+module.exports = { PublicSpan, unwrap: PublicSpan.unwrap }

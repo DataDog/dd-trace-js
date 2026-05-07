@@ -681,7 +681,7 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.startSpan, 'a', 'b')
-        assert.deepEqual(unwrap(returnValue), { id: 'span' })
+        assert.strictEqual(unwrap(returnValue), noop.startSpan.returnValues[0])
       })
 
       it('should set service source override tag when returned span does a setTag', () => {
@@ -985,7 +985,7 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.startSpan, 'a', 'b')
-        assert.deepEqual(unwrap(returnValue), { id: 'span' })
+        assert.strictEqual(unwrap(returnValue), tracer.startSpan.returnValues[0])
       })
 
       it('should set service source override tag when returned span does a setTag', () => {
