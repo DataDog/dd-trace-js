@@ -16,7 +16,12 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const gc = global.gc ?? (() => {})
+
+if (typeof global.gc !== 'function') {
+  throw new Error('requires --expose-gc flag')
+}
+
+const gc = global.gc
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
@@ -537,11 +542,6 @@ describe('Plugin', () => {
         })
 
         describe('garbage collection and memory leaks', function () {
-          // GC tests need --expose-gc flag
-          if (typeof global.gc !== 'function') {
-            return it.skip('requires --expose-gc flag')
-          }
-
           it('should clean up WeakMap entries when messages are garbage collected', async function () {
             this.timeout(10000)
 
@@ -570,14 +570,14 @@ describe('Plugin', () => {
               await publish(topic, { data: Buffer.from('gc test message') })
 
               // Wait for message to be received
-              await new Promise((resolve) => {
+              await /** @type {Promise<void>} */ (new Promise((resolve) => {
                 const checkInterval = setInterval(() => {
                   if (messageReceived) {
                     clearInterval(checkInterval)
                     resolve()
                   }
                 }, 100)
-              })
+              }))
 
               // Close subscription to release references
               subscription.close()
@@ -622,14 +622,14 @@ describe('Plugin', () => {
             }
 
             // Wait for all messages
-            await new Promise((resolve) => {
+            await /** @type {Promise<void>} */ (new Promise((resolve) => {
               const checkInterval = setInterval(() => {
                 if (messagesReceived >= targetMessages) {
                   clearInterval(checkInterval)
                   resolve()
                 }
               }, 100)
-            })
+            }))
 
             subscription.close()
 

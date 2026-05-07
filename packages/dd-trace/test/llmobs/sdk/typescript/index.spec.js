@@ -38,7 +38,7 @@ const testCases = [
   {
     name: 'instruments an application with decorators',
     file: 'index',
-    setup: (agent, results = {}) => {
+    setup: (agent, results) => {
       const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
         results.llmobsSpans = payload.flatMap(item => item.spans)
       })
@@ -115,7 +115,7 @@ describe('typescript', () => {
           await Promise.all(waiters)
 
           // some tests just need the file to run, not assert payloads
-          test.runTest && test.runTest(results)
+          test.runTest?.(results)
         })
       }
     })

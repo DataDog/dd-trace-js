@@ -113,21 +113,18 @@ function dsmStatsExistWithParentHash (agent, expectedParentHash) {
  * @returns {import('../../src/opentracing/span')[]}
  */
 function unformatSpanEvents (span) {
-  if (span.meta && span.meta.events) {
+  if (span.meta?.events) {
     // Parse the JSON string back into an object
     const events = JSON.parse(span.meta.events)
 
     // Create the _events array
-    const spanEvents = events.map(event => {
+    return events.map(event => {
       return {
         name: event.name,
         startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
         attributes: event.attributes ? event.attributes : undefined,
       }
     })
-
-    // Return the unformatted _events
-    return spanEvents
   }
 
   return [] // Return an empty array if no events are found

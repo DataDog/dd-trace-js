@@ -31,7 +31,7 @@ describe('TextMapPropagator', () => {
 
   const createContext = (params = {}) => {
     const trace = { started: [], finished: [], tags: {} }
-    const spanContext = new SpanContext({
+    return new SpanContext({
       traceId: id('123', 10),
       spanId: id('456', 10),
       isRemote: params.isRemote === undefined ? true : params.isRemote,
@@ -42,8 +42,6 @@ describe('TextMapPropagator', () => {
         ...params.trace,
       },
     })
-
-    return spanContext
   }
 
   beforeEach(() => {
