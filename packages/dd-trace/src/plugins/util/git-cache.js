@@ -53,14 +53,12 @@ function getCache (cacheKey) {
   try {
     const cacheFilePath = getCacheFilePath(cacheKey)
     if (!fs.existsSync(cacheFilePath)) {
-      return null
+      return
     }
 
-    const content = fs.readFileSync(cacheFilePath, 'utf8')
-    return content
+    return fs.readFileSync(cacheFilePath, 'utf8')
   } catch (err) {
     log.error('Failed to read git cache', err)
-    return null
   }
 }
 
@@ -87,7 +85,7 @@ function cachedExec (cmd, flags, options) {
   }
   const cacheKey = getCacheKey(cmd, flags)
   const cachedResult = getCache(cacheKey)
-  if (cachedResult !== null) {
+  if (cachedResult !== undefined) {
     if (cachedResult.startsWith('__GIT_COMMAND_FAILED__')) {
       let error
       try {

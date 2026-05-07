@@ -41,7 +41,7 @@ function getAllInstrumentations () {
     .filter(file => file.endsWith('.js'))
     .map(file => file.slice(0, -3))
 
-  const instrumentations = names.reduce((acc, key) => {
+  return names.reduce((acc, key) => {
     const name = key
     let instrumentations = loadOneInst(name)
 
@@ -52,8 +52,6 @@ function getAllInstrumentations () {
 
     return acc
   }, {})
-
-  return instrumentations
 }
 
 module.exports = {

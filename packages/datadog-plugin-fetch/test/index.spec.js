@@ -345,8 +345,8 @@ describe('Plugin', function () {
 
           agent
             .assertSomeTraces(() => {
-              done(new Error('Noop request was traced.'))
               clearTimeout(timer)
+              done(new Error('Noop request was traced.'))
             })
 
           const store = storage('legacy').getStore()

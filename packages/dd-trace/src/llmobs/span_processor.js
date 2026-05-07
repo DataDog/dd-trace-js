@@ -145,7 +145,8 @@ class LLMObsSpanProcessor {
     }
 
     if (mlObsTags[TOOL_DEFINITIONS]) {
-      this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions = [])
+      meta.tool_definitions = []
+      this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions)
     }
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {

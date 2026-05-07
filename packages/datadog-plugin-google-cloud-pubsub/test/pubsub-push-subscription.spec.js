@@ -10,7 +10,12 @@ const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const gc = global.gc ?? (() => {})
+
+if (typeof global.gc !== 'function') {
+  throw new Error('requires --expose-gc flag')
+}
+
+const gc = global.gc
 
 describe('Push Subscription Plugin', () => {
   let appListener
@@ -242,10 +247,6 @@ describe('Push Subscription Plugin', () => {
     })
 
     describe('garbage collection and memory leaks', function () {
-      if (typeof global.gc !== 'function') {
-        return it.skip('requires --expose-gc flag')
-      }
-
       it('should clean up receiveSpans WeakMap when request is garbage collected', function (done) {
         this.timeout(10000)
 
