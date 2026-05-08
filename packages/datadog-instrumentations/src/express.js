@@ -54,12 +54,12 @@ function wrapResponseRender (render) {
 
     const abortController = new AbortController()
     return responseRenderChannel.traceSync(
-      function () {
+      function (...args) {
         if (abortController.signal.aborted) {
           throw abortController.signal.reason || new Error('Aborted')
         }
 
-        return render.apply(this, arguments)
+        return render.apply(this, args)
       },
       {
         req: this.req,
@@ -172,7 +172,7 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, next => function (...args) {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -182,7 +182,7 @@ function publishQueryParsedAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, arguments)
+    return next.apply(this, args)
   })
 }
 
@@ -191,8 +191,8 @@ addHook({
   versions: ['4'],
   file: 'lib/middleware/query.js',
 }, query => {
-  return shimmer.wrapFunction(query, query => function () {
-    const queryMiddleware = query.apply(this, arguments)
+  return shimmer.wrapFunction(query, query => function (...args) {
+    const queryMiddleware = query.apply(this, args)
 
     return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
@@ -204,9 +204,9 @@ addHook({
 const processParamsStartCh = channel('datadog:express:process_params:start')
 function wrapProcessParamsMethod (requestPositionInArguments) {
   return function wrapProcessParams (original) {
-    return function wrappedProcessParams () {
+    return function wrappedProcessParams (...args) {
       if (processParamsStartCh.hasSubscribers) {
-        const req = arguments[requestPositionInArguments]
+        const req = args[requestPositionInArguments]
         const abortController = new AbortController()
 
         processParamsStartCh.publish({
@@ -219,7 +219,7 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
         if (abortController.signal.aborted) return
       }
 
-      return original.apply(this, arguments)
+      return original.apply(this, args)
     }
   }
 }
