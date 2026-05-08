@@ -159,7 +159,7 @@
     "version.js"
   ],
   "dependencies": {
-    "dc-polyfill": "^0.1.10",
+    "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.0.1"
   },
   "optionalDependencies": {
