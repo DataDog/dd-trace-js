@@ -50,7 +50,10 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   let cacheWriteTokens = 0
 
   for (const { chunk: { bytes } } of chunks) {
-    const body = JSON.parse(bytes.toString('utf8'))
+    // AWS SDK v3 ships chunk.bytes as Uint8Array; its `toString(encoding)`
+    // ignores the encoding arg and returns the comma-joined byte values.
+    // `Buffer.from` wraps without copying, then decodes correctly.
+    const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
 
     switch (modelProviderUpper) {
       case PROVIDER.AMAZON: {
@@ -348,7 +351,9 @@ function extractRequestParams (params, provider) {
 }
 
 function extractTextAndResponseReason (response, provider, modelName) {
-  const body = JSON.parse(response.body.toString('utf8'))
+  // See `extractTextAndResponseReasonFromStream` -- response.body is a
+  // Uint8Array on AWS SDK v3, so wrap before decoding.
+  const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
   const shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes('embed')
   try {
     switch (provider.toUpperCase()) {
