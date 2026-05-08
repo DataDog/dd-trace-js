@@ -33,6 +33,13 @@ const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
     if (NODE_MAJOR <= 16) {
@@ -270,6 +277,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
             assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'test')
+            assertItrSkippingEnabledTags(events, 'true')
           }, 25000)
 
         const coverageRequestPromise = receiver
@@ -528,6 +536,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
             assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+            assertItrSkippingEnabledTags(events, 'true')
           }, 30000)
 
         const skippableRequestPromise = receiver

@@ -119,7 +119,8 @@ describe('Plugin', () => {
               }, { timeoutMs: 10000 })
 
               try {
-                await sendMessages(kafka, testTopic, messages = [{ key: 'key1' }])
+                messages = [{ key: 'key1' }]
+                await sendMessages(kafka, testTopic, messages)
               } catch (e) {
                 error = e
                 return expectedSpanPromise
@@ -181,11 +182,11 @@ describe('Plugin', () => {
                 try {
                   assert.notStrictEqual(currentSpan, firstSpan)
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  eachMessage = async () => {} // avoid being called for each message
                   done()
                 } catch (e) {
+                  eachMessage = async () => {}
                   done(e)
-                } finally {
-                  eachMessage = async () => {} // avoid being called for each message
                 }
               }
 
@@ -299,11 +300,11 @@ describe('Plugin', () => {
                 try {
                   assert.notEqual(currentSpan, firstSpan)
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  eachBatch = () => {} // avoid being called for each message
                   done()
                 } catch (e) {
+                  eachBatch = () => {}
                   done(e)
-                } finally {
-                  eachBatch = () => {} // avoid being called for each message
                 }
               }
 

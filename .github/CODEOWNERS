@@ -221,6 +221,7 @@
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
 /scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities-js
+/scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities-js
 /supported_versions_output.json @DataDog/apm-sdk-capabilities-js
 /supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
 

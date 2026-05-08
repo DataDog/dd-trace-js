@@ -44,7 +44,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
       const before = payload.charCodeAt(last - 1)
       const isWhitespace = before === 0x20 || before === 0x09 || before === 0x0A || before === 0x0D
-      if (!isWhitespace && before !== 0x7B /* { */ && !payload.includes(`"${key}"`)) {
+      if (!isWhitespace && before !== 0x7B && !payload.includes(`"${key}"`)) {
         return `${payload.slice(0, last)},"${key}":${JSON.stringify(value)}}`
       }
     }

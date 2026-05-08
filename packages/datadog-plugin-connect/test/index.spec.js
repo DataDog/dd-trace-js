@@ -494,12 +494,12 @@ describe('Plugin', () => {
           app.use((req, res) => {
             try {
               assert.strictEqual(storage.getStore(), store)
+              res.end()
               done()
             } catch (e) {
+              res.end()
               done(e)
             }
-
-            res.end()
           })
 
           appListener = http.createServer(app).listen(0, 'localhost', () => {

@@ -4,10 +4,10 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, AsyncResource } = require('./helpers/instrument')
 
 function wrapRequest (original) {
-  return function () {
-    const id = arguments.length - 1
-    arguments[id] = AsyncResource.bind(arguments[id])
-    return original.apply(this, arguments)
+  return function (...args) {
+    const id = args.length - 1
+    args[id] = AsyncResource.bind(args[id])
+    return original.apply(this, args)
   }
 }
 

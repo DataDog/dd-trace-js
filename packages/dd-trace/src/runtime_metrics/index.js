@@ -29,8 +29,8 @@ module.exports = {
 
   stop () {
     runtimeMetrics.stop()
-
-    Object.setPrototypeOf(module.exports, runtimeMetrics = noop)
+    runtimeMetrics = noop
+    Object.setPrototypeOf(module.exports, noop)
   },
 }
 

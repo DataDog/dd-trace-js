@@ -31,6 +31,7 @@ const {
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
@@ -52,6 +53,7 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getSessionRequestErrorTags,
+  getSessionItrSkippingEnabledTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
@@ -320,6 +322,7 @@ class CypressPlugin {
 
   finishedTestsByFile = {}
   testStatuses = {}
+  hasLibraryConfiguration = false
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
@@ -393,6 +396,7 @@ class CypressPlugin {
     this._isInit = false
     this.finishedTestsByFile = {}
     this.testStatuses = {}
+    this.hasLibraryConfiguration = false
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
@@ -475,6 +479,7 @@ class CypressPlugin {
             value: 'true',
           })
         } else {
+          this.hasLibraryConfiguration = true
           const {
             libraryConfig: {
               isSuitesSkippingEnabled,
@@ -534,8 +539,10 @@ class CypressPlugin {
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
-    const testSuiteSpanMetadata =
-      getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
+    const testSuiteSpanMetadata = {
+      ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
+      ...this.getSessionItrSkippingEnabledTags(),
+    }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
@@ -588,6 +595,7 @@ class CypressPlugin {
     if (testSourceFile) {
       testSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
     }
+    Object.assign(testSpanMetadata, this.getSessionItrSkippingEnabledTags())
 
     const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
     if (codeOwners) {
@@ -635,6 +643,15 @@ class CypressPlugin {
    */
   getSessionRequestErrorTags () {
     return getSessionRequestErrorTags(this.testSessionSpan)
+  }
+
+  /**
+   * Returns ITR skipping-enabled tags from the test session span for propagation to child events.
+   *
+   * @returns {Record<string, string>}
+   */
+  getSessionItrSkippingEnabledTags () {
+    return getSessionItrSkippingEnabledTags(this.testSessionSpan)
   }
 
   ciVisEvent (name, testLevel, tags = {}) {
@@ -789,6 +806,11 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    if (this.hasLibraryConfiguration) {
+      const skippingEnabled = this.isSuitesSkippingEnabled ? 'true' : 'false'
+      this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+      this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+    }
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
 
     return details
@@ -1054,10 +1076,7 @@ class CypressPlugin {
           rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
-        if (this.testSuiteSpan) {
-          return suitePayload
-        }
-        this.testSuiteSpan = this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
+        this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {
