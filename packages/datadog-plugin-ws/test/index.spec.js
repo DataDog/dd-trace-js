@@ -4,6 +4,7 @@ const assert = require('node:assert')
 const { once } = require('node:events')
 
 const dc = require('dc-polyfill')
+const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -142,7 +143,6 @@ describe('Plugin', () => {
         })
 
         it('should not retain the connection span during socket setup', async () => {
-          const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
           let resolve
           const promise = new Promise((_resolve) => {
             resolve = _resolve
