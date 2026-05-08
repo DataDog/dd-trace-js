@@ -30,7 +30,7 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
     const span = storage('legacy').getStore()?.span
     if (!span) return
     if (span._spanContext?._tags?.error) return
-    
+
     const { ErrorMessage: message, ErrorType: type, StackTrace } = data.Error
     const stack = Array.isArray(StackTrace) ? StackTrace.join('\n') : undefined
 

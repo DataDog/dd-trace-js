@@ -6,5 +6,5 @@ module.exports = [
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
-  ...require('./aws-durable-execution-sdk-js')
+  ...require('./aws-durable-execution-sdk-js'),
 ]

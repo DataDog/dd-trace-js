@@ -30,11 +30,9 @@ function isReplayedOp (ctxImpl) {
 function getOperationId (ctxImpl) {
   try {
     const stepId = ctxImpl?.getNextStepId?.()
-    if (!stepId) return undefined
+    if (!stepId) return
     return createHash('md5').update(stepId).digest('hex').slice(0, 16)
-  } catch {
-    return undefined
-  }
+  } catch {}
 }
 
 module.exports = { isReplayedOp, getOperationId }

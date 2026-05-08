@@ -138,28 +138,52 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   })
 
   for (const { span, operationName, run, opts } of [
-    { span: 'aws.durable.step', operationName: 'test-step',
-      run: ctx => ctx.step('test-step', async () => ({ stepped: true })) },
-    { span: 'aws.durable.child_context', operationName: 'test-child',
-      run: ctx => ctx.runInChildContext('test-child', async () => ({ childResult: true })) },
-    { span: 'aws.durable.wait', operationName: 'test-wait',
-      run: ctx => ctx.wait('test-wait', { seconds: 1 }) },
-    { span: 'aws.durable.wait_for_condition', operationName: 'test-condition',
+    {
+      span: 'aws.durable.step',
+      operationName: 'test-step',
+      run: ctx => ctx.step('test-step', async () => ({ stepped: true })),
+    },
+    {
+      span: 'aws.durable.child_context',
+      operationName: 'test-child',
+      run: ctx => ctx.runInChildContext('test-child', async () => ({ childResult: true })),
+    },
+    {
+      span: 'aws.durable.wait',
+      operationName: 'test-wait',
+      run: ctx => ctx.wait('test-wait', { seconds: 1 }),
+    },
+    {
+      span: 'aws.durable.wait_for_condition',
+      operationName: 'test-condition',
       run: ctx => ctx.waitForCondition('test-condition', async () => ({ met: true }), {
         waitStrategy: r => r?.met
           ? { shouldContinue: false }
           : { shouldContinue: true, delay: { seconds: 1 } },
-      }) },
-    { span: 'aws.durable.wait_for_callback', operationName: 'test-callback',
+      }),
+    },
+    {
+      span: 'aws.durable.wait_for_callback',
+      operationName: 'test-callback',
       run: ctx => ctx.waitForCallback('test-callback', async () => ({ submitted: true })),
-      opts: { resolveCallback: 'test-callback' } },
-    { span: 'aws.durable.create_callback', operationName: 'test-create-cb',
-      run: ctx => ctx.createCallback('test-create-cb') },
-    { span: 'aws.durable.map', operationName: 'test-map',
-      run: ctx => ctx.map('test-map', [1, 2, 3], async (item) => item * 2) },
-    { span: 'aws.durable.parallel', operationName: 'test-parallel',
+      opts: { resolveCallback: 'test-callback' },
+    },
+    {
+      span: 'aws.durable.create_callback',
+      operationName: 'test-create-cb',
+      run: ctx => ctx.createCallback('test-create-cb'),
+    },
+    {
+      span: 'aws.durable.map',
+      operationName: 'test-map',
+      run: ctx => ctx.map('test-map', [1, 2, 3], async (item) => item * 2),
+    },
+    {
+      span: 'aws.durable.parallel',
+      operationName: 'test-parallel',
       run: ctx => ctx.parallel('test-parallel',
-        [async () => 'branch-a', async () => 'branch-b']) },
+        [async () => 'branch-a', async () => 'branch-b']),
+    },
   ]) {
     it(`${span} (happy path): emits span with operation_name and hash-format operation_id`, async () => {
       const trace = agent.assertSomeTraces(traces => {
@@ -195,21 +219,32 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   // `Error` into a typed error class (StepError / ChildContextError) before reaching the
   // plugin, which is why `error.type` differs from `'Error'`.
   for (const { span, errorType, errorMessage, run } of [
-    { span: 'aws.durable.step', errorType: 'StepError', errorMessage: 'Intentional step error',
+    {
+      span: 'aws.durable.step',
+      errorType: 'StepError',
+      errorMessage: 'Intentional step error',
       run: ctx => ctx.step('error-step',
         async () => { throw new Error('Intentional step error') },
-        { retryStrategy: () => ({ shouldRetry: false }) }) },
-    { span: 'aws.durable.child_context', errorType: 'ChildContextError',
+        { retryStrategy: () => ({ shouldRetry: false }) }),
+    },
+    {
+      span: 'aws.durable.child_context',
+      errorType: 'ChildContextError',
       errorMessage: 'Intentional child context error',
       run: ctx => ctx.runInChildContext('error-child',
         async () => { throw new Error('Intentional child context error') },
-        { retryStrategy: () => ({ shouldRetry: false }) }) },
+        { retryStrategy: () => ({ shouldRetry: false }) }),
+    },
   ]) {
     it(`${span} (error path): stamps error tags on span`, async () => {
       const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: span,
-        meta: { component: COMPONENT, 'span.kind': 'internal',
-          'error.type': errorType, 'error.message': errorMessage },
+        meta: {
+          component: COMPONENT,
+          'span.kind': 'internal',
+          'error.type': errorType,
+          'error.message': errorMessage,
+        },
         error: 1,
       }))
       try {
