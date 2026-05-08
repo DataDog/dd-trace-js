@@ -2025,14 +2025,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
        * List of URLs/paths that should not be instrumented. Takes precedence over
        * allowlist if a URL matches an entry in both.
        *
@@ -2043,14 +2035,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a URL/path is allowed.
@@ -2698,14 +2682,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2713,14 +2689,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -2755,14 +2723,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2770,14 +2730,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Valkey command should be instrumented.
@@ -3054,28 +3006,12 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both.
        *
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
