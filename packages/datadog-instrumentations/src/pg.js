@@ -31,16 +31,16 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 })
 
 function wrapQuery (query) {
-  return function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
     const processId = this.processID
 
-    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
-      ? arguments[0]
-      : { text: arguments[0] }
+    const pgQuery = args[0] !== null && typeof args[0] === 'object'
+      ? args[0]
+      : { text: args[0] }
 
     const textPropObj = pgQuery.cursor ?? pgQuery
     const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
@@ -80,7 +80,7 @@ function wrapQuery (query) {
 
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
-        const callback = arguments[arguments.length - 1]
+        const callback = args[args.length - 1]
 
         finish(error)
 
@@ -109,9 +109,9 @@ function wrapQuery (query) {
         return Promise.reject(error)
       }
 
-      arguments[0] = pgQuery
+      args[0] = pgQuery
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
 
       const deperecated = Object.hasOwn(this, '_activeQuery')
       const queryQueue = deperecated ? this._queryQueue : this.queryQueue
@@ -153,18 +153,18 @@ const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
 function wrapPoolQuery (query) {
-  return function () {
+  return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
-    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const pgQuery = args[0] !== null && typeof args[0] === 'object' ? args[0] : { text: args[0] }
     const abortController = new AbortController()
 
     const ctx = { query: pgQuery, abortController }
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const cb = arguments[arguments.length - 1]
+      const cb = args[args.length - 1]
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
@@ -179,13 +179,13 @@ function wrapPoolQuery (query) {
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
+        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (...args) {
           finish(ctx)
-          return cb.apply(this, arguments)
+          return cb.apply(this, args)
         })
       }
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
 
       if (retval?.then) {
         retval.then(() => {
