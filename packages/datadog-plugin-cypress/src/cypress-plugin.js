@@ -1056,12 +1056,9 @@ class CypressPlugin {
 
     for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
-        const cypressTest = getMatchingCypressTest(
-          cypressTests,
-          testName,
-          attemptIndex,
-          finishedTest.testStatus
-        )
+        const cypressTest = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
+          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus)
+          : cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
           continue
         }
