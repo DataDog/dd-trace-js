@@ -169,7 +169,9 @@ describe('Plugin', () => {
         it('should skip tags for unavailable fields', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.ok(!('elasticsearch.body' in traces[0][0].meta))
+              const meta = traces[0][0].meta
+              assert.ok(!('elasticsearch.body' in meta))
+              assert.ok(!('elasticsearch.params' in meta))
             })
             .then(done)
             .catch(done)

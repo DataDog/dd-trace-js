@@ -131,7 +131,9 @@ describe('Plugin', () => {
         it('should skip tags for unavailable fields', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.ok(!('opensearch.body' in traces[0][0].meta))
+              const meta = traces[0][0].meta
+              assert.ok(!('opensearch.body' in meta))
+              assert.ok(!('opensearch.params' in meta))
             })
             .then(done)
             .catch(done)
