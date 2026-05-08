@@ -47,8 +47,8 @@ function instrumentBaseModule (module) {
   // Helper function to wrap producer classes
   function wrapProducerClass (ProducerClass, className) {
     return shimmer.wrap(module, className, function wrapProducer (Original) {
-      return function wrappedProducer () {
-        const producer = new Original(...arguments)
+      return function wrappedProducer (...args) {
+        const producer = new Original(...args)
 
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
@@ -94,9 +94,9 @@ function instrumentBaseModule (module) {
   // Helper function to wrap consumer classes
   function wrapConsumerClass (ConsumerClass, className) {
     return shimmer.wrap(module, className, function wrapConsumer (Original) {
-      return function wrappedConsumer () {
-        const consumer = new Original(...arguments)
-        const groupId = this.groupId || (arguments[0]?.['group.id'])
+      return function wrappedConsumer (...args) {
+        const consumer = new Original(...args)
+        const groupId = this.groupId || (args[0]?.['group.id'])
 
         // Wrap the consume method
         if (typeof consumer?.consume === 'function') {
@@ -196,11 +196,11 @@ function instrumentKafkaJS (kafkaJS) {
         // Wrap the producer method if it exists
         if (typeof kafka?.producer === 'function') {
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
-            return function wrappedProducerMethod () {
-              const producer = producerMethod.apply(this, arguments)
+            return function wrappedProducerMethod (...args) {
+              const producer = producerMethod.apply(this, args)
 
-              if (!brokers && arguments?.[0]?.['bootstrap.servers']) {
-                kafka._ddBrokers = arguments[0]['bootstrap.servers']
+              if (!brokers && args?.[0]?.['bootstrap.servers']) {
+                kafka._ddBrokers = args[0]['bootstrap.servers']
               }
 
               // Wrap the send method of the producer
