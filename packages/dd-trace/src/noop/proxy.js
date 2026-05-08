@@ -90,7 +90,7 @@ class NoopProxy {
     return new PublicSpan(this._tracer.startSpan(name, options))
   }
 
-  inject(context, format, carrier) {
+  inject (context, format, carrier) {
     if (context instanceof PublicSpan) {
       context = unwrap(context)
     }
