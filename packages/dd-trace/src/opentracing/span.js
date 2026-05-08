@@ -11,8 +11,8 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
-const SpanContext = require('./span_context')
 const { DD_MAJOR } = require('../../../../version')
+const SpanContext = require('./span_context')
 
 const dateNow = Date.now
 

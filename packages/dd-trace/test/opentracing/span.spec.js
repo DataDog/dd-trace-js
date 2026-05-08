@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
+const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -297,6 +298,16 @@ describe('Span', () => {
       assert.deepStrictEqual(span._links[0].attributes, {
         baz: 'valid',
       })
+    })
+
+    const legacyAddLinkTest = DD_MAJOR < 6 ? it : it.skip
+    legacyAddLinkTest('still accepts the deprecated (spanContext, attributes) form on v5', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addLink(span2.context(), { foo: 'bar' })
+      assert.strictEqual(span._links.length, 1)
+      assert.deepStrictEqual(span._links[0].attributes, { foo: 'bar' })
     })
 
     it('seeds links from constructor fields.links and sanitizes their attributes', () => {
