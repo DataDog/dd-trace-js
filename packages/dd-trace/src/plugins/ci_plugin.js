@@ -49,6 +49,7 @@ const {
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_LEVEL_EVENT_TYPES,
@@ -64,6 +65,7 @@ const {
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
   getSessionRequestErrorTags,
+  getSessionItrSkippingEnabledTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_IS_NEW,
@@ -74,6 +76,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_RETRY,
   TEST_RETRY_REASON,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -98,6 +101,21 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'mocha',
   'cucumber',
 ])
+
+function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
+  const libraryCapabilitiesTags = getLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
+
+  if (!libraryCapabilitiesTags[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] ||
+    !plugin.libraryConfig ||
+    !plugin.testSessionSpan ||
+    !plugin.testModuleSpan) {
+    return
+  }
+
+  const skippingEnabled = plugin.libraryConfig.isSuitesSkippingEnabled ? 'true' : 'false'
+  plugin.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+  plugin.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+}
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -137,6 +155,7 @@ module.exports = class CiPlugin extends Plugin {
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR, err)
         } else {
           this.libraryConfig = libraryConfig
+          setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
         const requestErrorTags = this.testSessionSpan
@@ -225,6 +244,7 @@ module.exports = class CiPlugin extends Plugin {
         },
         integrationName: this.constructor.id,
       })
+      setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
       // only for vitest
       // These are added for the worker threads to use
       if (this.constructor.id === 'vitest') {
@@ -246,6 +266,7 @@ module.exports = class CiPlugin extends Plugin {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
           ...getSessionRequestErrorTags(this.testSessionSpan),
+          ...getSessionItrSkippingEnabledTags(this.testSessionSpan),
         }
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
@@ -342,6 +363,9 @@ module.exports = class CiPlugin extends Plugin {
 
           if (span.name?.startsWith(`${this.constructor.id}.`)) {
             span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
+            if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
+              Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
+            }
             // augment with git information (since it will not be available in the worker)
             for (const key in this.testEnvironmentMetadata) {
               // CAREFUL: this bypasses the metadata/metrics distinction
@@ -470,6 +494,15 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Returns ITR skipping-enabled tags from the test session span for propagation to child events.
+   *
+   * @returns {Record<string, string>}
+   */
+  getSessionItrSkippingEnabledTags () {
+    return getSessionItrSkippingEnabledTags(this.testSessionSpan)
+  }
+
+  /**
    * @param {import('../config/config-base')} config - Tracer configuration
    * @param {boolean} shouldGetEnvironmentData - Whether to get environment data
    */
@@ -595,6 +628,8 @@ module.exports = class CiPlugin extends Plugin {
         ...suiteTags,
       }
     }
+
+    Object.assign(testTags, getSessionItrSkippingEnabledTags(this.testSessionSpan))
 
     this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
