@@ -297,9 +297,9 @@ function wrapRun (pl, isLatestVersion, version) {
 
   patched.add(pl)
 
-  shimmer.wrap(pl.prototype, 'run', run => function () {
+  shimmer.wrap(pl.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     let numAttempt = 0
@@ -370,7 +370,7 @@ function wrapRun (pl, isLatestVersion, version) {
       const executionStart = performance.now()
 
       testFnCh.runStores(ctx, () => {
-        promise = run.apply(this, arguments)
+        promise = run.apply(this, args)
       })
       promise.finally(async () => {
         this.eventBroadcaster.removeListener('envelope', onEnvelope)
@@ -551,11 +551,11 @@ function wrapRun (pl, isLatestVersion, version) {
       })
     }
   })
-  shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
+  shimmer.wrap(pl.prototype, 'runStep', runStep => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return runStep.apply(this, arguments)
+      return runStep.apply(this, args)
     }
-    const testStep = arguments[0]
+    const testStep = args[0]
     let resource
 
     if (isLatestVersion) {
@@ -567,7 +567,7 @@ function wrapRun (pl, isLatestVersion, version) {
     const ctx = { resource }
     return testStepStartCh.runStores(ctx, () => {
       try {
-        const promise = runStep.apply(this, arguments)
+        const promise = runStep.apply(this, args)
 
         promise.then((result) => {
           const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
@@ -1201,9 +1201,9 @@ addHook({
   versions: ['>=11.0.0'],
   file: 'lib/formatter/helpers/event_data_collector.js',
 }, (eventDataCollectorPackage) => {
-  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
+  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function (...args) {
     eventDataCollector = this
-    return parseEnvelope.apply(this, arguments)
+    return parseEnvelope.apply(this, args)
   })
   return eventDataCollectorPackage
 })
@@ -1222,7 +1222,7 @@ addHook({
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
   )
   // EFD in parallel mode only supported in >=11.0.0
-  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
+  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function (...args) {
     if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
       this.options.worldParameters._ddIsKnownTestsEnabled = true
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
@@ -1252,7 +1252,7 @@ addHook({
       this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
     }
 
-    return startWorker.apply(this, arguments)
+    return startWorker.apply(this, args)
   })
   return adapterPackage
 })

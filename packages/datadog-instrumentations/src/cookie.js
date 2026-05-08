@@ -6,8 +6,8 @@ const { channel, addHook } = require('./helpers/instrument')
 const cookieParseCh = channel('datadog:cookie:parse:finish')
 
 function wrapParse (originalParse) {
-  return function () {
-    const cookies = originalParse.apply(this, arguments)
+  return function (...args) {
+    const cookies = originalParse.apply(this, args)
     if (cookieParseCh.hasSubscribers && cookies) {
       cookieParseCh.publish({ cookies })
     }
