@@ -4,6 +4,15 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 5.0 to 6.0
+
+### Plugin `whitelist` and `blacklist` options removed from types
+
+The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`,
+`iovalkey`, and `redis` plugin interfaces are no longer part of the v6 TypeScript
+surface. Use `allowlist` / `blocklist` instead — both have been the canonical
+names for several majors.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported
