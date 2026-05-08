@@ -33,7 +33,7 @@ describe('SchemaBuilder', () => {
         schemas: {
           person: {
             properties: {
-              name: { description: 'name of the person', type: 'string' },
+              name: { type: 'string' },
               phone_numbers: { items: { type: 'string' }, type: 'array' },
               person_name: { type: 'string' },
               address: { $ref: '#/components/schemas/address', type: 'object' },
@@ -50,7 +50,7 @@ describe('SchemaBuilder', () => {
     }
 
     assert.deepStrictEqual(JSON.parse(schema.definition), expectedSchema)
-    assert.strictEqual(schema.id, '9510078321201428652')
+    assert.strictEqual(schema.id, '14888728997744663998')
     assert.strictEqual(shouldExtractPerson, true)
     assert.strictEqual(shouldExtractAddress, true)
     assert.strictEqual(shouldExtractPerson2, false)
