@@ -462,7 +462,7 @@ function testEndHandler ({
   // Check if all EFD retries failed
   if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
     (test._ddIsNew || test._ddIsModified) &&
-    test._ddIsEfdRetry &&
+    isEarlyFlakeDetectionEnabled &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }

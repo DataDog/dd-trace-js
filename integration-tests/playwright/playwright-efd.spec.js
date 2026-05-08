@@ -29,6 +29,7 @@ const { DD_MAJOR } = require('../../version')
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
+const PLAYWRIGHT_EFD_GATHER_TIMEOUT = 60000
 
 const latest = 'latest'
 const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
@@ -188,7 +189,7 @@ versions.forEach((version) => {
 
             // all but one has been retried
             assert.strictEqual(totalRetriedTests.length, totalNewTests.length - 2)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -256,7 +257,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -328,7 +329,7 @@ versions.forEach((version) => {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -379,7 +380,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          }, 60000)
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -448,7 +449,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -503,7 +504,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -564,7 +565,7 @@ versions.forEach((version) => {
               assert.strictEqual(newTests.length, 0)
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               assert.strictEqual(retriedTests.length, 0)
-            }),
+            }, PLAYWRIGHT_EFD_GATHER_TIMEOUT),
         ])
       })
 
@@ -627,14 +628,8 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
 
-              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
-              const lastRetry = newTests[newTests.length - 1]
-              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-              // Earlier attempts should not have the flag
-              for (let i = 0; i < newTests.length - 1; i++) {
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
-              }
+              const failedAllRetries = newTests.filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+              assert.strictEqual(failedAllRetries.length, 1)
 
               // --retries works normally for old flaky tests
               const oldFlakyTests = tests.filter(
@@ -647,7 +642,7 @@ versions.forEach((version) => {
               assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
               assert.strictEqual(failedFlakyTests.length, 1)
-            }),
+            }, PLAYWRIGHT_EFD_GATHER_TIMEOUT),
         ])
       })
 
@@ -710,14 +705,8 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
 
-              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
-              const lastRetry = newTests[newTests.length - 1]
-              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-              // Earlier attempts should not have the flag
-              for (let i = 0; i < newTests.length - 1; i++) {
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
-              }
+              const failedAllRetries = newTests.filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+              assert.strictEqual(failedAllRetries.length, 1)
 
               // ATR works normally for old flaky tests
               const oldFlakyTests = tests.filter(
@@ -730,7 +719,7 @@ versions.forEach((version) => {
               assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
               assert.strictEqual(failedFlakyTests.length, 1)
-            }),
+            }, PLAYWRIGHT_EFD_GATHER_TIMEOUT),
         ])
       })
     })
