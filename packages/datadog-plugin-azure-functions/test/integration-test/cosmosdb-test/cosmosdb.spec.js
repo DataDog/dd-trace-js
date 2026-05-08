@@ -32,7 +32,7 @@ describe('esm', () => {
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
       './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
-    before(async function () {
+    before(async () => {
       const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
       setup = helpers.setup
       teardown = helpers.teardown

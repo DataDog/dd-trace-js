@@ -4,6 +4,6 @@
   "description": "",
   "main": "./server.mjs",
   "scripts": {
-    "start": "func start"
+    "start": "func start --verbose"
   }
 }

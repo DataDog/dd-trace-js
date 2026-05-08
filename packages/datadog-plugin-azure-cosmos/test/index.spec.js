@@ -79,7 +79,8 @@ describe('Plugin', () => {
               })
 
               assert(span.meta['http.useragent'].includes('azure-cosmos-js/'), 'expected http.useragent in span meta')
-              assert(span.metrics['db.response.status_code'] >= 200 && span.metrics['db.response.status_code'] < 300)
+              assert(parseInt(span.meta['db.response.status_code']) >= 200 &&
+                parseInt(span.meta['db.response.status_code']) < 300)
 
               validatedResources.add(resource)
             }
@@ -114,7 +115,7 @@ describe('Plugin', () => {
             const conflictCreate = allSpans.find(
               s =>
                 s?.resource === 'create /dbs/testDatabase/colls/testContainer/docs' &&
-                s?.metrics?.['db.response.status_code'] === 409
+                s?.meta?.['db.response.status_code'] === '409'
             )
             assert.ok(
               conflictCreate,
@@ -131,6 +132,7 @@ describe('Plugin', () => {
                 component: 'azure_cosmos',
                 'db.system': 'cosmosdb',
                 'db.name': 'testDatabase',
+                'db.response.status_code': '409',
                 'cosmosdb.container': 'testContainer',
                 'cosmosdb.connection.mode': 'gateway',
                 'error.message': 'The document already exists in the collection.',
@@ -139,7 +141,6 @@ describe('Plugin', () => {
             })
 
             assert(conflictCreate.meta['http.useragent'].includes('azure-cosmos-js/'))
-            assert(conflictCreate.metrics['db.response.status_code'] === 409)
           }
         )
 
