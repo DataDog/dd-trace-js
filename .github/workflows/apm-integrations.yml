@@ -150,6 +150,8 @@ jobs:
 
   aws-durable-execution-sdk-js:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: aws-durable-execution-sdk-js
     steps:
