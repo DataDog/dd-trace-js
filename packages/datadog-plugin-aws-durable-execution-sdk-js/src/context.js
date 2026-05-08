@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getOperationId, isReplayedOp } = require('./util')
+const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -64,7 +64,7 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
   }
 
   error (ctxOrError) {
-    super.error(ctxOrError)
+    super.error(unwrapDurableError(ctxOrError))
     super.finish(ctxOrError)
   }
 }

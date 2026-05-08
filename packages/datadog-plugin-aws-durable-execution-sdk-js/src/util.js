@@ -22,8 +22,7 @@ function isReplayedOp (ctxImpl) {
 /**
  * Returns the operation_id (16-hex-char MD5 of the next stepId) for the op the
  * DurableContextImpl is about to run, or undefined if unavailable. Mirrors the
- * SDK's internal `hashId`, which it uses for the `Id` field on checkpoint
- * updates and for `operationId` in its logging context.
+ * SDK's internal calculations
  * @param {object} [ctxImpl]
  * @returns {string|undefined}
  */
@@ -35,4 +34,20 @@ function getOperationId (ctxImpl) {
   } catch {}
 }
 
-module.exports = { isReplayedOp, getOperationId }
+/**
+ * The SDK wraps user errors in typed classes (StepError, ChildContextError, etc.). For
+ * span tagging we want the user's original Error, so we follow the `.cause` chain back
+ * out of the wrapper hierarchy. SDK wrappers expose a string `errorType` field, so the
+ * loop stops once we leave the wrappers.
+ */
+function unwrapDurableError (ctxOrError) {
+  let err = ctxOrError?.error
+  if (!(err instanceof Error)) return ctxOrError
+
+  while (typeof err.errorType === 'string' && err.cause instanceof Error) {
+    err = err.cause
+  }
+  return { ...ctxOrError, error: err }
+}
+
+module.exports = { isReplayedOp, getOperationId, unwrapDurableError }

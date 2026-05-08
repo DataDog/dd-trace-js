@@ -1,7 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { getOperationId, isReplayedOp } = require('./util')
+const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -44,7 +44,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   }
 
   error (ctxOrError) {
-    super.error(ctxOrError)
+    super.error(unwrapDurableError(ctxOrError))
     super.finish(ctxOrError)
   }
 }

@@ -14,65 +14,33 @@ const defaultMeta = {
   'aws.durable.replayed': 'false',
 }
 
-/**
- * Find a span matching the expected name and partial-equal-match all expected fields.
- * Iterates same-named candidates so multi-invocation flows (e.g. replay) can pick the
- * right span, falling back to the last assertion error for a clear diff. Returns the
- * matched span so callers can run follow-up assertions (e.g. regex on a meta field).
- */
 function assertSpanByName (traces, expected) {
   const allSpans = traces.flat()
-  const candidates = allSpans.filter(s => s.name === expected.name)
-  if (candidates.length === 0) {
-    const names = allSpans.map(s => s.name)
-    throw new Error(`Expected span "${expected.name}" not found. Available: ${JSON.stringify(names)}`)
-  }
-  let lastErr
-  for (const span of candidates) {
-    try {
-      assertObjectContains(span, expected)
-      return span
-    } catch (err) {
-      lastErr = err
-    }
-  }
-  throw lastErr
+  const span = allSpans.find(s => s.name === expected.name)
+  assert.ok(span, `expected span "${expected.name}", got: ${allSpans.map(s => s.name).join(', ')}`)
+  assertObjectContains(span, expected)
+  return span
 }
 
-/**
- * Asserts map/parallel child suppression: no child_context spans in the parent's trace,
- * and direct step children keep the default resource (cardinality protection) while
- * still carrying the user-supplied name on `aws.durable.operation_name` and a
- * hash-format `aws.durable.operation_id`.
- *
- * @param {object[][]} traces
- * @param {string} parentSpanName
- * @param {string} op
- * @param {string[]} expectedNames - operation_name values expected on direct step children
- */
-function assertChildSuppression (traces, parentSpanName, op, expectedNames) {
+// Asserts map/parallel child suppression: no child_context spans in the parent's trace,
+// and direct step children keep the default resource.
+function assertChildSuppression (traces, op, expectedNames) {
   const allSpans = traces.flat()
-  const parentSpan = allSpans.find(s => s.name === parentSpanName)
-  if (!parentSpan) throw new Error(`${parentSpanName} span not found`)
-  const traceId = parentSpan.trace_id?.toString()
-
-  const childContextSpans = allSpans.filter(s =>
-    s.name === 'aws.durable.child_context' && s.trace_id?.toString() === traceId
-  )
-  assert.equal(childContextSpans.length, 0, `expected no child_context spans inside ${op}`)
+  const parent = allSpans.find(s => s.name === `aws.durable.${op}`)
+  assert.ok(parent, `aws.durable.${op} span not found`)
+  assert.equal(allSpans.filter(s => s.name === 'aws.durable.child_context').length, 0)
 
   const stepChildren = allSpans.filter(s =>
-    s.name === 'aws.durable.step' && s.parent_id?.toString() === parentSpan.span_id?.toString()
+    s.name === 'aws.durable.step' && s.parent_id?.toString() === parent.span_id?.toString()
   )
-  assert.ok(stepChildren.length >= 2, `expected step children directly under ${op}`)
   for (const step of stepChildren) {
-    assert.equal(step.resource, 'aws.durable.step', `expected default resource on ${op} child step`)
-    assert.match(step.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE,
-      `expected hash-format aws.durable.operation_id on ${op} child step`)
+    assert.equal(step.resource, 'aws.durable.step')
+    assert.match(step.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
   }
-  const childNames = stepChildren.map(s => s.meta?.['aws.durable.operation_name']).sort()
-  assert.deepStrictEqual(childNames, [...expectedNames].sort(),
-    `expected operation_name on ${op} child steps even when resource is suppressed`)
+  assert.deepStrictEqual(
+    stepChildren.map(s => s.meta?.['aws.durable.operation_name']).sort(),
+    [...expectedNames].sort()
+  )
 }
 
 createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-execution-sdk-js', {
@@ -80,9 +48,6 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 }, (meta) => {
   const { agent } = meta
 
-  // setup/teardown per-test so the fake clock (static on LocalDurableTestRunner) starts
-  // fresh — otherwise time advanced by ctx.wait/RETRY in earlier tests can let later
-  // ctx.wait calls complete synchronously and skip the suspend/replay cycle.
   beforeEach(async () => setup(meta.mod, meta.versionMod))
   afterEach(async () => teardown())
 
@@ -96,7 +61,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         },
       }))
 
-      const result = await invokeHandler(async () => ({ status: 'completed' }))
+      const result = await invokeHandler(async () => {})
       assert.ok(result !== undefined, 'withDurableExecution should return a result')
 
       return trace
@@ -114,11 +79,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       return trace
     })
 
-    // ctx.wait suspends the first invocation; under skipTime the runner advances virtual
-    // time and re-invokes the handler. The second invocation enters ReplayMode naturally,
-    // so its aws.durable.execute span carries replayed=true. Same trick dd-trace-py uses.
-    // The wider timeout absorbs the gap between the first (PENDING) trace flush and the
-    // second (replayed) flush — both arrive in separate payloads.
+    // ctx.wait suspends invocation, reinvoked after waiting with replayed=true
     it('replay: replayed=true on resume after suspend', async () => {
       const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.execute',
@@ -129,7 +90,6 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       await invokeHandler(async (event, ctx) => {
         invocations++
         await ctx.wait('replay-trigger', { seconds: 1 })
-        return { status: 'replayed' }
       })
       assert.equal(invocations, 2, 'expected the handler to be invoked twice (initial + replay)')
 
@@ -141,12 +101,12 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     {
       span: 'aws.durable.step',
       operationName: 'test-step',
-      run: ctx => ctx.step('test-step', async () => ({ stepped: true })),
+      run: ctx => ctx.step('test-step', async () => {}),
     },
     {
       span: 'aws.durable.child_context',
       operationName: 'test-child',
-      run: ctx => ctx.runInChildContext('test-child', async () => ({ childResult: true })),
+      run: ctx => ctx.runInChildContext('test-child', async () => {}),
     },
     {
       span: 'aws.durable.wait',
@@ -156,16 +116,14 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     {
       span: 'aws.durable.wait_for_condition',
       operationName: 'test-condition',
-      run: ctx => ctx.waitForCondition('test-condition', async () => ({ met: true }), {
-        waitStrategy: r => r?.met
-          ? { shouldContinue: false }
-          : { shouldContinue: true, delay: { seconds: 1 } },
+      run: ctx => ctx.waitForCondition('test-condition', async () => {}, {
+        waitStrategy: () => ({ shouldContinue: false }),
       }),
     },
     {
       span: 'aws.durable.wait_for_callback',
       operationName: 'test-callback',
-      run: ctx => ctx.waitForCallback('test-callback', async () => ({ submitted: true })),
+      run: ctx => ctx.waitForCallback('test-callback', async () => {}),
       opts: { resolveCallback: 'test-callback' },
     },
     {
@@ -176,16 +134,15 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     {
       span: 'aws.durable.map',
       operationName: 'test-map',
-      run: ctx => ctx.map('test-map', [1, 2, 3], async (item) => item * 2),
+      run: ctx => ctx.map('test-map', [1, 2, 3], async () => {}),
     },
     {
       span: 'aws.durable.parallel',
       operationName: 'test-parallel',
-      run: ctx => ctx.parallel('test-parallel',
-        [async () => 'branch-a', async () => 'branch-b']),
+      run: ctx => ctx.parallel('test-parallel', [async () => {}, async () => {}]),
     },
   ]) {
-    it(`${span} (happy path): emits span with operation_name and hash-format operation_id`, async () => {
+    it(`${span} (happy path): emits span with expected tags`, async () => {
       const trace = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
           name: span,
@@ -210,18 +167,13 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         'aws.durable.operation_name must be absent when no name is passed')
       assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
     })
-    await invokeHandler(async (event, ctx) => ctx.step(async () => ({ stepped: true })))
+    await invokeHandler(async (event, ctx) => ctx.step(async () => {}))
     return trace
   })
 
-  // Error coverage for the shared base. Both step and child_context propagate user errors
-  // through `BaseAwsDurableExecutionSdkJsContextPlugin.error()`. The SDK wraps the user's
-  // `Error` into a typed error class (StepError / ChildContextError) before reaching the
-  // plugin, which is why `error.type` differs from `'Error'`.
-  for (const { span, errorType, errorMessage, run } of [
+  for (const { span, errorMessage, run } of [
     {
       span: 'aws.durable.step',
-      errorType: 'StepError',
       errorMessage: 'Intentional step error',
       run: ctx => ctx.step('error-step',
         async () => { throw new Error('Intentional step error') },
@@ -229,7 +181,6 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     },
     {
       span: 'aws.durable.child_context',
-      errorType: 'ChildContextError',
       errorMessage: 'Intentional child context error',
       run: ctx => ctx.runInChildContext('error-child',
         async () => { throw new Error('Intentional child context error') },
@@ -242,7 +193,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         meta: {
           component: COMPONENT,
           'span.kind': 'internal',
-          'error.type': errorType,
+          'error.type': 'Error',
           'error.message': errorMessage,
         },
         error: 1,
@@ -255,25 +206,24 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   }
 
   // map/parallel suppress internal child_context spans and force the default resource on
-  // direct step children to avoid resource-tag cardinality explosions.
+  // direct step children to avoid unbounded resource-tag cardinality.
   for (const { op, expectedNames } of [
     { op: 'map', expectedNames: ['work-1', 'work-2'] },
     { op: 'parallel', expectedNames: ['a', 'b'] },
   ]) {
-    const spanName = `aws.durable.${op}`
-    it(`${spanName}: suppresses child_context and keeps default step resource`, async () => {
+    it(`aws.durable.${op}: suppresses child_context and keeps default step resource`, async () => {
       const trace = agent.assertSomeTraces(
-        traces => assertChildSuppression(traces, spanName, op, expectedNames)
+        traces => assertChildSuppression(traces, op, expectedNames)
       )
 
       await invokeHandler(async (event, ctx) => {
         if (op === 'map') {
           return ctx.map('items', [1, 2], async (mapCtx, item) =>
-            mapCtx.step(`work-${item}`, async () => item * 2))
+            mapCtx.step(`work-${item}`, async () => {}))
         }
         return ctx.parallel('fan-out', [
-          async pCtx => pCtx.step('a', async () => 'a-result'),
-          async pCtx => pCtx.step('b', async () => 'b-result'),
+          async pCtx => pCtx.step('a', async () => {}),
+          async pCtx => pCtx.step('b', async () => {}),
         ])
       })
 
@@ -300,7 +250,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 
       const result = await invokeHandler(
         async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),
-        { invokeTarget: async () => ({ ok: true }) }
+        { invokeTarget: async () => {} }
       )
       assert.ok(result !== undefined, 'invoke should return a result')
 
@@ -313,7 +263,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         meta: {
           component: COMPONENT,
           'span.kind': 'client',
-          'error.type': 'InvokeError',
+          'error.type': 'Error',
+          'error.message': 'Intentional invoke error',
         },
         error: 1,
       }))
