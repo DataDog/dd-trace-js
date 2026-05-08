@@ -23,7 +23,11 @@ const {
   VARIANT,
 } = process.env
 
-const ITERATIONS = 30_000
+// Per-variant inner-loop count keeps each variant in the ~1-3 s/iter sweet
+// spot. The mixed path is ~7x slower per event because of the `code > 127`
+// branch in the unicode replacer; keeping it at the ascii inner count would
+// push the variant over the per-variant runtime budget without adding signal.
+const ITERATIONS = VARIANT === 'encode-unicode-mixed' ? 4_000 : 30_000
 
 const writer = new LLMObsSpanWriter({
   apiKey: 'placeholder-api-key',

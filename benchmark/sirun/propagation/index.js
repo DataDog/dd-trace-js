@@ -8,7 +8,11 @@ const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/pr
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 300_000
+// `extract-inject` does both an extract and an inject per inner iteration, so
+// it runs ~2x the work of the single-operation variants. Drop its inner count
+// to keep per-iteration wall-clock in the ~1-3 s sweet spot the rest of the
+// suite targets.
+const ITERATIONS = VARIANT === 'extract-inject' ? 100_000 : 300_000
 
 // Duck-typed config keeps the bench out of the full `Config` singleton (telemetry
 // registration, env reads). The propagator only reads the fields below.
