@@ -243,9 +243,11 @@ function formatContentObject (content) {
   let functionResponses
   for (const part of parts) {
     if (part.functionCall) {
-      (functionCalls ??= []).push(part)
+      functionCalls ??= []
+      functionCalls.push(part)
     } else if (part.functionResponse) {
-      (functionResponses ??= []).push(part)
+      functionResponses ??= []
+      functionResponses.push(part)
     }
   }
 
@@ -341,7 +343,8 @@ function formatNonStreamingCandidate (candidate) {
   let codeExecutionResult
   for (const part of parts) {
     if (part.functionCall) {
-      (functionCalls ??= []).push(part)
+      functionCalls ??= []
+      functionCalls.push(part)
     } else if (!executableCode && part.executableCode) {
       executableCode = part
     } else if (!codeExecutionResult && part.codeExecutionResult) {

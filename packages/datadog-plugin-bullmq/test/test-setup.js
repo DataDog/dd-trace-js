@@ -38,11 +38,10 @@ class BullmqTestSetup {
   }
 
   async queueAdd () {
-    const job = await this.queue.add('test-job', {
+    return this.queue.add('test-job', {
       message: 'Hello from BullMQ',
       timestamp: Date.now(),
     })
-    return job
   }
 
   async queueAddError () {
@@ -52,12 +51,11 @@ class BullmqTestSetup {
   }
 
   async queueAddBulk () {
-    const jobs = await this.queue.addBulk([
+    return this.queue.addBulk([
       { name: 'bulk-job-1', data: { message: 'First bulk job' } },
       { name: 'bulk-job-2', data: { message: 'Second bulk job' } },
       { name: 'bulk-job-3', data: { message: 'Third bulk job' } },
     ])
-    return jobs
   }
 
   async queueAddBulkError () {
@@ -68,7 +66,7 @@ class BullmqTestSetup {
   }
 
   async flowProducerAdd () {
-    const flow = await this.flowProducer.add({
+    return this.flowProducer.add({
       name: 'parent-flow-job',
       queueName: 'test-queue',
       data: { type: 'parent', message: 'I am the parent' },
@@ -85,7 +83,6 @@ class BullmqTestSetup {
         },
       ],
     })
-    return flow
   }
 
   async flowProducerAddError () {

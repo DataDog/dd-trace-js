@@ -18,8 +18,8 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
 
     const client = this
 
-    const wrappedQueryCompiler = function () {
-      const query = queryCompiler.apply(this, arguments)
+    const wrappedQueryCompiler = function (...args) {
+      const query = queryCompiler.apply(this, args)
 
       const ctx = { client, server, query }
       startCh.runStores(ctx, () => {

@@ -410,6 +410,7 @@ describe('profiler', () => {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
       // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      // eslint-disable-next-line sonarjs/stable-tests -- timing-dependent profiler sample alignment
       this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const env = {
@@ -597,12 +598,11 @@ describe('profiler', () => {
       // Simple server that writes a constant message to the socket.
       const msg = 'cya later!\n'
       function createServer () {
-        const server = net.createServer((socket) => {
+        return net.createServer((socket) => {
           socket.end(msg, 'utf8')
         }).on('error', (err) => {
           throw err
         })
-        return server
       }
       // Create two instances of the server
       const server1 = createServer()
