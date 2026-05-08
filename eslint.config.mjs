@@ -421,11 +421,11 @@ export default [
       'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
-      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/hashbang': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
-      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-process-exit': 'error',
       'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
         allowModules: Object.keys(dependencies),
@@ -590,8 +590,35 @@ export default [
     ],
     rules: {
       'eslint-rules/eslint-process-env': 'off',
-      // Scripts are CLI/dev tooling where process.exit is acceptable.
+      // Scripts are CLI/dev tooling where process.exit and shebangs are acceptable.
+      'n/hashbang': 'off',
+      'n/no-process-exit': 'off',
       'unicorn/no-process-exit': 'off',
+    },
+  },
+  {
+    // Benchmarks and integration test scaffolding are standalone scripts. Shebangs
+    // are used so they can be invoked as `./script.js`, and `process.exit` is the
+    // expected exit signal for these driver / harness programs.
+    name: 'dd-trace/scripts/runnable-fixtures',
+    files: [
+      'benchmark/**/*.js',
+      'benchmark/**/*.mjs',
+      'integration-tests/**/*.js',
+      'integration-tests/**/*.mjs',
+      'packages/datadog-instrumentations/test/helpers/check-require-cache/**/*.js',
+      'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
+      'packages/datadog-plugin-openai/test/no-init.js',
+      'packages/dd-trace/test/custom-metrics-app.js',
+      'packages/datadog-plugin-fastify/test/integration-test/helper.mjs',
+      'packages/datadog-plugin-light-my-request/test/integration-test/server.mjs',
+    ],
+    plugins: {
+      n: eslintPluginN,
+    },
+    rules: {
+      'n/hashbang': 'off',
+      'n/no-process-exit': 'off',
     },
   },
   {
