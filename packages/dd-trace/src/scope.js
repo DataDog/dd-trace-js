@@ -37,9 +37,9 @@ class Scope {
     const scope = this
     const spanOrActive = this._spanOrActive(span)
 
-    return function () {
+    return function (...args) {
       return scope.activate(spanOrActive, () => {
-        return fn.apply(this, arguments)
+        return fn.apply(this, args)
       })
     }
   }

@@ -334,8 +334,8 @@ describe('dependencies', () => {
       let atLeastOneTimeout = false
       global.setImmediate = function (callback) {
         atLeastOneTimeout = true
-        const timeout = originalSetImmediate(function () {
-          const cbResult = callback.apply(this, arguments)
+        const timeout = originalSetImmediate(function (...args) {
+          const cbResult = callback.apply(this, args)
           timeouts.splice(timeouts.indexOf(timeout), 1)
           return cbResult
         })
