@@ -89,7 +89,11 @@ class NoopProxy {
       options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
     }
 
-    const childOf = unwrap(options?.childOf)
+    let childOf
+    if (options?.childOf instanceof PublicSpan) {
+      childOf = unwrap(options?.childOf)
+    }
+
     if (childOf !== undefined) {
       options = { ...options, childOf }
     }
@@ -97,8 +101,11 @@ class NoopProxy {
     return new PublicSpan(this._tracer.startSpan(name, options))
   }
 
-  inject (context, format, carrier) {
-    return this._tracer.inject(unwrap(context), format, carrier)
+  inject(context, format, carrier) {
+    if (context instanceof PublicSpan) {
+      context = unwrap(context)
+    }
+    return this._tracer.inject(context, format, carrier)
   }
 
   extract () {

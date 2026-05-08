@@ -80,9 +80,13 @@ class PublicSpan {
     return this.#span.finish.apply(this.#span, arguments)
   }
 
-  static unwrap (value) {
-    return value instanceof PublicSpan ? value.#span : value
+  static _unwrap(value) {
+    if (!value) return
+    return value.#span ?? value
   }
 }
 
-module.exports = { PublicSpan, unwrap: PublicSpan.unwrap }
+const unwrap = PublicSpan._unwrap
+delete PublicSpan._unwrap
+
+module.exports = { PublicSpan, unwrap }

@@ -7,7 +7,7 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { unwrap } = require('../opentracing/public/span')
+const { PublicSpan, unwrap } = require('../opentracing/public/span')
 
 const { storage: storageCore } = require('../../../datadog-core')
 const {
@@ -220,11 +220,11 @@ class LLMObs extends NoopLLMObs {
 
     if (!span) {
       span = this._active()
-    } else if (!options && !(unwrap(span) instanceof Span)) {
+    } else if (span instanceof PublicSpan) {
+      span = unwrap(span)
+    } else if (!options) {
       options = span
       span = this._active()
-    } else {
-      span = unwrap(span)
     }
 
     let err = ''

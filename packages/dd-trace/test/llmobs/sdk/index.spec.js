@@ -15,7 +15,7 @@ const tracerVersion = require('../../../../../package.json').version
 const agent = require('../../plugins/agent')
 const { removeDestroyHandler } = require('../util')
 
-const { unwrap } = require('../../../src/opentracing/public/span')
+const { PublicSpan, unwrap } = require('../../../src/opentracing/public/span')
 
 const injectCh = channel('dd-trace:span:inject')
 
@@ -60,7 +60,7 @@ describe('sdk', () => {
     })
     const tagMap = LLMObsTagger.tagMap
     const originalGet = tagMap.get.bind(tagMap)
-    tagMap.get = (span) => originalGet(unwrap(span))
+    tagMap.get = (span) => originalGet(span instanceof PublicSpan ? unwrap(span) : span)
   })
 
   afterEach(() => {
