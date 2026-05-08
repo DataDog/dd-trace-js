@@ -63,8 +63,8 @@ describe('IAST Rewriter', () => {
       workerThreads = require('worker_threads')
 
       MessageChannel = workerThreads.MessageChannel
-      workerThreads.MessageChannel = function () {
-        const res = new MessageChannel(...arguments)
+      workerThreads.MessageChannel = function (...args) {
+        const res = new MessageChannel(...args)
         port1On = sinon.spy(res.port1, 'on')
         port1Unref = sinon.spy(res.port1, 'unref')
 

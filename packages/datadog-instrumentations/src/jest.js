@@ -521,13 +521,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const setNameToParams = (name, params) => { this.nameToParams[name] = [...params] }
 
       if (event.name === 'setup' && this.global.test) {
-        shimmer.wrap(this.global.test, 'each', each => function () {
-          const testParameters = getFormattedJestTestParameters(arguments)
-          const eachBind = each.apply(this, arguments)
-          return function () {
-            const [testName] = arguments
+        shimmer.wrap(this.global.test, 'each', each => function (...args) {
+          const testParameters = getFormattedJestTestParameters(args)
+          const eachBind = each.apply(this, args)
+          return function (...args) {
+            const [testName] = args
             setNameToParams(testName, testParameters)
-            return eachBind.apply(this, arguments)
+            return eachBind.apply(this, args)
           }
         })
       }
@@ -624,16 +624,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               originalHookFns.set(hook, hookFn)
             }
-            const newHookFn = shimmer.wrapFunction(hookFn, hookFn => function () {
-              return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+            const newHookFn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
+              return testFnCh.runStores(ctx, () => hookFn.apply(this, args))
             })
             hook.fn = newHookFn
           }
           const originalFn = event.test.fn
           originalTestFns.set(event.test, originalFn)
 
-          const newFn = shimmer.wrapFunction(event.test.fn, testFn => function () {
-            return testFnCh.runStores(ctx, () => testFn.apply(this, arguments))
+          const newFn = shimmer.wrapFunction(event.test.fn, testFn => function (...args) {
+            return testFnCh.runStores(ctx, () => testFn.apply(this, args))
           })
 
           event.test.fn = newFn
@@ -648,8 +648,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         } else {
           originalHookFns.set(event.hook, hookFn)
         }
-        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function () {
-          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
+          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, args))
         })
       }
 
@@ -1544,14 +1544,14 @@ function coverageReporterWrapper (coverageReporter) {
    * in which case we'll leave it.
    */
   // `_addUntestedFiles` is an async function
-  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
     if (DD_TEST_TIA_KEEP_COV_CONFIG) {
-      return addUntestedFiles.apply(this, arguments)
+      return addUntestedFiles.apply(this, args)
     }
     if (isCodeCoverageEnabledBecauseOfUs) {
       return Promise.resolve()
     }
-    return addUntestedFiles.apply(this, arguments)
+    return addUntestedFiles.apply(this, args)
   })
 
   return coverageReporter
@@ -1594,8 +1594,8 @@ addHook({
   name: '@jest/test-sequencer',
   versions: ['>=28'],
 }, (sequencerPackage, frameworkVersion) => {
-  shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
-    const shardedTests = shard.apply(this, arguments)
+  shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function (...args) {
+    const shardedTests = shard.apply(this, args)
 
     if (!shardedTests.length || !isSuitesSkippingEnabled || !skippableSuites.length) {
       return shardedTests
@@ -1642,10 +1642,10 @@ addHook({
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
-  const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
-    const environment = arguments[2]
+  const newAdapter = shimmer.wrapFunction(adapter, adapter => function (...args) {
+    const environment = args[2]
     if (!environment || !environment.testEnvironmentOptions) {
-      return adapter.apply(this, arguments)
+      return adapter.apply(this, args)
     }
     testSuiteStartCh.publish({
       testSuite: environment.testSuite,
@@ -1655,7 +1655,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       frameworkVersion: jestVersion,
       testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
     })
-    return adapter.apply(this, arguments).then(suiteResults => {
+    return adapter.apply(this, args).then(suiteResults => {
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
       let status = 'pass'
       if (skipped) {
@@ -1773,8 +1773,8 @@ function jestConfigAsyncWrapper (jestConfig) {
 }
 
 function jestConfigSyncWrapper (jestConfig) {
-  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
-    const readConfigsResult = readConfigs.apply(this, arguments)
+  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function (...args) {
+    const readConfigsResult = readConfigs.apply(this, args)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
@@ -1794,6 +1794,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddRepositoryRoot',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddItrSkippingEnabledTags',
   '_ddIsDiEnabled',
   '_ddIsKnownTestsEnabled',
   '_ddIsTestManagementTestsEnabled',
@@ -1983,10 +1984,10 @@ addHook({
 })
 
 function onMessageWrapper (onMessage) {
-  return function () {
-    const response = arguments[0]
+  return function (...args) {
+    const response = args[0]
     if (!Array.isArray(response)) {
-      return onMessage.apply(this, arguments)
+      return onMessage.apply(this, args)
     }
 
     const [code, data] = response
@@ -2013,7 +2014,7 @@ function onMessageWrapper (onMessage) {
       }
       return
     }
-    return onMessage.apply(this, arguments)
+    return onMessage.apply(this, args)
   }
 }
 
@@ -2077,8 +2078,8 @@ function wrapWorker (worker) {
 }
 
 function enqueueWrapper (enqueue) {
-  return function () {
-    shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
+  return function (...args) {
+    shimmer.wrap(args[0], 'onStart', onStart => function (worker) {
       if (worker) {
         const currentChannel = worker._child || worker._worker
         const previousChannel = wrappedWorkerChannels.get(worker)
@@ -2095,7 +2096,7 @@ function enqueueWrapper (enqueue) {
       }
       return onStart.apply(this, arguments)
     })
-    return enqueue.apply(this, arguments)
+    return enqueue.apply(this, args)
   }
 }
 

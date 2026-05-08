@@ -370,17 +370,17 @@ addHook({
 }, (Mocha, frameworkVersion) => {
   warnDeprecatedMochaVersion(frameworkVersion)
 
-  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+  shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
     this.options.delay = true
 
-    const runner = run.apply(this, arguments)
+    const runner = run.apply(this, args)
 
     // eslint-disable-next-line unicorn/no-array-for-each
     this.files.forEach((path) => {
@@ -427,11 +427,11 @@ addHook({
   file: 'lib/cli/run-helpers.js',
 }, (run) => {
   // `runMocha` is an async function
-  shimmer.wrap(run, 'runMocha', runMocha => function () {
+  shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return runMocha.apply(this, arguments)
+      return runMocha.apply(this, args)
     }
-    const mocha = arguments[0]
+    const mocha = args[0]
 
     /**
      * This attaches `run` to the global context, which we'll call after
@@ -445,7 +445,7 @@ addHook({
       mocha.options.delay = true
     }
 
-    return runMocha.apply(this, arguments)
+    return runMocha.apply(this, args)
   })
   return run
 })
@@ -463,9 +463,9 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
-  shimmer.wrap(Runner.prototype, 'run', run => function () {
+  shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
@@ -553,7 +553,7 @@ addHook({
       }
     })
 
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   })
 
   return Runner

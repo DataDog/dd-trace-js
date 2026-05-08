@@ -713,5 +713,36 @@ describe('encode', () => {
       assert.match(logger.debug.getCall(1).args[0], /unsupported_key2/)
       assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
     })
+
+    it('should skip events whose name is not a string without throwing', () => {
+      // `addEvent` and the OTel bridge do not type-check `name`. The native
+      // path used to hand `name` straight to `_encodeString`, which throws
+      // for `Symbol` / `null` / non-coercible values via `Buffer.byteLength`
+      // and would have aborted the entire trace. Bad entries are dropped
+      // silently; the rest of the trace must still encode.
+      const topLevelEvents = [
+        { name: null, time_unix_nano: 1000000, attributes: { ok: true } },
+        { name: 42, time_unix_nano: 2000000 },
+        { name: Symbol('event'), time_unix_nano: 3000000 },
+        { name: undefined, time_unix_nano: 4000000 },
+        { name: 'kept', time_unix_nano: 5000000, attributes: { mood: 'happy' } },
+      ]
+
+      data[0].span_events = topLevelEvents
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const trace = decoded[0]
+
+      assert.deepStrictEqual(trace[0].span_events, [
+        {
+          name: 'kept',
+          time_unix_nano: 5000000,
+          attributes: { mood: { type: 0, string_value: 'happy' } },
+        },
+      ])
+    })
   })
 })

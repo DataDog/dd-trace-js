@@ -72,11 +72,11 @@ function wrapFn (fn) {
 }
 
 function wrapNext (req, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, next => function (...args) {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 
-    next.apply(this, arguments)
+    next.apply(this, args)
   })
 }
 
