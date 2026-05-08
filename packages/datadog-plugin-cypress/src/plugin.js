@@ -23,22 +23,13 @@ const noopTask = {
 module.exports = function CypressPlugin (on, config) {
   const tracer = require('../../dd-trace')
 
-  if (satisfies(config.version, '<10.2.0')) {
-    if (DD_MAJOR >= 6) {
-      // eslint-disable-next-line no-console
-      console.error(
-        'ERROR: dd-trace v6 has deleted support for Cypress<10.2.0.'
-      )
-      on('task', noopTask)
-      return config
-    }
-
-    // console.warn does not seem to work in cypress, so using console.log instead
+  if (DD_MAJOR >= 6 && satisfies(config.version, '<12.0.0')) {
     // eslint-disable-next-line no-console
-    console.log(
-      'WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
-      ' and will not be supported in future versions of dd-trace.'
+    console.error(
+      'ERROR: dd-trace v6 has deleted support for Cypress<12.0.0.'
     )
+    on('task', noopTask)
+    return config
   }
 
   // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)

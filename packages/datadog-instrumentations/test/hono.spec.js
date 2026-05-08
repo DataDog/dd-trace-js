@@ -138,5 +138,49 @@ withVersions('hono', 'hono', version => {
       assert.strictEqual(callArgs.req.url, '/error')
       assert.strictEqual(callArgs.error.message, 'test error')
     })
+
+    // Regression for #8198: Hono's testing helper forwards to
+    // `app.fetch(request, undefined, undefined)`, so `env` and `context.env` are
+    // undefined. The wrappers must not throw and must not publish events with a
+    // missing IncomingMessage (the APM `web` helpers depend on one).
+    describe('without a Node.js IncomingMessage', () => {
+      let localApp
+      let localMiddlewareCalled
+
+      beforeEach(() => {
+        const { Hono } = require(`../../../versions/hono@${version}`).get()
+        localMiddlewareCalled = sinon.stub()
+        localApp = new Hono()
+        localApp.use(async function localNamed (_c, next) {
+          localMiddlewareCalled()
+          await next()
+        })
+        localApp.get('/test', (c) => c.text('OK'))
+        localApp.get('/error', () => { throw new Error('boom') })
+      })
+
+      it('should serve `app.request()` without throwing or publishing', async () => {
+        const res = await localApp.request('/test')
+
+        assert.strictEqual(res.status, 200)
+        assert.strictEqual(await res.text(), 'OK')
+        sinon.assert.calledOnce(localMiddlewareCalled)
+        sinon.assert.notCalled(handleChannelCb)
+        sinon.assert.notCalled(routeChannelCb)
+        sinon.assert.notCalled(enterChannelCb)
+        sinon.assert.notCalled(nextChannelCb)
+        sinon.assert.notCalled(exitChannelCb)
+        sinon.assert.notCalled(finishChannelCb)
+        sinon.assert.notCalled(errorChannelCb)
+      })
+
+      it('should let route errors propagate without publishing to errorChannel', async () => {
+        const res = await localApp.request('/error')
+
+        assert.strictEqual(res.status, 500)
+        sinon.assert.notCalled(errorChannelCb)
+        sinon.assert.notCalled(handleChannelCb)
+      })
+    })
   })
 })

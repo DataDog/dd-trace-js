@@ -11,14 +11,18 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        # Preserve untracked artifacts (coverage/, .nyc_output/, node_modules/) produced by earlier
+        # test steps. Without this, the default `git clean -ffdx` wipes them before subsequent
+        # steps such as Codecov upload can pick them up.
+        clean: false
     - name: Create Artifacts Directories
-      run: |
-        mkdir -p "./artifacts/logs"
-        mkdir -p "./artifacts/supported-integrations"
+      if: runner.debug == '1'
+      run: mkdir -p "./artifacts/logs"
       shell: bash
     - name: Save Test Agent Logs
       id: save_logs
-      if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
+      if: runner.debug == '1'
       run: |
         if [ -n "${{inputs.container-id}}" ]; then
           docker logs "${{inputs.container-id}}" > "artifacts/logs/test_agent_logs_${{ inputs.suffix }}.txt"
@@ -27,28 +31,8 @@ runs:
         fi
       shell: bash
     - name: Archive Test Agent Logs
-      if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
+      if: runner.debug == '1'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: "test_agent_logs_${{ inputs.suffix }}"
         path: "./artifacts/logs"
-    - name: Get Tested Integrations from Test Agent
-      run: |
-        # make temporary files to save response data to
-        response=$(mktemp) && headers=$(mktemp)
-
-        # get tested integrations
-        curl -o "$response" -D "$headers" http://127.0.0.1:9126/test/integrations/tested_versions
-
-        # get filename representing the name of the tested integration from headers
-        filename=$(awk -F': ' '/file-name/{print $2}' "$headers" | tr -d '\r\n')
-
-        # copy data to final file and remove temp files
-        mv "$response" "artifacts/supported-integrations/${filename}_supported_versions.csv"
-        rm "$headers"
-      shell: bash
-    - name: Archive Test Agent Tested Versions Artifacts
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: supported-integrations-${{ inputs.suffix }}
-        path: ./artifacts

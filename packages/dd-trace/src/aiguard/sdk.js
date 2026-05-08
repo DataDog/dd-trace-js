@@ -2,7 +2,7 @@
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
-const { storage } = require('../../../datadog-core')
+const { getActiveRequest } = require('../appsec/store')
 const log = require('../log')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const telemetryMetrics = require('../telemetry/metrics')
@@ -70,7 +70,7 @@ class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
     super()
 
-    if (!config.apiKey || !config.appKey) {
+    if (!config.apiKey || !config.DD_APP_KEY) {
       log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
       this.#initialized = false
       return
@@ -78,7 +78,7 @@ class AIGuard extends NoopAIGuard {
     this.#tracer = tracer
     this.#headers = {
       'DD-API-KEY': config.apiKey,
-      'DD-APPLICATION-KEY': config.appKey,
+      'DD-APPLICATION-KEY': config.DD_APP_KEY,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
       'DD-AI-GUARD-LANGUAGE': 'nodejs',
@@ -154,7 +154,7 @@ class AIGuard extends NoopAIGuard {
 
     if (!needsHttpClientIp && !needsNetworkClientIp) return
 
-    const req = storage('legacy').getStore()?.req
+    const req = getActiveRequest()
 
     if (!req) return
 

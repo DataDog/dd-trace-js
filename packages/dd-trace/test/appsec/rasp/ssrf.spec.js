@@ -5,17 +5,18 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { storage } = require('../../../../datadog-core')
 const {
   httpClientRequestStart,
   httpClientResponseFinish,
 } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
+const { withRequest } = require('../../../src/appsec/store')
 
 const DEFAULT_URL = 'http://example.com'
 
 describe('RASP - ssrf.js', () => {
   let waf
-  let legacyStorage
   let downstream
   let ssrf
   let telemetry
@@ -30,8 +31,12 @@ describe('RASP - ssrf.js', () => {
   })
 
   const stubStore = (req = {}, res = {}) => {
-    legacyStorage.getStore.returns({ req, res })
+    storage('legacy').enterWith(req ? withRequest(undefined, req) : {})
     return { req, res }
+  }
+
+  const clearStore = () => {
+    storage('legacy').enterWith({})
   }
 
   const publishRequestStart = ({ ctx, includeBodies = false, requestAddresses = {} }) => {
@@ -48,10 +53,6 @@ describe('RASP - ssrf.js', () => {
   }
 
   beforeEach(() => {
-    legacyStorage = {
-      getStore: sinon.stub(),
-    }
-
     waf = {
       run: sinon.stub(),
     }
@@ -72,7 +73,6 @@ describe('RASP - ssrf.js', () => {
     }
 
     ssrf = proxyquire('../../../src/appsec/rasp/ssrf', {
-      '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
       '../downstream_requests': downstream,
       '../telemetry': telemetry,
@@ -94,6 +94,7 @@ describe('RASP - ssrf.js', () => {
   afterEach(() => {
     sinon.restore()
     ssrf.disable()
+    clearStore()
   })
 
   describe('analyzeSsrf', () => {
@@ -133,7 +134,7 @@ describe('RASP - ssrf.js', () => {
 
     it('should not analyze ssrf if no store', () => {
       const ctx = makeCtx()
-      legacyStorage.getStore.returns(undefined)
+      clearStore()
 
       httpClientRequestStart.publish(ctx)
 

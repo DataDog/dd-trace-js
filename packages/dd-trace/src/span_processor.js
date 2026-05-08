@@ -5,7 +5,6 @@ const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
-const { getValueFromEnvSources } = require('./config/helper')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -26,7 +25,7 @@ class SpanProcessor {
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
 
-    this._processTags = config.propagateProcessTags?.enabled
+    this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
   }
@@ -88,7 +87,7 @@ class SpanProcessor {
   }
 
   _erase (trace, active) {
-    if (getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
+    if (this._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING) {
       const started = new Set()
       const startedIds = new Set()
       const finished = new Set()
@@ -157,10 +156,6 @@ class SpanProcessor {
           log.error('Span finished in one trace but was started in another trace: %s', span)
         }
       }
-    }
-
-    for (const span of trace.finished) {
-      span.context()._tags = {}
     }
 
     trace.started = active

@@ -2,8 +2,6 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
-const { isTrue } = require('../util')
-const { getValueFromEnvSources } = require('../config/helper')
 
 /**
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
@@ -139,16 +137,16 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     hostname,
     port,
     isCiVisibility,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED,
   } = config
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility &&
-                                      isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
+  const isCiVisibilityAgentlessMode = isCiVisibility && DD_CIVISIBILITY_AGENTLESS_ENABLED
 
   if (isCiVisibilityAgentlessMode) {
     try {
-      url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
+      url ||= new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
@@ -178,14 +176,14 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && getValueFromEnvSources('DD_API_KEY') && config.site) {
+    if (error && config.apiKey && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
       // figure out which data center to send to
       const backendUrl = getAgentlessTelemetryEndpoint(config.site)
-      const backendHeader = { ...options.headers, 'DD-API-KEY': getValueFromEnvSources('DD_API_KEY') }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': config.apiKey }
       const backendOptions = {
         ...options,
         url: backendUrl,

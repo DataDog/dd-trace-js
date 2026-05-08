@@ -400,6 +400,8 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pg', { appendComment: true });
+tracer.use('pg', { truncate: true });
+tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
@@ -691,7 +693,8 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {},
+  tags: { team: 'ml' },
+  costTags: ['team'],
   prompt: {
     id: '123',
     version: '1.0.0',
@@ -703,7 +706,8 @@ llmobs.annotate(span, {
   outputData: 'output',
   metadata: {},
   metrics: {},
-  tags: {}
+  tags: { team: 'ml' },
+  costTags: ['team']
 })
 
 

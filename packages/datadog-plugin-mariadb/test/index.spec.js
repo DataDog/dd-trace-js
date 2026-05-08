@@ -118,7 +118,7 @@ describe('Plugin', () => {
               component: 'mariadb',
               '_dd.integration': 'mariadb',
             },
-          })
+          }, { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ })
             .then(done)
             .catch(done)
 
@@ -141,7 +141,7 @@ describe('Plugin', () => {
                 'db.type': 'mariadb',
                 component: 'mariadb',
               },
-            })
+            }, { spanResourceMatch: /SELECT \? \+ \? AS solution/ })
               .then(done)
               .catch(done)
 
@@ -163,7 +163,7 @@ describe('Plugin', () => {
                 'db.type': 'mariadb',
                 component: 'mariadb',
               },
-            })
+            }, { spanResourceMatch: /SELECT \? \+ \? AS solution/ })
               .then(done)
               .catch(done)
 
@@ -201,7 +201,8 @@ describe('Plugin', () => {
 
         it('should work without a callback', done => {
           agent
-            .assertFirstTraceSpan({ resource: 'SELECT 1 + 1 AS solution' })
+            .assertFirstTraceSpan({ resource: 'SELECT 1 + 1 AS solution' },
+              { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ })
             .then(done)
             .catch(done)
 

@@ -4,6 +4,7 @@
 const realSetTimeout = setTimeout
 
 const path = require('node:path')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -11,8 +12,13 @@ const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   DYNAMIC_NAME_RE,
-  collectDynamicNamesFromTraces,
-  logDynamicNamesWarning,
+  getTestSuitePath,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
+  recordAttemptToFixExecution,
+  collectTestOptimizationSummariesFromTraces,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -49,6 +55,7 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const attemptToFixTaskToStatuses = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
 const dynamicNameTasks = new WeakSet()
@@ -57,6 +64,12 @@ const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
 const modifiedTasks = new WeakSet()
+const efdDeterminedRetries = new WeakMap()
+const efdSlowAbortedTasks = new WeakSet()
+const efdExecutionStartByTask = new WeakMap()
+const efdSkippedRetryResults = new WeakMap()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
@@ -65,6 +78,7 @@ let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionSlowTestRetries = {}
 let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
@@ -80,6 +94,13 @@ let isSessionStarted = false
 let vitestPool = null
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
+  if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
+    return fallbackRetryCount
+  }
+  return getMaxEfdRetryCount(slowTestRetries)
+}
 
 function getTestCommand () {
   return `vitest ${process.argv.slice(2).join(' ')}`
@@ -104,6 +125,7 @@ function getProvidedContext () {
       _ddIsDiEnabled,
       _ddKnownTests: knownTests,
       _ddEarlyFlakeDetectionNumRetries: numRepeats,
+      _ddEarlyFlakeDetectionSlowTestRetries: slowTestRetries,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
@@ -119,6 +141,7 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
       knownTests,
       numRepeats,
+      slowTestRetries: slowTestRetries ?? {},
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
@@ -135,6 +158,7 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: false,
       knownTests: {},
       numRepeats: 0,
+      slowTestRetries: {},
       isKnownTestsEnabled: false,
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
@@ -213,12 +237,8 @@ function getSessionStatus (state) {
 
 // From https://github.com/vitest-dev/vitest/blob/51c04e2f44d91322b334f8ccbcdb368facc3f8ec/packages/runner/src/run.ts#L243-L250
 function getVitestTestStatus (test, retryCount) {
-  if (test.result.state !== 'fail') {
-    if (!test.repeats) {
-      return 'pass'
-    } else if (test.repeats && (test.retry ?? 0) === retryCount) {
-      return 'pass'
-    }
+  if (test.result.state !== 'fail' && (!test.repeats || (test.retry ?? 0) === retryCount)) {
+    return 'pass'
   }
   return 'fail'
 }
@@ -255,6 +275,29 @@ function getTestName (task) {
   return testName
 }
 
+function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
+  if (isSwitchedStatus && attemptToFixTasks.has(task) && testCtx?.status) {
+    return testCtx.status
+  }
+
+  return state === 'fail' ? 'fail' : 'pass'
+}
+
+function recordFinalAttemptToFixExecution (task, status, providedContext) {
+  const statuses = attemptToFixTaskToStatuses.get(task)
+  if (statuses && statuses.length <= providedContext.testManagementAttemptToFixRetries) {
+    statuses.push(status)
+  }
+
+  recordAttemptToFixExecution(attemptToFixExecutions, {
+    testSuite: getTestSuitePath(task.file.filepath, process.cwd()),
+    testName: getTestName(task),
+    status,
+    isDisabled: disabledTasks.has(task),
+    isQuarantined: quarantinedTasks.has(task),
+  })
+}
+
 /**
  * Wraps a function so it runs inside the current test span context.
  * @param {object} task
@@ -262,8 +305,8 @@ function getTestName (task) {
  * @returns {Function}
  */
 function wrapTestScopedFn (task, fn) {
-  return shimmer.wrapFunction(fn, fn => function () {
-    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+  return shimmer.wrapFunction(fn, fn => function (...args) {
+    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
   })
 }
 
@@ -302,6 +345,7 @@ function getSortWrapper (sort, frameworkVersion) {
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
         isDiEnabled = libraryConfig.isDiEnabled
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -360,7 +404,9 @@ function getSortWrapper (sort, frameworkVersion) {
               workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
               workspaceProject._provided._ddKnownTests = knownTests
               workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-              workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+              workspaceProject._provided._ddEarlyFlakeDetectionNumRetries =
+                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries)
+              workspaceProject._provided._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
             } catch {
               log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
             }
@@ -480,7 +526,8 @@ function getFinishWrapper (exitOrClose) {
       onFinish,
     })
 
-    logDynamicNamesWarning(newTestsWithDynamicNames)
+    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    loggedAttemptToFixTests.clear()
 
     await flushPromise
 
@@ -497,13 +544,13 @@ function getFinishWrapper (exitOrClose) {
 
 function getCliOrStartVitestWrapper (frameworkVersion) {
   return function (oldCliOrStartVitest) {
-    return function () {
+    return function (...args) {
       if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
-        return oldCliOrStartVitest.apply(this, arguments)
+        return oldCliOrStartVitest.apply(this, args)
       }
       isSessionStarted = true
       testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
-      return oldCliOrStartVitest.apply(this, arguments)
+      return oldCliOrStartVitest.apply(this, args)
     }
   }
 }
@@ -542,7 +589,10 @@ function threadHandler (thread) {
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-        collectDynamicNamesFromTraces(message.data, newTestsWithDynamicNames)
+        collectTestOptimizationSummariesFromTraces(message.data, {
+          newTestsWithDynamicNames,
+          attemptToFixExecutions,
+        })
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
@@ -584,7 +634,10 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-          collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
+          collectTestOptimizationSummariesFromTraces(data, {
+            newTestsWithDynamicNames,
+            attemptToFixExecutions,
+          })
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
@@ -608,11 +661,11 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
   if (forksPoolWorker) {
     // function is async
-    shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function () {
+    shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'child_process'
       this.env.DD_VITEST_WORKER = '1'
 
-      return start.apply(this, arguments)
+      return start.apply(this, args)
     })
     shimmer.wrap(forksPoolWorker.value.prototype, 'on', getWrappedOn)
   }
@@ -620,10 +673,10 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const threadsPoolWorker = getThreadsPoolWorkerExport(cliApiPackage)
   if (threadsPoolWorker) {
     // function is async
-    shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function () {
+    shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
       this.env.DD_VITEST_WORKER = '1'
-      return start.apply(this, arguments)
+      return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
@@ -658,7 +711,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
             isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
             task.repeats = testManagementAttemptToFixRetries
             attemptToFixTasks.add(task)
-            taskToStatuses.set(task, [])
+            attemptToFixTaskToStatuses.set(task, [])
           }
         },
       })
@@ -685,7 +738,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isImpacted) => {
           if (isImpacted) {
             if (isEarlyFlakeDetectionEnabled) {
-              isRetryReasonEfd = task.repeats !== numRepeats
+              isRetryReasonEfd = true
               task.repeats = numRepeats
             }
             modifiedTasks.add(task)
@@ -703,7 +756,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isNew) => {
           if (isNew && !attemptToFixTasks.has(task)) {
             if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
-              isRetryReasonEfd = task.repeats !== numRepeats
+              isRetryReasonEfd = true
               task.repeats = numRepeats
             }
             newTasks.add(task)
@@ -726,15 +779,17 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
-      const isDisabled = disabledTasks.has(task)
       const isQuarantined = quarantinedTasks.has(task)
 
-      if (isAttemptingToFix && (isDisabled || isQuarantined)) {
-        if (task.result.state === 'fail') {
+      if (isAttemptingToFix) {
+        const statuses = attemptToFixTaskToStatuses.get(task)
+        if (task.result.state === 'pass' && statuses?.includes('fail')) {
           switchedStatuses.add(task)
+          task.result.state = 'fail'
         }
-        task.result.state = 'pass'
-      } else if (isQuarantined) {
+      }
+
+      if (!isAttemptingToFix && isQuarantined) {
         if (task.result.state === 'fail') {
           switchedStatuses.add(task)
         }
@@ -773,6 +828,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isTestManagementTestsEnabled,
       testManagementTests,
       isFlakyTestRetriesEnabled,
+      slowTestRetries,
     } = getProvidedContext()
 
     if (isKnownTestsEnabled) {
@@ -794,6 +850,39 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
+    const isEfdManagedTask = isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)
+
+    if (isEfdManagedTask && numRepetition > 0 && !efdDeterminedRetries.has(task)) {
+      const previousExecutionStart = efdExecutionStartByTask.get(task)
+      const duration = previousExecutionStart === undefined
+        ? task.result?.duration ?? 0
+        : performance.now() - previousExecutionStart
+      const retryCount = getEfdRetryCount(duration, slowTestRetries)
+      efdDeterminedRetries.set(task, retryCount)
+      task.repeats = retryCount
+      if (retryCount === 0) {
+        efdSlowAbortedTasks.add(task)
+      }
+    }
+
+    const efdRetryCount = efdDeterminedRetries.get(task)
+    if (isEfdManagedTask && efdRetryCount !== undefined && numRepetition > efdRetryCount) {
+      if (task.result) {
+        efdSkippedRetryResults.set(task, {
+          ...task.result,
+          errors: task.result.errors?.slice(),
+        })
+      }
+      if (vitestSetFn) {
+        const noop = function () {}
+        noop.__ddTraceWrapped = true
+        vitestSetFn(task, noop)
+      }
+      return onBeforeTryTask.apply(this, arguments)
+    }
+    if (isEfdManagedTask) {
+      efdExecutionStartByTask.set(task, performance.now())
+    }
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
@@ -822,10 +911,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     const lastExecutionStatus = task.result.state
     const isAtf = attemptToFixTasks.has(task)
-    const isQuarantinedOrDisabledAtf = isAtf && (quarantinedTasks.has(task) || disabledTasks.has(task))
     const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isQuarantinedOrDisabledAtf
-    const statuses = taskToStatuses.get(task)
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isAtf
+    const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
     // The only thing that EFD does is to forcefully pass the test if it has passed at least once
@@ -842,7 +930,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (shouldTrackStatuses) {
+        if (shouldTrackStatuses && statuses) {
           statuses.push(lastExecutionStatus)
         }
         if (shouldFlipStatus) {
@@ -855,7 +943,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
     } else if (numRepetition === task.repeats) {
-      if (shouldTrackStatuses) {
+      if (shouldTrackStatuses && statuses) {
         statuses.push(lastExecutionStatus)
       }
 
@@ -865,6 +953,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         testErrorCh.publish({ error: testError, ...ctx.currentStore })
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
+      }
+      if (shouldFlipStatus) {
+        task.result.state = 'pass'
       }
     }
 
@@ -889,6 +980,14 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isModified: modifiedTasks.has(task),
     }
     taskToCtx.set(task, ctx)
+
+    if (attemptToFixTasks.has(task)) {
+      logAttemptToFixTestExecution(
+        getTestSuitePath(task.file.filepath, process.cwd()),
+        testName,
+        loggedAttemptToFixTests
+      )
+    }
 
     testStartCh.runStores(ctx, () => {})
 
@@ -915,8 +1014,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
           for (let i = 0; i < hookArray.length; i++) {
             const currentFn = hookArray[i]
             const originalFn = originalHookFns.get(currentFn) || currentFn
-            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function () {
-              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function (...args) {
+              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
 
               if (hookType === 'beforeEach') {
                 return wrapBeforeEachCleanupResult(task, result)
@@ -937,31 +1036,58 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
-    async function (task, { retry: retryCount }) {
+    async function (task, retryInfo) {
       if (!testPassCh.hasSubscribers && !testErrorCh.hasSubscribers && !testSkipCh.hasSubscribers) {
         return onAfterTryTask.apply(this, arguments)
       }
       const result = await onAfterTryTask.apply(this, arguments)
 
-      const { testManagementAttemptToFixRetries } = getProvidedContext()
+      const {
+        isEarlyFlakeDetectionEnabled,
+        testManagementAttemptToFixRetries,
+        slowTestRetries,
+      } = getProvidedContext()
 
-      const status = getVitestTestStatus(task, retryCount)
+      const status = getVitestTestStatus(task, retryInfo.retry)
       const ctx = taskToCtx.get(task)
 
       const { isDiEnabled } = getProvidedContext()
 
-      if (isDiEnabled && retryCount > 1) {
+      if (efdSkippedRetryResults.has(task)) {
+        task.result = efdSkippedRetryResults.get(task)
+        efdSkippedRetryResults.delete(task)
+        return result
+      }
+
+      if (isDiEnabled && retryInfo.retry > 1) {
         await waitForHitProbe()
+      }
+
+      if (
+        isEarlyFlakeDetectionEnabled &&
+        (retryInfo.repeats ?? 0) === 0 &&
+        taskToStatuses.has(task) &&
+        !attemptToFixTasks.has(task) &&
+        !efdDeterminedRetries.has(task)
+      ) {
+        const executionStart = efdExecutionStartByTask.get(task)
+        const duration = executionStart === undefined ? task.result?.duration ?? 0 : performance.now() - executionStart
+        const retryCount = getEfdRetryCount(duration, slowTestRetries)
+        efdDeterminedRetries.set(task, retryCount)
+        task.repeats = retryCount
+        if (retryCount === 0) {
+          efdSlowAbortedTasks.add(task)
+        }
       }
 
       let attemptToFixPassed = false
       let attemptToFixFailed = false
       if (attemptToFixTasks.has(task)) {
-        const statuses = taskToStatuses.get(task)
+        const statuses = attemptToFixTaskToStatuses.get(task)
         if (statuses.length === testManagementAttemptToFixRetries) {
-          if (statuses.every(status => status === 'pass')) {
+          if (status === 'pass' && statuses.every(status => status === 'pass')) {
             attemptToFixPassed = true
-          } else if (statuses.includes('fail')) {
+          } else if (status === 'fail' || statuses.includes('fail')) {
             attemptToFixFailed = true
           }
         }
@@ -1162,9 +1288,16 @@ addHook({
       // We have to trick vitest into thinking that the test has passed
       // but we want to report it as failed if it did fail
       const isSwitchedStatus = switchedStatuses.has(task)
+      const providedContext = getProvidedContext()
 
       if (result) {
         const { state, duration, errors } = result
+        const testError = errors?.[0]
+        if (attemptToFixTasks.has(task)) {
+          const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
+          recordFinalAttemptToFixExecution(task, status, providedContext)
+        }
+
         if (state === 'skip') { // programmatic skip
           testSkipCh.publish({
             testName: getTestName(task),
@@ -1174,19 +1307,20 @@ addHook({
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
-            testPassCh.publish({ task, ...testCtx.currentStore })
+            const isSkippedByTestManagement =
+              !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
+            testPassCh.publish({
+              task,
+              finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
+              earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
+              ...testCtx.currentStore,
+            })
           }
         } else if (state === 'fail' || isSwitchedStatus) {
-          let testError
-
-          if (errors?.length) {
-            testError = errors[0]
-          }
-
           let hasFailedAllRetries = false
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
-            const statuses = taskToStatuses.get(task)
+            const statuses = attemptToFixTaskToStatuses.get(task)
             if (statuses.includes('fail')) {
               attemptToFixFailed = true
             }
@@ -1196,19 +1330,22 @@ addHook({
           }
 
           // Check if all EFD retries failed
-          const providedContext = getProvidedContext()
-          if (providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))) {
+          const isEfdRetry =
+            providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
+          if (isEfdRetry) {
             const statuses = taskToStatuses.get(task)
-            // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
-            if (statuses && statuses.length === providedContext.numRepeats &&
+            const efdRetryCount = efdDeterminedRetries.get(task) ?? providedContext.numRepeats
+            // statuses only includes repetitions (not the initial run), so we check against retry count (not +1)
+            if (efdRetryCount > 0 && statuses && statuses.length === efdRetryCount &&
               statuses.every(status => status === 'fail')) {
               hasFailedAllRetries = true
             }
           }
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-          if (providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
-            !newTasks.has(task) && !modifiedTasks.has(task)) {
+          const isAtrRetry = providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
+            !newTasks.has(task) && !modifiedTasks.has(task)
+          if (isAtrRetry) {
             const maxRetries = providedContext.flakyTestRetriesCount ?? 0
             if (maxRetries > 0 && task.result?.retryCount === maxRetries) {
               hasFailedAllRetries = true
@@ -1218,11 +1355,29 @@ addHook({
           if (testCtx) {
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
+
+            let finalStatus
+            if (isSwitchedStatus) {
+              if (!attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))) {
+                finalStatus = 'skip'
+              } else if (isAtrRetry || isEfdRetry) {
+                finalStatus = hasFailedAllRetries ? 'fail' : 'pass'
+              } else if (attemptToFixTasks.has(task)) {
+                finalStatus = attemptToFixFailed ? 'fail' : 'pass'
+              } else {
+                finalStatus = undefined
+              }
+            } else {
+              finalStatus = 'fail'
+            }
+
             testErrorCh.publish({
               duration: isRetry ? undefined : duration,
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,
+              finalStatus,
+              earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
               ...testCtx.currentStore,
             })
           }

@@ -141,11 +141,9 @@ describe('telemetry', () => {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2',
       },
-      installSignature: {
-        id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
-        type: 'k8s_single_step',
-        time: '1703188212',
-      },
+      DD_INSTRUMENTATION_INSTALL_ID: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+      DD_INSTRUMENTATION_INSTALL_TYPE: 'k8s_single_step',
+      DD_INSTRUMENTATION_INSTALL_TIME: '1703188212',
     }, {
       _pluginsByName: pluginsByName,
     })

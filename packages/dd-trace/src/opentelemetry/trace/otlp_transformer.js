@@ -3,6 +3,7 @@
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
+const id = require('../../id')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -12,11 +13,28 @@ const SPAN_KIND_CLIENT = protoSpanKind.values.SPAN_KIND_CLIENT
 const SPAN_KIND_PRODUCER = protoSpanKind.values.SPAN_KIND_PRODUCER
 const SPAN_KIND_CONSUMER = protoSpanKind.values.SPAN_KIND_CONSUMER
 
+// Cached zero Identifier used to detect zero IDs without re-allocating per span.
+const ZERO_ID = id('0')
+
 /**
+ * @typedef {import('../../id').Identifier} Identifier
+ *
+ * @typedef {object} DDSpanLink
+ * @property {string} trace_id - Hex-encoded trace ID
+ * @property {string} span_id - Hex-encoded span ID
+ * @property {Record<string, string | number | boolean>} [attributes] - Link attributes
+ * @property {number} [flags] - Trace flags
+ * @property {string} [tracestate] - W3C trace state
+ *
+ * @typedef {object} DDSpanEvent
+ * @property {string} name - Event name
+ * @property {number} time_unix_nano - Event time in nanoseconds since epoch
+ * @property {Record<string, string | number | boolean>} [attributes] - Event attributes
+ *
  * @typedef {object} DDFormattedSpan
- * @property {import('../../id')} trace_id - DD Identifier for trace ID
- * @property {import('../../id')} span_id - DD Identifier for span ID
- * @property {import('../../id')} parent_id - DD Identifier for parent span ID
+ * @property {Identifier} trace_id - DD Identifier for trace ID
+ * @property {Identifier} span_id - DD Identifier for span ID
+ * @property {Identifier} parent_id - DD Identifier for parent span ID
  * @property {string} name - Span operation name
  * @property {string} resource - Resource name
  * @property {string} [service] - Service name
@@ -24,9 +42,10 @@ const SPAN_KIND_CONSUMER = protoSpanKind.values.SPAN_KIND_CONSUMER
  * @property {number} error - Error flag (0 or 1)
  * @property {{[key: string]: string}} meta - String key-value tags
  * @property {{[key: string]: number}} metrics - Numeric key-value tags
+ * @property {{[key: string]: object}} [meta_struct] - Structured tags (JSON-serialized, bytes in protobuf)
  * @property {number} start - Start time in nanoseconds since epoch
  * @property {number} duration - Duration in nanoseconds
- * @property {object[]} [span_events] - Span events
+ * @property {DDSpanEvent[]} [span_events] - Span events
  */
 
 // Map DD span.kind string values to OTLP SpanKind numeric values
@@ -51,7 +70,7 @@ const EXCLUDED_META_KEYS = new Set([
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
- * This implementation follows the OTLP Trace v1.7.0 Data Model specification:
+ * This implementation follows the OTLP trace data model:
  * https://opentelemetry.io/docs/specs/otlp/#trace-data-model
  *
  * It receives DD-formatted spans (from span_format.js) and produces
@@ -119,7 +138,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     return {
       traceId: this.#idToBytes(span.trace_id, 16),
       spanId: this.#idToBytes(span.span_id, 8),
-      parentSpanId: (parentId && !this.#isZeroId(parentId)) ? this.#idToBytes(parentId, 8) : undefined,
+      parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
       startTimeUnixNano: span.start,
@@ -178,7 +197,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
-    // Add meta_struct as bytesValue attributes (JSON-serialized, base64-encoded per proto JSON mapping)
+    // TODO: meta_struct values are logically raw bytes. The OTLP http/json spec encodes the bytesValue
+    // field as base64, but when http/protobuf or gRPC support is added the payload should be sent as
+    // raw bytes directly (no JSON.stringify + base64). The backend decoding side will need to be
+    // updated in parallel to accept the unencoded bytes.
     if (span.meta_struct) {
       for (const [key, value] of Object.entries(span.meta_struct)) {
         const bytes = Buffer.from(JSON.stringify(value))
@@ -202,33 +224,40 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
 
   /**
    * Maps DD span error state to an OTLP Status object.
+   * Combines error.type and error.message when both are present so error type
+   * information is preserved on the OTel side.
    *
    * @param {DDFormattedSpan} span - DD-formatted span
    * @returns {object} OTLP Status object with code and message
    */
   #mapStatus (span) {
-    if (span.error === 1) {
-      return {
-        code: STATUS_CODE_ERROR,
-        message: span.meta?.['error.message'] || '',
-      }
+    if (span.error !== 1) {
+      return { code: STATUS_CODE_UNSET, message: '' }
     }
-    return { code: STATUS_CODE_UNSET, message: '' }
+    const errorType = span.meta?.['error.type']
+    const errorMessage = span.meta?.['error.message']
+    let message = ''
+    if (errorType && errorMessage) {
+      message = `${errorType}: ${errorMessage}`
+    } else if (errorType) {
+      message = errorType
+    } else if (errorMessage) {
+      message = errorMessage
+    }
+    return { code: STATUS_CODE_ERROR, message }
   }
 
   /**
    * Transforms a DD span event to an OTLP Event object.
    *
-   * @param {object} event - DD span event with name, time_unix_nano, and attributes
+   * @param {DDSpanEvent} event - DD span event
    * @returns {object} OTLP Event object
    */
   #transformEvent (event) {
     return {
       timeUnixNano: event.time_unix_nano,
       name: event.name || '',
-      attributes: event.attributes && Object.keys(event.attributes).length > 0
-        ? this.transformAttributes(event.attributes)
-        : [],
+      attributes: this.transformAttributes(event.attributes ?? {}),
       droppedAttributesCount: 0,
     }
   }
@@ -257,7 +286,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   /**
    * Transforms a single DD span link to an OTLP Link object.
    *
-   * @param {object} link - DD span link with trace_id, span_id, attributes, flags, tracestate
+   * @param {DDSpanLink} link - DD span link
    * @returns {object} OTLP Link object
    */
   #transformLink (link) {
@@ -265,9 +294,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       traceId: this.#hexToBytes(link.trace_id, 16),
       spanId: this.#hexToBytes(link.span_id, 8),
       traceState: link.tracestate || '',
-      attributes: link.attributes && Object.keys(link.attributes).length > 0
-        ? this.transformAttributes(link.attributes)
-        : [],
+      attributes: this.transformAttributes(link.attributes ?? {}),
       droppedAttributesCount: 0,
       flags: link.flags,
     }
@@ -278,7 +305,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * Pads with leading zeros if the identifier buffer is shorter than the target.
    * Per the OTLP http/json spec, trace-ids and span-ids must be hex-encoded strings.
    *
-   * @param {object} identifier - DD Identifier object with toBuffer() method
+   * @param {Identifier} identifier - DD Identifier
    * @param {number} targetLength - Target byte length (16 for trace ID, 8 for span ID)
    * @returns {string} Hex-encoded string of the specified length
    */
@@ -290,27 +317,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     if (buffer.length > targetLength) {
       return Buffer.from(buffer.slice(buffer.length - targetLength)).toString('hex')
     }
-    // Pad with leading zeros to reach target length
+    // Pad with leading zeros to reach target length.
     const result = Buffer.alloc(targetLength)
-    const offset = targetLength - buffer.length
-    for (let i = 0; i < buffer.length; i++) {
-      result[offset + i] = buffer[i]
-    }
+    Buffer.from(buffer).copy(result, targetLength - buffer.length)
     return result.toString('hex')
-  }
-
-  /**
-   * Checks if a DD Identifier represents a zero ID (all bytes are 0).
-   *
-   * @param {object} identifier - DD Identifier object with toBuffer() method
-   * @returns {boolean} True if the identifier is all zeros
-   */
-  #isZeroId (identifier) {
-    const buffer = identifier.toBuffer()
-    for (let i = 0; i < buffer.length; i++) {
-      if (buffer[i] !== 0) return false
-    }
-    return true
   }
 
   /**

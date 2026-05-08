@@ -20,14 +20,13 @@ class AgentWriter extends BaseWriter {
       ...args[0],
       beforeFirstFlush: () => firstFlushChannel.publish(),
     })
-    const { prioritySampler, lookup, protocolVersion, headers, config = {} } = args[0]
+    const { prioritySampler, lookup, protocolVersion, headers } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._headers = headers
-    this._config = config
     this._encoder = new AgentEncoder(this)
   }
 

@@ -130,6 +130,73 @@ describe('spanFormat', () => {
       })
     })
 
+    it('should truncate meta and metric keys/values past the agent-side limits', () => {
+      const {
+        MAX_META_KEY_LENGTH,
+        MAX_META_VALUE_LENGTH,
+        MAX_METRIC_KEY_LENGTH,
+      } = require('../src/encode/tags-processors')
+
+      // Last-accepted lengths (exact limit) round-trip untouched.
+      const acceptedMetaKey = 'a'.repeat(MAX_META_KEY_LENGTH)
+      const acceptedMetaValue = 'a'.repeat(MAX_META_VALUE_LENGTH)
+      const acceptedMetricKey = `${'b'.repeat(MAX_METRIC_KEY_LENGTH - 1)}!`
+      span.context()._tags[acceptedMetaKey] = acceptedMetaValue
+      span.context()._tags[acceptedMetricKey] = 11
+
+      // First-rejected lengths (limit + 1) get sliced and gain a `...` suffix.
+      // Cover all four typed branches in `addTag`: string / number / boolean /
+      // Buffer (the URL branch shares the boolean/buffer truncation line).
+      const overlongMetaKey = `${'c'.repeat(MAX_META_KEY_LENGTH)}X`
+      const overlongMetaValue = `${'d'.repeat(MAX_META_VALUE_LENGTH)}Y`
+      const overlongMetricKey = `${'e'.repeat(MAX_METRIC_KEY_LENGTH)}Z`
+      const overlongBoolKey = `${'f'.repeat(MAX_METRIC_KEY_LENGTH)}Q`
+      const overlongBufferKey = `${'g'.repeat(MAX_METRIC_KEY_LENGTH)}R`
+      span.context()._tags[overlongMetaKey] = overlongMetaValue
+      span.context()._tags[overlongMetricKey] = 42
+      span.context()._tags[overlongBoolKey] = true
+      span.context()._tags[overlongBufferKey] = Buffer.from('payload')
+
+      trace = spanFormat(span)
+
+      const truncatedMetaKey = `${overlongMetaKey.slice(0, MAX_META_KEY_LENGTH)}...`
+      const truncatedMetaValue = `${overlongMetaValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+      const truncatedMetricKey = `${overlongMetricKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedBoolKey = `${overlongBoolKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      assert.strictEqual(trace.meta[acceptedMetaKey], acceptedMetaValue)
+      assert.strictEqual(trace.meta[truncatedMetaKey], truncatedMetaValue)
+      assert.strictEqual(trace.metrics[acceptedMetricKey], 11)
+      assert.strictEqual(trace.metrics[truncatedMetricKey], 42)
+      assert.strictEqual(trace.metrics[truncatedBoolKey], 1)
+      assert.strictEqual(trace.metrics[truncatedBufferKey], 'payload')
+    })
+
+    it('should truncate the serialized span_links meta value past MAX_META_VALUE_LENGTH', () => {
+      const { MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+
+      const ctxFor = (innerSpanId) => ({
+        toTraceId: () => innerSpanId,
+        toSpanId: () => innerSpanId,
+        _tracestate: undefined,
+        _sampling: {},
+      })
+      // One link with a giant value attribute pushes the JSON serialization
+      // past the 25_000-char limit.
+      span._links = [
+        {
+          context: ctxFor(spanId.toString()),
+          attributes: { huge: 'h'.repeat(MAX_META_VALUE_LENGTH) },
+        },
+      ]
+
+      trace = spanFormat(span)
+
+      const serialized = trace.meta['_dd.span_links']
+      assert.strictEqual(serialized.length, MAX_META_VALUE_LENGTH + 3)
+      assert.ok(serialized.endsWith('...'))
+    })
+
     it('should always set a parent ID', () => {
       span.context()._parentId = null
 

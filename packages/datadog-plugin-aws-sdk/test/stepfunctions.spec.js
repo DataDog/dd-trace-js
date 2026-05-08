@@ -40,20 +40,20 @@ describe('Sfn', () => {
         const client = new lib.SFNClient(params)
         return {
           client,
-          createStateMachine: function () {
-            const req = new lib.CreateStateMachineCommand(...arguments)
+          createStateMachine: function (...args) {
+            const req = new lib.CreateStateMachineCommand(...args)
             return client.send(req)
           },
-          deleteStateMachine: function () {
-            const req = new lib.DeleteStateMachineCommand(...arguments)
+          deleteStateMachine: function (...args) {
+            const req = new lib.DeleteStateMachineCommand(...args)
             return client.send(req)
           },
-          startExecution: function () {
-            const req = new lib.StartExecutionCommand(...arguments)
+          startExecution: function (...args) {
+            const req = new lib.StartExecutionCommand(...args)
             return client.send(req)
           },
-          describeExecution: function () {
-            const req = new lib.DescribeExecutionCommand(...arguments)
+          describeExecution: function (...args) {
+            const req = new lib.DescribeExecutionCommand(...args)
             return client.send(req)
           },
         }
@@ -62,12 +62,12 @@ describe('Sfn', () => {
         const client = new StepFunctions(params)
         return {
           client,
-          createStateMachine: function () { return client.createStateMachine(...arguments).promise() },
-          deleteStateMachine: function () {
-            return client.deleteStateMachine(...arguments).promise()
+          createStateMachine: function (...args) { return client.createStateMachine(...args).promise() },
+          deleteStateMachine: function (...args) {
+            return client.deleteStateMachine(...args).promise()
           },
-          startExecution: function () { return client.startExecution(...arguments).promise() },
-          describeExecution: function () { return client.describeExecution(...arguments).promise() },
+          startExecution: function (...args) { return client.startExecution(...args).promise() },
+          describeExecution: function (...args) { return client.describeExecution(...args).promise() },
         }
       }
     }

@@ -5,12 +5,29 @@ const cp = require('node:child_process')
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const context = describe
+const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../../../../dd-trace/test/setup/core')
 const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
+
+// Used by the negative "no API key" test to inject a stubbed getConfig singleton into
+// the request chain. The stubbed singleton still pulls every other field from the real
+// tracer Config so the rest of the exporter behaves normally.
+function loadAgentlessExporterWithFakeConfig (fakeConfig) {
+  const realConfig = require('../../../../src/config')()
+  const getLibraryConfiguration = proxyquire('../../../../src/ci-visibility/requests/get-library-configuration', {
+    '../../config': () => ({ ...realConfig, ...fakeConfig }),
+  })
+  const CiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/ci-visibility-exporter', {
+    '../requests/get-library-configuration': getLibraryConfiguration,
+  })
+  return proxyquire('../../../../src/ci-visibility/exporters/agentless', {
+    '../ci-visibility-exporter': CiVisibilityExporter,
+  })
+}
 
 describe('CI Visibility Agentless Exporter', () => {
   const url = new URL('http://www.example.com')
@@ -143,8 +160,8 @@ describe('CI Visibility Agentless Exporter', () => {
     })
 
     it('will not allow skippable request if ITR configuration fails', (done) => {
-      // request will fail
-      delete process.env.DD_API_KEY
+      // Stub apiKey to be missing so the request is never sent.
+      const AgentlessCiVisibilityExporter = loadAgentlessExporterWithFakeConfig({ apiKey: undefined })
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -162,10 +179,10 @@ describe('CI Visibility Agentless Exporter', () => {
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
-        return new Promise(resolve => {
+        return /** @type {Promise<void>} */ (new Promise(resolve => {
           agentlessExporter._resolveGit()
           resolve()
-        })
+        }))
       }
 
       agentlessExporter.getLibraryConfiguration({}, (err) => {
@@ -176,7 +193,6 @@ describe('CI Visibility Agentless Exporter', () => {
           )
         )
         assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), false)
-        process.env.DD_API_KEY = '1'
         done()
       })
     })

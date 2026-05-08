@@ -17,8 +17,8 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
-  constructor (config, prioritySampler, exporter) {
-    super(config, prioritySampler, exporter)
+  constructor (config, prioritySampler) {
+    super(config, prioritySampler)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
@@ -100,27 +100,27 @@ class DatadogTracer extends Tracer {
   wrap (name, options, fn) {
     const tracer = this
 
-    return function () {
+    return function (...args) {
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
-        optionsObj = optionsObj.apply(this, arguments)
+        optionsObj = optionsObj.apply(this, args)
       }
 
-      const lastArgId = arguments.length - 1
-      const cb = arguments[lastArgId]
+      const lastArgId = args.length - 1
+      const cb = args[lastArgId]
 
       if (typeof cb === 'function') {
         const scopeBoundCb = tracer.scope().bind(cb)
         return tracer.trace(name, optionsObj, (span, done) => {
-          arguments[lastArgId] = function (err) {
+          args[lastArgId] = function (err) {
             done(err)
             return scopeBoundCb.apply(this, arguments)
           }
 
-          return fn.apply(this, arguments)
+          return fn.apply(this, args)
         })
       }
-      return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
+      return tracer.trace(name, optionsObj, () => fn.apply(this, args))
     }
   }
 

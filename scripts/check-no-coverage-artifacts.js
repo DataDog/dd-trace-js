@@ -15,6 +15,7 @@ const FORBIDDEN_BASENAMES = new Set([
   'clover.xml', // istanbul/nyc: clover reporter output
   'coverage.xml', // Generic coverage XML basename used by various ecosystems/tools (avoid committing it)
   'cobertura.xml', // Alternative Cobertura XML basename used by some tools/setups (avoid committing it)
+  '.nyc-pre-instrumented', // Marker dropped by the coverage tarball packer — must never land in the repo
 ])
 
 /**

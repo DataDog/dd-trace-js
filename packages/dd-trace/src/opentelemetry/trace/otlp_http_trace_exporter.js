@@ -8,12 +8,19 @@ const OtlpTraceTransformer = require('./otlp_transformer')
 /**
  * OtlpHttpTraceExporter exports DD-formatted spans via OTLP over HTTP/JSON.
  *
- * This implementation follows the OTLP HTTP v1.7.0 specification:
+ * This implementation follows the OTLP HTTP specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * It receives DD-formatted spans (from span_format.js), transforms them
  * to OTLP ExportTraceServiceRequest JSON format, and sends them to the
  * configured OTLP endpoint via HTTP POST.
+ *
+ * TODO: Add batch handling similar to the OpenTelemetry SDK Batch Processor
+ * (https://opentelemetry.io/docs/specs/otel/trace/sdk/#batching-processor).
+ * Currently each finished trace is sent as its own HTTP request, which is
+ * unsuitable for high-traffic production environments. The config values
+ * `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE`, and `OTEL_BSP_MAX_QUEUE_SIZE`
+ * (OTEL_BSP_*) are already defined and should drive that implementation.
  *
  * @class OtlpHttpTraceExporter
  * @augments OtlpHttpExporterBase
@@ -25,12 +32,13 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    * Creates a new OtlpHttpTraceExporter instance.
    *
    * @param {string} url - OTLP endpoint URL
-   * @param {string} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
+   *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    */
   constructor (url, headers, timeout, resourceAttributes) {
-    super(url, headers, timeout, 'http/json', '/v1/traces', 'traces')
+    super(url, headers, timeout, 'http/json', 'traces')
     this.#transformer = new OtlpTraceTransformer(resourceAttributes)
   }
 

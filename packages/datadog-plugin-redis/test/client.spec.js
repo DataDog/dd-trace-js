@@ -85,7 +85,7 @@ describe('Plugin', () => {
                   'network.destination.port': 6379,
                 },
               })
-            })
+            }, { spanResourceMatch: /^GET$/ })
 
           await Promise.all([client.get('foo'), promise])
         })

@@ -55,25 +55,29 @@ describe('WAF Metrics', () => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.waf.error'], -127)
       })
 
-      const checkTelemetryMetrics = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
+      const checkTelemetryMetrics = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const namespace = payload.payload.namespace
 
-        if (namespace === 'appsec') {
-          appsecTelemetryMetricsReceived = true
-          const series = payload.payload.series
-          const wafRequests = series.find(s => s.metric === 'waf.requests')
+          if (namespace === 'appsec') {
+            appsecTelemetryMetricsReceived = true
+            const series = payload.payload.series
+            const wafRequests = series.find(s => s.metric === 'waf.requests')
 
-          assert.ok(wafRequests)
-          assert.strictEqual(wafRequests.type, 'count')
-          assert.ok(wafRequests.tags.includes('waf_error:true'))
-          assert.ok(wafRequests.tags.includes('rate_limited:false'))
+            assert.ok(wafRequests)
+            assert.strictEqual(wafRequests.type, 'count')
+            assert.ok(wafRequests.tags.includes('waf_error:true'))
+            assert.ok(wafRequests.tags.includes('rate_limited:false'))
 
-          const wafError = series.find(s => s.metric === 'waf.error')
-          assert.ok(wafError)
-          assert.strictEqual(wafError.type, 'count')
-          assert.ok(wafError.tags.includes('waf_error:-127'))
-        }
-      }, 'generate-metrics', 30_000, 2)
+            const wafError = series.find(s => s.metric === 'waf.error')
+            assert.ok(wafError)
+            assert.strictEqual(wafError.type, 'count')
+            assert.ok(wafError.tags.includes('waf_error:-127'))
+          }
+        },
+        requestType: 'generate-metrics',
+        expectedMessageCount: 2,
+      })
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
@@ -114,19 +118,23 @@ describe('WAF Metrics', () => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.waf.timeouts'] > 0, true)
       })
 
-      const checkTelemetryMetrics = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
+      const checkTelemetryMetrics = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const namespace = payload.payload.namespace
 
-        if (namespace === 'appsec') {
-          appsecTelemetryMetricsReceived = true
-          const series = payload.payload.series
-          const wafRequests = series.find(s => s.metric === 'waf.requests')
+          if (namespace === 'appsec') {
+            appsecTelemetryMetricsReceived = true
+            const series = payload.payload.series
+            const wafRequests = series.find(s => s.metric === 'waf.requests')
 
-          assert.ok(wafRequests)
-          assert.strictEqual(wafRequests.type, 'count')
-          assert.ok(wafRequests.tags.includes('waf_timeout:true'))
-        }
-      }, 'generate-metrics', 30_000, 2)
+            assert.ok(wafRequests)
+            assert.strictEqual(wafRequests.type, 'count')
+            assert.ok(wafRequests.tags.includes('waf_timeout:true'))
+          }
+        },
+        requestType: 'generate-metrics',
+        expectedMessageCount: 2,
+      })
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
@@ -168,23 +176,27 @@ describe('WAF Metrics', () => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.truncated.string_length'], 5000)
       })
 
-      const checkTelemetryMetrics = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
+      const checkTelemetryMetrics = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const namespace = payload.payload.namespace
 
-        if (namespace === 'appsec') {
-          appsecTelemetryMetricsReceived = true
-          const series = payload.payload.series
-          const inputTruncated = series.find(s => s.metric === 'waf.input_truncated')
+          if (namespace === 'appsec') {
+            appsecTelemetryMetricsReceived = true
+            const series = payload.payload.series
+            const inputTruncated = series.find(s => s.metric === 'waf.input_truncated')
 
-          assert.ok(inputTruncated)
-          assert.strictEqual(inputTruncated.type, 'count')
-          assert.ok(inputTruncated.tags.includes('truncation_reason:7'))
+            assert.ok(inputTruncated)
+            assert.strictEqual(inputTruncated.type, 'count')
+            assert.ok(inputTruncated.tags.includes('truncation_reason:7'))
 
-          const wafRequests = series.find(s => s.metric === 'waf.requests')
-          assert.ok(wafRequests)
-          assert.ok(wafRequests.tags.includes('input_truncated:true'))
-        }
-      }, 'generate-metrics', 30_000, 2)
+            const wafRequests = series.find(s => s.metric === 'waf.requests')
+            assert.ok(wafRequests)
+            assert.ok(wafRequests.tags.includes('input_truncated:true'))
+          }
+        },
+        requestType: 'generate-metrics',
+        expectedMessageCount: 2,
+      })
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
