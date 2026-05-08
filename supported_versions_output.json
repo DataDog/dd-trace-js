@@ -52,7 +52,7 @@
     "dependency": "@cucumber/cucumber",
     "integration": "cucumber",
     "minimum_tracer_supported": "7.0.0",
-    "max_tracer_supported": "12.5.0",
+    "max_tracer_supported": "12.8.2",
     "auto-instrumented": "True"
   },
   {

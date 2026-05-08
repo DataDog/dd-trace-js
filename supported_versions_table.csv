@@ -6,7 +6,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @azure/functions,azure-functions,4.0.0,4.11.0,True
 @azure/service-bus,azure-service-bus,7.9.2,7.9.5,True
 @confluentinc/kafka-javascript,confluentinc-kafka-javascript,1.0.0,1.8.0,True
-@cucumber/cucumber,cucumber,7.0.0,12.5.0,True
+@cucumber/cucumber,cucumber,7.0.0,12.8.2,True
 @elastic/elasticsearch,elasticsearch,5.6.16,9.3.2,True
 @elastic/transport,elasticsearch,8.0.0,9.3.3,True
 @google-cloud/pubsub,google-cloud-pubsub,1.2.0,5.2.2,True
