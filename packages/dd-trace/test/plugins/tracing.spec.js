@@ -105,7 +105,7 @@ describe('TracingPlugin', () => {
       configurePlugin.configure({})
 
       assert.strictEqual(typeof configurePlugin.config.hooks.query, 'function')
-      assert.doesNotThrow(() => configurePlugin.config.hooks.query())
+      configurePlugin.config.hooks.query()
     })
   })
 })
