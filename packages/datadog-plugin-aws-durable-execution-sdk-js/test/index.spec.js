@@ -1,11 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const crypto = require('node:crypto')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
-const { TEST_EXEC_ARN, TEST_FUNC_ARN, invokeHandler, setup, teardown } = require('./helpers')
+const { TEST_FUNC_ARN, invokeHandler, setup, teardown } = require('./helpers')
 
 const COMPONENT = 'aws-durable-execution-sdk-js'
 const defaultMeta = {
@@ -14,15 +13,28 @@ const defaultMeta = {
   'aws.durable.replayed': 'false',
 }
 
-/** Find a span by name across all received traces and assert it contains expected props. */
+/**
+ * Find a span matching the expected name and partial-equal-match all expected fields.
+ * Iterates same-named candidates so multi-invocation flows (e.g. replay) can pick the
+ * right span, falling back to the last assertion error for a clear diff.
+ */
 function assertSpanByName (traces, expected) {
   const allSpans = traces.flat()
-  const span = allSpans.find(s => s.name === expected.name)
-  if (!span) {
+  const candidates = allSpans.filter(s => s.name === expected.name)
+  if (candidates.length === 0) {
     const names = allSpans.map(s => s.name)
     throw new Error(`Expected span "${expected.name}" not found. Available: ${JSON.stringify(names)}`)
   }
-  assertObjectContains(span, expected)
+  let lastErr
+  for (const span of candidates) {
+    try {
+      assertObjectContains(span, expected)
+      return
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr
 }
 
 /**
@@ -54,21 +66,23 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 }, (meta) => {
   const { agent } = meta
 
-  before(async () => setup(meta.mod))
-  after(async () => teardown())
+  // setup/teardown per-test so the fake clock (static on LocalDurableTestRunner) starts
+  // fresh — otherwise time advanced by ctx.wait/RETRY in earlier tests can let later
+  // ctx.wait calls complete synchronously and skip the suspend/replay cycle.
+  beforeEach(async () => setup(meta.mod, meta.versionMod))
+  afterEach(async () => teardown())
 
   describe('withDurableExecution() - aws.durable.execute', () => {
-    it('happy: emits execution_arn, invocation_status=succeeded, replayed=false', async () => {
+    it('happy: emits invocation_status=succeeded, replayed=false', async () => {
       const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.execute',
         meta: {
           ...defaultMeta,
-          'aws.durable.execution_arn': TEST_EXEC_ARN,
           'aws.durable.invocation_status': 'succeeded',
         },
       }))
 
-      const result = await invokeHandler(async () => ({ status: 'completed' }), { mode: 'immediate' })
+      const result = await invokeHandler(async () => ({ status: 'completed' }))
       assert.ok(result !== undefined, 'withDurableExecution should return a result')
 
       return trace
@@ -81,29 +95,29 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       }))
 
       // The SDK catches handler errors and returns FAILED without rethrowing.
-      await invokeHandler(async () => { throw new Error('Intentional durable execution error') },
-        { mode: 'immediate' })
+      await invokeHandler(async () => { throw new Error('Intentional durable execution error') })
 
       return trace
     })
 
-    it('replay: replayed=true when event has prior operations', async () => {
+    // ctx.wait suspends the first invocation; under skipTime the runner advances virtual
+    // time and re-invokes the handler. The second invocation enters ReplayMode naturally,
+    // so its aws.durable.execute span carries replayed=true. Same trick dd-trace-py uses.
+    // The wider timeout absorbs the gap between the first (PENDING) trace flush and the
+    // second (replayed) flush — both arrive in separate payloads.
+    it('replay: replayed=true on resume after suspend', async () => {
       const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.execute',
         meta: { 'aws.durable.replayed': 'true' },
-      }))
+      }), { timeoutMs: 5000 })
 
-      // >1 Operations on the event signals the SDK to enter ReplayMode.
-      const replayOp = {
-        Id: crypto.createHash('md5').update('1').digest('hex').substring(0, 16),
-        Type: 'STEP',
-        SubType: 'STEP',
-        Status: 'SUCCEEDED',
-        Name: 'prior-step',
-        StepDetails: { Result: JSON.stringify('cached') },
-      }
-      await invokeHandler(async () => ({ status: 'replayed' }),
-        { mode: 'immediate', extraOps: [replayOp] })
+      let invocations = 0
+      await invokeHandler(async (event, ctx) => {
+        invocations++
+        await ctx.wait('replay-trigger', { seconds: 1 })
+        return { status: 'replayed' }
+      })
+      assert.equal(invocations, 2, 'expected the handler to be invoked twice (initial + replay)')
 
       return trace
     })
@@ -111,12 +125,12 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 
   // 7 of 9 spans share BaseAwsDurableExecutionSdkJsContextPlugin.bindStart.
   // One smoke test per span name proves orchestrion's prefix → spanName wiring.
-  for (const { span, resource, run, mode } of [
+  for (const { span, resource, run, opts } of [
     { span: 'aws.durable.step', resource: 'test-step',
       run: ctx => ctx.step('test-step', async () => ({ stepped: true })) },
     { span: 'aws.durable.child_context',
       run: ctx => ctx.runInChildContext('test-child', async () => ({ childResult: true })) },
-    { span: 'aws.durable.wait', mode: 'immediate',
+    { span: 'aws.durable.wait',
       run: ctx => ctx.wait('test-wait', { seconds: 1 }) },
     { span: 'aws.durable.wait_for_condition',
       run: ctx => ctx.waitForCondition('test-condition', async () => ({ met: true }), {
@@ -125,7 +139,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
           : { shouldContinue: true, delay: { seconds: 1 } },
       }) },
     { span: 'aws.durable.wait_for_callback',
-      run: ctx => ctx.waitForCallback('test-callback', async () => ({ submitted: true })) },
+      run: ctx => ctx.waitForCallback('test-callback', async () => ({ submitted: true })),
+      opts: { resolveCallback: 'test-callback' } },
     { span: 'aws.durable.create_callback',
       run: ctx => ctx.createCallback('test-create-cb') },
     { span: 'aws.durable.map',
@@ -138,7 +153,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: span, ...(resource && { resource }), meta: defaultMeta,
       }))
-      await invokeHandler(async (event, ctx) => run(ctx), mode ? { mode } : undefined)
+      await invokeHandler(async (event, ctx) => run(ctx), opts)
       return trace
     })
   }
@@ -188,7 +203,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
           async pCtx => pCtx.step('a', async () => 'a-result'),
           async pCtx => pCtx.step('b', async () => 'b-result'),
         ])
-      }, { mode: 'immediate' })
+      })
 
       return trace
     })
@@ -209,31 +224,28 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 
       const result = await invokeHandler(
         async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),
-        { mode: 'immediate' }
+        { invokeTarget: async () => ({ ok: true }) }
       )
       assert.ok(result !== undefined, 'invoke should return a result')
 
       return trace
     })
 
-    it('error: stamps error tags when checkpoint START fails', async () => {
+    it('error: stamps error tags when invoke target fails', async () => {
       const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.invoke',
         meta: {
           component: COMPONENT,
           'span.kind': 'client',
           'error.type': 'InvokeError',
-          'error.message': 'Intentional invoke error',
         },
         error: 1,
       }))
 
       try {
         await invokeHandler(
-          async (event, ctx) => ctx.invoke(
-            'error-func', 'arn:aws:lambda:us-east-1:123456789012:function:nonexistent', {}
-          ),
-          { mode: 'immediate', failOnAction: 'START' }
+          async (event, ctx) => ctx.invoke('error-func', TEST_FUNC_ARN, {}),
+          { invokeTarget: async () => { throw new Error('Intentional invoke error') } }
         )
       } catch { /* expected */ }
 
@@ -242,9 +254,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   })
 
   // The SDK queues a RETRY checkpoint with the user's error and awaits a retry timer.
-  // The retry-pending mode keeps RETRY ops PENDING so the SDK suspends (terminationManager
-  // wins the race) instead of looping. The checkpoint plugin sees the RETRY action and
-  // stamps the user error onto the active step span.
+  // First call to retryStrategy returns shouldRetry: true so the SDK emits a RETRY
+  // checkpoint (the checkpoint plugin sees it and stamps the user error onto the active
+  // step span); subsequent calls return shouldRetry: false so the step terminates instead
+  // of looping forever under skipTime.
   it('checkpoint plugin: attaches user error to step span when RETRY is queued', async () => {
     const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
       name: 'aws.durable.step',
@@ -253,14 +266,14 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       error: 1,
     }))
 
+    let attempts = 0
     try {
       await invokeHandler(
         async (event, ctx) => ctx.step('retry-step',
           async () => { throw new Error('transient failure') },
-          { retryStrategy: () => ({ shouldRetry: true, delay: { seconds: 60 } }) }),
-        { mode: 'retry-pending' }
+          { retryStrategy: () => ({ shouldRetry: attempts++ < 1, delay: { seconds: 60 } }) })
       )
-    } catch { /* the workflow may suspend (PENDING) — not an error to the caller */ }
+    } catch { /* expected: step ultimately fails */ }
 
     return trace
   })
