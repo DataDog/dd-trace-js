@@ -19,7 +19,20 @@ function extractSubscriptionID (ownerName) {
 }
 
 function extractResourceGroup (ownerName) {
-  return /.+\+(.+)-.+webspace(-Linux)?/.exec(ownerName)?.[1]
+  // WEBSITE_OWNER_NAME format: `<sub-id>+<rg>-<region>webspace[-Linux]`. Region
+  // names have no `-`; resource groups can. Plain string ops read more directly
+  // than `/.+\+(.+)-.+webspace(-Linux)?/` and avoid the engine backtracking
+  // through three `.+` quantifiers to land on the right `-`.
+  if (typeof ownerName !== 'string') return
+  const plusIdx = ownerName.indexOf('+')
+  if (plusIdx === -1) return
+  let rest = ownerName.slice(plusIdx + 1)
+  if (rest.endsWith('-Linux')) rest = rest.slice(0, -'-Linux'.length)
+  if (!rest.endsWith('webspace')) return
+  rest = rest.slice(0, -'webspace'.length)
+  const lastDash = rest.lastIndexOf('-')
+  if (lastDash === -1) return
+  return rest.slice(0, lastDash)
 }
 
 function buildResourceID (subscriptionID, siteName, resourceGroup) {
