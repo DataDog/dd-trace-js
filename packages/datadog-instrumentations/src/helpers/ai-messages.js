@@ -1,6 +1,16 @@
 'use strict'
 
 /**
+ * Returns the value as a string, JSON-stringifying it when it is not already a string.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function stringifyIfNeeded (value) {
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+/**
  * Converts a LanguageModelV2FilePart with an image mediaType to an AI guard style image_url content part.
  *
  * @param {{type: 'file', data: URL|string|Uint8Array, mediaType: string}} part
@@ -79,12 +89,11 @@ function convertVercelPromptToMessages (prompt) {
           if (part.type === 'text') {
             textParts.push(part.text)
           } else if (part.type === 'tool-call') {
-            const args = part.args ?? part.input
             toolCalls.push({
               id: part.toolCallId,
               function: {
                 name: part.toolName,
-                arguments: typeof args === 'string' ? args : JSON.stringify(args),
+                arguments: stringifyIfNeeded(part.args ?? part.input),
               },
             })
           }
@@ -103,11 +112,10 @@ function convertVercelPromptToMessages (prompt) {
 
         for (const part of msg.content) {
           if (part.type === 'tool-result') {
-            const result = part.result ?? part.output
             messages.push({
               role: 'tool',
               tool_call_id: part.toolCallId,
-              content: typeof result === 'string' ? result : JSON.stringify(result),
+              content: stringifyIfNeeded(part.result ?? part.output),
             })
           }
         }
@@ -130,16 +138,13 @@ function buildToolCallOutputMessages (inputMessages, toolCalls) {
     ...inputMessages,
     {
       role: 'assistant',
-      tool_calls: toolCalls.map(tc => {
-        const args = tc.args ?? tc.input
-        return {
-          id: tc.toolCallId,
-          function: {
-            name: tc.toolName,
-            arguments: typeof args === 'string' ? args : JSON.stringify(args),
-          },
-        }
-      }),
+      tool_calls: toolCalls.map(tc => ({
+        id: tc.toolCallId,
+        function: {
+          name: tc.toolName,
+          arguments: stringifyIfNeeded(tc.args ?? tc.input),
+        },
+      })),
     },
   ]
 }
@@ -213,7 +218,7 @@ function openAIResponseItemToMessage (item, defaultRole) {
         id: item.call_id,
         function: {
           name: item.name,
-          arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments),
+          arguments: stringifyIfNeeded(item.arguments),
         },
       }],
     }
@@ -221,7 +226,7 @@ function openAIResponseItemToMessage (item, defaultRole) {
     return {
       role: 'tool',
       tool_call_id: item.call_id,
-      content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+      content: stringifyIfNeeded(item.output),
     }
   }
 }

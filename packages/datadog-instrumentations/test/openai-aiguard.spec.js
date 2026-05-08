@@ -71,6 +71,10 @@ function subscribeWithHandler (handler) {
   return () => evaluateChannel.unsubscribe(handler)
 }
 
+function aiGuardAbortError (message = 'blocked') {
+  return Object.assign(new Error(message), { name: 'AIGuardAbortError' })
+}
+
 /**
  * Loads the openai instrumentation with a stubbed `addHook` so we capture the exports-
  * transform callbacks. We then invoke them against fake prototypes to apply the shims.
@@ -208,7 +212,7 @@ describe('openai AI Guard instrumentation', () => {
     })
 
     it('rejects with the AI Guard error when Before Model denies', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
@@ -221,7 +225,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('rejects with the AI Guard error when After Model denies', () => {
       let count = 0
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
         count === 1 ? ctx.resolve() : ctx.reject(err)
@@ -293,7 +297,7 @@ describe('openai AI Guard instrumentation', () => {
     })
 
     it('rejects when any choice fails After Model evaluation', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       let count = 0
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
@@ -315,7 +319,7 @@ describe('openai AI Guard instrumentation', () => {
     })
 
     it('propagates Before Model rejection through asResponse()', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
@@ -477,7 +481,7 @@ describe('openai AI Guard instrumentation', () => {
     })
 
     it('does not emit unhandled rejection when apiProm is discarded and Before Model would deny', async () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
 
       const observed = []
@@ -579,7 +583,7 @@ describe('openai AI Guard instrumentation', () => {
     })
 
     it('rejects with AI Guard error when Before Model denies on the unwrapped promise', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
       const completions = new Completions()
       const body = { choices: [{ message: { role: 'assistant', content: 'x' } }] }
@@ -594,7 +598,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('rejects with AI Guard error when After Model denies on the unwrapped promise', () => {
       let count = 0
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
         count === 1 ? ctx.resolve() : ctx.reject(err)
@@ -709,7 +713,7 @@ describe('openai AI Guard instrumentation', () => {
     })
 
     it('rejects with AI Guard error when Before Model denies', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
       const responses = new Responses()
       responses._nextApiPromise = new FakeAPIPromise({
@@ -724,7 +728,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('rejects with AI Guard error when After Model denies', () => {
       let count = 0
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
         count === 1 ? ctx.resolve() : ctx.reject(err)
