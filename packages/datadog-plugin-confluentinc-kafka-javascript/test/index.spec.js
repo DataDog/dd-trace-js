@@ -182,11 +182,11 @@ describe('Plugin', () => {
                 try {
                   assert.notStrictEqual(currentSpan, firstSpan)
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  eachMessage = async () => {} // avoid being called for each message
                   done()
                 } catch (e) {
+                  eachMessage = async () => {}
                   done(e)
-                } finally {
-                  eachMessage = async () => {} // avoid being called for each message
                 }
               }
 
@@ -300,11 +300,11 @@ describe('Plugin', () => {
                 try {
                   assert.notEqual(currentSpan, firstSpan)
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  eachBatch = () => {} // avoid being called for each message
                   done()
                 } catch (e) {
+                  eachBatch = () => {}
                   done(e)
-                } finally {
-                  eachBatch = () => {} // avoid being called for each message
                 }
               }
 

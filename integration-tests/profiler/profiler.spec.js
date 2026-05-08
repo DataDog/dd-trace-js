@@ -410,6 +410,7 @@ describe('profiler', () => {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
       // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      // eslint-disable-next-line sonarjs/stable-tests -- timing-dependent profiler sample alignment
       this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const env = {

@@ -12,8 +12,8 @@ const ch = tracingChannel('apm:aerospike:command')
 function wrapCreateCommand (createCommand) {
   if (typeof createCommand !== 'function') return createCommand
 
-  return function commandWithTrace () {
-    const CommandClass = createCommand.apply(this, arguments)
+  return function commandWithTrace (...args) {
+    const CommandClass = createCommand.apply(this, args)
 
     if (!CommandClass) return CommandClass
 
