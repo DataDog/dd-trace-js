@@ -26,7 +26,8 @@ class ElectronExporter {
       this.#timer = setTimeout(() => {
         this.flush()
         this.#timer = undefined
-      }, flushInterval).unref?.()
+      }, flushInterval)
+      this.#timer.unref?.()
     }
   }
 
