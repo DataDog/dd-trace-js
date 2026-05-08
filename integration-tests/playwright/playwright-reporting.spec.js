@@ -145,6 +145,8 @@ versions.forEach((version) => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
                 const testSession = events.find(event => event.type === 'test_session_end').content
                 assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+                const testModule = events.find(event => event.type === 'test_module_end').content
+                assert.strictEqual(testModule.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
                 const testEvent = events.find(event => event.type === 'test')
                 assert.ok(testEvent, 'should have test event')
                 assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
@@ -176,6 +178,8 @@ versions.forEach((version) => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
                 const testSession = events.find(event => event.type === 'test_session_end').content
                 assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
+                const testModule = events.find(event => event.type === 'test_module_end').content
+                assert.strictEqual(testModule.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
                 const testEvent = events.find(event => event.type === 'test')
                 assert.ok(testEvent, 'should have test event')
                 assert.strictEqual(

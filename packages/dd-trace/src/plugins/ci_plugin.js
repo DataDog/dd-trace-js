@@ -462,6 +462,9 @@ module.exports = class CiPlugin extends Plugin {
     const value = 'true'
     if (this.testSessionSpan) {
       this.testSessionSpan.setTag(tag, value)
+      if (this.testModuleSpan) {
+        this.testModuleSpan.setTag(tag, value)
+      }
     } else {
       this._pendingRequestErrorTags.push({ tag, value })
     }
