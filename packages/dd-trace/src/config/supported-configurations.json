@@ -254,7 +254,8 @@
           "appsec.extendedHeadersCollection.redaction",
           "experimental.appsec.extendedHeadersCollection.redaction"
         ],
-        "default": "true"
+        "default": "true",
+        "deprecated": true
       }
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": [
@@ -289,7 +290,8 @@
           "appsec.extendedHeadersCollection.maxHeaders",
           "experimental.appsec.extendedHeadersCollection.maxHeaders"
         ],
-        "default": "50"
+        "default": "50",
+        "deprecated": true
       }
     ],
     "DD_APPSEC_MAX_STACK_TRACES": [
