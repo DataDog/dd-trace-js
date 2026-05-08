@@ -27,15 +27,17 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/mocha.js',
 }, (Mocha) => {
-  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+  shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     if (this.options._ddIsKnownTestsEnabled) {
       config.isKnownTestsEnabled = true
       config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
       config.knownTests = this.options._ddKnownTests
       config.earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
+      config.earlyFlakeDetectionSlowTestRetries = this.options._ddEfdSlowTestRetries ?? {}
       delete this.options._ddIsEfdEnabled
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
+      delete this.options._ddEfdSlowTestRetries
       delete this.options._ddIsKnownTestsEnabled
     }
     if (this.options._ddIsImpactedTestsEnabled) {
@@ -58,7 +60,7 @@ addHook({
       delete this.options._ddIsFlakyTestRetriesEnabled
       delete this.options._ddFlakyTestRetriesCount
     }
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   })
 
   return Mocha
@@ -72,9 +74,9 @@ addHook({
 }, function (Runner) {
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
-  shimmer.wrap(Runner.prototype, 'run', run => function () {
+  shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!workerFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
     this.once('end', () => {
@@ -93,7 +95,7 @@ addHook({
 
     this.on('pending', getOnPendingHandler())
 
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   })
   return Runner
 })

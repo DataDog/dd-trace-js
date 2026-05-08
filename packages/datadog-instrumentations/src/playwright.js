@@ -79,6 +79,7 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 let quarantinedButNotAttemptToFixFqns = new Set()
+let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -574,9 +575,9 @@ function testEndHandler ({
 }
 
 function dispatcherRunWrapper (run) {
-  return function () {
+  return function (...args) {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   }
 }
 
@@ -604,9 +605,9 @@ function dispatcherRunWrapperNew (run) {
 
 function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', dispatcherRunWrapper)
-  shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
+  shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function (...args) {
     const dispatcher = this
-    const worker = createWorker.apply(this, arguments)
+    const worker = createWorker.apply(this, args)
     const projects = getProjectsFromDispatcher(dispatcher)
     sessionProjects = projects
 
@@ -645,9 +646,9 @@ function dispatcherHook (dispatcherExport) {
 
 function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
-  shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
+  shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function (...args) {
     const dispatcher = this
-    const worker = createWorker.apply(this, arguments)
+    const worker = createWorker.apply(this, args)
     const projects = getProjectsFromDispatcher(dispatcher)
     sessionProjects = projects
 
@@ -661,8 +662,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const test = getTestByTestId(dispatcher, testId)
 
       const isTimeout = status === 'timedOut'
-      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
       const testStatus = STATUS_TO_TEST_STATUS[status]
+      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+      if (shouldCreateTestSpan && !testToCtx.has(test)) {
+        testBeginHandler(test, getBrowserNameFromProjects(projects, test), true)
+      }
       testEndHandler(
         {
           test,
@@ -835,15 +839,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
+        const alreadyReported = testsReportedInGenerateSummary.has(test)
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser, true)
+        testBeginHandler(test, browser, !alreadyReported)
         testEndHandler({
           test,
           annotations: [],
           testStatus: 'skip',
           error: null,
           isTimeout: false,
-          shouldCreateTestSpan: true,
+          shouldCreateTestSpan: !alreadyReported,
           projects,
         })
       }
@@ -894,6 +899,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
     quarantinedButNotAttemptToFixFqns = new Set()
+    testsReportedInGenerateSummary = new Set()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1144,7 +1150,7 @@ addHook({
   }
 
   // We need to proxy the createRootSuite function because the function is not configurable
-  const proxy = new Proxy(loadUtilsPackage, {
+  return new Proxy(loadUtilsPackage, {
     get (target, prop) {
       if (prop === 'createRootSuite') {
         return newCreateRootSuite
@@ -1152,8 +1158,6 @@ addHook({
       return target[prop]
     },
   })
-
-  return proxy
 })
 
 // main process hook
@@ -1419,12 +1423,13 @@ addHook({
 })
 
 function generateSummaryWrapper (generateSummary) {
-  return function () {
+  return function (...args) {
     for (const test of this.suite.allTests()) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
       const didNotRun = test.outcome() === 'skipped' &&
         (!test.results.length || test.expectedStatus !== 'skipped')
-      if (didNotRun) {
+      if (didNotRun && !testsReportedInGenerateSummary.has(test)) {
+        testsReportedInGenerateSummary.add(test)
         const {
           _requireFile: testSuiteAbsolutePath,
           location: {
@@ -1451,7 +1456,7 @@ function generateSummaryWrapper (generateSummary) {
         })
       }
     }
-    return generateSummary.apply(this, arguments)
+    return generateSummary.apply(this, args)
   }
 }
 

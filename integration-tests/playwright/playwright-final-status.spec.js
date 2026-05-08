@@ -44,6 +44,7 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
+    // eslint-disable-next-line sonarjs/stable-tests -- chromium download is flaky in CI
     this.retries(2)
     this.timeout(80000)
 
@@ -82,7 +83,7 @@ versions.forEach((version) => {
     })
 
     afterEach(async () => {
-      childProcess.kill()
+      childProcess?.kill()
       await receiver.stop()
     })
 
@@ -147,15 +148,17 @@ versions.forEach((version) => {
             )
             // retry=0 fail, retry=1 fail, retry=2 pass → 3 runs total
             assert.strictEqual(eventuallyPassingTests.length, 3)
-            eventuallyPassingTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-              .forEach((test, index) => {
-                if (index < eventuallyPassingTests.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta),
-                    `TEST_FINAL_STATUS should not be set on intermediate ATR run ${index}`)
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                }
-              })
+
+            // Exactly one ATR run has TEST_FINAL_STATUS; all others must not.
+            // We avoid sorting by start time because parallel workers make
+            // wall-clock order non-deterministic.
+            const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
+            assert.strictEqual(finalRuns.length, 1,
+              `Exactly one ATR run should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+            assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], 'pass')
+            const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
+            assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
+              'All other ATR runs should not have TEST_FINAL_STATUS')
           }, 30000)
 
         // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
@@ -216,25 +219,18 @@ versions.forEach((version) => {
             assert.ok(!(TEST_IS_NEW in knownTest.meta))
             assert.strictEqual(knownTest.meta[TEST_FINAL_STATUS], knownTest.meta[TEST_STATUS])
 
-            // New tests: exactly one run has TEST_FINAL_STATUS and it must be the last to finish.
-            // The main process marks the execution final based on arrival order of testEnd events,
-            // so the run that completes last is always the one that gets the tag.
+            // New tests: exactly one run (the last EFD clone by repeat index) has TEST_FINAL_STATUS;
+            // all others must not. We avoid sorting by start time because parallel workers make
+            // wall-clock order non-deterministic.
             const assertEfdFinalStatus = (testName, expectedFinalStatus) => {
               const group = tests.filter(t => t.meta[TEST_NAME] === testName)
-              group.sort((a, b) => {
-                const endA = BigInt(a.start) + BigInt(a.duration)
-                const endB = BigInt(b.start) + BigInt(b.duration)
-                return endA < endB ? -1 : endA > endB ? 1 : 0
-              })
-              group.forEach((t, index) => {
-                if (index < group.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in t.meta),
-                    `Run ${index} of "${testName}" should not have TEST_FINAL_STATUS`)
-                } else {
-                  assert.strictEqual(t.meta[TEST_FINAL_STATUS], expectedFinalStatus,
-                    `Last run of "${testName}" should have TEST_FINAL_STATUS="${expectedFinalStatus}"`)
-                }
-              })
+              const finalRuns = group.filter(t => TEST_FINAL_STATUS in t.meta)
+              assert.strictEqual(finalRuns.length, 1,
+                `Exactly one run of "${testName}" should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+              assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], expectedFinalStatus)
+              const nonFinalRuns = group.filter(t => !(TEST_FINAL_STATUS in t.meta))
+              assert.strictEqual(nonFinalRuns.length, group.length - 1,
+                `All other runs of "${testName}" should not have TEST_FINAL_STATUS`)
             }
 
             // should work with passing tests is new and passes consistently → final_status='pass'
@@ -452,6 +448,106 @@ versions.forEach((version) => {
           receiverPromise,
         ])
       })
+
+      it('does not set final_status on intermediate skipped executions in serial mode', async () => {
+        if (version === 'latest') return
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const seriallySkippedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+            )
+            // playwright never fires testEnd for serial-mode-skipped tests (they don't
+            // run in a worker), so only the final passing execution reaches us.
+            assert.strictEqual(seriallySkippedTests.length, 1)
+
+            const passExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'pass')
+            assert.ok(passExecution, 'Expected a passing execution on the retry cycle')
+            assert.strictEqual(passExecution.meta[TEST_FINAL_STATUS], 'pass')
+          }, 30000)
+
+        // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
+        // dd-trace won't override it since its guard is `if (project.retries === 0)`.
+        childProcess = exec(
+          './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it(
+        'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled', async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: false,
+            early_flake_detection: { enabled: false },
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // These serial tests never ran — abandoned when maxFailures cut the run after the
+              // non-serial test exhausted its retries. Each must appear exactly once: the fallback
+              // loop at the end of the run must not re-emit them as duplicates.
+              const abandonedTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
+              t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+              )
+              assert.strictEqual(abandonedTests.length, 2)
+              abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
+
+              // Suite finalization must not be blocked by the abandoned tests staying in remainingTestsByFile
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+              assert.ok(suiteEvents.length > 0, 'Expected test_suite_end — suite must be finalized')
+            }, 30000)
+
+          // --retries=1: `should eventually pass after retrying` needs retry>=2 to pass, so it exhausts
+          // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
+          // PLAYWRIGHT_WORKERS=1 ensures the non-serial test always runs (and fails) before the serial suite.
+          childProcess = exec(
+            './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
+                MAX_FAILURES: '1',
+                PLAYWRIGHT_WORKERS: '1',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
     })
   })
 })
