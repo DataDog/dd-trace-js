@@ -1225,7 +1225,7 @@ brace-expansion@^2.0.2:
   dependencies:
     balanced-match "^1.0.0"
 
-brace-expansion@^5.0.2, brace-expansion@^5.0.5:
+brace-expansion@^5.0.5:
   version "5.0.5"
   resolved "https://registry.yarnpkg.com/brace-expansion/-/brace-expansion-5.0.5.tgz#dcc3a37116b79f3e1b46db994ced5d570e930fdb"
   integrity sha512-VZznLgtwhn+Mact9tfiwx64fA9erHH/MCXEUfB/0bX/6Fz6ny5EGTXYltMocqg4xFAQZtnO3DHWWXi8RiuN7cQ==
@@ -1551,10 +1551,10 @@ data-view-byte-offset@^1.0.1:
     es-errors "^1.3.0"
     is-data-view "^1.0.1"
 
-dc-polyfill@^0.1.10:
-  version "0.1.10"
-  resolved "https://registry.yarnpkg.com/dc-polyfill/-/dc-polyfill-0.1.10.tgz#6f2ada1a9e449587c363ca98cfb79b443cf74b70"
-  integrity sha512-9iSbB8XZ7aIrhUtWI5ulEOJ+IyUN+axquodHK+bZO4r7HfY/xwmo6I4fYYf+aiDom+WMcN/wnzCz+pKvHDDCug==
+dc-polyfill@^0.1.11:
+  version "0.1.11"
+  resolved "https://registry.yarnpkg.com/dc-polyfill/-/dc-polyfill-0.1.11.tgz#3efa792147f3b5224b8a9274905b1e98fe82a856"
+  integrity sha512-TyyeGcjx0YeThAI9fTFtgsvj5qd4R+aGfVmXiUhevbgzWFDr7IK4tv4YjE6jaGzLHQTchk4h7DHdr5q4WGgaZw==
 
 debug@^3.2.7:
   version "3.2.7"
