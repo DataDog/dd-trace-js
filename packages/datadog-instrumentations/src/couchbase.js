@@ -77,25 +77,25 @@ function wrap (prefix, fn) {
   const finishCh = channel(prefix + ':finish')
   const errorCh = channel(prefix + ':error')
 
-  return function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return fn.apply(this, arguments)
+      return fn.apply(this, args)
     }
 
-    const callbackIndex = findCallbackIndex(arguments, 1)
+    const callbackIndex = findCallbackIndex(args, 1)
 
-    if (callbackIndex < 0) return fn.apply(this, arguments)
+    if (callbackIndex < 0) return fn.apply(this, args)
 
     const ctx = { bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
     return startCh.runStores(ctx, () => {
-      const cb = arguments[callbackIndex]
+      const cb = args[callbackIndex]
 
-      arguments[callbackIndex] = shimmer.wrapFunction(cb, (cb) => {
-        return wrapCallbackFinish(cb, this, arguments, errorCh, finishCh, ctx, prefix)
+      args[callbackIndex] = shimmer.wrapFunction(cb, (cb) => {
+        return wrapCallbackFinish(cb, this, args, errorCh, finishCh, ctx, prefix)
       })
 
       try {
-        return fn.apply(this, arguments)
+        return fn.apply(this, args)
       } catch (error) {
         ctx.error = error
         void error.stack // trigger getting the stack at the original throwing point
@@ -173,12 +173,12 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
 
 function wrapWithName (name) {
   return function (operation) {
-    return function () { // no arguments used by us
+    return function (...args) { // no arguments used by us
       return wrapCBandPromise(operation, name, {
         collection: { name: this._name || '_default' },
         bucket: { name: this._scope._bucket._name },
         seedNodes: this._dd_connStr,
-      }, this, arguments)
+      }, this, args)
     }
   }
 }
@@ -248,8 +248,8 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
 
   shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
-    return function () {
-      const bucket = openBucket.apply(this, arguments)
+    return function (...args) {
+      const bucket = openBucket.apply(this, args)
       const hosts = this.dsnObj.hosts
       bucket._dd_hosts = hosts.map(hostAndPort => hostAndPort.join(':')).join(',')
       return bucket
@@ -261,8 +261,8 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^3.0.7', '^3.1.3'] }, Bucket => {
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
-    return function () {
-      const collection = getCollection.apply(this, arguments)
+    return function (...args) {
+      const collection = getCollection.apply(this, args)
       const connStr = this._cluster._connStr
       collection._dd_connStr = connStr
       return collection
@@ -294,8 +294,8 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.2'] }
 addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.2'] }, bucket => {
   const Bucket = bucket.Bucket
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
-    return function () {
-      const collection = getCollection.apply(this, arguments)
+    return function (...args) {
+      const collection = getCollection.apply(this, args)
       const connStr = this._cluster._connStr
       collection._dd_connStr = connStr
       return collection
