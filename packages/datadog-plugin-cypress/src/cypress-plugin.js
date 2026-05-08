@@ -1056,8 +1056,10 @@ class CypressPlugin {
 
     for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
-        const cypressTest = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
-          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus)
+        const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
+        const cypressTest = isDatadogManagedAttempt
+          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus) ||
+            cypressTests.find(test => test.title.join(' ') === testName)
           : cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
           continue
@@ -1065,7 +1067,9 @@ class CypressPlugin {
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
-        let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        let cypressTestStatus = isDatadogManagedAttempt
+          ? finishedTest.testStatus
+          : CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
         if (!finishedTest.isEfdManagedTest && !finishedTest.isAttemptToFix &&
           cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
