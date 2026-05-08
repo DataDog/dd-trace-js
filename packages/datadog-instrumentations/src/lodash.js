@@ -18,7 +18,7 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
         }
 
         const result = lodashFn.apply(this, args)
-        const message = { operation: lodashFn.name, args, result }
+        const message = { operation: lodashFn.name, arguments: args, result }
         lodashOperationCh.publish(message)
 
         return message.result
