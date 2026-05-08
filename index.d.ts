@@ -251,6 +251,7 @@ interface Plugins {
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
   "generic-pool": tracer.plugins.generic_pool;
+  "genkit": tracer.plugins.genkit;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -2495,6 +2496,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [genkit](https://github.com/npmjs/package/genkit) library.
+     */
+    interface genkit extends Instrumentation {}
+
     interface google_cloud_pubsub extends Integration {}
 
     /**

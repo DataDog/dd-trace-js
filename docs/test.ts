@@ -329,6 +329,7 @@ tracer.use('fastify', httpServerOptions);
 tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
+tracer.use('genkit');
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
 tracer.use('google-genai');

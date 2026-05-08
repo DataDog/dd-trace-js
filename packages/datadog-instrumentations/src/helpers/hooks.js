@@ -2,6 +2,8 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
+  '@genkit-ai/ai': () => require('../genkit'),
+  '@genkit-ai/core': () => require('../genkit'),
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),

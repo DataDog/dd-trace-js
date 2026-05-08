@@ -629,4 +629,14 @@ module.exports = {
       versions: ['>=8.0.0'],
     },
   ],
+  genkit: [
+    {
+      name: '@genkit-ai/ai',
+      versions: ['>=1.33.0'],
+    },
+    {
+      name: '@genkit-ai/core',
+      versions: ['>=1.33.0'],
+    },
+  ],
 }
