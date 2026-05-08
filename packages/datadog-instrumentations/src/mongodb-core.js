@@ -104,25 +104,25 @@ function wrapConnectionCommand (command, operation, name, instrumentFn = instrum
 }
 
 function wrapQuery (query, operation, name) {
-  return function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
     const pool = this.server.s.pool
     const ns = this.ns
     const ops = this.cmd
-    return instrument(operation, query, this, arguments, pool, ns, ops)
+    return instrument(operation, query, this, args, pool, ns, ops)
   }
 }
 
 function wrapCursor (cursor, operation, name) {
-  return function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return cursor.apply(this, arguments)
+      return cursor.apply(this, args)
     }
     const pool = this.server.s.pool
     const ns = this.ns
-    return instrument(operation, cursor, this, arguments, pool, ns, {}, { name })
+    return instrument(operation, cursor, this, args, pool, ns, {}, { name })
   }
 }
 

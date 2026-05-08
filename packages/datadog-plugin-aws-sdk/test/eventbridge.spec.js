@@ -7,12 +7,12 @@ const { before, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const EventBridge = require('../src/services/eventbridge')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const tracer = require('../../dd-trace')
+const { withAwsSdkVersions } = require('./spec_helpers')
 
 describe('EventBridge', () => {
   let span
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let traceId
     let parentId
     let spanId

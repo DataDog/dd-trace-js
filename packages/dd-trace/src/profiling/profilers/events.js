@@ -174,7 +174,7 @@ class NetDecorator {
   }
 }
 
-class FilesystemDecorator {
+class KeyValueDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
   }
@@ -205,31 +205,11 @@ class ZlibDecorator {
   }
 }
 
-class CryptoDecorator {
-  constructor (stringTable) {
-    this.stringTable = stringTable
-  }
-
-  decorateSample (sampleInput, item) {
-    const labels = sampleInput.label
-    const stringTable = this.stringTable
-    for (const [key, value] of Object.entries(item.detail)) {
-      switch (typeof value) {
-        case 'string':
-          labels.push(labelFromStrStr(stringTable, key, value))
-          break
-        case 'number':
-          labels.push(new Label({ key: stringTable.dedup(key), num: value }))
-      }
-    }
-  }
-}
-
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  crypto: CryptoDecorator,
-  fs: FilesystemDecorator,
+  crypto: KeyValueDecorator,
+  fs: KeyValueDecorator,
   dns: DNSDecorator,
   gc: GCDecorator,
   net: NetDecorator,

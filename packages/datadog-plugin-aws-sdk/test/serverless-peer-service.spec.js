@@ -6,17 +6,17 @@ const { promisify } = require('node:util')
 const { after, before, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const helpers = require('./kinesis_helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
+    // eslint-disable-next-line sonarjs/stable-tests -- aws-sdk integration depends on real AWS endpoints
     this.retries(5)
     this.timeout(15000)
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
 
       before(async () => {

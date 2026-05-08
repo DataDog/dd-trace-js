@@ -82,12 +82,12 @@ function createContextFromChildProcessInfo (childProcessInfo) {
 
 function wrapChildProcessSyncMethod (returnError, shell = false) {
   return function wrapMethod (childProcessMethod) {
-    return function () {
-      if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return childProcessMethod.apply(this, arguments)
+    return function (...args) {
+      if (!childProcessChannel.start.hasSubscribers || args.length === 0) {
+        return childProcessMethod.apply(this, args)
       }
 
-      const callArgs = [...arguments]
+      const callArgs = [...args]
       const childProcessInfo = normalizeArgs(callArgs, shell)
       const context = createContextFromChildProcessInfo(childProcessInfo)
       context.callArgs = callArgs
@@ -118,12 +118,12 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
 }
 
 function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
-  return function () {
-    if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-      return customPromisifyMethod.apply(this, arguments)
+  return function (...args) {
+    if (!childProcessChannel.start.hasSubscribers || args.length === 0) {
+      return customPromisifyMethod.apply(this, args)
     }
 
-    const callArgs = [...arguments]
+    const callArgs = [...args]
     const childProcessInfo = normalizeArgs(callArgs, shell)
 
     const context = createContextFromChildProcessInfo(childProcessInfo)
@@ -170,12 +170,12 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
 
 function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
   return function wrapMethod (childProcessMethod) {
-    function wrappedChildProcessMethod () {
-      if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return childProcessMethod.apply(this, arguments)
+    function wrappedChildProcessMethod (...args) {
+      if (!childProcessChannel.start.hasSubscribers || args.length === 0) {
+        return childProcessMethod.apply(this, args)
       }
 
-      const callArgs = [...arguments]
+      const callArgs = [...args]
       const childProcessInfo = normalizeArgs(callArgs, shell)
 
       const context = createContextFromChildProcessInfo(childProcessInfo)
