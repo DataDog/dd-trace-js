@@ -27,11 +27,12 @@ describe('esm', () => {
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
       '@azure/cosmos',
-      // @azure/core-rest-pipeline → @typespec/ts-http-runtime depends on these; Bun’s hoisted sandbox can
-      // omit nested node_modules (broken path to dist/index.js in CI). Pin semver so createSandbox skips
-      // versions/latests lookup (see integration-tests/helpers createSandbox + plugins/versions).
+      // Bun’s hoisted sandbox can omit nested node_modules that @azure/cosmos (and its HTTP stack) still
+      // resolve to; pin x.y.z so createSandbox skips versions/latests (helpers + plugins/versions).
       'http-proxy-agent@7.0.2',
       'https-proxy-agent@7.0.6',
+      'priorityqueuejs@2.0.0',
+      'semaphore@1.1.0',
     ],
     false,
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
