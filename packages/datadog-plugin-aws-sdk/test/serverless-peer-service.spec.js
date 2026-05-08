@@ -12,6 +12,7 @@ const { setup } = require('./spec_helpers')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
+    // eslint-disable-next-line sonarjs/stable-tests -- aws-sdk integration depends on real AWS endpoints
     this.retries(5)
     this.timeout(15000)
     setup()
