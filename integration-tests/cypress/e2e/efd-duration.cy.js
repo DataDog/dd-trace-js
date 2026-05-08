@@ -1,3 +1,6 @@
+/* eslint-disable */
+'use strict'
+
 describe('efd duration retries', () => {
   it('instant test', () => {
     expect(1 + 1).to.equal(2)
