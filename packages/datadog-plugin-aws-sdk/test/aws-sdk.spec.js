@@ -7,7 +7,6 @@ const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
 

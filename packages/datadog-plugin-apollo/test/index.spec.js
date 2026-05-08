@@ -7,7 +7,6 @@ const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const agent = require('../../dd-trace/test/plugins/agent.js')
-
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const accounts = require('./fixtures.js')
