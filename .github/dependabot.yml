@@ -143,7 +143,9 @@ updates:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 1
+    # One slot per cohort group below plus headroom; with the cohort design a
+    # single blocked group otherwise stalls every other group.
+    open-pull-requests-limit: 10
     cooldown:
       default-days: 3
       exclude:
