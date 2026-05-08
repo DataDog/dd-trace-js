@@ -52,10 +52,10 @@ function sanitize (input) {
 
   if (!isObject(input) || Buffer.isBuffer(input)) return '?'
 
-  for (const key in input) {
-    if (typeof input[key] === 'function') continue
+  for (const [key, val] of Object.entries(input)) {
+    if (typeof val === 'function') continue
 
-    output[key] = sanitize(input[key])
+    output[key] = sanitize(val)
   }
 
   return output

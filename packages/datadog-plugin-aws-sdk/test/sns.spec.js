@@ -424,8 +424,8 @@ describe('Sns', function () {
             sqs.receiveMessage(receiveParams, (err, data) => {
               if (err) done(err)
 
-              for (const message in data.Messages) {
-                const recordData = JSON.parse(data.Messages[message].Body)
+              for (const message of data.Messages) {
+                const recordData = JSON.parse(message.Body)
                 assert.ok(Object.hasOwn(recordData.MessageAttributes, '_datadog'))
 
                 const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))

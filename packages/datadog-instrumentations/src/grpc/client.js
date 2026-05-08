@@ -48,7 +48,7 @@ function createWrapMakeClientConstructor (hasPeer = false) {
 }
 
 function wrapPackageDefinition (def, hasPeer = false) {
-  for (const name in def) {
+  for (const name of Object.keys(def)) {
     if (def[name].format) continue
     if (def[name].service && def[name].prototype) {
       wrapClientConstructor(def[name], def[name].service, hasPeer)

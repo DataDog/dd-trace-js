@@ -43,7 +43,7 @@ function expectSomeSpan (agent, expected, timeout) {
 // expected. Here, an edit means adding or changing a property.
 function compare (expected, actual) {
   let score = 0
-  for (const name in expected) {
+  for (const name of Object.keys(expected)) {
     // If both the expected property and the actual property are objects, then
     // we can do a deeper comparison. Otherwise we just compare strict equality.
     if (isObject(expected[name]) && isObject(actual[name])) {
@@ -62,7 +62,7 @@ function isObject (obj) {
 
 function withDefaults (defaults, obj) {
   const newObj = { ...defaults, ...obj }
-  for (const propName in defaults) {
+  for (const propName of Object.keys(defaults)) {
     if (isObject(defaults[propName]) && isObject(obj[propName])) {
       newObj[propName] = withDefaults(defaults[propName], obj[propName])
     }

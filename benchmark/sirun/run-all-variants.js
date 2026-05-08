@@ -16,7 +16,7 @@ const env = { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' }
 ;(async () => {
   if (metaJson.variants) {
     const variants = metaJson.variants
-    for (const variant in variants) {
+    for (const variant of Object.keys(variants)) {
       const variantEnv = { ...env, SIRUN_VARIANT: variant }
       await exec('sirun', ['meta-temp.json'], { env: variantEnv, stdio })
     }

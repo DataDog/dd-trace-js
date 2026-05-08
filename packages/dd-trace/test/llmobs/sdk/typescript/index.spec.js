@@ -14,9 +14,8 @@ const {
 const { assertLlmObsSpanEvent } = require('../../util')
 
 function check (expected, actual) {
-  for (const expectedLLMObsSpanIdx in expected) {
-    const expectedLLMObsSpan = expected[expectedLLMObsSpanIdx]
-    const actualLLMObsSpan = actual[expectedLLMObsSpanIdx]
+  for (const [idx, expectedLLMObsSpan] of Object.entries(expected)) {
+    const actualLLMObsSpan = actual[idx]
     assertLlmObsSpanEvent(actualLLMObsSpan, expectedLLMObsSpan)
   }
 }

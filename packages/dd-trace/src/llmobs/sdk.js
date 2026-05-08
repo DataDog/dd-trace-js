@@ -418,8 +418,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       if (tags) {
-        for (const key in tags) {
-          const tag = tags[key]
+        for (const [key, tag] of Object.entries(tags)) {
           if (typeof tag === 'string') {
             evaluationTags[key] = tag
           } else if (typeof tag.toString === 'function') {

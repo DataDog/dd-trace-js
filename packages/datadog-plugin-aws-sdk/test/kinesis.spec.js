@@ -107,8 +107,8 @@ describe('Kinesis', function () {
           helpers.getTestRecord(kinesis, streamName, data.Records[0], (err, data) => {
             if (err) return done(err)
 
-            for (const record in data.Records) {
-              const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
+            for (const record of data.Records) {
+              const recordData = JSON.parse(Buffer.from(record.Data).toString())
               assert.ok(Object.hasOwn(recordData, '_datadog'))
               assert.ok(Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'))
             }

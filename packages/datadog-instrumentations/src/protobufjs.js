@@ -77,7 +77,7 @@ function wrapReflection (protobuf) {
     shimmer.wrap(method.target, method.name, original => function (...args) {
       const result = original.apply(this, args)
       if (result.nested) {
-        for (const type in result.nested) {
+        for (const type of Object.keys(result.nested)) {
           wrapSetup(result.nested[type])
         }
       }

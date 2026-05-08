@@ -27,9 +27,7 @@ class CouchBasePlugin extends StoragePlugin {
     if (bucket) tags['couchbase.bucket.name'] = bucket.name
     if (collection) tags['couchbase.collection.name'] = collection.name
 
-    for (const tag in customTags) {
-      tags[tag] = customTags[tag]
-    }
+    Object.assign(tags, customTags)
 
     return super.startSpan(
       this.operationName({ operation }),

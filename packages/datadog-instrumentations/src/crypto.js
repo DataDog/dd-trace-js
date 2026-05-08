@@ -62,9 +62,9 @@ function buildAsyncContext (operation, paramNames) {
   return function (_, args) {
     const ctx = { operation }
     const lastIndex = args.length - 1
-    // paramNames is a sparse array; for-in yields only populated slot indices, in ascending
+    // paramNames is a sparse array; Object.keys yields only populated slot indices, in ascending
     // numeric order, so we can break once we pass the callback position.
-    for (const i in paramNames) {
+    for (const i of Object.keys(paramNames)) {
       if (i >= lastIndex) break
       const name = paramNames[i]
       const value = args[i]

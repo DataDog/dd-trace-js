@@ -120,7 +120,7 @@ function summarizeResults (buildData, testResults) {
 async function getResults (gitCommit) {
   const builds = await getBuildNumsFromGithub(gitCommit)
   const buildData = {}
-  for (const name in builds) {
+  for (const name of Object.keys(builds)) {
     const artifacts = JSON.parse(await get(artifactsUrl(builds[name]), circleHeaders))
     const artifact = artifacts.find(a => a.path === 'sirun-output.ndjson')
     if (!artifact) continue

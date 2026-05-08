@@ -42,7 +42,7 @@ function checkPlugins (yamlPath) {
 
   const rangesPerPluginFromYaml = {}
   const rangesPerPluginFromInst = {}
-  for (const jobName in yamlContent.jobs) {
+  for (const jobName of Object.keys(yamlContent.jobs)) {
     const job = yamlContent.jobs[jobName]
     if (!job.env || !job.env.PLUGINS) continue
 
@@ -67,7 +67,7 @@ function checkPlugins (yamlPath) {
     }
   }
 
-  for (const pluginName in rangesPerPluginFromYaml) {
+  for (const pluginName of Object.keys(rangesPerPluginFromYaml)) {
     const yamlRanges = [...rangesPerPluginFromYaml[pluginName]]
     const instRanges = [...rangesPerPluginFromInst[pluginName]]
     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)

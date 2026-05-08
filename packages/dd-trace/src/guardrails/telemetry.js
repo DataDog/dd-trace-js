@@ -65,10 +65,12 @@ function sendTelemetry (name, tags, resultMetadata) {
 
   // Update metadata with provided result metadata
   var currentMetadata = {}
+  // eslint-disable-next-line no-restricted-syntax -- Node 0.8 compat: for-of and Object.keys are unavailable
   for (var key in metadata) {
     currentMetadata[key] = metadata[key]
   }
   if (resultMetadata) {
+    // eslint-disable-next-line no-restricted-syntax -- Node 0.8 compat: for-of and Object.keys are unavailable
     for (var resultKey in resultMetadata) {
       currentMetadata[resultKey] = resultMetadata[resultKey]
     }

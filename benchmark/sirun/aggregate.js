@@ -36,7 +36,7 @@ fs.writeFileSync('all-sirun-output.ndjson', jsons.join('\n'))
 const buildData = {
   byVersion: true,
 }
-for (const version in versionResults) {
+for (const version of Object.keys(versionResults)) {
   buildData[version] = {}
   summarizeResults(buildData[version], versionResults[version])
 }

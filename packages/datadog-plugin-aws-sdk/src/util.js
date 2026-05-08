@@ -159,9 +159,7 @@ const extractQueueMetadata = queueURL => {
  * @returns {boolean}
  */
 const isEmpty = obj => {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) return false
-  return true
+  return Object.keys(obj).length === 0
 }
 
 module.exports = {
