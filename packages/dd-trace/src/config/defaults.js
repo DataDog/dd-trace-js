@@ -15,6 +15,9 @@ let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
 
+// `helper.js` may load before this module (production order via `index.js`) or after (proxyquire
+// in unit tests); the call is idempotent so either order leaves `supportedConfigurations` in the
+// post-filter state before the `configurationsTable` build below.
 applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
 if (DD_MAJOR < 6) {

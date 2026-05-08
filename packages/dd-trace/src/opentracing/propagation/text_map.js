@@ -17,9 +17,6 @@ const TraceState = require('./tracestate')
 // v6 aligns with the OTel `b3` propagator spec: `'b3'` means single-header, `'b3multi'` means
 // multi-header. v5 keeps the older shape where `'b3'` means multi and `'b3 single header'` is the
 // single-header form.
-const B3_SINGLE_KEY = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
-const B3_MULTI_KEY = DD_MAJOR >= 6 ? 'b3multi' : 'b3'
-
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const injectCh = channel('dd-trace:span:inject')
@@ -276,9 +273,9 @@ class TextMapPropagator {
   }
 
   _injectB3MultipleHeaders (spanContext, carrier) {
-    // `'b3multi'` is recognised on both versions; `B3_MULTI_KEY` is `'b3'` on v5 and `'b3multi'` on v6.
+    // v5 also accepts the legacy `'b3'` spelling for multi; v6 routes `'b3'` to single-header.
     const hasB3multi = this._hasPropagationStyle('inject', 'b3multi') ||
-      this._hasPropagationStyle('inject', B3_MULTI_KEY)
+      (DD_MAJOR < 6 && this._hasPropagationStyle('inject', 'b3'))
     if (!hasB3multi) return
 
     carrier[b3TraceKey] = this._getB3TraceId(spanContext)
@@ -295,9 +292,9 @@ class TextMapPropagator {
   }
 
   _injectB3SingleHeader (spanContext, carrier) {
-    // `'b3 single header'` is the legacy spelling kept for callers that bypass parser normalisation.
-    const hasB3SingleHeader = this._hasPropagationStyle('inject', B3_SINGLE_KEY) ||
-      this._hasPropagationStyle('inject', 'b3 single header')
+    // v6 keeps `'b3 single header'` as a back-compat alias for callers that bypass parser normalisation.
+    const hasB3SingleHeader = this._hasPropagationStyle('inject', 'b3 single header') ||
+      (DD_MAJOR >= 6 && this._hasPropagationStyle('inject', 'b3'))
     if (!hasB3SingleHeader) return null
 
     const traceId = this._getB3TraceId(spanContext)

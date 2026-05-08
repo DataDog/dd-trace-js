@@ -132,9 +132,10 @@ describe('Config', () => {
     })
 
     // The legacy `DD_PROFILING_EXPERIMENTAL_*` and `DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED`
-    // aliases are dropped in v6 (defaults.js removes them under `DD_MAJOR >= 6`); the deprecation
-    // warning path therefore only fires on v5.
+    // aliases are dropped in v6 (`helper.js` removes them under `DD_MAJOR >= 6` before the alias
+    // snapshot); the deprecation warning path therefore only fires on v5.
     const itLegacyAlias = DD_MAJOR < 6 ? it : it.skip
+    const itV6Filter = DD_MAJOR >= 6 ? it : it.skip
 
     itLegacyAlias('should log deprecation warning for deprecated configurations', async () => {
       process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
@@ -165,6 +166,67 @@ describe('Config', () => {
           /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
         )
       })
+
+    // The production load order in `index.js` requires `helper.js` before `defaults.js`. The
+    // regression below loads `helper.js` in isolation so that defaults.js's mutations cannot
+    // accidentally cover for a missing alias filter inside helper.js.
+    const loadFreshHelper = () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      return proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': fresh,
+      })
+    }
+
+    itV6Filter('drops the deprecated DD_PROFILING_EXPERIMENTAL_* aliases without rewriting them', () => {
+      const helper = loadFreshHelper()
+      const envs = helper.getEnvironmentVariables({
+        DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 'true',
+      })
+      for (const canonical of [
+        'DD_PROFILING_CODEHOTSPOTS_ENABLED',
+        'DD_PROFILING_CPU_ENABLED',
+        'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED',
+        'DD_PROFILING_TIMELINE_ENABLED',
+      ]) {
+        assert.strictEqual(envs[canonical], undefined, `${canonical} should not be populated from a dropped alias`)
+      }
+    })
+
+    itV6Filter('drops the deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED alias', () => {
+      const helper = loadFreshHelper()
+      const envs = helper.getEnvironmentVariables({ DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED: 'true' })
+      assert.strictEqual(envs.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+    })
+
+    itV6Filter('rejects access to the dropped DD_PROFILING_EXPERIMENTAL_CPU_ENABLED key', () => {
+      const helper = loadFreshHelper()
+      assert.throws(
+        () => helper.getEnvironmentVariable('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'),
+        /Missing DD_PROFILING_EXPERIMENTAL_CPU_ENABLED env\/configuration in "supported-configurations.json" file./
+      )
+    })
+
+    itV6Filter('applyMajorVersionAliasFilters is idempotent on the same supportedConfigurations object', () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const { applyMajorVersionAliasFilters } =
+        proxyquire.noPreserveCache()('../../src/config/major-version-filters', {})
+      const supported = fresh.supportedConfigurations
+      assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
+      applyMajorVersionAliasFilters(supported, 6)
+      assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
+      const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
+      assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
+      const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
+      assert.ok(!runtimeIdEntry.aliases?.includes('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'))
+      const beforeKeyCount = Object.keys(supported).length
+      applyMajorVersionAliasFilters(supported, 6)
+      assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
+    })
 
     it('should pass through random envs', async () => {
       process.env.FOOBAR = 'true'

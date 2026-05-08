@@ -6,14 +6,20 @@
 
 const EXPERIMENTAL_IAST_PREFIX = 'experimental.iast'
 
+const filtered = new WeakSet()
+
 /**
- * Shared between `defaults.js` (runtime) and `eslint-config-names-sync` (lint) so
- * the JSON ↔ `index.d.ts` sync check uses the same view as the runtime parser.
+ * Shared between `helper.js` / `defaults.js` (runtime) and `eslint-config-names-sync` (lint) so
+ * the JSON ↔ `index.d.ts` sync check uses the same view as the runtime parser. Idempotent on a
+ * per-object basis so callers don't have to coordinate load order.
  *
  * @param {SupportedConfigurations} supportedConfigurations Mutated in place.
  * @param {number} majorVersion
  */
 function applyMajorVersionAliasFilters (supportedConfigurations, majorVersion) {
+  if (filtered.has(supportedConfigurations)) return
+  filtered.add(supportedConfigurations)
+
   if (majorVersion < 6) return
 
   // v6 strips both the bare `experimental.iast` alias and its nested forms so

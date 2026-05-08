@@ -21,9 +21,17 @@
  */
 
 const { deprecate } = require('util')
+
+const { DD_MAJOR } = require('../../../../version')
+const { applyMajorVersionAliasFilters } = require('./major-version-filters')
 const {
   supportedConfigurations,
 } = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+// Apply v6 env-alias deletions before the `aliases` / `aliasToCanonical` snapshot below;
+// otherwise `getEnvironmentVariables()` keeps rewriting the deprecated env vars to their
+// canonical names. Idempotent so `defaults.js` may also call it before iterating.
+applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
 /**
  * Types for environment variable handling.
