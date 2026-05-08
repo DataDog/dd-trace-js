@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { isReplayedOp } = require('./util')
+const { getOperationId, isReplayedOp } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -30,14 +30,22 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
   bindStart (ctx) {
     const spanName = this.constructor.spanName
     const parentName = this.activeSpan?.context()._name
-    const operationName = HIGH_CARDINALITY_PARENT_SPAN_NAMES.has(parentName)
-      ? undefined
-      : this.getOperationName(ctx)
+    const operationName = this.getOperationName(ctx)
+    const resource = HIGH_CARDINALITY_PARENT_SPAN_NAMES.has(parentName) ? undefined : operationName
+
+    const meta = { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) }
+    if (operationName) {
+      meta['aws.durable.operation_name'] = operationName
+    }
+    const operationId = getOperationId(ctx.self)
+    if (operationId) {
+      meta['aws.durable.operation_id'] = operationId
+    }
 
     this.startSpan(spanName, {
-      resource: operationName,
+      resource,
       kind: this.constructor.kind,
-      meta: { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) },
+      meta,
     }, ctx)
 
     return ctx.currentStore

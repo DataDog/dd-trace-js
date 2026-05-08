@@ -7,6 +7,7 @@ const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helper
 const { TEST_FUNC_ARN, invokeHandler, setup, teardown } = require('./helpers')
 
 const COMPONENT = 'aws-durable-execution-sdk-js'
+const OPERATION_ID_RE = /^[a-f0-9]{16}$/
 const defaultMeta = {
   component: COMPONENT,
   'span.kind': 'internal',
@@ -16,7 +17,8 @@ const defaultMeta = {
 /**
  * Find a span matching the expected name and partial-equal-match all expected fields.
  * Iterates same-named candidates so multi-invocation flows (e.g. replay) can pick the
- * right span, falling back to the last assertion error for a clear diff.
+ * right span, falling back to the last assertion error for a clear diff. Returns the
+ * matched span so callers can run follow-up assertions (e.g. regex on a meta field).
  */
 function assertSpanByName (traces, expected) {
   const allSpans = traces.flat()
@@ -29,7 +31,7 @@ function assertSpanByName (traces, expected) {
   for (const span of candidates) {
     try {
       assertObjectContains(span, expected)
-      return
+      return span
     } catch (err) {
       lastErr = err
     }
@@ -39,9 +41,16 @@ function assertSpanByName (traces, expected) {
 
 /**
  * Asserts map/parallel child suppression: no child_context spans in the parent's trace,
- * and direct step children keep the default resource (cardinality protection).
+ * and direct step children keep the default resource (cardinality protection) while
+ * still carrying the user-supplied name on `aws.durable.operation_name` and a
+ * hash-format `aws.durable.operation_id`.
+ *
+ * @param {object[][]} traces
+ * @param {string} parentSpanName
+ * @param {string} op
+ * @param {string[]} expectedNames - operation_name values expected on direct step children
  */
-function assertChildSuppression (traces, parentSpanName, op) {
+function assertChildSuppression (traces, parentSpanName, op, expectedNames) {
   const allSpans = traces.flat()
   const parentSpan = allSpans.find(s => s.name === parentSpanName)
   if (!parentSpan) throw new Error(`${parentSpanName} span not found`)
@@ -58,7 +67,12 @@ function assertChildSuppression (traces, parentSpanName, op) {
   assert.ok(stepChildren.length >= 2, `expected step children directly under ${op}`)
   for (const step of stepChildren) {
     assert.equal(step.resource, 'aws.durable.step', `expected default resource on ${op} child step`)
+    assert.match(step.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE,
+      `expected hash-format aws.durable.operation_id on ${op} child step`)
   }
+  const childNames = stepChildren.map(s => s.meta?.['aws.durable.operation_name']).sort()
+  assert.deepStrictEqual(childNames, [...expectedNames].sort(),
+    `expected operation_name on ${op} child steps even when resource is suppressed`)
 }
 
 createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-execution-sdk-js', {
@@ -123,40 +137,58 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  // 7 of 9 spans share BaseAwsDurableExecutionSdkJsContextPlugin.bindStart.
-  // One smoke test per span name proves orchestrion's prefix → spanName wiring.
-  for (const { span, resource, run, opts } of [
-    { span: 'aws.durable.step', resource: 'test-step',
+  for (const { span, operationName, run, opts } of [
+    { span: 'aws.durable.step', operationName: 'test-step',
       run: ctx => ctx.step('test-step', async () => ({ stepped: true })) },
-    { span: 'aws.durable.child_context',
+    { span: 'aws.durable.child_context', operationName: 'test-child',
       run: ctx => ctx.runInChildContext('test-child', async () => ({ childResult: true })) },
-    { span: 'aws.durable.wait',
+    { span: 'aws.durable.wait', operationName: 'test-wait',
       run: ctx => ctx.wait('test-wait', { seconds: 1 }) },
-    { span: 'aws.durable.wait_for_condition',
+    { span: 'aws.durable.wait_for_condition', operationName: 'test-condition',
       run: ctx => ctx.waitForCondition('test-condition', async () => ({ met: true }), {
         waitStrategy: r => r?.met
           ? { shouldContinue: false }
           : { shouldContinue: true, delay: { seconds: 1 } },
       }) },
-    { span: 'aws.durable.wait_for_callback',
+    { span: 'aws.durable.wait_for_callback', operationName: 'test-callback',
       run: ctx => ctx.waitForCallback('test-callback', async () => ({ submitted: true })),
       opts: { resolveCallback: 'test-callback' } },
-    { span: 'aws.durable.create_callback',
+    { span: 'aws.durable.create_callback', operationName: 'test-create-cb',
       run: ctx => ctx.createCallback('test-create-cb') },
-    { span: 'aws.durable.map',
+    { span: 'aws.durable.map', operationName: 'test-map',
       run: ctx => ctx.map('test-map', [1, 2, 3], async (item) => item * 2) },
-    { span: 'aws.durable.parallel',
+    { span: 'aws.durable.parallel', operationName: 'test-parallel',
       run: ctx => ctx.parallel('test-parallel',
         [async () => 'branch-a', async () => 'branch-b']) },
   ]) {
-    it(`${span} (happy path): emits span with default meta`, async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
-        name: span, ...(resource && { resource }), meta: defaultMeta,
-      }))
+    it(`${span} (happy path): emits span with operation_name and hash-format operation_id`, async () => {
+      const trace = agent.assertSomeTraces(traces => {
+        const matched = assertSpanByName(traces, {
+          name: span,
+          resource: operationName,
+          meta: { ...defaultMeta, 'aws.durable.operation_name': operationName },
+        })
+        assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+      })
       await invokeHandler(async (event, ctx) => run(ctx), opts)
       return trace
     })
   }
+
+  it('aws.durable.step (un-named overload): omits operation_name when no name is passed', async () => {
+    const trace = agent.assertSomeTraces(traces => {
+      const matched = assertSpanByName(traces, {
+        name: 'aws.durable.step',
+        resource: 'aws.durable.step',
+        meta: defaultMeta,
+      })
+      assert.equal(matched.meta?.['aws.durable.operation_name'], undefined,
+        'aws.durable.operation_name must be absent when no name is passed')
+      assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+    })
+    await invokeHandler(async (event, ctx) => ctx.step(async () => ({ stepped: true })))
+    return trace
+  })
 
   // Error coverage for the shared base. Both step and child_context propagate user errors
   // through `BaseAwsDurableExecutionSdkJsContextPlugin.error()`. The SDK wraps the user's
@@ -189,10 +221,15 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 
   // map/parallel suppress internal child_context spans and force the default resource on
   // direct step children to avoid resource-tag cardinality explosions.
-  for (const op of ['map', 'parallel']) {
+  for (const { op, expectedNames } of [
+    { op: 'map', expectedNames: ['work-1', 'work-2'] },
+    { op: 'parallel', expectedNames: ['a', 'b'] },
+  ]) {
     const spanName = `aws.durable.${op}`
     it(`${spanName}: suppresses child_context and keeps default step resource`, async () => {
-      const trace = agent.assertSomeTraces(traces => assertChildSuppression(traces, spanName, op))
+      const trace = agent.assertSomeTraces(
+        traces => assertChildSuppression(traces, spanName, op, expectedNames)
+      )
 
       await invokeHandler(async (event, ctx) => {
         if (op === 'map') {
@@ -210,17 +247,21 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   }
 
   describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
-    it('happy: emits function_name with span.kind=client', async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
-        name: 'aws.durable.invoke',
-        resource: 'test-func',
-        meta: {
-          component: COMPONENT,
-          'span.kind': 'client',
-          'aws.durable.invoke.function_name': TEST_FUNC_ARN,
-          'aws.durable.replayed': 'false',
-        },
-      }))
+    it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
+      const trace = agent.assertSomeTraces(traces => {
+        const matched = assertSpanByName(traces, {
+          name: 'aws.durable.invoke',
+          resource: 'test-func',
+          meta: {
+            component: COMPONENT,
+            'span.kind': 'client',
+            'aws.durable.invoke.function_name': TEST_FUNC_ARN,
+            'aws.durable.replayed': 'false',
+            'aws.durable.operation_name': 'test-func',
+          },
+        })
+        assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+      })
 
       const result = await invokeHandler(
         async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),

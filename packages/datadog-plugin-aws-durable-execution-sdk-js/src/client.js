@@ -1,7 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { isReplayedOp } = require('./util')
+const { getOperationId, isReplayedOp } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -21,6 +21,13 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     }
     if (functionName) {
       meta['aws.durable.invoke.function_name'] = functionName
+    }
+    if (operationName) {
+      meta['aws.durable.operation_name'] = operationName
+    }
+    const operationId = getOperationId(ctx.self)
+    if (operationId) {
+      meta['aws.durable.operation_id'] = operationId
     }
 
     this.startSpan('aws.durable.invoke', {
