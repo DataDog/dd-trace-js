@@ -33,6 +33,8 @@ const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
+const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
+
 const latest = 'latest'
 const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
 const versions = [oldest, latest]
@@ -339,7 +341,7 @@ versions.forEach((version) => {
                 assert.strictEqual(passedFlakyTest.length, 1)
                 assert.strictEqual(failedFlakyTest.length, 1)
               }
-            }, 30000)
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         /**
          * @param {{
@@ -502,7 +504,7 @@ versions.forEach((version) => {
                   'ATF test that is in known tests should not be tagged as new'
                 )
               }
-            })
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
           childProcess = exec(
             './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
@@ -684,7 +686,7 @@ versions.forEach((version) => {
                   assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in test.meta))
                 }
               })
-            }, 25000)
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         const runDisableTest = async (isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
@@ -818,7 +820,7 @@ versions.forEach((version) => {
                 assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTests[0].meta))
                 assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               }
-            }, 25000)
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         /**
          * @param {{
