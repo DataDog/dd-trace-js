@@ -118,8 +118,14 @@ function handleLLMObsParentIdInjection ({ carrier }) {
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
     globalTracerConfig.llmobs.mlApp
 
-  if (parentId) carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-  if (mlApp) carrier['x-datadog-tags'] += `,${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  // The standard tags injection path only writes carrier['x-datadog-tags']
+  // when the trace has at least one `_dd.p.*` tag, so the property may be
+  // undefined here. Coalesce before appending to avoid emitting the literal
+  // string `"undefined,..."` (MLOS-642).
+  let tags = carrier['x-datadog-tags'] || ''
+  if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
+  if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  if (tags) carrier['x-datadog-tags'] = tags
 }
 
 function handleFlush () {

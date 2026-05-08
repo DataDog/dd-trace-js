@@ -106,7 +106,7 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
@@ -116,7 +116,7 @@ describe('module', () => {
         'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
@@ -127,6 +127,34 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
       assert.strictEqual(carrier['x-datadog-tags'], '')
+    })
+
+    it('does not produce a literal "undefined" prefix when carrier has no x-datadog-tags', () => {
+      // Regression test for MLOS-642: when the standard tags injection path
+      // doesn't pre-populate carrier['x-datadog-tags'] (e.g. when the trace
+      // has no _dd.p.* tags, or DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0), the
+      // LLMObs handler used to do `undefined += ',foo=bar'` and emit the
+      // string "undefined,foo=bar".
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {}
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
+    })
+
+    it('appends to an existing non-empty x-datadog-tags with a single comma separator', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+      )
     })
   })
 
