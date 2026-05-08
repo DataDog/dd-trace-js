@@ -162,7 +162,7 @@ benchmark-serverless-trigger:
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
-    branch: onzia/test-noble
+    branch: onzia/support-release-branches
     strategy: depend
   allow_failure: true
   variables:
