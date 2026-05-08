@@ -23,7 +23,7 @@ function buildPlugin (inject = (span, format, info) => { info['x-datadog-trace-i
 
 describe('Stepfunctions plugin requestInject', () => {
   for (const operation of ['startExecution', 'startSyncExecution']) {
-    describe(`${operation}`, () => {
+    describe(operation, () => {
       it('injects context into a JSON object payload with no whitespace', () => {
         const plugin = buildPlugin()
         const request = { operation, params: { input: '{"a":1}' } }
@@ -92,11 +92,11 @@ describe('Stepfunctions plugin requestInject', () => {
 
       it('skips injection when the trimmed payload is shorter than 2 bytes', () => {
         const plugin = buildPlugin()
-        const request = { operation, params: { input: '{ ' } }
+        const request = { operation, params: { input: '} ' } }
 
         plugin.requestInject(null, request)
 
-        assert.strictEqual(request.params.input, '{ ')
+        assert.strictEqual(request.params.input, '} ')
       })
     })
   }
