@@ -289,6 +289,11 @@ function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatu
   return matchingTest
 }
 
+function isCypressHookFailure (cypressTest) {
+  return CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === 'fail' &&
+    /\bhook\b/.test(String(cypressTest.displayError || ''))
+}
+
 const FINAL_STATUS_RETRY_KIND = {
   none: 'none',
   atr: 'atr',
@@ -1056,6 +1061,8 @@ class CypressPlugin {
 
     for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
+        // We can check if this is the last attempt regardless of the retry mechanism
+        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
         const cypressTest = isDatadogManagedAttempt
           ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus) ||
@@ -1067,7 +1074,8 @@ class CypressPlugin {
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
-        let cypressTestStatus = isDatadogManagedAttempt
+        const shouldUseCapturedStatus = isDatadogManagedAttempt && !(isLastAttempt && isCypressHookFailure(cypressTest))
+        let cypressTestStatus = shouldUseCapturedStatus
           ? finishedTest.testStatus
           : CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
         if (!finishedTest.isEfdManagedTest && !finishedTest.isAttemptToFix &&
@@ -1100,6 +1108,9 @@ class CypressPlugin {
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
+          if (finishedTest.isAttemptToFix && cypressTestStatus === 'fail') {
+            finishedTest.testSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+          }
         }
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
@@ -1119,8 +1130,6 @@ class CypressPlugin {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
         }
 
-        // We can check if this is the last attempt regardless of the retry mechanism
-        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         if (isLastAttempt) {
           const testSpanTags = finishedTest.testSpan.context()._tags
           const retryKind = getFinalStatusRetryKind({
