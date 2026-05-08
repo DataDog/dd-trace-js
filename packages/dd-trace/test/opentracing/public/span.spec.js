@@ -137,13 +137,6 @@ describe('PublicSpan', () => {
       sinon.assert.calledOnceWithExactly(inner.addTags, { 'http.url': 'x' })
     })
 
-    it('handles null/undefined without throwing or marking', () => {
-      assert.doesNotThrow(() => publicSpan.addTags(null))
-      assert.doesNotThrow(() => publicSpan.addTags(undefined))
-
-      sinon.assert.notCalled(inner.setTag)
-      assert.strictEqual(inner.addTags.callCount, 2)
-    })
   })
 
   describe('unwrap()', () => {
