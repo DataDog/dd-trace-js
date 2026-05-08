@@ -1864,6 +1864,22 @@ describe('Config', () => {
     })
   })
 
+  it('should accept legacy "b3 single header" propagation style', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'B3 single header'
+
+    const config = getConfig()
+
+    if (DD_MAJOR < 6) {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
+    } else {
+      // The legacy spelling normalises to the canonical `'b3'` so existing configs and the upstream
+      // system-tests parametric suite keep injecting / extracting B3 single-header headers.
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+    }
+  })
+
   it('should prioritize specific propagation style over shared propagation style env vars', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'

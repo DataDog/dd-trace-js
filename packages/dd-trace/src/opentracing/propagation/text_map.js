@@ -295,7 +295,9 @@ class TextMapPropagator {
   }
 
   _injectB3SingleHeader (spanContext, carrier) {
-    const hasB3SingleHeader = this._hasPropagationStyle('inject', B3_SINGLE_KEY)
+    // `'b3 single header'` is the legacy spelling kept for callers that bypass parser normalisation.
+    const hasB3SingleHeader = this._hasPropagationStyle('inject', B3_SINGLE_KEY) ||
+      this._hasPropagationStyle('inject', 'b3 single header')
     if (!hasB3SingleHeader) return null
 
     const traceId = this._getB3TraceId(spanContext)
@@ -410,8 +412,6 @@ class TextMapPropagator {
           extractedContext = this._extractTraceparentContext(carrier)
           break
         case 'b3 single header':
-          // v6 routes the canonical `'b3'` to single-header extract directly via `#extractB3Context`,
-          // so this case only fires in v5 where the legacy spelling is still accepted.
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':

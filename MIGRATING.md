@@ -64,8 +64,9 @@ Use `DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED` instead.
 
 The historical `'b3'` value used to mean multi-header; per the OTel `b3`
 propagator spec, `'b3'` now means single-header. Multi-header propagation is
-the existing `'b3multi'` value. The legacy `'b3 single header'` string is no
-longer accepted.
+the existing `'b3multi'` value. The legacy `'b3 single header'` spelling is
+still accepted on `DD_TRACE_PROPAGATION_STYLE` and the programmatic option as
+a quiet alias for `'b3'`; prefer the canonical `'b3'` going forward.
 
 ## 4.0 to 5.0
 

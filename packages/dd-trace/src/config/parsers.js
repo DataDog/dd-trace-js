@@ -10,12 +10,9 @@ function setWarnInvalidValue (fn) {
   warnInvalidValue = fn
 }
 
-// v6 drops the legacy `'b3 single header'` propagation style. The string `'b3'` is now the OTel
-// single-header form, and multi-header propagation goes through `'b3multi'` (which v5 already
-// supports). v5 keeps accepting both names for backwards compatibility.
+// `'b3 single header'` is the legacy spelling of `'b3'`; on v6 it is normalised below.
 const VALID_PROPAGATION_STYLES = new Set([
-  'datadog', 'tracecontext', 'b3', 'b3multi', 'baggage', 'none',
-  ...(DD_MAJOR < 6 ? ['b3 single header'] : []),
+  'datadog', 'tracecontext', 'b3', 'b3 single header', 'b3multi', 'baggage', 'none',
 ])
 
 const RENAMED_OTEL_TAGS = new Map(
@@ -150,10 +147,14 @@ const transformers = {
   },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
-    for (const propagator of value) {
+    for (let index = 0; index < value.length; index++) {
+      const propagator = value[index]
       if (!VALID_PROPAGATION_STYLES.has(propagator)) {
         warnInvalidValue(propagator, optionName, optionName, 'Invalid propagator')
         return
+      }
+      if (DD_MAJOR >= 6 && propagator === 'b3 single header') {
+        value[index] = 'b3'
       }
     }
     return value

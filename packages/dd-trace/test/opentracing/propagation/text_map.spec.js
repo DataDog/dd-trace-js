@@ -474,6 +474,22 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(carrier['x-b3-spanid'], '0000000000000456')
         assert.ok(!('b3' in carrier))
       })
+
+      it('should treat inject:["b3 single header"] as the single-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3 single header']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
     }
 
     it('should skip injection of traceparent header without the feature flag', () => {
