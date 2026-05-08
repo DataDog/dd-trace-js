@@ -33,7 +33,7 @@ class BaseGenkitClientPlugin extends ClientPlugin {
     this.startSpan(this.constructor.spanName, {
       service: this.config.service,
       kind: this.constructor.kind,
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore
@@ -79,7 +79,7 @@ class ChatSendPlugin extends BaseGenkitClientPlugin {
 }
 
 module.exports = {
-  'BaseGenkitClientPlugin': BaseGenkitClientPlugin,
-  'GenkitAiGenerateStreamPlugin': GenkitAiGenerateStreamPlugin,
-  'ChatSendPlugin': ChatSendPlugin
+  BaseGenkitClientPlugin,
+  GenkitAiGenerateStreamPlugin,
+  ChatSendPlugin,
 }

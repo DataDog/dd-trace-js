@@ -44,7 +44,7 @@ createIntegrationTestSuite('genkit', 'genkit', {
         assert.ok(span, 'expected genkit.generate span')
         assertObjectContains(span, {
           name: 'genkit.generate',
-          meta: { 'span.kind': 'client', component: 'genkit' }
+          meta: { 'span.kind': 'client', component: 'genkit' },
         })
       })
 
@@ -63,8 +63,8 @@ createIntegrationTestSuite('genkit', 'genkit', {
           meta: {
             'span.kind': 'client',
             'error.type': 'GenkitError',
-            'error.message': "NOT_FOUND: Model 'nonexistent/model-that-does-not-exist' not found"
-          }
+            'error.message': "NOT_FOUND: Model 'nonexistent/model-that-does-not-exist' not found",
+          },
         })
       })
 
@@ -85,7 +85,7 @@ createIntegrationTestSuite('genkit', 'genkit', {
         assert.ok(span, 'expected genkit.generateStream span')
         assertObjectContains(span, {
           name: 'genkit.generateStream',
-          meta: { 'span.kind': 'client', component: 'genkit' }
+          meta: { 'span.kind': 'client', component: 'genkit' },
         })
       })
 
@@ -105,8 +105,8 @@ createIntegrationTestSuite('genkit', 'genkit', {
           name: 'genkit.generateStream',
           meta: {
             'span.kind': 'client',
-            'genkit.ai.model': 'nonexistent/model-that-does-not-exist'
-          }
+            'genkit.ai.model': 'nonexistent/model-that-does-not-exist',
+          },
         })
       })
 
@@ -127,7 +127,7 @@ createIntegrationTestSuite('genkit', 'genkit', {
         assert.ok(span, 'expected genkit.send span')
         assertObjectContains(span, {
           name: 'genkit.send',
-          meta: { 'span.kind': 'client', component: 'genkit' }
+          meta: { 'span.kind': 'client', component: 'genkit' },
         })
       })
 
@@ -146,8 +146,8 @@ createIntegrationTestSuite('genkit', 'genkit', {
           meta: {
             'span.kind': 'client',
             'error.type': 'GenkitError',
-            'error.message': "NOT_FOUND: Model 'nonexistent/model-that-does-not-exist' not found"
-          }
+            'error.message': "NOT_FOUND: Model 'nonexistent/model-that-does-not-exist' not found",
+          },
         })
       })
 
@@ -168,7 +168,7 @@ createIntegrationTestSuite('genkit', 'genkit', {
         assert.ok(span, 'expected genkit.defineAction span')
         assertObjectContains(span, {
           name: 'genkit.defineAction',
-          meta: { 'span.kind': 'internal', component: 'genkit' }
+          meta: { 'span.kind': 'internal', component: 'genkit' },
         })
       })
 
@@ -183,7 +183,7 @@ createIntegrationTestSuite('genkit', 'genkit', {
         assert.ok(span, 'expected genkit.defineAction span')
         assertObjectContains(span, {
           name: 'genkit.defineAction',
-          meta: { 'span.kind': 'internal', component: 'genkit' }
+          meta: { 'span.kind': 'internal', component: 'genkit' },
         })
         // defineAction is a sync registration function; errors during registration
         // are implementation-dependent. We verify the span exists.

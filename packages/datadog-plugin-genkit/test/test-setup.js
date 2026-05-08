@@ -13,7 +13,7 @@ class GenkitTestSetup {
     this._echoModel = this._ai.defineModel(
       {
         name: MODEL_NAME,
-        supports: { multiturn: true, tools: false, media: false, systemRole: true, output: ['text'] }
+        supports: { multiturn: true, tools: false, media: false, systemRole: true, output: ['text'] },
       },
       async function echoModelRunner (request) {
         const lastMessage = request.messages[request.messages.length - 1]
@@ -21,7 +21,7 @@ class GenkitTestSetup {
         return {
           message: { role: 'model', content: [{ text: 'Echo: ' + text }] },
           finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
         }
       }
     )
@@ -62,7 +62,7 @@ class GenkitTestSetup {
   async genkitAIGenerateStreamError () {
     const streamResult = this._ai.generateStream({
       model: 'nonexistent/model-that-does-not-exist',
-      prompt: 'This should fail'
+      prompt: 'This should fail',
     })
     return streamResult.response
   }
@@ -85,13 +85,13 @@ class GenkitTestSetup {
     this._ai.defineModel(
       {
         name,
-        supports: { multiturn: false, tools: false, media: false, systemRole: false, output: ['text'] }
+        supports: { multiturn: false, tools: false, media: false, systemRole: false, output: ['text'] },
       },
       async function testRunner () {
         return {
           message: { role: 'model', content: [{ text: 'test' }] },
           finishReason: 'stop',
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
         }
       }
     )
@@ -104,7 +104,7 @@ class GenkitTestSetup {
     this._ai.defineModel(
       {
         name,
-        supports: { multiturn: false, tools: false, media: false, systemRole: false, output: ['text'] }
+        supports: { multiturn: false, tools: false, media: false, systemRole: false, output: ['text'] },
       },
       async function errorRunner () {
         throw new Error('defineAction test error')

@@ -9,7 +9,7 @@ class GenkitInternalPlugin extends TracingPlugin {
   bindStart (ctx) {
     this.startSpan('genkit.defineAction', {
       service: this.config.service,
-      kind: 'internal'
+      kind: 'internal',
     }, ctx)
 
     return ctx.currentStore

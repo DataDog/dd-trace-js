@@ -8,7 +8,7 @@ class GenkitPlugin extends CompositePlugin {
   static id = 'genkit'
   static plugins = {
     ...clientPlugin,
-    internal: internalPlugin
+    internal: internalPlugin,
   }
 }
 
