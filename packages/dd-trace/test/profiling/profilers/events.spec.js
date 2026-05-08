@@ -2,7 +2,7 @@
 
 const assert = require('node:assert')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 const dc = require('dc-polyfill')
 
 require('../../setup/core')
@@ -14,6 +14,33 @@ const EventsProfiler = require('../../../src/profiling/profilers/events')
 const startCh = dc.channel('apm:dns:lookup:start')
 const finishCh = dc.channel('apm:dns:lookup:finish')
 
+function collectLabels (sample, stringTable) {
+  const labels = {}
+  for (const label of sample.label) {
+    const key = stringTable.strings[label.key]
+    labels[key] = label.str ? stringTable.strings[label.str] : label.num
+  }
+  return labels
+}
+
+function runOnceAndProfile (startChannel, finishChannel, ctx) {
+  const profiler = new EventsProfiler({
+    samplingInterval: 10_000,
+    flushInterval: 65_000,
+    timelineSamplingEnabled: false,
+    codeHotspotsEnabled: true,
+  })
+  const startTime = new Date()
+  profiler.start()
+  try {
+    startChannel.publish(ctx)
+    finishChannel.publish(ctx)
+    return profiler.profile(true, startTime, new Date())()
+  } finally {
+    profiler.stop()
+  }
+}
+
 function getProfilerConfig (tracerOptions) {
   const tracerConfig = getConfigFresh(tracerOptions)
   const ProfilingConfig = require('../../../src/profiling/config').Config
@@ -24,6 +51,10 @@ function getProfilerConfig (tracerOptions) {
 }
 
 describe('profilers/events', () => {
+  afterEach(() => {
+    storage('legacy').enterWith(undefined)
+  })
+
   it('should provide info', () => {
     const info = new EventsProfiler(getProfilerConfig()).getInfo()
     assert(info.maxSamples > 0)
@@ -72,5 +103,46 @@ describe('profilers/events', () => {
     } finally {
       profiler.stop()
     }
+  })
+
+  it('captures async zlib events with operation label', () => {
+    const profile = runOnceAndProfile(
+      dc.channel('apm:zlib:operation:start'),
+      dc.channel('apm:zlib:operation:finish'),
+      { operation: 'gzip' }
+    )
+    assert.equal(profile.sample.length, 1)
+    const labels = collectLabels(profile.sample[0], profile.stringTable)
+    assert.equal(labels.event, 'zlib')
+    assert.equal(labels.operation, 'gzip')
+  })
+
+  it('captures async crypto events with per-op labels', () => {
+    const profile = runOnceAndProfile(
+      dc.channel('apm:crypto:operation:start'),
+      dc.channel('apm:crypto:operation:finish'),
+      { operation: 'pbkdf2', digest: 'sha256', iterations: 1000, keylen: 32 }
+    )
+    assert.equal(profile.sample.length, 1)
+    const labels = collectLabels(profile.sample[0], profile.stringTable)
+    assert.equal(labels.event, 'crypto')
+    assert.equal(labels.operation, 'pbkdf2')
+    assert.equal(labels.digest, 'sha256')
+    assert.equal(labels.iterations, 1000)
+    assert.equal(labels.keylen, 32)
+  })
+
+  it('drops async crypto events with unexpected context fields', () => {
+    const profile = runOnceAndProfile(
+      dc.channel('apm:crypto:operation:start'),
+      dc.channel('apm:crypto:operation:finish'),
+      { operation: 'randomBytes', size: 16, password: 'secret', buffer: Buffer.alloc(0) }
+    )
+    assert.equal(profile.sample.length, 1)
+    const labels = collectLabels(profile.sample[0], profile.stringTable)
+    assert.equal(labels.operation, 'randomBytes')
+    assert.equal(labels.size, 16)
+    assert.equal(labels.password, undefined)
+    assert.equal(labels.buffer, undefined)
   })
 })

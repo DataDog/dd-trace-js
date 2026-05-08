@@ -208,6 +208,9 @@ describe('Dynamic Instrumentation', function () {
         let receivedAckUpdate = false
 
         t.agent.on('remote-config-ack-update', (id, version, state, error) => {
+          // Transitional UNACKNOWLEDGED can arrive before the worker transitions to ERROR.
+          if (state === UNACKNOWLEDGED) return
+
           assert.strictEqual(id, `logProbe_${config.id}`)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ERROR)

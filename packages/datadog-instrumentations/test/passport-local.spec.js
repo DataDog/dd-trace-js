@@ -8,7 +8,7 @@ const sinon = require('sinon')
 
 const axios = require('axios').create({ validateStatus: null })
 const agent = require('../../dd-trace/test/plugins/agent')
-const { storage } = require('../../datadog-core')
+const { getActiveRequest } = require('../../dd-trace/src/appsec/store')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('passport-local', 'passport-local', version => {
@@ -164,7 +164,8 @@ withVersions('passport-local', 'passport-local', version => {
 
     it('should block when subscriber aborts', async () => {
       subscriberStub = sinon.spy(({ abortController }) => {
-        storage('legacy').getStore().req.res.writeHead(403).end('Blocked')
+        const req = getActiveRequest()
+        req.res.writeHead(403).end('Blocked')
         abortController.abort()
       })
 

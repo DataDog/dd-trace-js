@@ -6,7 +6,7 @@ const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const {
   addIntelligentTestRunnerSpanTags,
@@ -37,6 +37,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -116,7 +117,7 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       this.libraryConfig = null
@@ -140,6 +141,7 @@ class CucumberPlugin extends CiPlugin {
           'cucumber'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -307,10 +309,19 @@ class CucumberPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      earlyFlakeAbortReason,
+      finalStatus,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
+
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+      }
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')

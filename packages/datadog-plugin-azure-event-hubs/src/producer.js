@@ -1,6 +1,5 @@
 'use strict'
 
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 const spanContexts = new WeakMap()
@@ -11,8 +10,9 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get prefix () { return 'tracing:apm:azure-event-hubs:send' }
 
   bindStart (ctx) {
+    const batchLinksEnabled = this._tracerConfig.DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED
     // we do not want to make these spans when batch linking is disabled.
-    if (!batchLinksAreEnabled() && ctx.functionName === 'tryAdd') {
+    if (!batchLinksEnabled && ctx.functionName === 'tryAdd') {
       return ctx.currentStore
     }
 
@@ -37,7 +37,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         span.setTag('message.id', ctx.eventData.messageID)
       }
 
-      if (batchLinksAreEnabled()) {
+      if (batchLinksEnabled) {
         const spanContext = spanContexts.get(ctx.batch)
         if (spanContext) {
           spanContext.push(span.context())
@@ -58,13 +58,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         for (const event of eventData) {
           injectTraceContext(this.tracer, span, event)
         }
-      } else {
-        if (batchLinksAreEnabled()) {
-          const contexts = spanContexts.get(eventData)
-          if (contexts) {
-            for (const spanContext of contexts) {
-              span.addLink(spanContext)
-            }
+      } else if (batchLinksEnabled) {
+        const contexts = spanContexts.get(eventData)
+        if (contexts) {
+          for (const spanContext of contexts) {
+            span.addLink(spanContext)
           }
         }
       }
@@ -86,11 +84,6 @@ function injectTraceContext (tracer, span, event) {
     event.properties = {}
   }
   tracer.inject(span, 'text_map', event.properties)
-}
-
-function batchLinksAreEnabled () {
-  const eh = getValueFromEnvSources('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
-  return eh !== 'false'
 }
 
 module.exports = AzureEventHubsProducerPlugin

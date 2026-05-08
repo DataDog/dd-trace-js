@@ -158,11 +158,10 @@ describe('sendData', () => {
   })
 
   it('uses the CI Visibility agentless intake when agentless mode is enabled', () => {
-    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = '1'
-
     sendDataModule.sendData(
       {
         isCiVisibility: true,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -179,6 +178,5 @@ describe('sendData', () => {
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
-    delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })

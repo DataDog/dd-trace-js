@@ -47,6 +47,8 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage/
+!integration-tests/coverage/
+!integration-tests/coverage/**
 *.lcov
 
 # nyc test coverage
@@ -145,6 +147,9 @@ __queuestorage__/AzuriteConfig
 # ignore claude settings
 .claude/*
 !.claude/skills/
+
+# ignore oh-my-claudecode local state
+.omc/
 
 # Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
 .husky/_/

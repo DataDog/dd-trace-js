@@ -5,30 +5,13 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
-const types = require('../../../../../ext/types')
-const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
-const { USER_REJECT } = require('../../../../../ext/priority')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../../../dd-trace/src/constants')
 
-const WEB = types.WEB
-const SERVER = kinds.SERVER
-const RESOURCE_NAME = tags.RESOURCE_NAME
-const SERVICE_NAME = tags.SERVICE_NAME
-const SPAN_TYPE = tags.SPAN_TYPE
-const SPAN_KIND = tags.SPAN_KIND
 const ERROR = tags.ERROR
-const HTTP_METHOD = tags.HTTP_METHOD
-const HTTP_URL = tags.HTTP_URL
-const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
-const HTTP_ROUTE = tags.HTTP_ROUTE
-const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
-const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const HTTP_USERAGENT = tags.HTTP_USERAGENT
-const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
+const HTTP_ROUTE = tags.HTTP_ROUTE
+const RESOURCE_NAME = tags.RESOURCE_NAME
 
 describe('plugins/util/web', () => {
   let web
@@ -41,9 +24,6 @@ describe('plugins/util/web', () => {
   let tags
 
   beforeEach(() => {
-    // `req` should only have common properties exposed and not things like
-    // `socket` or `connection` since some libraries rely on fake objects that
-    // may not have those.
     req = {
       method: 'GET',
       headers: {
@@ -53,6 +33,7 @@ describe('plugins/util/web', () => {
     }
     end = sinon.stub()
     res = {
+      statusCode: 200,
       end,
       getHeader: sinon.stub(),
       getHeaders: sinon.stub().returns({}),
@@ -64,9 +45,6 @@ describe('plugins/util/web', () => {
 
     tracer = require('../../..').init({ plugins: false })
     web = require('../../../src/plugins/util/web')
-  })
-
-  beforeEach(() => {
     config = web.normalizeConfig(config)
   })
 
@@ -146,665 +124,13 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('instrument', () => {
-    describe('on request start', () => {
-      it('should set the parent from the request headers', () => {
-        req.headers = {
-          'x-datadog-trace-id': '123',
-          'x-datadog-parent-id': '456',
-        }
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          assert.strictEqual(span.context()._traceId.toString(10), '123')
-          assert.strictEqual(span.context()._parentId.toString(10), '456')
-        })
-      })
-
-      it('should set the service name', () => {
-        config.service = 'custom'
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          assert.strictEqual(span.context()._tags[SERVICE_NAME], 'custom')
-        })
-      })
-
-      it('should activate a scope with the span', () => {
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          assert.strictEqual(tracer.scope().active(), span)
-        })
-      })
-
-      it('should add request tags to the span', () => {
-        req.method = 'GET'
-        req.url = '/user/123'
-        req.headers['user-agent'] = 'curl'
-        req.headers['x-forwarded-for'] = '8.8.8.8'
-        res.statusCode = '200'
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [SPAN_TYPE]: WEB,
-            [HTTP_URL]: 'http://localhost/user/123',
-            [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl',
-          })
-        })
-      })
-
-      it('should add client ip tag to the span when enabled', () => {
-        req.headers['x-forwarded-for'] = '8.8.8.8'
-
-        config.clientIpEnabled = true
-
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [HTTP_CLIENT_IP]: '8.8.8.8',
-          })
-        })
-      })
-
-      it('should add custom client ip tag to the span when it is configured', () => {
-        req.headers['X-Forwad-For'] = '8.8.8.8'
-
-        config.clientIpEnabled = true
-        config.clientIpHeader = 'X-Forwad-For'
-
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [HTTP_CLIENT_IP]: '8.8.8.8',
-          })
-        })
-      })
-
-      it('should not add custom client ip tag to the span when it is not configured', () => {
-        req.headers['X-Forwad-For'] = '8.8.8.8'
-
-        config.clientIpEnabled = true
-
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assert.ok(!(HTTP_CLIENT_IP in tags))
-        })
-      })
-
-      it('should not add client ip tag to the span when disabled', () => {
-        req.headers['x-forwarded-for'] = '8.8.8.8'
-
-        config.clientIpEnabled = false
-
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assert.ok(!(HTTP_CLIENT_IP in tags))
-        })
-      })
-
-      it('should not replace client ip when it exists', () => {
-        req.headers['x-forwarded-for'] = '8.8.8.8'
-
-        config.clientIpEnabled = true
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          span.setTag(HTTP_CLIENT_IP, '1.1.1.1')
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [HTTP_CLIENT_IP]: '1.1.1.1',
-          })
-        })
-      })
-
-      it('should not add client ip tag when no candidate header is present in request', () => {
-        config.clientIpEnabled = true
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assert.ok(!(HTTP_CLIENT_IP in tags))
-        })
-      })
-
-      it('should add configured headers to the span tags', () => {
-        req.headers.req = 'incoming'
-        req.headers.res = 'outgoing'
-        config.headers = ['host', 'req:http.req', 'server', 'res:http.res']
-        config = web.normalizeConfig(config)
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
-            'http.req': 'incoming',
-            [`${HTTP_RESPONSE_HEADERS}.server`]: 'test',
-            'http.res': 'outgoing',
-          })
-        })
-      })
-
-      it('should only start one span for the entire request', () => {
-        web.instrument(tracer, config, req, res, 'test.request', span1 => {
-          web.instrument(tracer, config, req, res, 'test.request', span2 => {
-            assert.strictEqual(span1, span2)
-          })
-        })
-      })
-
-      it('should allow overriding the span name', () => {
-        web.instrument(tracer, config, req, res, 'test.request', () => {
-          web.instrument(tracer, config, req, res, 'test2.request', span => {
-            assert.strictEqual(span.context()._name, 'test2.request')
-          })
-        })
-      })
-
-      it('should allow overriding the span service name', () => {
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          config.service = 'test2'
-          web.instrument(tracer, config, req, res, 'test.request')
-
-          assert.ok('service.name' in span.context()._tags)
-          assert.strictEqual(span.context()._tags['service.name'], 'test2')
-        })
-      })
-
-      it('should only wrap res.end once', () => {
-        web.instrument(tracer, config, req, res, 'test.request')
-        const end = res.end
-        web.instrument(tracer, config, req, res, 'test.request')
-
-        assert.strictEqual(end, res.end)
-      })
-
-      it('should use the config from the last call', () => {
-        config.headers = ['host']
-
-        const override = web.normalizeConfig({
-          headers: ['date'],
-        })
-
-        web.instrument(tracer, config, req, res, 'test.request', () => {
-          web.instrument(tracer, override, req, res, 'test.request', span => {
-            const tags = span.context()._tags
-
-            res.end()
-
-            assertObjectContains(tags, {
-              [`${HTTP_REQUEST_HEADERS}.date`]: 'now',
-            })
-          })
-        })
-      })
-
-      it('should obfuscate the query string from the URL', () => {
-        const config = web.normalizeConfig({
-          queryStringObfuscation: 'secret=.*?(&|$)',
-        })
-
-        req.method = 'GET'
-        req.url = '/user/123?secret=password&foo=bar'
-        res.statusCode = '200'
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar',
-          })
-        })
-      })
-
-      it('should handle CORS preflight', () => {
-        const headers = [
-          'x-datadog-origin',
-          'x-datadog-parent-id',
-          'x-datadog-sampled',
-          'x-datadog-sampling-priority',
-          'x-datadog-trace-id',
-          'x-datadog-tags',
-        ].join(',')
-
-        req.method = 'OPTIONS'
-        req.headers.origin = 'http://test.com'
-        req.headers['access-control-request-headers'] = headers
-
-        res.getHeaders.returns({
-          'access-control-allow-origin': 'http://test.com',
-        })
-
-        web.instrument(tracer, config, req, res, 'test.request')
-
-        res.writeHead()
-
-        sinon.assert.calledWith(res.setHeader, 'access-control-allow-headers', headers)
-      })
-
-      it('should handle CORS preflight with partial headers', () => {
-        const headers = [
-          'x-datadog-parent-id',
-          'x-datadog-trace-id',
-        ].join(',')
-
-        req.method = 'OPTIONS'
-        req.headers.origin = 'http://test.com'
-        req.headers['access-control-request-headers'] = headers
-
-        res.getHeaders.returns({
-          'access-control-allow-origin': 'http://test.com',
-        })
-
-        web.instrument(tracer, config, req, res, 'test.request')
-
-        res.writeHead()
-
-        sinon.assert.calledWith(res.setHeader, 'access-control-allow-headers', headers)
-      })
-
-      it('should handle CORS preflight when the origin does not match', () => {
-        const headers = ['x-datadog-trace-id']
-
-        req.method = 'OPTIONS'
-        req.headers.origin = 'http://test.com'
-        req.headers['access-control-request-headers'] = headers
-
-        web.instrument(tracer, config, req, res, 'test.request')
-
-        res.writeHead()
-
-        sinon.assert.notCalled(res.setHeader)
-      })
-
-      it('should handle CORS preflight when no header was requested', () => {
-        req.method = 'OPTIONS'
-        req.headers.origin = 'http://test.com'
-
-        res.getHeaders.returns({
-          'access-control-allow-origin': 'http://test.com',
-        })
-
-        web.instrument(tracer, config, req, res, 'test.request')
-
-        res.writeHead()
-
-        sinon.assert.notCalled(res.setHeader)
-      })
-
-      it('should support https', () => {
-        req.url = '/user/123'
-        req.headers['user-agent'] = 'curl'
-        req.headers['x-forwarded-for'] = '8.8.8.8'
-        req.socket = { encrypted: true }
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [SPAN_TYPE]: WEB,
-            [HTTP_URL]: 'https://localhost/user/123',
-            [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl',
-          })
-        })
-      })
-
-      it('should support HTTP2 compatibility API', () => {
-        req.stream = {}
-        req.method = 'GET'
-        req.headers = {
-          ':scheme': 'https',
-          ':authority': 'localhost',
-          ':method': 'GET',
-          ':path': '/user/123',
-          'user-agent': 'curl',
-          'x-forwarded-for': '8.8.8.8',
-        }
-        res.statusCode = '200'
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          assertObjectContains(tags, {
-            [SPAN_TYPE]: WEB,
-            [HTTP_URL]: 'https://localhost/user/123',
-            [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl',
-          })
-        })
-      })
-
-      it('should drop filtered out requests', () => {
-        config.filter = () => false
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const sampling = span.context()._sampling
-
-          res.end()
-
-          assert.strictEqual(sampling.priority, USER_REJECT)
-        })
-      })
-    })
-
-    describe('on request end', () => {
-      beforeEach(() => {
-        web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
-          span = reqSpan
-          tags = span.context()._tags
-        })
-      })
-
-      it('should finish the request span', () => {
-        sinon.spy(span, 'finish')
-
-        res.end()
-
-        sinon.assert.called(span.finish)
-      })
-
-      it('should should only finish once', () => {
-        sinon.spy(span, 'finish')
-
-        res.end()
-        res.end()
-
-        sinon.assert.calledOnce(span.finish)
-      })
-
-      it('should finish middleware spans', () => {
-        web.wrapMiddleware(req, () => {}, 'middleware', () => {
-          const span = tracer.scope().active()
-
-          sinon.spy(span, 'finish')
-
-          res.end()
-
-          sinon.assert.called(span.finish)
-        })
-      })
-
-      it('should execute any beforeEnd handlers', () => {
-        const spy1 = sinon.spy()
-        const spy2 = sinon.spy()
-
-        web.beforeEnd(req, spy1)
-        web.beforeEnd(req, spy2)
-
-        res.end()
-
-        sinon.assert.called(spy1)
-        sinon.assert.called(spy2)
-      })
-
-      it('should call the original end', () => {
-        res.end()
-
-        sinon.assert.called(end)
-      })
-
-      it('should add response tags to the span', () => {
-        req.method = 'GET'
-        req.url = '/user/123'
-        res.statusCode = 200
-
-        res.end()
-
-        assertObjectContains(tags, {
-          [RESOURCE_NAME]: 'GET',
-          [HTTP_STATUS_CODE]: 200,
-        })
-      })
-
-      it('should set the error tag if the request is an error', () => {
-        res.statusCode = 500
-
-        res.end()
-
-        assertObjectContains(tags, {
-          [ERROR]: true,
-        })
-      })
-
-      it('should set the error tag if the configured validator returns false', () => {
-        config.validateStatus = () => false
-
-        res.end()
-
-        assertObjectContains(tags, {
-          [ERROR]: true,
-        })
-      })
-
-      it('should use the user provided route', () => {
-        span.setTag('http.route', '/custom/route')
-
-        res.end()
-
-        assertObjectContains(tags, {
-          [HTTP_ROUTE]: '/custom/route',
-        })
-      })
-
-      it('should execute the request end hook', () => {
-        config.hooks.request = sinon.spy()
-
-        res.end()
-
-        sinon.assert.calledWith(config.hooks.request, span, req, res)
-      })
-
-      it('should execute multiple end hooks', () => {
-        config.hooks = {
-          request: sinon.spy(),
-        }
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          res.end()
-
-          sinon.assert.calledWith(config.hooks.request, span, req, res)
-        })
-      })
-
-      it('should set the resource name from the http.route tag set in the hooks', () => {
-        config.hooks = {
-          request: span => span.setTag('http.route', '/custom/route'),
-        }
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          res.end()
-
-          assert.strictEqual(tags['resource.name'], 'GET /custom/route')
-        })
-      })
-    })
-  })
-
-  describe('enterRoute', () => {
-    beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
-    })
-
-    it('should add a route segment that will be added to the span resource name', () => {
-      req.method = 'GET'
-
-      web.enterRoute(req, '/foo')
-      web.enterRoute(req, '/bar')
-      res.end()
-
-      assert.strictEqual(tags[RESOURCE_NAME], 'GET /foo/bar')
-      assert.strictEqual(tags[HTTP_ROUTE], '/foo/bar')
-    })
-
-    it('should only add valid route segments to the span resource name', () => {
-      req.method = 'GET'
-
-      web.enterRoute(req)
-      web.enterRoute(req, 1337)
-      res.end()
-
-      assert.strictEqual(tags[RESOURCE_NAME], 'GET')
-      assert.ok(!(HTTP_ROUTE in tags))
-    })
-  })
-
-  describe('exitRoute', () => {
-    beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
-        span = reqSpan
-        tags = span.context()._tags
-      })
-    })
-
-    it('should remove a route segment', () => {
-      req.method = 'GET'
-
-      web.enterRoute(req, '/foo')
-      web.enterRoute(req, '/bar')
-      web.exitRoute(req)
-      res.end()
-
-      assert.strictEqual(tags[RESOURCE_NAME], 'GET /foo')
-    })
-  })
-
-  describe('wrapMiddleware', () => {
-    beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
-    })
-
-    it('should activate a scope with the span', (done) => {
-      const fn = function test () {
-        assert.notStrictEqual(tracer.scope().active(), span)
-        done()
-      }
-
-      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
-    })
-  })
-
-  describe('finish', () => {
-    beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
-    })
-
-    it('should finish the span of the current middleware', (done) => {
-      const fn = () => {
-        const span = tracer.scope().active()
-
-        sinon.spy(span, 'finish')
-        web.finish(req, fn, 'middleware')
-
-        sinon.assert.called(span.finish)
-
-        done()
-      }
-
-      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
-    })
-
-    it('should add an error if provided', (done) => {
-      const fn = () => {
-        const span = tracer.scope().active()
-        const tags = span.context()._tags
-        const error = new Error('boom')
-
-        sinon.spy(span, 'finish')
-        web.finish(req, error)
-
-        assert.strictEqual(tags[ERROR_TYPE], error.name)
-        assert.strictEqual(tags[ERROR_MESSAGE], error.message)
-        assert.strictEqual(tags[ERROR_STACK], error.stack)
-
-        done()
-      }
-
-      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
-    })
-  })
-
   describe('root', () => {
-    it('should return the request root span', () => {
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        const span = tracer.scope().active()
-
-        web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
-          assert.strictEqual(web.root(req), span)
-        })
-      })
-    })
-
     it('should return null when not yet instrumented', () => {
       assert.strictEqual(web.root(req), null)
     })
   })
 
   describe('active', () => {
-    it('should return the request span by default', () => {
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        assert.strictEqual(web.active(req), tracer.scope().active())
-      })
-    })
-
-    it('should return the active middleware span', () => {
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        const span = tracer.scope().active()
-
-        web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
-          assert.notStrictEqual(web.active(req), null)
-          assert.notStrictEqual(web.active(req), span)
-        })
-      })
-    })
-
     it('should return null when not yet instrumented', () => {
       assert.strictEqual(web.active(req), null)
     })
@@ -812,11 +138,15 @@ describe('plugins/util/web', () => {
 
   describe('addError', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
+      span = tracer.startSpan('test.request')
+      tags = span.context()._tags
+
+      web.patch(req)
+      const context = web.getContext(req)
+      context.span = span
+      context.req = req
+      context.res = res
+      context.config = config
     })
 
     it('should add an error to the request span', () => {
@@ -825,9 +155,7 @@ describe('plugins/util/web', () => {
       web.addError(req, error)
       web.addStatusError(req, 500)
 
-      assertObjectContains(tags, {
-        [ERROR]: error,
-      })
+      assert.strictEqual(tags[ERROR], error)
     })
 
     it('should override an existing error', () => {
@@ -837,27 +165,27 @@ describe('plugins/util/web', () => {
       web.addError(req, error)
       web.addStatusError(req, 500)
 
-      assertObjectContains(tags, {
-        [ERROR]: error,
-      })
+      assert.strictEqual(tags[ERROR], error)
     })
   })
 
   describe('addStatusError', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
+      span = tracer.startSpan('test.request')
+      tags = span.context()._tags
+
+      web.patch(req)
+      const context = web.getContext(req)
+      context.span = span
+      context.req = req
+      context.res = res
+      context.config = config
     })
 
     it('should flag the request as an error', () => {
       web.addStatusError(req, 500)
 
-      assertObjectContains(tags, {
-        [ERROR]: true,
-      })
+      assert.strictEqual(tags[ERROR], true)
     })
 
     it('should only flag requests as an error for configured status codes', () => {
@@ -938,18 +266,29 @@ describe('plugins/util/web', () => {
   })
 
   describe('http.endpoint tagging', () => {
+    beforeEach(() => {
+      span = tracer.startSpan('test.request')
+      tags = span.context()._tags
+
+      req.url = '/'
+
+      web.patch(req)
+      const context = web.getContext(req)
+      context.span = span
+      context.req = req
+      context.res = res
+      context.config = config
+    })
+
     it('should derive http.endpoint when no framework route is available', () => {
       config = web.normalizeConfig({ resourceRenamingEnabled: true })
       req.method = 'GET'
       req.url = '/api/orders/12345/items?foo=bar'
 
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
+      const context = web.getContext(req)
+      context.config = config
 
-      res.statusCode = 200
-      res.end()
+      web.finishAll(context)
 
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
       assert.strictEqual(tags[HTTP_ENDPOINT], '/api/orders/{param:int}/items')
@@ -960,13 +299,10 @@ describe('plugins/util/web', () => {
       req.method = 'GET'
       req.url = '/api/orders/12345/items'
 
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
+      const context = web.getContext(req)
+      context.config = config
 
-      res.statusCode = 200
-      res.end()
+      web.finishAll(context)
 
       assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))

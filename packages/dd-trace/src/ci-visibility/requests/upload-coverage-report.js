@@ -3,10 +3,10 @@
 const { readFileSync } = require('node:fs')
 const { gzipSync } = require('node:zlib')
 
+const getConfig = require('../../config')
 const FormData = require('../../exporters/common/form-data')
 const request = require('../../exporters/common/request')
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -34,7 +34,7 @@ function uploadCoverageReport (
   { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
-  const apiKey = getValueFromEnvSources('DD_API_KEY')
+  const apiKey = getConfig().apiKey
 
   if (!apiKey && !isEvpProxy) {
     return callback(new Error('DD_API_KEY is required for coverage report upload'))

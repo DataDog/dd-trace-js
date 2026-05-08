@@ -24,7 +24,6 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
-      config,
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))

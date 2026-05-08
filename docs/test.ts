@@ -197,9 +197,9 @@ tracer.dogstatsd.flush()
 
 const httpOptions = {
   service: 'test',
-  allowlist: ['url', /url/, url => true],
-  blocklist: ['url', /url/, url => true],
-  validateStatus: code => code < 400,
+  allowlist: ['url', /url/, (url: string) => true],
+  blocklist: ['url', /url/, (url: string) => true],
+  validateStatus: (code: number) => code < 400,
   headers: ['host'],
   middleware: true
 };
@@ -382,6 +382,7 @@ tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
+tracer.use('modelcontextprotocol-sdk');
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
@@ -399,6 +400,8 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pg', { appendComment: true });
+tracer.use('pg', { truncate: true });
+tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
@@ -690,7 +693,8 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {},
+  tags: { team: 'ml' },
+  costTags: ['team'],
   prompt: {
     id: '123',
     version: '1.0.0',
@@ -702,7 +706,8 @@ llmobs.annotate(span, {
   outputData: 'output',
   metadata: {},
   metrics: {},
-  tags: {}
+  tags: { team: 'ml' },
+  costTags: ['team']
 })
 
 

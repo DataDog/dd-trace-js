@@ -37,7 +37,9 @@ describe('ssrf analyzer', () => {
               }
             })
 
-            clientRequest.destroy()
+            setImmediate(() => {
+              clientRequest.destroy()
+            })
           })
         }
 
@@ -65,7 +67,9 @@ describe('ssrf analyzer', () => {
               }
             })
 
-            clientRequest.destroy()
+            setImmediate(() => {
+              clientRequest.destroy()
+            })
           })
         }
 

@@ -353,7 +353,7 @@ describe('Plugin', () => {
                 meta: { component: 'graphql' },
               })
               assert.ok(!('graphql.source' in span.meta))
-            })
+            }, { spanResourceMatch: /^graphql\.parse$/ })
             .then(done)
             .catch(done)
 
@@ -375,7 +375,7 @@ describe('Plugin', () => {
                 meta: { component: 'graphql' },
               })
               assert.ok(!('graphql.source' in span.meta))
-            })
+            }, { spanResourceMatch: /^graphql\.validate$/ })
             .then(done)
             .catch(done)
 

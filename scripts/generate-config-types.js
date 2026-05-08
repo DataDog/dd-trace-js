@@ -15,6 +15,11 @@ const OUTPUT_PATH = path.join(
   '..',
   'packages/dd-trace/src/config/generated-config-types.d.ts'
 )
+const CONFIG_INDEX_PATH = path.join(
+  __dirname,
+  '..',
+  'packages/dd-trace/src/config/index.js'
+)
 
 const BASE_TYPES = {
   array: 'string[]',
@@ -54,8 +59,78 @@ function getPropertyName (canonicalName, entry) {
   return configurationNames?.[0] ?? canonicalName
 }
 
-function withUndefined (type, entry) {
-  return entry.default === null ? `${type} | undefined` : type
+const FALLBACK_PATTERN =
+  /if\s*\(\s*!\s*this\.([\w.]+)\s*\)\s*\{[\s\S]*?setAndTrack\s*\(\s*this\s*,\s*['"]([\w.]+)['"]\s*,/g
+
+// Expression whose tail (after any top-level `||`/`??`, or the whole expression) is a string or
+// template literal — i.e. the result is guaranteed defined at runtime.
+const GUARANTEED_DEFINED = /(?:^|\|\||\?\?)\s*(?:'[^']*'|"[^"]*"|`(?:\$\{[^}`]*\}|[^`])*`)\s*$/
+
+// Returns the index right after the `close` that balances the `open` preceding `start`, or -1 if
+// unbalanced. Skips over string and template literals so their contents don't affect depth.
+function balancedEnd (s, start, open, close) {
+  let depth = 1
+  let i = start
+  while (i < s.length) {
+    const ch = s[i]
+    if (ch === open) {
+      depth++
+      i++
+    } else if (ch === close) {
+      i++
+      if (--depth === 0) return i
+    } else if (ch === '"' || ch === '\'' || ch === '`') {
+      i = skipQuoted(s, i, ch)
+    } else {
+      i++
+    }
+  }
+  return -1
+}
+
+function skipQuoted (s, i, quote) {
+  const isTemplate = quote === '`'
+  i++
+  while (i < s.length) {
+    if (s[i] === '\\') { i += 2; continue }
+    if (s[i] === quote) return i + 1
+    if (isTemplate && s[i] === '$' && s[i + 1] === '{') {
+      i = balancedEnd(s, i + 2, '{', '}')
+      if (i === -1) return s.length
+      continue
+    }
+    i++
+  }
+  return i
+}
+
+function findCalculatedFallbackProperties () {
+  const source = readFileSync(CONFIG_INDEX_PATH, 'utf8')
+  const marker = /#applyCalculated\s*\(\s*\)\s*\{/.exec(source)
+  if (!marker) throw new Error('Could not locate #applyCalculated() in config/index.js')
+
+  const bodyStart = marker.index + marker[0].length
+  const body = source.slice(bodyStart, balancedEnd(source, bodyStart, '{', '}') - 1)
+
+  const properties = new Set()
+  let match
+  while ((match = FALLBACK_PATTERN.exec(body)) !== null) {
+    if (match[1] !== match[2]) continue
+    const valueStart = match.index + match[0].length
+    const valueEnd = balancedEnd(body, valueStart, '(', ')')
+    if (valueEnd === -1) continue
+    const value = body.slice(valueStart, valueEnd - 1).trim()
+    if (GUARANTEED_DEFINED.test(value)) properties.add(match[1])
+  }
+  return properties
+}
+
+const CALCULATED_FALLBACK_PROPERTIES = findCalculatedFallbackProperties()
+
+function withUndefined (type, entry, propertyName) {
+  if (entry.default !== null) return type
+  if (CALCULATED_FALLBACK_PROPERTIES.has(propertyName)) return type
+  return `${type} | undefined`
 }
 
 function getAllowedType (entry) {
@@ -93,7 +168,7 @@ function getTypeForEntry (propertyName, entry) {
     throw new Error(`Unsupported configuration type for ${propertyName}: ${entry.type}`)
   }
 
-  return withUndefined(override, entry)
+  return withUndefined(override, entry, propertyName)
 }
 
 function addProperty (root, propertyName, type) {

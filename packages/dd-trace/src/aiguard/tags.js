@@ -7,6 +7,7 @@ module.exports = {
   AI_GUARD_ACTION_TAG_KEY: 'ai_guard.action',
   AI_GUARD_REASON_TAG_KEY: 'ai_guard.reason',
   AI_GUARD_BLOCKED_TAG_KEY: 'ai_guard.blocked',
+  AI_GUARD_EVENT_TAG_KEY: 'ai_guard.event',
   AI_GUARD_META_STRUCT_KEY: 'ai_guard',
 
   AI_GUARD_TELEMETRY_REQUESTS: 'ai_guard.requests',

@@ -19,7 +19,7 @@ function setUser (tracer, user) {
     return
   }
 
-  const rootSpan = getRootSpan(tracer)
+  const rootSpan = getRootSpan()
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in setUser')
     return

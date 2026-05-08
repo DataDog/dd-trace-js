@@ -67,6 +67,8 @@ check-big-regressions:
 
 benchmark:
   extends: .benchmarks
+  # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
+  # one, change the other — otherwise variants get silently skipped.
   parallel:
     matrix:
       - MAJOR_VERSION: 18
@@ -77,6 +79,10 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 18
         GROUP: 4
+      - MAJOR_VERSION: 18
+        GROUP: 5
+      - MAJOR_VERSION: 18
+        GROUP: 6
       - MAJOR_VERSION: 20
         GROUP: 1
       - MAJOR_VERSION: 20
@@ -85,6 +91,10 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 20
         GROUP: 4
+      - MAJOR_VERSION: 20
+        GROUP: 5
+      - MAJOR_VERSION: 20
+        GROUP: 6
       - MAJOR_VERSION: 22
         GROUP: 1
       - MAJOR_VERSION: 22
@@ -93,6 +103,10 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 22
         GROUP: 4
+      - MAJOR_VERSION: 22
+        GROUP: 5
+      - MAJOR_VERSION: 22
+        GROUP: 6
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -101,8 +115,12 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 24
         GROUP: 4
+      - MAJOR_VERSION: 24
+        GROUP: 5
+      - MAJOR_VERSION: 24
+        GROUP: 6
   variables:
-    SPLITS: 4
+    SPLITS: 6
 
 benchmark-serverless:
   stage: benchmarks
@@ -134,6 +152,13 @@ benchmark-serverless-trigger:
   rules:
     - if: $CI_COMMIT_BRANCH == 'master'
       interruptible: false
+
+    # don't run on merges to release branches ("vN.x" where N is any integer)
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^v\d+\.x$/'
+      when: never
+    # don't run on pushes to release branches
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^v\d+\.x$/'
+      when: never
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools

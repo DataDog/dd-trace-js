@@ -34,6 +34,7 @@ const agent = require('../plugins/agent')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 
@@ -1107,7 +1108,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackLogin() returns action', () => {
@@ -1188,7 +1190,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackUser() returns action', () => {

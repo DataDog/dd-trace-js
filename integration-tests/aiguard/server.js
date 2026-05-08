@@ -6,6 +6,10 @@ const express = require('express')
 
 const app = express()
 
+app.get('/no-aiguard', (req, res) => {
+  res.status(200).json({ ok: true })
+})
+
 app.get('/allow', async (req, res) => {
   const evaluation = await tracer.aiguard.evaluate([
     { role: 'system', content: 'You are a beautiful AI' },

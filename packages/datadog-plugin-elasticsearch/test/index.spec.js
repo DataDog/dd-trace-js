@@ -52,7 +52,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].resource, 'POST /logstash-?.?.?/_search')
-            })
+            }, { spanResourceMatch: /^POST \/logstash-\?\.\?\.\?\/_search$/ })
             .then(done)
             .catch(done)
 

@@ -54,7 +54,7 @@ describe('plugins/util/url', () => {
       assert.strictEqual(result, 'https://secure.example.com/secure/path')
     })
 
-    it('should extract full URL from HTTPS request with connection.encrypted', () => {
+    it('should not read `connection.encrypted` (deprecated alias for `socket.encrypted`)', () => {
       const req = {
         headers: {
           host: 'secure.example.com',
@@ -65,7 +65,7 @@ describe('plugins/util/url', () => {
       }
 
       const result = url.extractURL(req)
-      assert.strictEqual(result, 'https://secure.example.com/secure/path')
+      assert.strictEqual(result, 'http://secure.example.com/secure/path')
     })
 
     it('should extract full URL from HTTP/2 request', () => {

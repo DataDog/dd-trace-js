@@ -8,21 +8,15 @@ export interface ConfigProperties extends GeneratedConfig {
     responsesEnabled: boolean
     rules: PayloadTaggingRules
   }
-  commitSHA: string | undefined
   debug: boolean
-  gcpPubSubPushSubscriptionEnabled: boolean
   instrumentationSource: 'manual' | 'ssi'
-  isAzureFunction: boolean
   isCiVisibility: boolean
-  isGCPFunction: boolean
   isServiceNameInferred: boolean
   isServiceUserProvided: boolean
   logger: import('../../../../index').TracerOptions['logger'] | undefined
   lookup: NonNullable<import('../../../../index').TracerOptions['lookup']>
   readonly parsedDdTags: Record<string, string>
   plugins: boolean
-  repositoryUrl: string | undefined
-  rules: import('../../../../index').SamplingRule[]
   sampler: {
     rateLimit: number
     rules: import('../../../../index').SamplingRule[]

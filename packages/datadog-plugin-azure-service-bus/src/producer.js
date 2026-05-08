@@ -1,6 +1,5 @@
 'use strict'
 
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const spanContexts = new WeakMap()
 
@@ -10,8 +9,9 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
   static get prefix () { return 'tracing:apm:azure-service-bus:send' }
 
   bindStart (ctx) {
+    const batchLinksEnabled = this._tracerConfig.DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED
     // we do not want to make these spans when batch linking is disabled.
-    if (!batchLinksAreEnabled() && ctx.functionName === 'tryAddMessage') {
+    if (!batchLinksEnabled && ctx.functionName === 'tryAddMessage') {
       return ctx.currentStore
     }
 
@@ -36,7 +36,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         span.setTag('message.id', ctx.msg)
       }
 
-      if (batchLinksAreEnabled()) {
+      if (batchLinksEnabled) {
         const spanContext = spanContexts.get(ctx.batch)
         if (spanContext) {
           spanContext.push(span.context())
@@ -52,7 +52,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
       const isBatch = messages.constructor?.name === 'ServiceBusMessageBatchImpl'
       if (isBatch) {
         span.setTag('messaging.batch.message_count', messages.count)
-        if (batchLinksAreEnabled()) {
+        if (batchLinksEnabled) {
           const contexts = spanContexts.get(messages)
           if (contexts) {
             for (const spanContext of contexts) {
@@ -87,11 +87,6 @@ function injectTraceContext (tracer, span, msg) {
   }
 
   tracer.inject(span, 'text_map', msg.applicationProperties)
-}
-
-function batchLinksAreEnabled () {
-  const sb = getValueFromEnvSources('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
-  return sb !== 'false'
 }
 
 module.exports = AzureServiceBusProducerPlugin

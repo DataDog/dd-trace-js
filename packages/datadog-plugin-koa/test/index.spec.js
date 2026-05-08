@@ -10,6 +10,7 @@ const semver = require('semver')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { storage } = require('../../datadog-core')
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -192,7 +193,7 @@ describe('Plugin', () => {
           let childSpan
 
           app.use((ctx, next) => {
-            parentSpan = tracer.scope().active()
+            parentSpan = storage('legacy').getStore()?.span
 
             sinon.spy(parentSpan, 'finish')
 
@@ -213,7 +214,7 @@ describe('Plugin', () => {
           })
 
           app.use((ctx, next) => {
-            childSpan = tracer.scope().active()
+            childSpan = storage('legacy').getStore()?.span
 
             sinon.spy(childSpan, 'finish')
 

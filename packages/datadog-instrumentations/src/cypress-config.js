@@ -4,8 +4,20 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
+const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
+
+const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
+
+// Ensure the cypress plugin is loaded so it can subscribe to our channel.
+// Normally, plugins are loaded when their npm module is required (via addHook),
+// but plain-object configs don't require('cypress'), so the plugin would never
+// be instantiated in the Cypress Config Manager child process.
+const loadCh = channel('dd-trace:instrumentation:load')
+if (loadCh.hasSubscribers) {
+  loadCh.publish({ name: 'cypress' })
+}
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
@@ -93,8 +105,9 @@ function injectSupportFile (config) {
 
 /**
  * Registers dd-trace's Cypress hooks (before:run, after:spec, after:run, tasks)
- * and injects the support file. Handles chaining with user-registered handlers
- * for after:spec/after:run so both the user's code and dd-trace's run in sequence.
+ * and injects the support file. Communicates with the plugin layer via
+ * the `ci:cypress:setup-node-events` diagnostic channel, avoiding direct
+ * tracer references in the instrumentation layer.
  *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
@@ -110,8 +123,6 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
       try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
     }
   }
-
-  const tracer = global._ddtrace
 
   const registerAfterRunWithCleanup = () => {
     on('after:run', (results) => {
@@ -129,49 +140,32 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     on('task', noopTask)
   }
 
-  if (!tracer || !tracer._initialized) {
+  if (!setupNodeEventsCh.hasSubscribers) {
     registerNoopHandlers()
     return config
   }
 
-  const NoopTracer = require('../../../packages/dd-trace/src/noop/tracer')
+  // Publish to the plugin layer via diagnostic channel.
+  // The subscriber sets `payload.registered = true` and optionally
+  // `payload.configPromise` when it handles the event.
+  const payload = {
+    on,
+    config,
+    userAfterSpecHandlers,
+    userAfterRunHandlers,
+    cleanupWrapper,
+    registered: false,
+    configPromise: undefined,
+  }
 
-  if (tracer._tracer instanceof NoopTracer) {
+  setupNodeEventsCh.publish(payload)
+
+  if (!payload.registered) {
     registerNoopHandlers()
     return config
   }
 
-  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
-
-  if (cypressPlugin._isInit) {
-    for (const h of userAfterSpecHandlers) on('after:spec', h)
-    registerAfterRunWithCleanup()
-    return config
-  }
-
-  on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
-
-  on('after:spec', (spec, results) => {
-    const chain = userAfterSpecHandlers.reduce(
-      (p, h) => p.then(() => h(spec, results)),
-      Promise.resolve()
-    )
-    return chain.then(() => cypressPlugin.afterSpec(spec, results))
-  })
-
-  on('after:run', (results) => {
-    const chain = userAfterRunHandlers.reduce(
-      (p, h) => p.then(() => h(results)),
-      Promise.resolve()
-    )
-    return chain
-      .then(() => cypressPlugin.afterRun(results))
-      .finally(cleanupWrapper)
-  })
-
-  on('task', cypressPlugin.getTasks())
-
-  return Promise.resolve(cypressPlugin.init(tracer, config)).then(() => config)
+  return payload.configPromise || config
 }
 
 /**
@@ -236,29 +230,136 @@ function wrapConfig (config) {
 }
 
 /**
+ * Returns `true` if the nearest package.json walking up from `filePath`
+ * sets `"type": "module"`. Used to decide whether ambiguous extensions
+ * (`.js`, `.ts`) are loaded as ESM or CJS.
+ *
+ * @param {string} filePath absolute path to a file under the project
+ * @returns {boolean}
+ */
+function isUnderEsmPackage (filePath) {
+  let dir = path.dirname(filePath)
+  while (true) {
+    const candidate = path.join(dir, 'package.json')
+    try {
+      const pkg = JSON.parse(fs.readFileSync(candidate, 'utf8'))
+      return pkg && pkg.type === 'module'
+    } catch { /* no package.json at this level */ }
+    const parent = path.dirname(dir)
+    if (parent === dir) return false
+    dir = parent
+  }
+}
+
+/**
  * @param {string} originalConfigFile absolute path to the original config file
  * @returns {string} path to the generated wrapper file
  */
 function createConfigWrapper (originalConfigFile) {
+  // Decide the wrapper's module mode (ESM vs CJS). It must match how
+  // Cypress would interpret the user's original config so that (1) Cypress
+  // keeps the loader it would have used (notably the ts-node registration
+  // for `.ts` configs), and (2) the wrapper body parses in that mode.
+  const originalExt = path.extname(originalConfigFile)
+  const isEsm = originalExt === '.mjs' || originalExt === '.mts' ||
+    (originalExt !== '.cjs' && originalExt !== '.cts' && isUnderEsmPackage(originalConfigFile))
+
+  // Preserve `.ts`/`.cts`/`.mts` so Cypress keeps ts-node registered for
+  // the wrapper. For plain JS originals, pick the extension that encodes
+  // the chosen module mode directly.
+  let wrapperExt
+  if (originalExt === '.ts' || originalExt === '.cts' || originalExt === '.mts') {
+    wrapperExt = originalExt
+  } else {
+    wrapperExt = isEsm ? '.mjs' : '.cjs'
+  }
+
   const wrapperFile = path.join(
     path.dirname(originalConfigFile),
-    `.dd-cypress-config-${process.pid}.mjs`
+    `.dd-cypress-config-${process.pid}${wrapperExt}`
   )
 
   const cypressConfigPath = require.resolve('./cypress-config')
 
-  // Always use ESM: it can import both CJS and ESM configs, so it works
-  // regardless of the original file's extension or "type": "module" in package.json.
-  // Import cypress-config.js directly (CJS default = module.exports object).
-  fs.writeFileSync(wrapperFile, [
-    `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-    `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
-    '',
-    'export default cypressConfig.wrapConfig(originalConfig)',
-    '',
-  ].join('\n'))
+  // ESM body: `import` default-interops a CJS module (cypress-config.js)
+  //   by exposing its `module.exports` as the default binding, and handles
+  //   both CJS and ESM user configs transparently.
+  // CJS body: avoids top-level `import` — older Cypress transpiles `.ts`
+  //   configs through CJS ts-node, where `require('file://...')` is not
+  //   supported. Guards against ES-module-default shape so TS-authored
+  //   configs using `export default` still work.
+  const body = isEsm
+    ? [
+        `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
+        `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
+        '',
+        'export default cypressConfig.wrapConfig(originalConfig)',
+        '',
+      ].join('\n')
+    : [
+        `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
+        `const originalExports = require(${JSON.stringify(originalConfigFile)})`,
+        'const originalConfig = originalExports && originalExports.__esModule',
+        '  ? originalExports.default',
+        '  : originalExports',
+        'module.exports = cypressConfig.wrapConfig(originalConfig)',
+        '',
+      ].join('\n')
 
+  fs.writeFileSync(wrapperFile, body)
   return wrapperFile
+}
+
+/**
+ * @param {string} projectRoot
+ * @returns {boolean}
+ */
+function isTypeScript6OrNewer (projectRoot) {
+  try {
+    // eslint-disable-next-line n/no-unpublished-require
+    const packageJsonPath = require.resolve('typescript/package.json', { paths: [projectRoot] })
+    const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+    const major = Number(String(version).split('.')[0])
+    return major >= 6
+  } catch {
+    return false
+  }
+}
+
+/**
+ * @param {string} projectRoot
+ * @param {string} configFilePath
+ * @returns {() => void}
+ */
+function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
+  const configExt = path.extname(configFilePath)
+  if (configExt !== '.ts' && configExt !== '.cts' && configExt !== '.mts') return () => {}
+  if (!isTypeScript6OrNewer(projectRoot)) return () => {}
+
+  /* eslint-disable eslint-rules/eslint-process-env */
+  const previousCompilerOptions = process.env.TS_NODE_COMPILER_OPTIONS
+  let compilerOptions = {}
+  if (previousCompilerOptions) {
+    try {
+      compilerOptions = JSON.parse(previousCompilerOptions)
+    } catch {
+      compilerOptions = {}
+    }
+  }
+
+  process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({
+    ...compilerOptions,
+    ignoreDeprecations: '6.0',
+  })
+
+  return () => {
+    if (previousCompilerOptions === undefined) {
+      delete process.env.TS_NODE_COMPILER_OPTIONS
+    } else {
+      process.env.TS_NODE_COMPILER_OPTIONS = previousCompilerOptions
+    }
+  }
+  /* eslint-enable eslint-rules/eslint-process-env */
 }
 
 /**
@@ -297,17 +398,16 @@ function wrapCliConfigFileOptions (options) {
     }
   }
 
-  // Skip .ts files — Cypress transpiles them internally via its own loader.
-  // The ESM wrapper can't import .ts directly. The defineConfig shimmer
-  // handles .ts configs since they're transpiled to CJS by Cypress.
-  if (!configFilePath || !fs.existsSync(configFilePath) || path.extname(configFilePath) === '.ts') return noop
+  if (!configFilePath || !fs.existsSync(configFilePath)) return noop
 
   try {
     const wrapperFile = createConfigWrapper(configFilePath)
+    const restoreTsNodeCompilerOptions = configureTsNodeForTypeScript6(projectRoot, configFilePath)
 
     return {
       options: { ...options, configFile: wrapperFile },
       cleanup: () => {
+        restoreTsNodeCompilerOptions()
         try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
       },
     }

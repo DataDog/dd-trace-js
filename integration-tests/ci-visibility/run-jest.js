@@ -59,6 +59,10 @@ if (process.env.WORKER_IDLE_MEMORY_LIMIT) {
   options.workerIdleMemoryLimit = Number(process.env.WORKER_IDLE_MEMORY_LIMIT)
 }
 
+if (process.env.JEST_BAIL) {
+  options.bail = true
+}
+
 jest.runCLI(
   options,
   options.projects

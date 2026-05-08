@@ -15,6 +15,8 @@ describe('FlaggingProvider', () => {
   let mockChannel
   let log
   let channelStub
+  let mockEvalMetricsHook
+  let mockEvalMetricsHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -45,11 +47,17 @@ describe('FlaggingProvider', () => {
       warn: sinon.spy(),
     }
 
+    mockEvalMetricsHook = {
+      record: sinon.spy(),
+    }
+    mockEvalMetricsHookClass = sinon.stub().returns(mockEvalMetricsHook)
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
+      './eval-metrics-hook': mockEvalMetricsHookClass,
     })
   })
 
@@ -72,7 +80,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider)
-      sinon.assert.calledWith(log.debug, 'FlaggingProvider created with timeout: 30000ms')
+      sinon.assert.calledWith(log.debug, '%s created with timeout: %dms', 'FlaggingProvider', 30000)
     })
   })
 
@@ -85,7 +93,7 @@ describe('FlaggingProvider', () => {
       provider._setConfiguration(ufc)
 
       sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
-      sinon.assert.calledWith(log.debug, 'FlaggingProvider provider configuration updated')
+      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
     })
 
     it('should handle null/undefined configuration gracefully', () => {
@@ -93,6 +101,21 @@ describe('FlaggingProvider', () => {
 
       provider._setConfiguration(null)
       provider._setConfiguration(undefined)
+    })
+  })
+
+  describe('hooks', () => {
+    it('should create EvalMetricsHook with config', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
+    })
+
+    it('should register EvalMetricsHook as a hook', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.hooks.length, 1)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
     })
   })
 

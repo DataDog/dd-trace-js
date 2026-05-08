@@ -1,5 +1,10 @@
 'use strict'
 
+// Capture real timers at module load, before any test can install fake timers.
+const { performance } = require('perf_hooks')
+const dateNow = Date.now
+
+const satisfies = require('../../../vendor/dist/semifies')
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -26,6 +31,7 @@ const {
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
@@ -47,12 +53,16 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getSessionRequestErrorTags,
+  getSessionItrSkippingEnabledTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
-  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
   getPullRequestBaseBranch,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -95,12 +105,13 @@ const {
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
 const {
-  resolveOriginalSourcePosition,
+  resolveOriginalSourceFile,
   resolveSourceLineForTest,
   shouldTrustInvocationDetailsLine,
 } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
+let hasWarnedDeprecatedCypressVersion = false
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -127,6 +138,20 @@ function getCypressVersion (details) {
     return details.config.version
   }
   return ''
+}
+
+function warnDeprecatedCypressVersion (version) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedCypressVersion || !version || !satisfies(version, '<12.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedCypressVersion = true
+  // console.warn does not seem to work reliably in Cypress, so use console.log instead.
+  // eslint-disable-next-line no-console
+  console.log(
+    'WARNING: dd-trace support for Cypress<12.0.0 is deprecated' +
+    ' and will not be supported in dd-trace v6. Please upgrade Cypress to >=12.0.0.'
+  )
 }
 
 function getRootDir (details) {
@@ -240,12 +265,64 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
+const FINAL_STATUS_RETRY_KIND = {
+  none: 'none',
+  atr: 'atr',
+  efd: 'efd',
+  atf: 'atf',
+}
+
+function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTestRetriesCount }) {
+  // Infer retry kind from the executions we actually saw so ATR enabled with
+  // a retry count of 0 is still treated as a single final execution.
+  if (finishedTest.isAttemptToFix) {
+    return FINAL_STATUS_RETRY_KIND.atf
+  }
+
+  if (finishedTestAttempts.some(testAttempt => testAttempt.isEfdRetry)) {
+    return FINAL_STATUS_RETRY_KIND.efd
+  }
+
+  if (finishedTestAttempts.length > 1 && flakyTestRetriesCount > 0) {
+    return FINAL_STATUS_RETRY_KIND.atr
+  }
+
+  return FINAL_STATUS_RETRY_KIND.none
+}
+
+function getFinalStatus ({
+  status,
+  retryKind,
+  hasFailedAllRetries,
+  hasPassedAllAtfRetries,
+  isQuarantined,
+  isDisabled,
+}) {
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (status === 'skip' || (retryKind !== FINAL_STATUS_RETRY_KIND.atf && (isQuarantined || isDisabled))) {
+    return 'skip'
+  }
+
+  switch (retryKind) {
+    case FINAL_STATUS_RETRY_KIND.atr:
+    case FINAL_STATUS_RETRY_KIND.efd:
+      // These modes report the aggregate result across attempts.
+      return hasFailedAllRetries ? 'fail' : 'pass'
+    case FINAL_STATUS_RETRY_KIND.atf:
+      // Attempt-to-fix only passes if every execution passed.
+      return hasPassedAllAtfRetries ? 'pass' : 'fail'
+    default:
+      return status
+  }
+}
+
 class CypressPlugin {
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   finishedTestsByFile = {}
   testStatuses = {}
+  hasLibraryConfiguration = false
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
@@ -265,6 +342,8 @@ class CypressPlugin {
   isImpactedTestsEnabled = false
   modifiedFiles = []
   newTestsWithDynamicNames = new Set()
+  attemptToFixExecutions = new Map()
+  loggedAttemptToFixTests = new Set()
 
   constructor () {
     const {
@@ -317,6 +396,7 @@ class CypressPlugin {
     this._isInit = false
     this.finishedTestsByFile = {}
     this.testStatuses = {}
+    this.hasLibraryConfiguration = false
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
@@ -337,6 +417,8 @@ class CypressPlugin {
     this.testManagementTests = undefined
     this.isImpactedTestsEnabled = false
     this.modifiedFiles = []
+    this.attemptToFixExecutions = new Map()
+    this.loggedAttemptToFixTests = new Set()
     this.activeTestSpan = null
     this.testSuiteSpan = null
     this.testModuleSpan = null
@@ -349,6 +431,19 @@ class CypressPlugin {
     this.rumFlushWaitMillis = undefined
     this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = undefined
+    this._timeOrigin = 0
+    this._perfOrigin = 0
+  }
+
+  /**
+   * Returns the current time in the same coordinate system used by span
+   * start/finish. Captured at session span creation so it shares the same
+   * epoch as the trace without reaching into span internals.
+   *
+   * @returns {number}
+   */
+  _now () {
+    return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
@@ -359,6 +454,7 @@ class CypressPlugin {
     this._isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
+    warnDeprecatedCypressVersion(cypressConfig.version)
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
@@ -383,6 +479,7 @@ class CypressPlugin {
             value: 'true',
           })
         } else {
+          this.hasLibraryConfiguration = true
           const {
             libraryConfig: {
               isSuitesSkippingEnabled,
@@ -442,14 +539,15 @@ class CypressPlugin {
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
-    const testSuiteSpanMetadata =
-      getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
+    const testSuiteSpanMetadata = {
+      ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
+      ...this.getSessionItrSkippingEnabledTags(),
+    }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
     if (testSuiteAbsolutePath) {
-      const resolvedSuitePosition = resolveOriginalSourcePosition(testSuiteAbsolutePath, 1)
-      const resolvedSuiteAbsolutePath = resolvedSuitePosition ? resolvedSuitePosition.sourceFile : testSuiteAbsolutePath
+      const resolvedSuiteAbsolutePath = resolveOriginalSourceFile(testSuiteAbsolutePath) || testSuiteAbsolutePath
       const testSourceFile = getTestSuitePath(resolvedSuiteAbsolutePath, this.repositoryRoot)
       testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
       testSuiteSpanMetadata[TEST_SOURCE_START] = 1
@@ -497,6 +595,7 @@ class CypressPlugin {
     if (testSourceFile) {
       testSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
     }
+    Object.assign(testSpanMetadata, this.getSessionItrSkippingEnabledTags())
 
     const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
     if (codeOwners) {
@@ -544,6 +643,15 @@ class CypressPlugin {
    */
   getSessionRequestErrorTags () {
     return getSessionRequestErrorTags(this.testSessionSpan)
+  }
+
+  /**
+   * Returns ITR skipping-enabled tags from the test session span for propagation to child events.
+   *
+   * @returns {Record<string, string>}
+   */
+  getSessionItrSkippingEnabledTags () {
+    return getSessionItrSkippingEnabledTags(this.testSessionSpan)
   }
 
   ciVisEvent (name, testLevel, tags = {}) {
@@ -665,6 +773,13 @@ class CypressPlugin {
       this.tracer._tracer._exporter.addMetadataTags(metadataTags)
     }
 
+    // Capture time references that match what startSpan records internally
+    // (trace.startTime = Date.now(), trace.ticks = performance.now()).
+    // This lets _now() produce values in the same coordinate system as
+    // span._startTime without accessing span internals.
+    this._timeOrigin = dateNow()
+    this._perfOrigin = performance.now()
+
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
       tags: {
@@ -691,6 +806,11 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    if (this.hasLibraryConfiguration) {
+      const skippingEnabled = this.isSuitesSkippingEnabled ? 'true' : 'false'
+      this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+      this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+    }
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
 
     return details
@@ -724,7 +844,10 @@ class CypressPlugin {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
-      logDynamicNamesWarning(this.newTestsWithDynamicNames)
+      logTestOptimizationSummary({
+        attemptToFixExecutions: this.attemptToFixExecutions,
+        newTestsWithDynamicNames: this.newTestsWithDynamicNames,
+      })
 
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -797,6 +920,7 @@ class CypressPlugin {
         : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+      skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
 
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
@@ -862,18 +986,19 @@ class CypressPlugin {
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
         }
-        // Update test status - but NOT for quarantined tests where we intentionally
+        // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
         const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
-        if (cypressTestStatus !== finishedTest.testStatus && !isQuarantinedTest) {
+        if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
         }
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        const resolvedSpecPosition = spec.absolute ? resolveOriginalSourcePosition(spec.absolute, 1) : null
-        const resolvedSpecAbsolutePath = resolvedSpecPosition ? resolvedSpecPosition.sourceFile : spec.absolute
+        const resolvedSpecAbsolutePath = spec.absolute
+          ? resolveOriginalSourceFile(spec.absolute) || spec.absolute
+          : spec.absolute
         const testSourceFile = resolvedSpecAbsolutePath && this.repositoryRoot
           ? getTestSuitePath(resolvedSpecAbsolutePath, this.repositoryRoot)
           : spec.relative
@@ -884,6 +1009,36 @@ class CypressPlugin {
 
         if (codeOwners) {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
+        }
+
+        // We can check if this is the last attempt regardless of the retry mechanism
+        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
+        if (isLastAttempt) {
+          const testSpanTags = finishedTest.testSpan.context()._tags
+          const retryKind = getFinalStatusRetryKind({
+            finishedTest,
+            finishedTestAttempts,
+            flakyTestRetriesCount: this.flakyTestRetriesCount,
+          })
+
+          const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          const hasPassedAllAtfRetries =
+            testSpanTags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
+          const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+          const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+
+          const finalStatus = getFinalStatus({
+            status: cypressTestStatus,
+            retryKind,
+            hasFailedAllRetries,
+            hasPassedAllAtfRetries,
+            isQuarantined,
+            isDisabled,
+          })
+
+          if (finalStatus) {
+            finishedTest.testSpan.setTag(TEST_FINAL_STATUS, finalStatus)
+          }
         }
 
         finishedTest.testSpan.finish(finishedTest.finishTime)
@@ -921,10 +1076,7 @@ class CypressPlugin {
           rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
-        if (this.testSuiteSpan) {
-          return suitePayload
-        }
-        this.testSuiteSpan = this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
+        this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {
@@ -940,6 +1092,10 @@ class CypressPlugin {
           this.skippedTests.push(test)
           this.isTestsSkipped = true
           return { shouldSkip: true }
+        }
+
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(testSuite, testName, this.loggedAttemptToFixTests)
         }
 
         // For disabled tests (not attemptToFix), skip them
@@ -982,6 +1138,7 @@ class CypressPlugin {
           isAttemptToFix,
           isModified,
           isQuarantined: isQuarantinedFromSupport,
+          isDisabled: isDisabledFromSupport,
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -1011,6 +1168,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
+        const activeSpanTags = this.activeTestSpan.context()._tags
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
@@ -1086,6 +1244,13 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
+          recordAttemptToFixExecution(this.attemptToFixExecutions, {
+            testSuite,
+            testName,
+            status: testStatus,
+            isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+            isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+          })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
@@ -1099,11 +1264,14 @@ class CypressPlugin {
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
+        if (isDisabledFromSupport) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+        }
 
         const finishedTest = {
           testName,
           testStatus,
-          finishTime: this.activeTestSpan._getTime(), // we store the finish time here
+          finishTime: this._now(),
           testSpan: this.activeTestSpan,
           isEfdRetry,
           isAttemptToFix,
@@ -1114,13 +1282,12 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
-        const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
-          isQuarantined: isQuarantinedFromSupport,
+          isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           isModified,
           isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })

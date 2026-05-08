@@ -1,6 +1,5 @@
 'use strict'
 
-const { getValueFromEnvSources } = require('./config/helper')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -114,11 +113,11 @@ class Tracer extends NoopProxy {
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
 
-      if (config.crashtracking.enabled) {
+      if (config.DD_CRASHTRACKING_ENABLED) {
         require('./crashtracking').start(config)
       }
 
-      if (config.heapSnapshot.count > 0) {
+      if (config.DD_HEAP_SNAPSHOT_COUNT > 0) {
         require('./heap_snapshots').start(config)
       }
 
@@ -129,11 +128,11 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
 
-      if (config.spanLeakDebug > 0) {
+      if (config.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
         const spanleak = require('./spanleak')
-        if (config.spanLeakDebug === spanleak.MODES.LOG) {
+        if (config.DD_TRACE_SPAN_LEAK_DEBUG === spanleak.MODES.LOG) {
           spanleak.enableLogging()
-        } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
+        } else if (config.DD_TRACE_SPAN_LEAK_DEBUG === spanleak.MODES.GC_AND_LOG) {
           spanleak.enableGarbageCollection()
         }
         spanleak.startScrubber()
@@ -204,7 +203,7 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing && config.isManualApiEnabled) {
+      if (config.tracing && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
@@ -212,8 +211,8 @@ class Tracer extends NoopProxy {
         // are lazily configured when the library is imported.
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
-      if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (getValueFromEnvSources('DD_API_KEY')) {
+      if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
+        if (config.apiKey) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -225,12 +224,12 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.otelLogsEnabled) {
+      if (config.DD_LOGS_OTEL_ENABLED) {
         const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
         initializeOpenTelemetryLogs(config)
       }
 
-      if (config.otelMetricsEnabled) {
+      if (config.DD_METRICS_OTEL_ENABLED) {
         const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
         initializeOpenTelemetryMetrics(config)
       }
@@ -255,10 +254,10 @@ class Tracer extends NoopProxy {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
-    } catch (e) {
+    } catch (error) {
       log.error(
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-        e
+        error
       )
       return false
     }

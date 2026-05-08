@@ -2,6 +2,11 @@
 
 const tags = require('../../../ext/tags')
 const constants = require('./constants')
+const {
+  MAX_META_KEY_LENGTH,
+  MAX_META_VALUE_LENGTH,
+  MAX_METRIC_KEY_LENGTH,
+} = require('./encode/tags-processors')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
@@ -32,6 +37,23 @@ const map = {
   'span.type': 'type',
   'resource.name': 'resource',
 }
+
+/**
+ * @typedef {object} FormattedSpan
+ * @property {import('./id').Identifier} trace_id
+ * @property {import('./id').Identifier} span_id
+ * @property {import('./id').Identifier} parent_id
+ * @property {string} name
+ * @property {string} resource
+ * @property {number} error
+ * @property {Record<string, string>} meta
+ * @property {Record<string, number>} metrics
+ * @property {Record<string, unknown> | undefined} meta_struct
+ * @property {number} start
+ * @property {number} duration
+ * @property {Array} links
+ * @property {Array<{ name: string, time_unix_nano: number, attributes?: Record<string, string> }>} [span_events]
+ */
 
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
@@ -71,12 +93,15 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
+/**
+ * @param {FormattedSpan} formattedSpan
+ * @param {import('./opentracing/span')} span
+ */
 function extractSpanLinks (formattedSpan, span) {
   if (!span._links?.length) {
     return
   }
-  const links = span._links.map(link => {
-    const { context, attributes } = link
+  const links = span._links.map(({ context, attributes }) => {
     const formattedLink = {
       trace_id: context.toTraceId(true),
       span_id: context.toSpanId(true),
@@ -90,21 +115,28 @@ function extractSpanLinks (formattedSpan, span) {
 
     return formattedLink
   })
-  formattedSpan.meta['_dd.span_links'] = JSON.stringify(links)
+  let serialized = JSON.stringify(links)
+  if (serialized.length > MAX_META_VALUE_LENGTH) {
+    serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
+  }
+  formattedSpan.meta['_dd.span_links'] = serialized
 }
 
+/**
+ * @param {FormattedSpan} formattedSpan
+ * @param {import('./opentracing/span')} span
+ */
 function extractSpanEvents (formattedSpan, span) {
   if (!span._events?.length) {
     return
   }
-  const events = span._events.map(event => {
+  formattedSpan.span_events = span._events.map(event => {
     return {
       name: event.name,
       time_unix_nano: Math.round(event.startTime * 1e6),
       attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
     }
   })
-  formattedSpan.span_events = events
 }
 
 function extractTags (formattedSpan, span) {
@@ -225,13 +257,25 @@ function extractError (formattedSpan, error) {
 function addTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
+      if (key.length > MAX_META_KEY_LENGTH) {
+        key = `${key.slice(0, MAX_META_KEY_LENGTH)}...`
+      }
+      if (value.length > MAX_META_VALUE_LENGTH) {
+        value = `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+      }
       meta[key] = value
       break
     case 'number':
       if (Number.isNaN(value)) break
+      if (key.length > MAX_METRIC_KEY_LENGTH) {
+        key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      }
       metrics[key] = value
       break
     case 'boolean':
+      if (key.length > MAX_METRIC_KEY_LENGTH) {
+        key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      }
       metrics[key] = value ? 1 : 0
       break
     default:
@@ -240,6 +284,9 @@ function addTag (meta, metrics, key, value, nested) {
       // Special case for Node.js Buffer and URL
       // TODO(BridgeAR)[31.03.2025]: Figure out if all typed arrays should be treated as buffers.
       if (isNodeBuffer(value) || isUrl(value)) {
+        if (key.length > MAX_METRIC_KEY_LENGTH) {
+          key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+        }
         metrics[key] = value.toString()
       } else if (!Array.isArray(value) && !nested) {
         for (const [prop, val] of Object.entries(value)) {

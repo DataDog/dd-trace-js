@@ -81,7 +81,14 @@ const {
   ERROR_STACK,
   ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
-const { VERSION: ddTraceVersion } = require('../../version')
+const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
+
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
 const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summary ${runTestsCommand}`
@@ -89,7 +96,11 @@ const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
 
-const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
+const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
+const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
+const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
+const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
+const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
@@ -921,13 +932,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       it('tests with retries', async () => {
         // retry handler was released in mocha@6.0.0
         // so the reported data changes between mocha versions
-        const isLatestMocha = MOCHA_VERSION === 'latest'
-
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(tests.length, 16)
             } else {
               // In old mocha (< 6.0.0), retries.js reports only final results (2 tests).
@@ -939,7 +948,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const eventuallyPassingTests = tests.filter(t =>
               t.meta[TEST_NAME] === 'mocha-test-retries will be retried and pass'
             )
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(eventuallyPassingTests.length, 3)
             } else {
               assert.strictEqual(eventuallyPassingTests.length, 1)
@@ -949,14 +958,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               t.meta[TEST_NAME] === 'mocha-test-retries will be retried and fail' &&
               t.meta[TEST_STATUS] === 'fail'
             )
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               assert.strictEqual(failedTests.length, 5)
             } else {
               assert.strictEqual(failedTests.length, 1)
             }
 
             // With afterEach hooks — retry tags should still be set correctly
-            if (isLatestMocha) {
+            if (supportsMochaRetryEvents) {
               const hooksPassTests = tests.filter(t =>
                 t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and pass'
               )
@@ -1119,7 +1128,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
-  const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
+  const envVarSettings = ['DD_TRACE_ENABLED']
 
   envVarSettings.forEach(envVar => {
     context(`when ${envVar}=false`, () => {
@@ -1698,6 +1707,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assertItrSkippingEnabledTags(payload.events, 'false')
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
@@ -1760,6 +1770,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
         assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
         done()
       }).catch(done)
 
@@ -1842,6 +1853,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+        assertItrSkippingEnabledTags(payload.events, 'true')
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
@@ -2054,6 +2066,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
           assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
           assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assertItrSkippingEnabledTags(events, 'true')
         }, 25000)
 
       childProcess = exec(
@@ -2169,6 +2182,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.length, 1)
           assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+          assertItrSkippingEnabledTags(events, 'true')
         })
 
       childProcess = exec(
@@ -2283,6 +2297,128 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           done()
         }).catch(done)
       })
+    })
+
+    it('retries callback-style async tests', async () => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const callbackTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/mocha-callback-test.js'
+          )
+
+          assert.strictEqual(callbackTests.length, NUM_RETRIES_EFD + 1)
+          callbackTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          })
+
+          const retriedTests = callbackTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            SHOULD_CHECK_RESULTS: '1',
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/mocha-callback-test.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('uses the retry count from the matching slow_test_retries bucket', async () => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+            '10s': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const instantTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/instant-test.js'
+          )
+          assert.strictEqual(instantTests.length, 3)
+          assert.strictEqual(
+            instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+            2
+          )
+
+          const slowTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/mocha-slightly-slow-test.js'
+          )
+          assert.strictEqual(slowTests.length, 1)
+          assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+          assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+        }, 25_000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/instant-test.js',
+              './test-early-flake-detection/mocha-slightly-slow-test.js',
+            ]),
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
     })
 
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
@@ -3747,6 +3883,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            // Opt out: the bootstrap adds enough child startup overhead that the single DI
+            // retry races the Inspector probe arming. Pre-instrumentation reduced (but did
+            // not eliminate) the slowdown, and this test is sensitive to either side of it.
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
           },
         }
       )
@@ -4061,6 +4201,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
                 assert.ok(!(TEST_IS_RETRY in test.meta))
                 assert.ok(!(TEST_RETRY_REASON in test.meta))
+                const expectedFinalStatus = (isQuarantined || isDisabled) ? 'skip' : test.meta[TEST_STATUS]
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
                 continue
               }
 
@@ -4092,6 +4234,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 }
+                // Attempt to fix ignores quarantine/disabled outcome suppression:
+                // pass only if all attempts passed, fail otherwise.
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], shouldAlwaysPass ? 'pass' : 'fail')
+              } else {
+                // Intermediate ATF executions must not carry a final status tag
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
               }
             }
           })
@@ -4145,11 +4293,36 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           stdout += data
         })
 
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
+
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             assert.match(stdout, /I am running when attempt to fix/)
-            if (shouldAlwaysPass || isQuarantined || isDisabled) {
-              // even though a test fails, the exit code is 0 because the test is quarantined or disabled
+            if (isAttemptToFix) {
+              assert.match(
+                stdout,
+                /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
+              )
+              assert.strictEqual(
+                (stdout.match(
+                  /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
+                ) || []).length,
+                1
+              )
+              assert.match(stdout, /Datadog Test Optimization/)
+              if (shouldAlwaysPass) {
+                assert.match(stdout, /Attempt to fix passed/)
+              } else {
+                assert.match(stdout, /Attempt to fix failed/)
+                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+              }
+              if (isQuarantined || isDisabled) {
+                assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+              }
+            }
+            if (shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)
@@ -4242,7 +4415,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ])
       })
 
-      onlyLatestIt('does not fail retry if a test is quarantined', (done) => {
+      onlyLatestIt('ignores quarantine when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
@@ -4363,7 +4536,87 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         })
 
-      onlyLatestIt('does not fail retry if a test is disabled', (done) => {
+      onlyLatestIt('omits final status on intermediate attempt to fix hook failures', async () => {
+        const NUM_RETRIES = 3
+        const testName = 'attempt to fix tests with failing afterEach ' +
+          'can attempt to fix a test whose afterEach fails before the last attempt'
+        let stdout = ''
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-with-failing-after-each.js': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const retriedTests = events.filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.strictEqual(retriedTests.length, 2)
+
+            const finalStatusTests = retriedTests.filter(test => TEST_FINAL_STATUS in test.meta)
+            assert.strictEqual(finalStatusTests.length, 0)
+
+            retriedTests.forEach((test, index) => {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+              if (index === 1) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              }
+
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+            })
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './test-management/test-attempt-to-fix-with-failing-after-each.js',
+              ]),
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', data => {
+          stdout += data
+        })
+        childProcess.stderr?.on('data', data => {
+          stdout += data
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.match(stdout, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 1 test\(s\)\./)
+        assert.strictEqual(exitCode, 1)
+      })
+
+      onlyLatestIt('ignores disabled when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
@@ -5225,7 +5478,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        if (MOCHA_VERSION === 'latest') {
+        if (supportsMochaRetryEvents) {
           assert.strictEqual(tests.length, 3)
           const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.strictEqual(failedTests.length, 2)

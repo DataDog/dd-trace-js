@@ -36,13 +36,26 @@ fi
 # once all of the tests have complete move on to the next version
 
 TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
-export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
+# Derive cpuset start from the kernel when CPU_START_ID is not provided
+if [[ -z "${CPU_START_ID}" ]]; then
+  CPUSET_START=$(grep -oP 'Cpus_allowed_list:\s*\K\d+' /proc/self/status 2>/dev/null || echo "0")
+else
+  CPUSET_START="${CPU_START_ID}"
+fi
+export CPU_AFFINITY="${CPUSET_START}"
+
+echo "CPU diagnostics:"
+echo "  nproc: ${TOTAL_CPU_CORES}"
+echo "  CPU_START_ID: ${CPU_START_ID:-<unset>}"
+echo "  CPUSET_START: ${CPUSET_START}"
+echo "  CPU_AFFINITY start: ${CPU_AFFINITY}"
+echo "  cpuset: $(cat /proc/self/status 2>/dev/null | grep Cpus_allowed_list || echo 'N/A')"
 
 nvm install $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
-CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # reset for each node.js version
+CPU_AFFINITY="${CPUSET_START}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 
@@ -60,8 +73,8 @@ BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
-if [[ ${GROUP_SIZE} -gt 24 ]]; then
-  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (${TOTAL_CPU_CORES} cores)"
+if [[ ${GROUP_SIZE} -gt ${TOTAL_CPU_CORES} ]]; then
+  echo "Group size ${GROUP_SIZE} exceeds available CPU cores (${TOTAL_CPU_CORES} from nproc)"
   exit 1
 fi
 
@@ -77,7 +90,7 @@ for D in "${DIRS[@]}"; do
 
       export SIRUN_VARIANT=$V
 
-      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
+      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished." || echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2) &
       ((CPU_AFFINITY=CPU_AFFINITY+1))
     fi
 

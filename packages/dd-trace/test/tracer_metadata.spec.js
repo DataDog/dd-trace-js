@@ -20,7 +20,7 @@ describe('tracer_metadata', () => {
     service: 'test-service',
     env: 'test-env',
     version: '1.0.0',
-    propagateProcessTags: { enabled: false },
+    DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
   }
 
   beforeEach(() => {
@@ -65,14 +65,14 @@ describe('tracer_metadata', () => {
   })
 
   it('passes null for process_tags when propagateProcessTags is disabled', () => {
-    storeConfig({ ...baseConfig, propagateProcessTags: { enabled: false } })
+    storeConfig({ ...baseConfig, DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
 
     const args = TracerMetadataStub.firstCall.args
     assert.strictEqual(args[6], null)
   })
 
   it('passes serialized process tags when propagateProcessTags is enabled', () => {
-    storeConfig({ ...baseConfig, propagateProcessTags: { enabled: true } })
+    storeConfig({ ...baseConfig, DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
     const args = TracerMetadataStub.firstCall.args
     assert.strictEqual(args[6], 'tag1:val1,tag2:val2')

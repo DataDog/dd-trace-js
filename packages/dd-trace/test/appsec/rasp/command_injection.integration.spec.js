@@ -66,29 +66,34 @@ describe('RASP - command_injection - integration', () => {
         assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
       }, 4_000)
 
-      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
-        const namespace = payload.payload.namespace
+      const checkTelemetry = agent.assertTelemetryReceived({
+        fn: ({ headers, payload }) => {
+          const namespace = payload.payload.namespace
 
-        // Only check telemetry received in appsec namespace and ignore others
-        if (namespace === 'appsec') {
-          appsecTelemetryReceived = true
-          const series = payload.payload.series
-          const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
-          const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
+          // Only check telemetry received in appsec namespace and ignore others
+          if (namespace === 'appsec') {
+            appsecTelemetryReceived = true
+            const series = payload.payload.series
+            const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
+            const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
 
-          assert.ok(evalSerie)
-          assert.ok(evalSerie.tags.includes('rule_type:command_injection'))
-          assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`))
-          assert.strictEqual(evalSerie.type, 'count')
+            assert.ok(evalSerie)
+            assert.ok(evalSerie.tags.includes('rule_type:command_injection'))
+            assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`))
+            assert.strictEqual(evalSerie.type, 'count')
 
-          assert.ok(matchSerie)
-          assert.ok(matchSerie.tags.includes('rule_type:command_injection'))
-          assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`))
-          assert.strictEqual(matchSerie.type, 'count')
-        } else {
-          assert.fail('namespace should be appsec')
-        }
-      }, 'generate-metrics', 4_000, 1, true)
+            assert.ok(matchSerie)
+            assert.ok(matchSerie.tags.includes('rule_type:command_injection'))
+            assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`))
+            assert.strictEqual(matchSerie.type, 'count')
+          } else {
+            assert.fail('namespace should be appsec')
+          }
+        },
+        requestType: 'generate-metrics',
+        timeout: 4_000,
+        resolveAtFirstSuccess: true,
+      })
 
       await Promise.all([checkMessages, checkTelemetry])
 

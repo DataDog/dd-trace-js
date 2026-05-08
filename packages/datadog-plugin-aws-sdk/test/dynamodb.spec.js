@@ -162,6 +162,7 @@ describe('Plugin', () => {
               resource: `putItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -186,6 +187,7 @@ describe('Plugin', () => {
               resource: `updateItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -215,6 +217,7 @@ describe('Plugin', () => {
               resource: `deleteItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -249,6 +252,7 @@ describe('Plugin', () => {
               resource: `getItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -699,7 +703,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with single table', () => {
         const configStr = '{"Table1": ["key1", "key2"]}'
-        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: configStr }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
@@ -709,7 +713,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with multiple tables', () => {
         const configStr = '{"Table1": ["key1"], "Table2": ["key2", "key3"]}'
-        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: configStr }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
@@ -720,7 +724,7 @@ describe('Plugin', () => {
 
       it('should fail for invalid entries', () => {
         const configStr = '{"Table1": {"key1": 42}, "Table42": ["key1"], "Table2": ["key1", "key2", "key3"]}'
-        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: configStr }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {

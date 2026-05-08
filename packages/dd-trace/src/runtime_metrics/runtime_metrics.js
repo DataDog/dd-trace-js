@@ -42,7 +42,7 @@ module.exports = {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
-    if (config.propagateProcessTags?.enabled) {
+    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
       for (const tag of processTags.tagsArray) {
         clientConfig.tags.push(tag)
       }
@@ -50,6 +50,8 @@ module.exports = {
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
+
+    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     if (trackGc) {
       startGCObserver()
@@ -71,8 +73,6 @@ module.exports = {
         nativeMetrics = null
       }
     }
-
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     lastTime = performance.now()
 

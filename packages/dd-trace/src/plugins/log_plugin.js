@@ -13,6 +13,9 @@ function messageProxy (message, holder) {
 
       return target[key]
     },
+    set (target, key, value) {
+      return Reflect.set(target, key, value)
+    },
     ownKeys (target) {
       const ownKeys = Reflect.ownKeys(target)
       if (!Object.hasOwn(target, 'dd') && Reflect.isExtensible(target)) {
@@ -48,7 +51,7 @@ module.exports = class LogPlugin extends Plugin {
   configure (config) {
     return super.configure({
       ...config,
-      enabled: config.enabled && (config.logInjection || config.ciVisAgentlessLogSubmissionEnabled),
+      enabled: config.enabled && (config.logInjection || config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED),
     })
   }
 }

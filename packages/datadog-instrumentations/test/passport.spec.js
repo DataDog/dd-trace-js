@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const axios = require('axios').create({ validateStatus: null })
 const agent = require('../../dd-trace/test/plugins/agent')
-const { storage } = require('../../datadog-core')
+const { getActiveRequest } = require('../../dd-trace/src/appsec/store')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const users = [
@@ -149,7 +149,8 @@ withVersions('passport', 'passport', version => {
       const cookie = login.headers['set-cookie'][0]
 
       subscriberStub.callsFake(({ abortController }) => {
-        const res = storage('legacy').getStore().req.res
+        const req = getActiveRequest()
+        const res = req.res
         res.writeHead(403)
         res.constructor.prototype.end.call(res, 'Blocked')
         abortController.abort()

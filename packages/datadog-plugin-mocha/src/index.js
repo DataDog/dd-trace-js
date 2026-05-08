@@ -5,7 +5,6 @@ const realDateNow = Date.now.bind(Date)
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
@@ -106,6 +105,7 @@ class MochaPlugin extends CiPlugin {
           'mocha'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
@@ -219,11 +219,15 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFixRetry,
       isAtrRetry,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
@@ -406,7 +410,7 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
       }
       this.libraryConfig = null
