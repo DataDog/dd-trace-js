@@ -136,7 +136,6 @@ describe('PublicSpan', () => {
       sinon.assert.notCalled(inner.setTag)
       sinon.assert.calledOnceWithExactly(inner.addTags, { 'http.url': 'x' })
     })
-
   })
 
   describe('unwrap()', () => {
