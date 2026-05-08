@@ -490,14 +490,6 @@ const meta = {
   metakey2: 'metavalue2'
 }
 
-tracer.appsec.trackUserLoginSuccessEvent(user)
-tracer.appsec.trackUserLoginSuccessEvent(user, meta)
-
-tracer.appsec.trackUserLoginFailureEvent('user_id', true)
-tracer.appsec.trackUserLoginFailureEvent('user_id', true, meta)
-tracer.appsec.trackUserLoginFailureEvent('user_id', false)
-tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
-
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
 
