@@ -75,6 +75,7 @@ function withNamingSchema (
         const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
+          // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
           this.retries(3)
           this.timeout(25000)
 
@@ -136,6 +137,7 @@ function withNamingSchema (
       const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
+        // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
         this.retries(3)
         this.timeout(15000)
 

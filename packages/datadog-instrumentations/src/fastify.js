@@ -25,8 +25,8 @@ const bodyPublished = new WeakSet()
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
 
-  return function fastifyWithTrace () {
-    const app = fastify.apply(this, arguments)
+  return function fastifyWithTrace (...args) {
+    const app = fastify.apply(this, args)
 
     if (!app || typeof app.addHook !== 'function') return app
 

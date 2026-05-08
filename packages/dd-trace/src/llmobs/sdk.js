@@ -112,16 +112,16 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this._extractOptions(options)
+    } = this.#extractOptions(options)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
+        this.#activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
+      this.#activate(span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -142,53 +142,53 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this._extractOptions(options)
+    } = this.#extractOptions(options)
 
     const llmobs = this
 
-    function wrapped () {
+    function wrapped (...args) {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
       const span = llmobs._tracer.scope().active()
-      const fnArgs = arguments
+      const fnArgs = args
 
       const lastArgId = fnArgs.length - 1
       const cb = fnArgs[lastArgId]
       const hasCallback = typeof cb === 'function'
 
       if (hasCallback) {
-        const scopeBoundCb = llmobs._bind(cb)
-        fnArgs[lastArgId] = function () {
+        const scopeBoundCb = llmobs.#bind(cb)
+        fnArgs[lastArgId] = function (...args) {
           // it is standard practice to follow the callback signature (err, result)
           // however, we try to parse the arguments to determine if the first argument is an error
           // if it is not, and is not undefined, we will use that for the output value
-          const maybeError = arguments[0]
-          const maybeResult = arguments[1]
+          const maybeError = args[0]
+          const maybeResult = args[1]
 
-          llmobs._autoAnnotate(
+          llmobs.#autoAnnotate(
             span,
             kind,
             getFunctionArguments(fn, fnArgs),
             isError(maybeError) || maybeError == null ? maybeResult : maybeError
           )
 
-          return scopeBoundCb.apply(this, arguments)
+          return scopeBoundCb.apply(this, args)
         }
       }
 
       try {
-        const result = llmobs._activate(span, { kind, ...llmobsOptions }, () => fn.apply(this, fnArgs))
+        const result = llmobs.#activate(span, { kind, ...llmobsOptions }, () => fn.apply(this, fnArgs))
 
         if (result && typeof result.then === 'function') {
           return result.then(
             value => {
               if (!hasCallback) {
-                llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), value)
+                llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), value)
               }
               return value
             },
             err => {
-              llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
+              llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
               throw err
             }
           )
@@ -199,12 +199,12 @@ class LLMObs extends NoopLLMObs {
         // the callback is called before the function returns (although unlikely)
         // we do not want to throw for "annotating a finished span" in this case
         if (!hasCallback) {
-          llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), result)
+          llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), result)
         }
 
         return result
       } catch (e) {
-        llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
+        llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
         throw e
       }
     }
@@ -516,7 +516,7 @@ class LLMObs extends NoopLLMObs {
     flushCh.publish()
   }
 
-  _autoAnnotate (span, kind, input, output) {
+  #autoAnnotate (span, kind, input, output) {
     const annotations = {}
     if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
       annotations.inputData = input
@@ -534,7 +534,7 @@ class LLMObs extends NoopLLMObs {
     return store?.span
   }
 
-  _activate (span, options, fn) {
+  #activate (span, options, fn) {
     const parentStore = storage.getStore()
     if (this.enabled) storage.enterWith({ ...parentStore, span })
 
@@ -567,22 +567,20 @@ class LLMObs extends NoopLLMObs {
   }
 
   // bind function to active LLMObs span
-  _bind (fn) {
+  #bind (fn) {
     if (typeof fn !== 'function') return fn
 
     const llmobs = this
     const activeSpan = llmobs._active()
 
-    const bound = function () {
-      return llmobs._activate(activeSpan, null, () => {
-        return fn.apply(this, arguments)
+    return function (...args) {
+      return llmobs.#activate(activeSpan, null, () => {
+        return fn.apply(this, args)
       })
     }
-
-    return bound
   }
 
-  _extractOptions (options) {
+  #extractOptions (options) {
     const {
       modelName,
       modelProvider,

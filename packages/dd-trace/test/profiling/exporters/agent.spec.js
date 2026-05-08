@@ -431,7 +431,8 @@ describe('exporters/agent', function () {
     let listener
 
     beforeEach(done => {
-      url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
+      const tmpDir = `dd-trace-profiler-test-${Date.now()}`
+      url = `${path.join(os.tmpdir(), tmpDir)}.sock`
 
       listener = app.listen(url, done)
       listener.on('connection', socket => sockets.push(socket))
