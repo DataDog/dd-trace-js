@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../log')
+
 const { encodeDeltaVarint, hashTargetingKey } = require('./encoding')
 
 const MAX_SERIAL_IDS = 128
@@ -32,6 +34,7 @@ class SpanEnrichmentState {
    */
   addSerialId (serialId) {
     if (this._serialIds.size >= MAX_SERIAL_IDS) {
+      log.debug('SpanEnrichment: MAX_SERIAL_IDS limit (%d) reached, dropping serialId %d', MAX_SERIAL_IDS, serialId)
       return false
     }
     this._serialIds.add(serialId)
@@ -56,6 +59,7 @@ class SpanEnrichmentState {
     }
 
     if (this._subjects.size >= MAX_SUBJECTS) {
+      log.debug('SpanEnrichment: MAX_SUBJECTS limit (%d) reached, dropping subject', MAX_SUBJECTS)
       return false
     }
 
@@ -76,6 +80,7 @@ class SpanEnrichmentState {
     }
 
     if (this._defaults.size >= MAX_DEFAULTS) {
+      log.debug('SpanEnrichment: MAX_DEFAULTS limit (%d) reached, dropping flag %s', MAX_DEFAULTS, flagKey)
       return false
     }
 

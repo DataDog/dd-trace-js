@@ -89,12 +89,6 @@ describe('SpanEnrichmentHook', () => {
   }
 
   describe('constructor', () => {
-    it('should store tracer reference', () => {
-      const hook = new SpanEnrichmentHook(mockTracer)
-
-      assert.strictEqual(hook._tracer, mockTracer)
-    })
-
     it('should subscribe to span finish channel', () => {
       new SpanEnrichmentHook(mockTracer) // eslint-disable-line no-new
 
@@ -333,7 +327,7 @@ describe('SpanEnrichmentHook', () => {
 
   describe('_onSpanFinish()', () => {
     it('should do nothing when span has no state', () => {
-      const hook = new SpanEnrichmentHook(mockTracer)
+      new SpanEnrichmentHook(mockTracer) // eslint-disable-line no-new
 
       finishSubscriber(mockSpan)
 
@@ -422,11 +416,13 @@ describe('SpanEnrichmentHook', () => {
   describe('destroy()', () => {
     it('should unsubscribe from finish channel', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
+      const subscribedFn = finishSubscriber
 
       hook.destroy()
 
       sinon.assert.calledOnce(mockFinishChannel.unsubscribe)
-      sinon.assert.calledWith(mockFinishChannel.unsubscribe, hook._onSpanFinish)
+      // Verify the same function that was subscribed is unsubscribed
+      sinon.assert.calledWith(mockFinishChannel.unsubscribe, subscribedFn)
     })
   })
 })

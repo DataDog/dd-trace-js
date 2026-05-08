@@ -19,18 +19,41 @@ const finishCh = channel('dd-trace:span:finish')
  * - `ffe_defaults`: JSON dict of flag_key → "coded-default: <value>"
  */
 class SpanEnrichmentHook {
+  #tracer
+  /** @type {WeakMap<object, SpanEnrichmentState>} */
+  #spanStates = new WeakMap()
+
+  /**
+   * Handler for span finish channel. Applies accumulated tags to the span.
+   * Arrow function to preserve `this` binding for channel subscription.
+   *
+   * @param {object} span - The span that is finishing
+   */
+  #onSpanFinish = (span) => {
+    const state = this.#spanStates.get(span)
+    if (!state || !state.hasData()) return
+
+    try {
+      const tags = state.toSpanTags()
+
+      for (const [key, value] of Object.entries(tags)) {
+        if (value) {
+          span.setTag(key, value)
+        }
+      }
+    } catch (err) {
+      log.warn('SpanEnrichmentHook: error applying span tags: %s', err.message)
+    } finally {
+      this.#spanStates.delete(span)
+    }
+  }
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    */
   constructor (tracer) {
-    this._tracer = tracer
-
-    /** @type {WeakMap<object, SpanEnrichmentState>} */
-    this._spanStates = new WeakMap()
-
-    // Subscribe to span finish channel to apply tags before export
-    this._onSpanFinish = this._onSpanFinish.bind(this)
-    finishCh.subscribe(this._onSpanFinish)
+    this.#tracer = tracer
+    finishCh.subscribe(this.#onSpanFinish)
   }
 
   /**
@@ -89,7 +112,7 @@ class SpanEnrichmentHook {
    * @private
    */
   _getRootSpan () {
-    const span = this._tracer.scope().active()
+    const span = this.#tracer.scope().active()
     if (!span) return null
 
     // Walk up the parent chain to find the root span
@@ -118,37 +141,12 @@ class SpanEnrichmentHook {
    * @private
    */
   _getOrCreateState (span) {
-    let state = this._spanStates.get(span)
+    let state = this.#spanStates.get(span)
     if (!state) {
       state = new SpanEnrichmentState()
-      this._spanStates.set(span, state)
+      this.#spanStates.set(span, state)
     }
     return state
-  }
-
-  /**
-   * Handler for span finish channel. Applies accumulated tags to the span.
-   *
-   * @param {object} span - The span that is finishing
-   * @private
-   */
-  _onSpanFinish (span) {
-    const state = this._spanStates.get(span)
-    if (!state || !state.hasData()) return
-
-    try {
-      const tags = state.toSpanTags()
-
-      for (const [key, value] of Object.entries(tags)) {
-        if (value) {
-          span.setTag(key, value)
-        }
-      }
-    } catch (err) {
-      log.warn('SpanEnrichmentHook: error applying span tags: %s', err.message)
-    } finally {
-      this._spanStates.delete(span)
-    }
   }
 
   /**
@@ -156,7 +154,7 @@ class SpanEnrichmentHook {
    * Should be called when the provider is shut down.
    */
   destroy () {
-    finishCh.unsubscribe(this._onSpanFinish)
+    finishCh.unsubscribe(this.#onSpanFinish)
   }
 }
 
