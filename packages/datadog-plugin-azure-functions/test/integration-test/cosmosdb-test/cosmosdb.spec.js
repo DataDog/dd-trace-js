@@ -42,7 +42,9 @@ describe('esm', () => {
 
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_COOKIE_ENABLED: 'false',
+        // Cosmos deps load npm `cookie`; skip that instrumentation so `hooks.js` never requires `../cookie`
+        // (can fail to resolve inside the Functions worker despite existing on disk).
+        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'cookie',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
     })
