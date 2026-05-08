@@ -86,8 +86,8 @@ module.exports = [
       filePath: 'lib/action.js'
     },
     functionQuery: {
-      methodName: 'defineAction',
-      kind: 'Async'
+      functionName: 'defineAction',
+      kind: 'Sync'
     },
     channelName: 'defineAction'
   },
@@ -98,8 +98,8 @@ module.exports = [
       filePath: 'lib/action.mjs'
     },
     functionQuery: {
-      methodName: 'defineAction',
-      kind: 'Async'
+      functionName: 'defineAction',
+      kind: 'Sync'
     },
     channelName: 'defineAction'
   }

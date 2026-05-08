@@ -9,8 +9,8 @@ class GenkitInternalPlugin extends TracingPlugin {
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('genkit.{flow|tool|model|embedder|retriever}', {
-      service: this.serviceName({ pluginService: this.config.service }),
+    this.startSpan('genkit.defineAction', {
+      service: this.config.service,
       meta
     }, ctx)
 
