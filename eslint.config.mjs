@@ -462,11 +462,14 @@ export default [
       sonarjs: eslintPluginSonar,
     },
     rules: {
+      'sonarjs/duplicates-in-character-class': 'error',
       'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-code-after-done': 'error',
       'sonarjs/no-commented-code': 'error',
       'sonarjs/no-duplicated-branches': 'error',
       'sonarjs/no-extra-arguments': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
+      'sonarjs/no-identical-functions': 'error',
       'sonarjs/no-invariant-returns': 'error',
       'sonarjs/no-nested-assignment': 'error',
       'sonarjs/no-parameter-reassignment': 'error',
@@ -479,17 +482,14 @@ export default [
       'sonarjs/prefer-single-boolean-return': 'error',
       'sonarjs/single-char-in-character-classes': 'error',
       'sonarjs/single-character-alternation': 'error',
+      'sonarjs/stable-tests': 'error',
       'sonarjs/test-check-exception': 'error',
+      'sonarjs/updated-loop-counter': 'error',
 
       // --- Rules to check later ------------------
-      'sonarjs/duplicates-in-character-class': 'off', // 86 errors
-      'sonarjs/no-code-after-done': 'error',
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
-      'sonarjs/no-identical-functions': 'error',
       'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
-      'sonarjs/stable-tests': 'error',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
-      'sonarjs/updated-loop-counter': 'error',
     },
   },
   {

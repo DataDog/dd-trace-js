@@ -6,9 +6,8 @@ const { promisify } = require('node:util')
 const { after, before, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const helpers = require('./kinesis_helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
@@ -17,7 +16,7 @@ describe('Plugin', () => {
     this.timeout(15000)
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
 
       before(async () => {
