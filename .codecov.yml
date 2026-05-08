@@ -9,3 +9,7 @@ coverage:
         target: 95%
         if_not_found: success
         if_ci_failed: success
+        # PRs against `vN.x` release branches are typically backports / cherry-picks
+        # where the patch coverage is decided in the source PR; only enforce on master.
+        branches:
+          - master
