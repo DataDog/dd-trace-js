@@ -32,6 +32,7 @@ class BaseGenkitClientPlugin extends ClientPlugin {
 
     this.startSpan(this.constructor.spanName, {
       service: this.config.service,
+      kind: this.constructor.kind,
       meta
     }, ctx)
 
@@ -39,10 +40,7 @@ class BaseGenkitClientPlugin extends ClientPlugin {
   }
 
   getTags (ctx) {
-    const tags = {
-      component: 'genkit',
-      'span.kind': 'client'
-    }
+    const tags = {}
 
     const modelName = getModelName(ctx)
     if (modelName) {

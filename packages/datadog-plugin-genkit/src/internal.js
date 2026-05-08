@@ -7,21 +7,12 @@ class GenkitInternalPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@genkit-ai/core:defineAction'
 
   bindStart (ctx) {
-    const meta = this.getTags(ctx)
-
     this.startSpan('genkit.defineAction', {
       service: this.config.service,
-      meta
+      kind: 'internal'
     }, ctx)
 
     return ctx.currentStore
-  }
-
-  getTags (ctx) {
-    return {
-      component: 'genkit',
-      'span.kind': 'internal'
-    }
   }
 
   // asyncEnd and end delegate to finish() which has the required guard
