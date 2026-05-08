@@ -305,8 +305,8 @@ function recordFinalAttemptToFixExecution (task, status, providedContext) {
  * @returns {Function}
  */
 function wrapTestScopedFn (task, fn) {
-  return shimmer.wrapFunction(fn, fn => function () {
-    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+  return shimmer.wrapFunction(fn, fn => function (...args) {
+    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
   })
 }
 
@@ -544,13 +544,13 @@ function getFinishWrapper (exitOrClose) {
 
 function getCliOrStartVitestWrapper (frameworkVersion) {
   return function (oldCliOrStartVitest) {
-    return function () {
+    return function (...args) {
       if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
-        return oldCliOrStartVitest.apply(this, arguments)
+        return oldCliOrStartVitest.apply(this, args)
       }
       isSessionStarted = true
       testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
-      return oldCliOrStartVitest.apply(this, arguments)
+      return oldCliOrStartVitest.apply(this, args)
     }
   }
 }
@@ -661,11 +661,11 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
   if (forksPoolWorker) {
     // function is async
-    shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function () {
+    shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'child_process'
       this.env.DD_VITEST_WORKER = '1'
 
-      return start.apply(this, arguments)
+      return start.apply(this, args)
     })
     shimmer.wrap(forksPoolWorker.value.prototype, 'on', getWrappedOn)
   }
@@ -673,10 +673,10 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const threadsPoolWorker = getThreadsPoolWorkerExport(cliApiPackage)
   if (threadsPoolWorker) {
     // function is async
-    shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function () {
+    shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
       this.env.DD_VITEST_WORKER = '1'
-      return start.apply(this, arguments)
+      return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
@@ -1014,8 +1014,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
           for (let i = 0; i < hookArray.length; i++) {
             const currentFn = hookArray[i]
             const originalFn = originalHookFns.get(currentFn) || currentFn
-            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function () {
-              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function (...args) {
+              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
 
               if (hookType === 'beforeEach') {
                 return wrapBeforeEachCleanupResult(task, result)
