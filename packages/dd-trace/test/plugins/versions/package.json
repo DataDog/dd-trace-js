@@ -27,7 +27,7 @@
     "durable-functions": "3.3.0",
     "@azure/service-bus": "7.9.5",
     "@confluentinc/kafka-javascript": "1.8.0",
-    "@cucumber/cucumber": "12.5.0",
+    "@cucumber/cucumber": "12.8.2",
     "@datadog/openfeature-node-server": "0.3.1",
     "@elastic/elasticsearch": "9.3.2",
     "@elastic/transport": "9.3.3",
