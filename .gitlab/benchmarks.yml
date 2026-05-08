@@ -153,8 +153,6 @@ benchmark-serverless-trigger:
   rules:
     - if: '$CI_PIPELINE_SOURCE != "merge_request_event"'
       when: never
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
-      interruptible: false
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
