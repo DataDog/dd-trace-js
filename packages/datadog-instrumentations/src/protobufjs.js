@@ -9,23 +9,23 @@ const deserializeChannel = dc.channel('apm:protobufjs:deserialize-end')
 
 function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
-    shimmer.wrap(messageClass, 'encode', original => function () {
+    shimmer.wrap(messageClass, 'encode', original => function (...args) {
       if (!serializeChannel.hasSubscribers) {
-        return original.apply(this, arguments)
+        return original.apply(this, args)
       }
       serializeChannel.publish({ messageClass: this })
-      return original.apply(this, arguments)
+      return original.apply(this, args)
     })
   }
 }
 
 function wrapDeserialization (messageClass) {
   if (messageClass?.decode) {
-    shimmer.wrap(messageClass, 'decode', original => function () {
+    shimmer.wrap(messageClass, 'decode', original => function (...args) {
       if (!deserializeChannel.hasSubscribers) {
-        return original.apply(this, arguments)
+        return original.apply(this, args)
       }
-      const result = original.apply(this, arguments)
+      const result = original.apply(this, args)
       deserializeChannel.publish({ messageClass: result })
       return result
     })
@@ -34,8 +34,8 @@ function wrapDeserialization (messageClass) {
 
 function wrapSetup (messageClass) {
   if (messageClass?.setup) {
-    shimmer.wrap(messageClass, 'setup', original => function () {
-      const result = original.apply(this, arguments)
+    shimmer.wrap(messageClass, 'setup', original => function (...args) {
+      const result = original.apply(this, args)
 
       wrapSerialization(messageClass)
       wrapDeserialization(messageClass)
@@ -74,8 +74,8 @@ function wrapReflection (protobuf) {
   ]
 
   for (const method of reflectionMethods) {
-    shimmer.wrap(method.target, method.name, original => function () {
-      const result = original.apply(this, arguments)
+    shimmer.wrap(method.target, method.name, original => function (...args) {
+      const result = original.apply(this, args)
       if (result.nested) {
         for (const type in result.nested) {
           wrapSetup(result.nested[type])
@@ -97,8 +97,8 @@ addHook({
   name: 'protobufjs',
   versions: ['>=6.8.0'],
 }, protobuf => {
-  shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
-    const result = original.apply(this, arguments)
+  shimmer.wrap(protobuf.Root.prototype, 'load', original => function (...args) {
+    const result = original.apply(this, args)
     if (isPromise(result)) {
       return result.then(root => {
         wrapProtobufClasses(root)
@@ -110,14 +110,14 @@ addHook({
     return result
   })
 
-  shimmer.wrap(protobuf.Root.prototype, 'loadSync', original => function () {
-    const root = original.apply(this, arguments)
+  shimmer.wrap(protobuf.Root.prototype, 'loadSync', original => function (...args) {
+    const root = original.apply(this, args)
     wrapProtobufClasses(root)
     return root
   })
 
-  shimmer.wrap(protobuf, 'Type', Original => function () {
-    const typeInstance = new Original(...arguments)
+  shimmer.wrap(protobuf, 'Type', Original => function (...args) {
+    const typeInstance = new Original(...args)
     wrapSetup(typeInstance)
     return typeInstance
   })
