@@ -86,6 +86,13 @@ const {
 } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
 
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
 const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summary ${runTestsCommand}`
 const testFile = 'ci-visibility/run-mocha.js'
@@ -1703,6 +1710,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assertItrSkippingEnabledTags(payload.events, 'false')
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
@@ -1765,6 +1773,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
         assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
         done()
       }).catch(done)
 
@@ -1847,6 +1856,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+        assertItrSkippingEnabledTags(payload.events, 'true')
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
@@ -2059,6 +2069,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
           assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
           assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assertItrSkippingEnabledTags(events, 'true')
         }, 25000)
 
       childProcess = exec(
@@ -2174,6 +2185,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.length, 1)
           assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+          assertItrSkippingEnabledTags(events, 'true')
         })
 
       childProcess = exec(
