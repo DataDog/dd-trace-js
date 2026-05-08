@@ -9,6 +9,7 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
+const { PublicSpan } = require('../../src/opentracing/public/span')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
@@ -70,6 +71,41 @@ describe('TracingPlugin', () => {
 
       const callArgs = startSpanSpy.firstCall.args[1]
       assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
+    })
+  })
+
+  describe('configure method', () => {
+    class TestPlugin extends TracingPlugin {
+      static id = 'test'
+      static operation = 'query'
+    }
+
+    let configurePlugin
+
+    beforeEach(() => {
+      configurePlugin = new TestPlugin({
+        _tracer: { startSpan: sinon.spy() },
+      })
+    })
+
+    it('wraps hooks so they receive a PublicSpan and forwards extra arguments', () => {
+      const hookSpy = sinon.spy()
+      configurePlugin.configure({ hooks: { query: hookSpy } })
+
+      const rawSpan = {}
+      const extraArg = { foo: 'bar' }
+      configurePlugin.config.hooks.query(rawSpan, extraArg)
+
+      sinon.assert.calledOnce(hookSpy)
+      assert.ok(hookSpy.firstCall.args[0] instanceof PublicSpan)
+      assert.strictEqual(hookSpy.firstCall.args[1], extraArg)
+    })
+
+    it('injects a default no-op hook for the operation when no hooks are provided', () => {
+      configurePlugin.configure({})
+
+      assert.strictEqual(typeof configurePlugin.config.hooks.query, 'function')
+      assert.doesNotThrow(() => configurePlugin.config.hooks.query())
     })
   })
 })
