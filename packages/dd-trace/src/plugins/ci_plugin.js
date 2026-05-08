@@ -378,7 +378,8 @@ module.exports = class CiPlugin extends Plugin {
 
           // Jest and Vitest worker test spans are serialized in the worker and may not include
           // request error tags; add them from the session span in the main process.
-          if ((span.name === 'jest.test' || span.name === 'vitest.test') && this.testSessionSpan) {
+          if ((span.name === 'jest.test' || span.name === 'vitest.test' || span.name === 'vitest.test_suite') &&
+              this.testSessionSpan) {
             Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
           }
         }

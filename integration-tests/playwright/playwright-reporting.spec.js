@@ -100,8 +100,9 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
-        it(
-          'tags session and children with _dd.ci.library_configuration_error.settings when settings fail 4xx',
+        context('error tags', () => {
+          it(
+            'tags session and children with _dd.ci.library_configuration_error.settings when settings fail 4xx',
           async () => {
             const envVars = reportMethod === 'agentless'
               ? getCiVisAgentlessConfig(receiver.port)
@@ -112,6 +113,12 @@ versions.forEach((version) => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
                 const testSession = events.find(event => event.type === 'test_session_end').content
                 assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+                const testModule = events.find(event => event.type === 'test_module_end')
+                assert.ok(testModule, 'should have test module event')
+                assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+                assert.ok(testSuiteEvent, 'should have test suite event')
+                assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
                 const testEvent = events.find(event => event.type === 'test')
                 assert.ok(testEvent, 'should have test event')
                 assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
@@ -147,6 +154,9 @@ versions.forEach((version) => {
                 assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
                 const testModule = events.find(event => event.type === 'test_module_end').content
                 assert.strictEqual(testModule.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+                assert.ok(testSuiteEvent, 'should have test suite event')
+                assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
                 const testEvent = events.find(event => event.type === 'test')
                 assert.ok(testEvent, 'should have test event')
                 assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
@@ -180,6 +190,11 @@ versions.forEach((version) => {
                 assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
                 const testModule = events.find(event => event.type === 'test_module_end').content
                 assert.strictEqual(testModule.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
+                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+                assert.ok(testSuiteEvent, 'should have test suite event')
+                assert.strictEqual(
+                  testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
+                )
                 const testEvent = events.find(event => event.type === 'test')
                 assert.ok(testEvent, 'should have test event')
                 assert.strictEqual(
@@ -199,6 +214,7 @@ versions.forEach((version) => {
             )
             await Promise.all([eventsPromise, once(childProcess, 'exit')])
           })
+        })
 
         it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'

@@ -537,8 +537,10 @@ class CypressPlugin {
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
-    const testSuiteSpanMetadata =
-      getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
+    const testSuiteSpanMetadata = {
+      ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
+      ...this.getSessionRequestErrorTags(),
+    }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
