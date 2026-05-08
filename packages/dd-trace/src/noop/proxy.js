@@ -5,7 +5,7 @@ const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
 const { PublicSpan, unwrap } = require('../opentracing/public/span')
-const { SVC_SRC_KEY } = require('../../src/constants')
+const { markManualService } = require('../opentracing/public/service-source')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
 
@@ -56,12 +56,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return
 
-    options = options || {}
-    if (options.service || options.tags?.service || options.tags?.['service.name']) {
-      options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
-    }
-
-    return this._tracer.trace(name, options, fn)
+    return this._tracer.trace(name, markManualService(options || {}), fn)
   }
 
   wrap (name, options, fn) {
@@ -72,11 +67,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return fn
 
-    options = options || {}
-    if (options.service || options.tags?.service || options.tags?.['service.name']) {
-      options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
-    }
-    return this._tracer.wrap(name, options, fn)
+    return this._tracer.wrap(name, markManualService(options || {}), fn)
   }
 
   setUrl () {
@@ -85,13 +76,11 @@ class NoopProxy {
   }
 
   startSpan (name, options) {
-    if (options?.tags?.service || options?.tags?.['service.name']) {
-      options = { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: 'm' } }
-    }
+    options = markManualService(options)
 
     let childOf
     if (options?.childOf instanceof PublicSpan) {
-      childOf = unwrap(options?.childOf)
+      childOf = unwrap(options.childOf)
     }
 
     if (childOf !== undefined) {

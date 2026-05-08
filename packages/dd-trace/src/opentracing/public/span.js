@@ -1,9 +1,12 @@
 'use strict'
 
 const { SVC_SRC_KEY } = require('../../constants')
-
-const SERVICE_KEY = 'service'
-const SERVICE_NAME_KEY = 'service.name'
+const {
+  SERVICE_KEY,
+  SERVICE_NAME_KEY,
+  MANUAL,
+  tagsHaveManualService,
+} = require('./service-source')
 
 const sym = Symbol('dd.publicSpan')
 
@@ -45,15 +48,15 @@ class PublicSpan {
 
   setTag (key, value) {
     if (key === SERVICE_KEY || key === SERVICE_NAME_KEY) {
-      this.#span.setTag(SVC_SRC_KEY, 'm')
+      this.#span.setTag(SVC_SRC_KEY, MANUAL)
     }
     this.#span.setTag(key, value)
     return this
   }
 
   addTags (tags) {
-    if (tags && (tags[SERVICE_KEY] || tags[SERVICE_NAME_KEY])) {
-      this.#span.setTag(SVC_SRC_KEY, 'm')
+    if (tagsHaveManualService(tags)) {
+      this.#span.setTag(SVC_SRC_KEY, MANUAL)
     }
     this.#span.addTags(tags)
     return this
@@ -80,7 +83,7 @@ class PublicSpan {
     return this.#span.finish.apply(this.#span, arguments)
   }
 
-  static _unwrap(value) {
+  static _unwrap (value) {
     if (!value) return
     return value.#span ?? value
   }
