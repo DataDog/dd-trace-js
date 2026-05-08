@@ -80,7 +80,7 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           FORCE_NONINTERACTIVE: "true"
           START_WEB: "0"
-          NODE_OPTIONS='--experimental-global-webcrypto'
+          NODE_OPTIONS: '--experimental-global-webcrypto'
         ports:
           - 4566:4566
         volumes:
