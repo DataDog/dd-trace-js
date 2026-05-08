@@ -102,9 +102,9 @@ function wrapOriginalEfdTest (test, slowTestRetries) {
 
     if (originalFn.length > 0) {
       const args = Array.prototype.slice.call(arguments)
-      args[0] = shimmer.wrapFunction(args[0], done => function () {
+      args[0] = shimmer.wrapFunction(args[0], done => function (...args) {
         recordDuration()
-        return done.apply(this, arguments)
+        return done.apply(this, args)
       })
       return originalFn.apply(this, args)
     }
@@ -142,13 +142,13 @@ function retryTest (test, numRetries, tags, slowTestRetries) {
       clonedTest._ddEfdRetryIndex = retryIndex + 1
       const originalFn = clonedTest.fn
       if (typeof originalFn === 'function') {
-        clonedTest.fn = shimmer.wrapFunction(originalFn, originalFn => function () {
+        clonedTest.fn = shimmer.wrapFunction(originalFn, originalFn => function (...args) {
           const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(clonedTest))
           if (efdRetryCount !== undefined && clonedTest._ddEfdRetryIndex > efdRetryCount) {
             clonedTest._ddShouldSkipEfdRetry = true
             this.skip()
           }
-          return originalFn.apply(this, arguments)
+          return originalFn.apply(this, args)
         })
       }
     }
@@ -231,9 +231,9 @@ function getTestContext (test) {
 }
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
-  shimmer.wrap(RunnablePackage.prototype, 'run', run => function () {
+  shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
       this.retries(libraryConfig?.flakyTestRetriesCount)
@@ -259,8 +259,8 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
       if (ctx) {
         // we bind the test fn to the correct context
-        const newFn = shimmer.wrapFunction(this.fn, originalFn => function () {
-          return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
+        const newFn = shimmer.wrapFunction(this.fn, originalFn => function (...args) {
+          return testFnCh.runStores(ctx, () => originalFn.apply(this, args))
         })
 
         // we store the original function, not to lose it
@@ -271,7 +271,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   })
   return RunnablePackage
 }

@@ -6,7 +6,7 @@ const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 const bodyParserReadCh = channel('datadog:body-parser:read:finish')
 
 function publishRequestBodyAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, next => function (...args) {
     if (bodyParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const body = req.body
@@ -16,7 +16,7 @@ function publishRequestBodyAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, arguments)
+    return next.apply(this, args)
   })
 }
 

@@ -12,13 +12,13 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
     lodash,
     instrumentedLodashFn,
     lodashFn => {
-      return function () {
+      return function (...args) {
         if (!lodashOperationCh.hasSubscribers) {
-          return lodashFn.apply(this, arguments)
+          return lodashFn.apply(this, args)
         }
 
-        const result = lodashFn.apply(this, arguments)
-        const message = { operation: lodashFn.name, arguments, result }
+        const result = lodashFn.apply(this, args)
+        const message = { operation: lodashFn.name, arguments: args, result }
         lodashOperationCh.publish(message)
 
         return message.result
