@@ -29,6 +29,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
+      - name: Apply empirical dc-polyfill patch (memoize channel by name)
+        run: node scripts/patch-dc-polyfill-empirical.js
+        shell: bash
       - name: Stress test ws (runner ${{ matrix.runner }}, ${{ inputs.iterations || 25 }} iterations)
         run: |
           ITERATIONS=${{ inputs.iterations || 25 }}
