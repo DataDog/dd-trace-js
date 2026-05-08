@@ -21,11 +21,9 @@ const finishCh = channel('dd-trace:span:finish')
 class SpanEnrichmentHook {
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
-   * @param {import('./flagging_provider')} provider - The flagging provider instance
    */
-  constructor (tracer, provider) {
+  constructor (tracer) {
     this._tracer = tracer
-    this._provider = provider
 
     /** @type {WeakMap<object, SpanEnrichmentState>} */
     this._spanStates = new WeakMap()
