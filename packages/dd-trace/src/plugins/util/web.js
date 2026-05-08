@@ -308,10 +308,10 @@ const web = {
     return contexts.get(req)
   },
   wrapRes (context, req, res, end) {
-    return function () {
+    return function (...args) {
       web.finishAll(context)
 
-      return end.apply(res, arguments)
+      return end.apply(res, args)
     }
   },
   wrapEnd (context) {
@@ -329,8 +329,8 @@ const web = {
         return ends.get(this)
       },
       set (value) {
-        ends.set(this, function () {
-          return storage('legacy').run(context.store, value, ...arguments)
+        ends.set(this, function (...args) {
+          return storage('legacy').run(context.store, value, ...args)
         })
       },
     })

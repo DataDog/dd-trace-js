@@ -149,11 +149,11 @@ class LLMObs extends NoopLLMObs {
 
     const llmobs = this
 
-    function wrapped () {
+    function wrapped (...args) {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
       const span = storageCore('legacy').getStore()?.span
-      const fnArgs = arguments
+      const fnArgs = args
 
       const lastArgId = fnArgs.length - 1
       const cb = fnArgs[lastArgId]
@@ -161,12 +161,12 @@ class LLMObs extends NoopLLMObs {
 
       if (hasCallback) {
         const scopeBoundCb = llmobs.#bind(cb)
-        fnArgs[lastArgId] = function () {
+        fnArgs[lastArgId] = function (...args) {
           // it is standard practice to follow the callback signature (err, result)
           // however, we try to parse the arguments to determine if the first argument is an error
           // if it is not, and is not undefined, we will use that for the output value
-          const maybeError = arguments[0]
-          const maybeResult = arguments[1]
+          const maybeError = args[0]
+          const maybeResult = args[1]
 
           llmobs.#autoAnnotate(
             span,
@@ -175,7 +175,7 @@ class LLMObs extends NoopLLMObs {
             isError(maybeError) || maybeError == null ? maybeResult : maybeError
           )
 
-          return scopeBoundCb.apply(this, arguments)
+          return scopeBoundCb.apply(this, args)
         }
       }
 
@@ -585,9 +585,9 @@ class LLMObs extends NoopLLMObs {
     const llmobs = this
     const activeSpan = llmobs._active()
 
-    return function () {
+    return function (...args) {
       return llmobs.#activate(activeSpan, null, () => {
-        return fn.apply(this, arguments)
+        return fn.apply(this, args)
       })
     }
   }

@@ -126,9 +126,9 @@ function wrapWriteHead (writeHead) {
 }
 
 function wrapWrite (write) {
-  return function wrappedWrite () {
+  return function wrappedWrite (...args) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return write.apply(this, arguments)
+      return write.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -147,7 +147,7 @@ function wrapWrite (write) {
       return true
     }
 
-    return write.apply(this, arguments)
+    return write.apply(this, args)
   }
 }
 
@@ -177,9 +177,9 @@ function wrapSetHeader (setHeader) {
 }
 
 function wrapAppendOrRemoveHeader (originalMethod) {
-  return function wrappedAppendOrRemoveHeader () {
+  return function wrappedAppendOrRemoveHeader (...args) {
     if (!startSetHeaderCh.hasSubscribers) {
-      return originalMethod.apply(this, arguments)
+      return originalMethod.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -189,14 +189,14 @@ function wrapAppendOrRemoveHeader (originalMethod) {
       return this
     }
 
-    return originalMethod.apply(this, arguments)
+    return originalMethod.apply(this, args)
   }
 }
 
 function wrapEnd (end) {
-  return function wrappedEnd () {
+  return function wrappedEnd (...args) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return end.apply(this, arguments)
+      return end.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -215,6 +215,6 @@ function wrapEnd (end) {
       return this
     }
 
-    return end.apply(this, arguments)
+    return end.apply(this, args)
   }
 }

@@ -771,7 +771,10 @@ class AgentEncoder {
 
     let arrayCount = 0
     for (const event of spanEvents) {
-      if (event === null || typeof event !== 'object') continue
+      // `addEvent` and the OTel bridge do not type-check `name`, and a
+      // non-string would throw downstream in `Buffer.byteLength`. Drop the
+      // bad event silently so the rest of the trace still encodes.
+      if (event === null || typeof event !== 'object' || typeof event.name !== 'string') continue
 
       const eventHeaderOffset = bytes.length
       bytes.reserve(1)
