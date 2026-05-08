@@ -626,7 +626,7 @@
     "dependency": "playwright",
     "integration": "playwright",
     "minimum_tracer_supported": "1.38.0",
-    "max_tracer_supported": "1.57.0",
+    "max_tracer_supported": "1.59.1",
     "auto-instrumented": "True"
   },
   {
