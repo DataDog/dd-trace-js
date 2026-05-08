@@ -28,9 +28,9 @@ describe('esm', () => {
       'azure-functions-core-tools@4',
       '@azure/cosmos',
     ],
-    false,
-    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-      './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
+      false,
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
     before(async function () {
       const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
@@ -42,6 +42,7 @@ describe('esm', () => {
 
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        DD_TRACE_COOKIE_ENABLED: 'false',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
     })
@@ -89,7 +90,7 @@ describe('esm', () => {
   })
 })
 
-async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile} --experimental-global-webcrypto`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -102,7 +103,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   }, stdioHandler)
 }
 
-function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
