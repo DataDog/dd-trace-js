@@ -1,5 +1,6 @@
 'use strict'
 
+const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 const propagationHash = require('../propagation-hash')
 const StoragePlugin = require('./storage')
@@ -7,6 +8,12 @@ const StoragePlugin = require('./storage')
 // Unreserved RFC 3986 set that `encodeURIComponent` leaves untouched (a conservative subset:
 // `! * ' ( )` are also untouched but rarely appear in db / host / service names so we skip them).
 const SAFE_ENCODE_RE = /^[\w\-.~]*$/
+
+// Cap `#dbmPrefixCache` so a high-cardinality `db.name` (MongoDB sets it to
+// `${database}.${collection}`) cannot grow the map without bound. Steady-state working sets
+// fit well below the cap; cache misses cost a few hundred nanoseconds, so an evicted entry
+// rebuilds cheaply on the next query.
+const DBM_PREFIX_CACHE_MAX = 256
 
 class DatabasePlugin extends StoragePlugin {
   static operation = 'query'
@@ -18,9 +25,9 @@ class DatabasePlugin extends StoragePlugin {
   #dbmEnvFragment
   #dbmEndFragment
   // Cache the rendered prefix per `${db.name}\0${out.host}\0${dbmService}`. The triple is
-  // connection-stable for a real workload, so the steady state is a single `Map.get` plus the
+  // connection-stable for a real workload, so the steady state is one `LRUCache.get` plus the
   // optional per-call `,ddprs='...'` suffix.
-  #dbmPrefixCache = new Map()
+  #dbmPrefixCache = new LRUCache({ max: DBM_PREFIX_CACHE_MAX })
 
   /**
    * @override

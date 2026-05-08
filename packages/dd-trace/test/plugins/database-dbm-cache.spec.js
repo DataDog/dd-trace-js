@@ -118,4 +118,25 @@ describe('DatabasePlugin DBM caching', () => {
     const comment = plugin.createDbmComment(span, 'svc')
     assert.match(comment, /,ddprs='downstream-svc'$/)
   })
+
+  it('bounds the prefix cache so high-cardinality db.name cannot grow it without bound', () => {
+    // Boundary test for the LRU cap (DBM_PREFIX_CACHE_MAX = 256 in database.js). Insert
+    // CAP + 1 unique keys without re-accessing intermediate ones, so the first-inserted key
+    // is the LRU and gets evicted when the CAP-th unique insertion lands.
+    const CAP = 256
+    encodeSpy = sinon.spy(globalThis, 'encodeURIComponent')
+
+    for (let i = 0; i <= CAP; i++) {
+      plugin.createDbmComment(makeSpan({ 'db.name': `dëb-${i}`, 'out.host': 'höst' }), 'svc')
+    }
+    const callsAfterFill = encodeSpy.callCount
+
+    plugin.createDbmComment(makeSpan({ 'db.name': `dëb-${CAP}`, 'out.host': 'höst' }), 'svc')
+    assert.strictEqual(encodeSpy.callCount, callsAfterFill,
+      'most-recently inserted key must remain cached')
+
+    plugin.createDbmComment(makeSpan({ 'db.name': 'dëb-0', 'out.host': 'höst' }), 'svc')
+    assert.ok(encodeSpy.callCount > callsAfterFill,
+      'least-recently-used key must have been evicted at the cap')
+  })
 })
