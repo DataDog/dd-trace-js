@@ -43,3 +43,10 @@ pinned version must:
 2. Be loadable through CJS `require()`. ESM-only releases (recent `got`,
    `uuid`) break the fixture's `require(name)` walk; pin a CJS-era
    version (e.g. `got@11`, `uuid@9`) instead.
+
+Some top-level packages still satisfy (1) and (2) themselves but pull in
+transitive deps that bumped to Node 20+ (e.g. `fastify@5` resolves
+`find-my-way@>=9.3` which requires Node 20). When that happens, add an
+`overrides` entry pinning the offending transitive dep to the last
+release that supports Node 18; do not downgrade the top-level package
+unless it has no other Node-18-compatible release.

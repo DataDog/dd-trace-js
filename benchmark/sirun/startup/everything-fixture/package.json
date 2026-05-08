@@ -33,5 +33,9 @@
     "uuid": "9.0.1",
     "winston": "3.19.0",
     "ws": "8.20.0"
+  },
+  "overrides": {
+    "find-my-way": "9.2.0",
+    "thread-stream": "3.1.0"
   }
 }
