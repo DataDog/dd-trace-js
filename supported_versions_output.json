@@ -282,7 +282,7 @@
   {
     "dependency": "couchbase",
     "integration": "couchbase",
-    "minimum_tracer_supported": "2.6.12",
+    "minimum_tracer_supported": "3.0.7",
     "max_tracer_supported": "4.6.0",
     "auto-instrumented": "True"
   },
