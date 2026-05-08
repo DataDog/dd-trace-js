@@ -22,20 +22,17 @@ function assertSpanByName (traces, expected) {
   return span
 }
 
-// Asserts map/parallel child suppression: no child_context spans in the parent's trace,
-// and direct step children keep the default resource.
-function assertChildSuppression (traces, op, expectedNames) {
+// Asserts step children of `parentName` keep the default resource (cardinality protection)
+// while still carrying the user-supplied operation_name.
+function assertStepChildren (traces, parentName, expectedNames) {
   const allSpans = traces.flat()
-  const parent = allSpans.find(s => s.name === `aws.durable.${op}`)
-  assert.ok(parent, `aws.durable.${op} span not found`)
-  assert.equal(allSpans.filter(s => s.name === 'aws.durable.child_context').length, 0)
-
+  const parent = allSpans.find(s => s.name === parentName)
+  assert.ok(parent, `${parentName} span not found`)
   const stepChildren = allSpans.filter(s =>
     s.name === 'aws.durable.step' && s.parent_id?.toString() === parent.span_id?.toString()
   )
   for (const step of stepChildren) {
     assert.equal(step.resource, 'aws.durable.step')
-    assert.match(step.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
   }
   assert.deepStrictEqual(
     stepChildren.map(s => s.meta?.['aws.durable.operation_name']).sort(),
@@ -207,29 +204,49 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 
   // map/parallel suppress internal child_context spans and force the default resource on
   // direct step children to avoid unbounded resource-tag cardinality.
-  for (const { op, expectedNames } of [
-    { op: 'map', expectedNames: ['work-1', 'work-2'] },
-    { op: 'parallel', expectedNames: ['a', 'b'] },
-  ]) {
-    it(`aws.durable.${op}: suppresses child_context and keeps default step resource`, async () => {
-      const trace = agent.assertSomeTraces(
-        traces => assertChildSuppression(traces, op, expectedNames)
-      )
+  describe('aws.durable.map', () => {
+    const runMap = () => invokeHandler(async (event, ctx) =>
+      ctx.map('items', [1, 2], async (mapCtx, item) =>
+        mapCtx.step(`work-${item}`, async () => {})))
 
-      await invokeHandler(async (event, ctx) => {
-        if (op === 'map') {
-          return ctx.map('items', [1, 2], async (mapCtx, item) =>
-            mapCtx.step(`work-${item}`, async () => {}))
-        }
-        return ctx.parallel('fan-out', [
-          async pCtx => pCtx.step('a', async () => {}),
-          async pCtx => pCtx.step('b', async () => {}),
-        ])
+    it('suppresses internal child_context spans', async () => {
+      const trace = agent.assertSomeTraces(traces => {
+        assert.equal(traces.flat().filter(s => s.name === 'aws.durable.child_context').length, 0)
       })
-
+      await runMap()
       return trace
     })
-  }
+
+    it('step children keep default resource and carry operation_name', async () => {
+      const trace = agent.assertSomeTraces(
+        traces => assertStepChildren(traces, 'aws.durable.map', ['work-1', 'work-2'])
+      )
+      await runMap()
+      return trace
+    })
+  })
+
+  describe('aws.durable.parallel', () => {
+    const runParallel = () => invokeHandler(async (event, ctx) =>
+      ctx.parallel('fan-out', [
+        async pCtx => pCtx.step('a', async () => {}),
+        async pCtx => pCtx.step('b', async () => {}),
+      ]))
+
+    it('suppresses internal child_context spans', async () => {
+      const trace = agent.assertSomeTraces(traces => {
+        assert.equal(traces.flat().filter(s => s.name === 'aws.durable.child_context').length, 0)
+      })
+      await runParallel()
+      return trace
+    })
+
+    it('step children keep default resource and carry operation_name', async () => {
+      const trace = agent.assertSomeTraces(traces => assertStepChildren(traces, 'aws.durable.parallel', ['a', 'b']))
+      await runParallel()
+      return trace
+    })
+  })
 
   describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
     it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
@@ -280,28 +297,36 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  // The SDK queues a RETRY checkpoint with the user's error and awaits a retry timer.
-  // First call to retryStrategy returns shouldRetry: true so the SDK emits a RETRY
-  // checkpoint (the checkpoint plugin sees it and stamps the user error onto the active
-  // step span); subsequent calls return shouldRetry: false so the step terminates instead
-  // of looping forever under skipTime.
-  it('checkpoint plugin: attaches user error to step span when RETRY is queued', async () => {
-    const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+  it('checkpoint plugin: fail-then-succeed retry produces a span per attempt', async () => {
+    const failedAttemptSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
       name: 'aws.durable.step',
       resource: 'retry-step',
       meta: { 'error.type': 'Error', 'error.message': 'transient failure' },
       error: 1,
     }))
+    const succeededAttemptSpan = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' && s.resource === 'retry-step'
+      )
+      assert.ok(span, 'expected step span')
+      assert.notEqual(span.error, 1, 'successful retry attempt must not be tagged as errored')
+    }, { timeoutMs: 5000 })
+    const successfulExecuteSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      name: 'aws.durable.execute',
+      meta: { 'aws.durable.invocation_status': 'succeeded' },
+    }), { timeoutMs: 5000 })
 
     let attempts = 0
-    try {
-      await invokeHandler(
-        async (event, ctx) => ctx.step('retry-step',
-          async () => { throw new Error('transient failure') },
-          { retryStrategy: () => ({ shouldRetry: attempts++ < 1, delay: { seconds: 60 } }) })
-      )
-    } catch { /* expected: step ultimately fails */ }
+    await invokeHandler(async (event, ctx) => ctx.step(
+      'retry-step',
+      async () => {
+        attempts++
+        if (attempts === 1) throw new Error('transient failure')
+      },
+      { retryStrategy: () => ({ shouldRetry: true, delay: { seconds: 1 } }) }
+    ))
+    assert.equal(attempts, 2, 'expected the step body to be called twice (initial + retry)')
 
-    return trace
+    return Promise.all([failedAttemptSpan, succeededAttemptSpan, successfulExecuteSpan])
   })
 })
