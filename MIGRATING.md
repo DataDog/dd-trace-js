@@ -68,6 +68,19 @@ the existing `'b3multi'` value. The legacy `'b3 single header'` spelling is
 still accepted on `DD_TRACE_PROPAGATION_STYLE` and the programmatic option as
 a quiet alias for `'b3'`; prefer the canonical `'b3'` going forward.
 
+### `experimental.appsec` configuration removed
+
+The `experimental.appsec.*` programmatic aliases (and
+`experimental.appsec.standalone.enabled`) have been removed. Use the canonical
+top-level `appsec.*` fields, and `apmTracingEnabled` (or
+`DD_APM_TRACING_ENABLED`) to control standalone ASM mode.
+
+### `ingestion` option removed
+
+The `ingestion: { sampleRate, rateLimit }` wrapper has been removed. Set
+`sampleRate` and `rateLimit` directly on the top-level `TracerOptions` object,
+or use `DD_TRACE_SAMPLE_RATE` / `DD_TRACE_RATE_LIMIT`.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported
