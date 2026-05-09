@@ -433,6 +433,16 @@ module.exports = {
       versions: ['>=1.27.1'],
     },
   ],
+  moleculer: [
+    {
+      // bluebird is a runtime fallback in moleculer's transit/util layer; the
+      // package's manifest does not list it, so install it as a sibling sandbox
+      // and let bun's hoisted linker lift it into versions/node_modules/bluebird
+      // where moleculer's require() walk finds it.
+      name: 'bluebird',
+      versions: ['3.7.2'],
+    },
+  ],
   'mongodb-core': [
     {
       name: 'bson',
