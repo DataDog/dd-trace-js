@@ -221,6 +221,22 @@ module.exports = {
       versions: ['3.5.7'],
     },
   ],
+  // pubsub@1.2.0's `pubsub.js` source-requires `@grpc/grpc-js` without declaring
+  // it. Under bun's isolated linker the parent walk lands on whatever bun hoists
+  // at the workspace root — the newer 1.8+ tree shared with google-gax@3.5.7 —
+  // and the credentials it produces fail the `instanceof ChannelCredentials`
+  // check inside 1.3.x's Channel constructor, which is the version pubsub@1.2.0's
+  // nested google-gax@1.15.4 uses (`~1.3.6`). yarn 1 happened to hoist 1.3.x;
+  // bun does not. Force the matching range as a direct dep of every pubsub
+  // sandbox so bun hoists 1.3.x and the parent walk finds the right version.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      version: '~1.3.6',
+      dep: true,
+      forced: true,
+    },
+  ],
   genai: [
     {
       name: '@google/genai',
