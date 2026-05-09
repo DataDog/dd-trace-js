@@ -191,13 +191,13 @@ describe('esm', () => {
 
 ## Running Tests
 
-dd-trace uses a non-standard dependency installation for plugin tests. Libraries under test are installed per-version via `yarn services`, not through the normal `node_modules`. The `:ci` script handles this automatically.
+dd-trace uses a non-standard dependency installation for plugin tests. Libraries under test are installed per-version via `npm run services` (which drives `scripts/install_plugin_modules.js` and a bun isolated install per sandbox), not through the normal `node_modules`. The `:ci` script handles this automatically.
 
 ```bash
-# CI command (preferred) — runs yarn services for dependency installation, then tests
+# CI command (preferred) — runs `npm run services` for dependency installation, then tests
 PLUGINS="<name>" npm run test:plugins:ci
 
-# Unit tests only (assumes yarn services already ran)
+# Unit tests only (assumes `npm run services` already ran)
 PLUGINS="<name>" npm run test:plugins
 
 # With external services (e.g., databases, message brokers)
