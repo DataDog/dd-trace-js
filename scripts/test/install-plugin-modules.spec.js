@@ -8,6 +8,7 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
+const { createRequire } = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -61,8 +62,13 @@ describe('scripts/install_plugin_modules.js', function () {
     const resolvedVersions = {}
     const expectedVersions = {}
     for (const folder of sandboxFolders) {
-      const pkgPath = path.join(versionsDir, folder, 'node_modules', 'pino', 'package.json')
-      const resolved = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version
+      // Walk Node's resolution from inside the sandbox: bun's hoisted linker shares a single
+      // hoisted copy at `versions/node_modules/pino` and only nests siblings whose declared
+      // version differs, so a fixed `versions/<sandbox>/node_modules/pino` lookup misses the
+      // hoisted entry.
+      const sandboxIndex = path.join(versionsDir, folder, 'index.js')
+      const sandboxRequire = createRequire(sandboxIndex)
+      const resolved = JSON.parse(fs.readFileSync(sandboxRequire.resolve('pino/package.json'), 'utf8')).version
       const declaredRange = folder.slice('pino@'.length)
       resolvedVersions[folder] = resolved
       expectedVersions[folder] = semver.satisfies(resolved, declaredRange)
