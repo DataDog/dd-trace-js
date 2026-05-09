@@ -4,7 +4,7 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
-## 5.0 to 6.0
+## 5.0 to 6.0 (unreleased)
 
 ### Plugin `whitelist` and `blacklist` options removed from types
 
