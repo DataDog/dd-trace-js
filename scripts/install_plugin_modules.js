@@ -242,7 +242,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
 
   let pkgJson
 
-  for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+  for (const { dep, name, node, forced, version } of externalDeps.get(externalName)) {
     if (node && !semver.satisfies(process.versions.node, node)) {
       continue
     }
@@ -274,7 +274,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      versionPkgJson.dependencies[name] = latests[name]
+      versionPkgJson.dependencies[name] = version || latests[name]
     }
   }
 
