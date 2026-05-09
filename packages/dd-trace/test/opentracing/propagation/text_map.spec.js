@@ -1426,9 +1426,8 @@ describe('TextMapPropagator', () => {
       })
     })
 
-    // v5 only: `'b3'` from `DD_TRACE_PROPAGATION_STYLE` historically dispatched to multi-header
-    // extraction. v6 aligns `'b3'` with the OTel single-header form unconditionally, so the
-    // dispatch-by-source distinction is gone and this block has nothing left to assert.
+    // v6 routes `'b3'` to the single-header path regardless of source, so the v5-only
+    // dispatch-by-source distinction tested below has nothing left to assert on v6.
     const describeOrSkip = DD_MAJOR < 6 ? describe : describe.skip
     describeOrSkip('with B3 propagation from DD_TRACE_PROPAGATION_STYLE', () => {
       beforeEach(() => {

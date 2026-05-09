@@ -14,9 +14,6 @@ const { DD_MAJOR } = require('../../../../../version')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const TraceState = require('./tracestate')
 
-// v6 aligns with the OTel `b3` propagator spec: `'b3'` means single-header, `'b3multi'` means
-// multi-header. v5 keeps the older shape where `'b3'` means multi and `'b3 single header'` is the
-// single-header form.
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const injectCh = channel('dd-trace:span:inject')

@@ -28,9 +28,8 @@ const {
   supportedConfigurations,
 } = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
-// Apply v6 env-alias deletions before the `aliases` / `aliasToCanonical` snapshot below;
-// otherwise `getEnvironmentVariables()` keeps rewriting the deprecated env vars to their
-// canonical names. Idempotent so `defaults.js` may also call it before iterating.
+// Apply v6 env-alias deletions before the `aliases` / `aliasToCanonical` snapshot below; otherwise
+// `getEnvironmentVariables()` keeps rewriting the deprecated env vars to their canonical names.
 applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
 /**

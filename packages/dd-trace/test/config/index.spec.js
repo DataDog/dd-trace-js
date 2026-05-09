@@ -131,9 +131,6 @@ describe('Config', () => {
       delete process.env.DATADOG_API_KEY
     })
 
-    // The legacy `DD_PROFILING_EXPERIMENTAL_*` and `DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED`
-    // aliases are dropped in v6 (`helper.js` removes them under `DD_MAJOR >= 6` before the alias
-    // snapshot); the deprecation warning path therefore only fires on v5.
     const itLegacyAlias = DD_MAJOR < 6 ? it : it.skip
     const itV6Filter = DD_MAJOR >= 6 ? it : it.skip
 
@@ -167,9 +164,8 @@ describe('Config', () => {
         )
       })
 
-    // The production load order in `index.js` requires `helper.js` before `defaults.js`. The
-    // regression below loads `helper.js` in isolation so that defaults.js's mutations cannot
-    // accidentally cover for a missing alias filter inside helper.js.
+    // Load `helper.js` in isolation so a missing alias filter in helper.js cannot be masked by
+    // the same overrides applied from `defaults.js` against a shared module cache.
     const loadFreshHelper = () => {
       const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
       return proxyquire.noPreserveCache()('../../src/config/helper', {
@@ -223,6 +219,7 @@ describe('Config', () => {
       assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
       const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
       assert.ok(!runtimeIdEntry.aliases?.includes('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'))
+
       const beforeKeyCount = Object.keys(supported).length
       applyMajorVersionAliasFilters(supported, 6)
       assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
@@ -1935,8 +1932,6 @@ describe('Config', () => {
       assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
       assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
     } else {
-      // The legacy spelling normalises to the canonical `'b3'` so existing configs and the upstream
-      // system-tests parametric suite keep injecting / extracting B3 single-header headers.
       assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3'])
       assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
     }
