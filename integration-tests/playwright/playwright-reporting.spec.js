@@ -270,7 +270,7 @@ versions.forEach((version) => {
     })
 
     it('works when tests are compiled to a different location', function (done) {
-      // this has shown some flakiness
+      // eslint-disable-next-line sonarjs/stable-tests -- TS compile cache occasionally races
       this.retries(1)
       let testOutput = ''
 

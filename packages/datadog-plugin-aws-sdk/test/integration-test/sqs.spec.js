@@ -9,13 +9,13 @@ const {
   spawnPluginIntegrationTestProcAndExpectExit,
   stopProc,
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withAwsSdkV3Versions } = require('../spec_helpers')
 
 describe('recursion regression test', () => {
   let agent
   let proc
 
-  withVersions('aws-sdk', ['@aws-sdk/smithy-client'], version => {
+  withAwsSdkV3Versions(version => {
     useSandbox([`'@aws-sdk/client-sqs'@${version}'`], false, [
       './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
 

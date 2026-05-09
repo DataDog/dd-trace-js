@@ -8,8 +8,8 @@ const paymentIntentCreateFinishCh = channel('datadog:stripe:paymentIntent:create
 const constructEventFinishCh = channel('datadog:stripe:constructEvent:finish')
 
 function wrapSessionCreate (create) {
-  return function wrappedSessionCreate () {
-    const promise = create.apply(this, arguments)
+  return function wrappedSessionCreate (...args) {
+    const promise = create.apply(this, args)
 
     if (!checkoutSessionCreateFinishCh.hasSubscribers) return promise
 
@@ -21,8 +21,8 @@ function wrapSessionCreate (create) {
 }
 
 function wrapPaymentIntentCreate (create) {
-  return function wrappedPaymentIntentCreate () {
-    const promise = create.apply(this, arguments)
+  return function wrappedPaymentIntentCreate (...args) {
+    const promise = create.apply(this, args)
 
     if (!paymentIntentCreateFinishCh.hasSubscribers) return promise
 
@@ -34,8 +34,8 @@ function wrapPaymentIntentCreate (create) {
 }
 
 function wrapConstructEvent (constructEvent) {
-  return function wrappedConstructEvent () {
-    const result = constructEvent.apply(this, arguments)
+  return function wrappedConstructEvent (...args) {
+    const result = constructEvent.apply(this, args)
 
     // no need to check for hasSubscribers,
     // if it's false, the publish function will be noop
@@ -46,8 +46,8 @@ function wrapConstructEvent (constructEvent) {
 }
 
 function wrapConstructEventAsync (constructEventAsync) {
-  return function wrappedConstructEventAsync () {
-    const promise = constructEventAsync.apply(this, arguments)
+  return function wrappedConstructEventAsync (...args) {
+    const promise = constructEventAsync.apply(this, args)
 
     if (!constructEventFinishCh.hasSubscribers) return promise
 
@@ -77,8 +77,8 @@ function instrumentStripeInstance (stripe) {
 // returns nothing; without 'new' it delegates to 'new Stripe(...)' and returns
 // that result. We need to instrument whichever object actually got populated
 function wrapLegacyStripe (Stripe) {
-  return function wrappedStripe () {
-    const result = Stripe.apply(this, arguments)
+  return function wrappedStripe (...args) {
+    const result = Stripe.apply(this, args)
     const stripe = this instanceof Stripe ? this : result
     instrumentStripeInstance(stripe)
     return stripe
@@ -88,8 +88,8 @@ function wrapLegacyStripe (Stripe) {
 // stripe >=22: the constructor is a factory that always returns a fresh Stripe
 // instance regardless of 'new', so we just instrument and forward the result
 function wrapStripe (Stripe) {
-  return function wrappedStripe () {
-    const stripe = Stripe.apply(this, arguments)
+  return function wrappedStripe (...args) {
+    const stripe = Stripe.apply(this, args)
     instrumentStripeInstance(stripe)
     return stripe
   }

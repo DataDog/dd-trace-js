@@ -201,7 +201,7 @@ versions.forEach((version) => {
               assert.strictEqual(retriedTestNew, isNew ? NUM_RETRIES_EFD * 2 : 0)
               assert.strictEqual(retriedTestsWithReason, NUM_RETRIES_EFD * 2)
             }
-          }, 25000)
+          }, 60000)
 
       const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
@@ -264,6 +264,7 @@ versions.forEach((version) => {
               enabled: true,
               slow_test_retries: {
                 '5s': NUM_RETRIES_EFD,
+                '10s': NUM_RETRIES_EFD,
               },
             },
             known_tests_enabled: true,

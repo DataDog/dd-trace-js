@@ -12,6 +12,7 @@ function encodeUnicode (str = '') {
   for (let index = 0; index < str.length; index++) {
     if (str.charCodeAt(index) > 127) {
       let result = str.slice(0, index)
+      // eslint-disable-next-line sonarjs/updated-loop-counter -- inner loop continues from outer position
       for (; index < str.length; index++) {
         const code = str.charCodeAt(index)
         result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[index]

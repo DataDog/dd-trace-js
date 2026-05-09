@@ -27,6 +27,7 @@ jobs:
   aerospike:
     name: aerospike (${{ matrix.aerospike-version }}, node-${{ matrix.node-version }})
     strategy:
+      fail-fast: false
       matrix:
         node-version: [eol]
         range: [">=4.0.0 <5.2.0"]
@@ -250,6 +251,7 @@ jobs:
 
   confluentinc-kafka-javascript:
     strategy:
+      fail-fast: false
       matrix:
         # using node versions matrix since this plugin testing fails due to install differences between node versions
         node-version: [18, 20, 22]
@@ -328,11 +330,10 @@ jobs:
 
   couchbase:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [eol]
         range:
-          # - '^2.6.12' skipping due to bug with couchbase integration that is blocking CI.
-          # TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
           - "^3.0.7"
           - ">=4.0.0 <4.2.0"
         include:
@@ -561,6 +562,7 @@ jobs:
 
   http:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, maintenance, latest]
     runs-on: ubuntu-latest
@@ -616,6 +618,7 @@ jobs:
 
   kafkajs:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
     runs-on: ubuntu-latest
@@ -1096,6 +1099,7 @@ jobs:
 
   prisma:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - node-version: 18

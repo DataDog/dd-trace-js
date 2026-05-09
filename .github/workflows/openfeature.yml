@@ -17,6 +17,7 @@ env:
 jobs:
   unit:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / unit (node-${{ matrix.version }})

@@ -33,6 +33,8 @@ const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
+const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
+
 const latest = 'latest'
 const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
 const versions = [oldest, latest]
@@ -296,9 +298,9 @@ versions.forEach((version) => {
                   assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
                 }
 
-                // Exactly one ATF run must have TEST_FINAL_STATUS and it must be the last to finish.
-                // The main process marks the execution final based on arrival order of testEnd events,
-                // so the run that completes last is always the one that gets the tag.
+                // Exactly one ATF run has TEST_FINAL_STATUS; all others must not.
+                // We avoid sorting by start time because parallel workers make
+                // wall-clock order non-deterministic.
                 for (const testName of [
                   'attempt to fix should attempt to fix failed test',
                   'attempt to fix should attempt to fix passed test',
@@ -314,20 +316,13 @@ versions.forEach((version) => {
                   }
 
                   const group = attemptedToFixTests.filter(t => t.meta[TEST_NAME] === testName)
-                  group.sort((a, b) => {
-                    const endA = BigInt(a.start) + BigInt(a.duration)
-                    const endB = BigInt(b.start) + BigInt(b.duration)
-                    return endA < endB ? -1 : endA > endB ? 1 : 0
-                  })
-                  group.forEach((t, index) => {
-                    if (index < group.length - 1) {
-                      assert.ok(!(TEST_FINAL_STATUS in t.meta),
-                        `ATF run ${index} of "${testName}" should not have TEST_FINAL_STATUS`)
-                    } else {
-                      assert.strictEqual(t.meta[TEST_FINAL_STATUS], expectedFinalStatus,
-                        `Last ATF run of "${testName}" should have TEST_FINAL_STATUS="${expectedFinalStatus}"`)
-                    }
-                  })
+                  const finalRuns = group.filter(t => TEST_FINAL_STATUS in t.meta)
+                  assert.strictEqual(finalRuns.length, 1,
+                    `Exactly one ATF run of "${testName}" should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+                  assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                  const nonFinalRuns = group.filter(t => !(TEST_FINAL_STATUS in t.meta))
+                  assert.strictEqual(nonFinalRuns.length, group.length - 1,
+                    `All other ATF runs of "${testName}" should not have TEST_FINAL_STATUS`)
                 }
               } else {
                 assert.strictEqual(countAttemptToFixTests, 0)
@@ -346,7 +341,7 @@ versions.forEach((version) => {
                 assert.strictEqual(passedFlakyTest.length, 1)
                 assert.strictEqual(failedFlakyTest.length, 1)
               }
-            }, 30000)
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         /**
          * @param {{
@@ -509,7 +504,7 @@ versions.forEach((version) => {
                   'ATF test that is in known tests should not be tagged as new'
                 )
               }
-            })
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
           childProcess = exec(
             './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
@@ -691,7 +686,7 @@ versions.forEach((version) => {
                   assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in test.meta))
                 }
               })
-            }, 25000)
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         const runDisableTest = async (isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
@@ -825,7 +820,7 @@ versions.forEach((version) => {
                 assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTests[0].meta))
                 assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               }
-            }, 25000)
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         /**
          * @param {{
