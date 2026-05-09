@@ -32,9 +32,10 @@ fi
 
 (
   cd ../../ &&
-  npm install --global yarn || (sleep 60 && npm install --global yarn) \
-    && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
-    && PLUGINS="bluebird|q|graphql|express" yarn services
+  (curl -fsSL https://bun.sh/install | bash) || (sleep 60 && curl -fsSL https://bun.sh/install | bash) \
+    && export PATH="$HOME/.bun/bin:$PATH" \
+    && bun install || (sleep 60 && bun install) \
+    && PLUGINS="bluebird|q|graphql|express" npm run services
 )
 
 (

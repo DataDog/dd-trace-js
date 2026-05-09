@@ -1,0 +1,32 @@
+name: Install smoke test
+
+on:
+  pull_request:
+  push:
+    branches: [master, mq-working-branch-master-*]
+  schedule:
+    - cron: 0 4 * * *
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pino-sandbox:
+    name: Sandbox install (pino)
+    runs-on: ubuntu-latest
+    env:
+      _DD_IGNORE_ENGINES: 'true'
+      PLUGINS: pino
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node
+        with:
+          version: oldest
+      - uses: ./.github/actions/install
+      - name: Synthesize and install per-version sandboxes
+        run: npm run services
+      - name: Assert sandbox version resolution
+        run: npm run test:scripts
+      - name: Smoke-test the pino plugin against the sandbox
+        run: npm run test:plugins -- --grep "should not alter the default behavior"
