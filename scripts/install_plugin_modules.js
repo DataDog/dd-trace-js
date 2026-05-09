@@ -305,6 +305,19 @@ async function assertWorkspaces () {
       workspaces: {
         packages: [...workspaces].sort(),
       },
+      // The langchain plugin tests load `@langchain/openai` through the
+      // `langchain@<version>` sandbox; under yarn classic that worked because
+      // yarn hoisted `@langchain/openai@0.0.34` (the version pulled in by
+      // `langchain@0.1.0`) to the workspace root, so every sandbox's
+      // `require('@langchain/openai')` walked up to it. Bun's isolated linker
+      // does not hoist transitive deps, so without this explicit pin
+      // `langchain@>=0.1` cannot resolve `@langchain/openai` and the cassette
+      // hashes shift away from the recorded `OpenAI/JS 4.x` shape. Newer
+      // `@langchain/openai` versions need their own cassettes; that is left
+      // for a follow-up.
+      dependencies: {
+        '@langchain/openai': '0.0.34',
+      },
       trustedDependencies: [...trustedDependencies].sort(),
     }, null, 2) + '\n'),
     // Per-sandbox node_modules via bun's isolated linker. Several plugin specs
