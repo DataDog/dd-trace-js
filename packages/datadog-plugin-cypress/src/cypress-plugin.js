@@ -267,8 +267,9 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
-function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatus) {
-  let matchingTest
+function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatus, preferIndexedMatch = false) {
+  let matchingTestByIndex
+  let matchingTestByStatus
   let matchingTestIndex = 0
 
   for (const cypressTest of cypressTests) {
@@ -277,16 +278,18 @@ function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatu
     }
 
     if (matchingTestIndex === attemptIndex) {
-      matchingTest = cypressTest
+      matchingTestByIndex = cypressTest
     }
     matchingTestIndex++
 
-    if (CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === testStatus) {
-      return cypressTest
+    if (!matchingTestByStatus && CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === testStatus) {
+      matchingTestByStatus = cypressTest
     }
   }
 
-  return matchingTest
+  return preferIndexedMatch
+    ? matchingTestByIndex || matchingTestByStatus
+    : matchingTestByStatus || matchingTestByIndex
 }
 
 function isCypressHookFailure (cypressTest) {
@@ -1065,7 +1068,7 @@ class CypressPlugin {
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
         const cypressTest = isDatadogManagedAttempt
-          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus) ||
+          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus, isLastAttempt) ||
             cypressTests.find(test => test.title.join(' ') === testName)
           : cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
