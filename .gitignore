@@ -110,7 +110,8 @@ node-*-junit.xml
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
-/versions
+/versions/*
+!/versions/bunfig.toml
 .bun
 .next
 package-lock.json
