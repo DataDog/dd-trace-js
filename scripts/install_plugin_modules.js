@@ -307,12 +307,16 @@ async function assertWorkspaces () {
       },
       trustedDependencies: [...trustedDependencies].sort(),
     }, null, 2) + '\n'),
-    // Workspace-aware hoisted layout: same-version transitives lift to
-    // `versions/node_modules/`, different-version copies stay nested under each
-    // sandbox, and cross-workspace `require()` walks find the hoisted copy
-    // (moleculer's runtime `require('bluebird')` fallback depends on this).
+    // Per-sandbox node_modules via bun's isolated linker. Several plugin specs
+    // hard-code paths into `versions/<plugin>@<ver>/node_modules/<plugin>/<internal>`
+    // (kafkajs reaches into `src/broker`, next reads `package.json`, rhea pulls
+    // `lib/session.js`); under isolated bun creates a symlink at that path that
+    // resolves to the central store, so the lookups work. Cross-workspace
+    // dependencies (moleculer's runtime `require('bluebird')` fallback, etc.) are
+    // wired through `externals.js` `dep: true, forced: true` so they land as a
+    // direct dep of the consuming sandbox rather than as a sibling workspace.
     writeFile(filename(null, null, 'bunfig.toml'), `[install]
-linker = "hoisted"
+linker = "isolated"
 saveTextLockfile = true
 `),
   ])
