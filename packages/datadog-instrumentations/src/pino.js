@@ -7,8 +7,8 @@ const {
 } = require('./helpers/instrument')
 
 function wrapPino (symbol, wrapper, pino) {
-  return function pinoWithTrace () {
-    const instance = pino.apply(this, arguments)
+  return function pinoWithTrace (...args) {
+    const instance = pino.apply(this, args)
 
     Object.defineProperty(instance, symbol, {
       configurable: true,
@@ -46,8 +46,8 @@ function wrapPrettifyObject (prettifyObject) {
 
 function wrapPrettyFactory (prettyFactory) {
   const ch = channel('apm:pino:log')
-  return function prettyFactoryWithTrace () {
-    const pretty = prettyFactory.apply(this, arguments)
+  return function prettyFactoryWithTrace (...args) {
+    const pretty = prettyFactory.apply(this, args)
     return function prettyWithTrace (obj) {
       const payload = { message: obj }
       ch.publish(payload)
@@ -60,17 +60,13 @@ function wrapPrettyFactory (prettyFactory) {
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
-
-  return wrapped
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
 })
 
 addHook({ name: 'pino', versions: ['>=5 <6.8.0'], patchDefault: true }, (pino) => {
   const asJsonSym = ((pino.default || pino)?.symbols.asJsonSym) || 'asJson'
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
-
-  return wrapped
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
 })
 
 addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino) => {

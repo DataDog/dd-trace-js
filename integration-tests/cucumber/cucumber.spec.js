@@ -81,6 +81,13 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
 const version = process.env.CUCUMBER_VERSION || 'latest'
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
@@ -646,6 +653,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+            assertItrSkippingEnabledTags(payload.events, 'false')
           }, ({ url }) => url.endsWith('/api/v2/citestcycle')).then(() => done()).catch(done)
 
           childProcess = exec(
@@ -720,6 +728,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
               assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
               assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+              assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
               done()
             }).catch(done)
 
@@ -763,6 +772,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+            assertItrSkippingEnabledTags(payload.events, 'true')
           }, ({ url }) => url.endsWith('/api/v2/citestcycle')).then(() => done()).catch(done)
 
           childProcess = exec(
@@ -962,6 +972,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
               assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
               assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+              assertItrSkippingEnabledTags(events, 'true')
             }, 25000)
 
           childProcess = exec(
@@ -1130,6 +1141,7 @@ describe(`cucumber@${version} commonJS`, () => {
               tests.forEach(test => {
                 assert.ok(!test.meta[TEST_SUITE].includes('farewell'))
               })
+              assertItrSkippingEnabledTags(events, 'true')
             })
 
           childProcess = exec(
@@ -1200,6 +1212,53 @@ describe(`cucumber@${version} commonJS`, () => {
               env: envVars,
             }
           )
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+
+        it('aborts EFD retries when the matching slow_test_retries bucket is 0', (done) => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 2,
+                '10s': 0,
+              },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({
+            cucumber: {
+              'ci-visibility/features/farewell.feature': ['Say farewell'],
+              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const slowTests = tests.filter(test =>
+                test.resource === 'ci-visibility/features/farewell.feature.Say whatever'
+              )
+
+              assert.strictEqual(slowTests.length, 1)
+              assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+              assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+            }, 20_000)
+
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...envVars,
+              SHOULD_ADD_SLOW_DURATION_TEST: '1',
+            },
+          })
           childProcess.on('exit', () => {
             eventsPromise.then(() => {
               done()

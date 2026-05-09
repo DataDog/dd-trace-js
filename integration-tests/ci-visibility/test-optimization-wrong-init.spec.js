@@ -19,7 +19,10 @@ const testFrameworks = [
   {
     testFramework: 'jest',
     command: 'node ./ci-visibility/test-optimization-wrong-init/run-jest.js',
-    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js',
+    expectedOutput: [
+      'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js',
+      'Test Suites:\\s+1 passed, 1 total',
+    ].join('|'),
   },
   {
     testFramework: 'vitest',

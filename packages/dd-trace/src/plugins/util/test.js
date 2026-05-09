@@ -239,6 +239,22 @@ function getSessionRequestErrorTags (sessionSpan) {
   return {}
 }
 
+/**
+ * Returns ITR skipping-enabled tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionItrSkippingEnabledTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[TEST_ITR_SKIPPING_ENABLED] !== undefined) {
+    return {
+      [TEST_ITR_SKIPPING_ENABLED]: tags[TEST_ITR_SKIPPING_ENABLED],
+    }
+  }
+  return {}
+}
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -318,6 +334,7 @@ module.exports = {
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
+  getMaxEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -349,6 +366,7 @@ module.exports = {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
   getSessionRequestErrorTags,
+  getSessionItrSkippingEnabledTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   checkShaDiscrepancies,
   getPullRequestDiff,
@@ -922,9 +940,7 @@ function getCoveredFilenamesFromCoverage (coverage) {
     .filter(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
+      return Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
     })
 }
 
@@ -1043,6 +1059,22 @@ function getEfdRetryCount (durationMs, slowTestRetries) {
     }
   }
   return 0 // ≥ 5 min — abort
+}
+
+/**
+ * Returns the maximum retry count configured by the backend for EFD.
+ *
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @returns {number}
+ */
+function getMaxEfdRetryCount (slowTestRetries) {
+  let maxRetries = 0
+  for (const retryCount of Object.values(slowTestRetries || {})) {
+    if (retryCount > maxRetries) {
+      maxRetries = retryCount
+    }
+  }
+  return maxRetries
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
@@ -1276,10 +1308,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   let bestScore = Infinity
   for (const branch of Object.keys(metrics)) {
     const score = metrics[branch].ahead
-    if (score < bestScore) {
-      bestScore = score
-      bestBranch = branch
-    } else if (score === bestScore && isDefaultBranch(branch)) {
+    if (score < bestScore || score === bestScore && isDefaultBranch(branch)) {
       bestScore = score
       bestBranch = branch
     }

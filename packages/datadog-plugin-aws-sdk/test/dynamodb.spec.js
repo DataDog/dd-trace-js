@@ -9,10 +9,9 @@ const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
@@ -28,7 +27,7 @@ describe('Plugin', () => {
     setup()
     this.timeout(10000)
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let tracer
       let AWS
       let dynamo

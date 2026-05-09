@@ -509,7 +509,9 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
   if (!rootSpan) return
 
   if (metricsQueue.size) {
-    rootSpan.addTags(Object.fromEntries(metricsQueue))
+    for (const [key, value] of metricsQueue) {
+      rootSpan.setTag(key, value)
+    }
 
     keepTrace(rootSpan, ASM)
 

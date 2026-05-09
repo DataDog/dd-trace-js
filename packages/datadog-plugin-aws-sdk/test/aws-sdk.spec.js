@@ -7,9 +7,8 @@ const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, sort } = require('./spec_helpers')
+const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
@@ -17,7 +16,7 @@ describe('Plugin', () => {
   describe('aws-sdk direct import', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk'], (version) => {
+    withAwsSdkV2Versions((version) => {
       if (semver.intersects(version, '>2.3.0')) {
         const S3 = require(`../../../versions/aws-sdk@${version}`).get('aws-sdk/clients/s3')
         const s3 = new S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
@@ -74,7 +73,7 @@ describe('Plugin', () => {
   describe('aws-sdk', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let s3
       let sqs
@@ -141,7 +140,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
             })
             if (semver.intersects(version, '>=2.3.4')) {
-              assert.match(span.meta['aws.response.request_id'], /[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+              assert.match(span.meta['aws.response.request_id'], /\w{8}(-\w{4}){3}-\w{12}/)
             }
           }).then(done, done)
 
