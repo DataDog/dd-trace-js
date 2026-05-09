@@ -1,5 +1,6 @@
 'use strict'
 
+const { execFileSync } = require('child_process')
 const { createHash } = require('crypto')
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
@@ -29,6 +30,9 @@ const FS_CONCURRENCY = 50
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+// Per-process cache of `bun pm view` lookups so a matrix run doesn't hit the registry twice
+// for the same `<name>@<range>` pair across the script's two install passes.
+const resolvedRangeCache = new Map()
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
@@ -152,11 +156,10 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
   const dependencies = {
-    [name]: getCappedRange(name, dependencyVersionRange),
+    [name]: resolveLatestSatisfying(name, getCappedRange(name, dependencyVersionRange)),
   }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(Boolean).join('-'),
@@ -164,16 +167,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     license: 'BSD-3-Clause',
     private: true,
     dependencies,
-  }
-
-  if (name === 'aerospike') {
-    pkg.installConfig = {
-      hoistingLimits: 'workspaces',
-    }
-  } else if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**'],
-    }
   }
 
   addFolderToWorkspaces(name, version)
@@ -369,16 +362,16 @@ async function assertWorkspaces () {
  */
 function install () {
   try {
-    retry(() => exec('yarn --ignore-engines', { cwd: folder() }), {
+    retry(() => exec('bun install --trust', { cwd: folder() }), {
       onRetry: (error, attempt, delayMs) => process.stderr.write(
-        `yarn install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
+        `bun install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
       ),
     })
   } catch (error) {
     // A failure that outlasts the retries is most often an unresolvable version: a declared range spans a major
-    // version that was never published. Point at the fix instead of leaving a bare yarn error.
+    // version that was never published. Point at the fix instead of leaving a bare bun error.
     throw new Error(
-      'yarn failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
+      'bun failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
       'major version that was never published (non-consecutive majors), add that package to ' +
       '`nonConsecutiveMajorPackages` in packages/dd-trace/test/plugins/versions/index.js (or split the range) so its ' +
       'in-between majors are not installed.\n' +
@@ -386,6 +379,44 @@ function install () {
       { cause: error }
     )
   }
+}
+
+/**
+ * Resolve a semver range to the highest published version satisfying it.
+ *
+ * Yarn 1 picked the highest matching version per install; bun picks the lowest.
+ * Without pre-resolution the per-major matrix collapses — `<pkg>@<range>` and
+ * `<pkg>@<coerced>` would land on the same version under bun.
+ *
+ * @param {string} name
+ * @param {string} range
+ * @returns {string}
+ */
+function resolveLatestSatisfying (name, range) {
+  if (semver.valid(range)) return range
+  const cacheKey = `${name}@${range}`
+  const cached = resolvedRangeCache.get(cacheKey)
+  if (cached) return cached
+  let parsed
+  try {
+    const stdout = execFileSync('bun', ['pm', 'view', cacheKey, 'version', '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+    parsed = JSON.parse(stdout)
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`bun pm view failed for ${cacheKey}: ${error.message}; deferring to install-time resolution`)
+    return range
+  }
+  if (typeof parsed !== 'string') {
+    // eslint-disable-next-line no-console
+    console.warn(`bun pm view returned no version for ${cacheKey}: ${JSON.stringify(parsed)}; ` +
+      'deferring to install-time resolution')
+    return range
+  }
+  resolvedRangeCache.set(cacheKey, parsed)
+  return parsed
 }
 
 /**
