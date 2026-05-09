@@ -8,9 +8,9 @@ do not modify unrelated behavior.
 
 ## Setup and Commands
 
-- Prerequisites: a Node.js version satisfying `package.json#engines` (`>=22` on `master`), yarn 1.x, and Docker
+- Prerequisites: a Node.js version satisfying `package.json#engines` (`>=22` on `master`), Bun (pinned in `package.json`), and Docker
   with Docker Compose for service-backed tests.
-- Use yarn only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
+- Use Bun to install dependencies (`bun add`, `bun install`) and npm to run `npm run services`.
 - Use npm for scripts, tests, linting, builds, and all other commands: `npm run <script>`.
 - The root `npm test` is intentionally disabled. Run a specific `*.spec.js` file or targeted `test:<area>` script.
 
@@ -179,5 +179,5 @@ channels. Validate new plugin structure with
 
 Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
 
-For vendored rspack dependencies, run yarn from `vendor/`; generated bundles are written under
+For vendored rspack dependencies, run Bun from `vendor/`; generated bundles are written under
 `packages/node_modules/`.
