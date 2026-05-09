@@ -92,7 +92,7 @@ jobs:
       - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: rm -rf *
       - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) --strip-components=1
-      - run: yarn --prod --ignore-optional
+      - run: bun install --production --omit=optional
       - run: ls -lisa
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@1e02edbdda803a45537a808ede97866db47756d3 # Unreleased

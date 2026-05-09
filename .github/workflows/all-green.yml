@@ -31,7 +31,7 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: active
-      - run: yarn add @actions/core @actions/github octokit
+      - run: bun install @actions/core @actions/github octokit
       - run: node scripts/all-green.mjs
         env:
           DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns

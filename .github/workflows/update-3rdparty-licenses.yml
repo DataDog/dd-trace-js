@@ -5,7 +5,7 @@ on:
     paths:
       - ".github/vendored-dependencies.csv"
       - "vendor/package-lock.json"
-      - "yarn.lock"
+      - "bun.lock"
 
 jobs:
   check-licenses:
