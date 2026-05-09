@@ -17,14 +17,7 @@ programmatic option. Set `DD_IAST_SECURITY_CONTROLS_CONFIGURATION` instead.
 The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`,
 `iovalkey`, and `redis` plugin interfaces are no longer part of the v6 TypeScript
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
-names for several majors
-
-### `legacyBaggageEnabled` default is now `false`
-
-The legacy `ot-baggage-*` propagation headers are no longer emitted or
-extracted by default. The W3C `baggage` header remains the default carrier for
-baggage. Set `legacyBaggageEnabled: true` (or `DD_TRACE_LEGACY_BAGGAGE_ENABLED=true`)
-to opt back in if a downstream consumer still depends on the legacy shape.
+names for several majors.
 
 ### `DD_TRACE_STARTUP_LOGS` defaults to `true`
 
