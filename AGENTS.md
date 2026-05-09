@@ -240,6 +240,15 @@ Avoid try/catch in hot paths - validate inputs early
 - Don't use language/runtime features that are too new
 - **Guard breaking changes with version checks** using [`version.js`](./version.js) (e.g., `DD_MAJOR`)
 
+### Public TypeScript Types
+
+The repo carries two public TypeScript surfaces:
+
+- `index.d.ts` — current major (master = v6).
+- `index.d.v5.ts` — frozen v5 surface. Swapped over `index.d.ts` by `scripts/release/swap-v5-types.js` during a v5 release.
+
+When adding a new public type, add it to both files unless the API is v6-only. v6-only changes — drops, renames, or APIs that don't exist in v5 — go in `index.d.ts` alone. The two files diverge by exactly the v6 cleanups; everything else mirrors.
+
 ## Adding New Configuration Options
 
 1. **Add default value** in `packages/dd-trace/src/config/defaults.js`
