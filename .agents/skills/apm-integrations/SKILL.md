@@ -135,7 +135,7 @@ Follow these steps when creating or modifying an integration:
 5. **Write tests** — Add unit tests and ESM integration tests. See [Testing](references/testing.md) for templates.
 6. **Run tests** — Validate with:
    ```bash
-   # Run plugin tests (preferred CI command — handles yarn services automatically)
+   # Run plugin tests (preferred CI command — handles `npm run services` automatically)
    PLUGINS="<name>" npm run test:plugins:ci
 
    # If the plugin needs external services (databases, message brokers, etc.),

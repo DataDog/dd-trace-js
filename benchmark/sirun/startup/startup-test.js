@@ -71,7 +71,6 @@ if (Number(process.env.EVERYTHING)) {
     'ttl-set',
     'workerpool',
     'yaml',
-    'yarn-deduplicate',
   ]
   for (const pkg of packages) {
     require(pkg)
