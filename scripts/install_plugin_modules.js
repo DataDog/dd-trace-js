@@ -33,9 +33,17 @@ const externalDeps = new Map()
 // Per-process cache of `bun pm view` lookups so a matrix run doesn't hit the registry twice
 // for the same `<name>@<range>` pair across the script's two install passes.
 const resolvedRangeCache = new Map()
+// Names of every package the synthesized workspaces install, both directly (via
+// `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
+// Bun runs lifecycle scripts only for packages listed in the workspace root's
+// `trustedDependencies`; native plugins (`aerospike`, `@confluentinc/kafka-javascript`,
+// `pg-native`, ...) need their `install`/`postinstall` to compile, otherwise
+// `node-gyp`'s `bindings` package fails to find the `.node` file at test time.
+const trustedDependencies = new Set()
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
+    trustedDependencies.add(thing.name)
     if (thing.dep) {
       const depsArr = externalDeps.get(external)
       if (depsArr) {
@@ -158,6 +166,7 @@ async function assertFolder (name, version) {
  * @param {string} dependencyVersionRange
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
+  trustedDependencies.add(name)
   const dependencies = {
     [name]: resolveLatestSatisfying(name, getCappedRange(name, dependencyVersionRange)),
   }
@@ -249,7 +258,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
           versionPkgJson.dependencies[name] = pkgJson.version
         } else {
           const declared = pkgJson[section][name]
-          versionPkgJson.dependencies[name] = declared.startsWith('workspace:')
+          const range = declared.startsWith('workspace:')
             // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
             // cannot resolve outside the source repo, so fall back to the pinned compatible version.
             ? (latests[name] ?? '*')
@@ -258,6 +267,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
               ? declared.split('||')[0].trim()
               // Only one version available so use that.
               : declared
+          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, range)
         }
         break
       }
@@ -342,15 +352,26 @@ module.exports = {
 
 async function assertWorkspaces () {
   await assertFolder()
-  await writeFile(filename(null, null, 'package.json'), JSON.stringify({
-    name: 'versions',
-    version: '1.0.0',
-    license: 'BSD-3-Clause',
-    private: true,
-    workspaces: {
-      packages: [...workspaces].sort(),
-    },
-  }, null, 2) + '\n')
+  await Promise.all([
+    writeFile(filename(null, null, 'package.json'), JSON.stringify({
+      name: 'versions',
+      version: '1.0.0',
+      license: 'BSD-3-Clause',
+      private: true,
+      workspaces: {
+        packages: [...workspaces].sort(),
+      },
+      trustedDependencies: [...trustedDependencies].sort(),
+    }, null, 2) + '\n'),
+    // Workspace-aware hoisted layout: same-version transitives lift to
+    // `versions/node_modules/`, different-version copies stay nested under each
+    // sandbox, and cross-workspace `require()` walks find the hoisted copy
+    // (moleculer's runtime `require('bluebird')` fallback depends on this).
+    writeFile(filename(null, null, 'bunfig.toml'), `[install]
+linker = "hoisted"
+saveTextLockfile = true
+`),
+  ])
 }
 
 /**
