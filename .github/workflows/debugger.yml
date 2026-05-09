@@ -29,9 +29,9 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:code-origin:ci
-      - run: yarn test:debugger:ci
-      - run: yarn test:integration:debugger:coverage
+      - run: npm run test:code-origin:ci
+      - run: npm run test:debugger:ci
+      - run: npm run test:integration:debugger:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: debugger-ubuntu-${{ matrix.version }}

@@ -23,7 +23,7 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:aiguard:ci
+      - run: npm run test:aiguard:ci
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-macos
@@ -44,13 +44,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:aiguard:ci
+      - run: npm run test:aiguard:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:aiguard:ci
+      - run: npm run test:aiguard:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:aiguard:ci
+      - run: npm run test:aiguard:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:aiguard:ci
+      - run: npm run test:aiguard:ci
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-ubuntu
@@ -73,7 +73,9 @@ jobs:
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
-      - run: yarn test:aiguard:ci
+        with:
+          cache: "true"
+      - run: npm run test:aiguard:ci
       - uses: ./.github/actions/node-crash-report
         if: failure()
       - uses: ./.github/actions/coverage
@@ -102,7 +104,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:aiguard:coverage
+      - run: npm run test:integration:aiguard:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-integration-${{ matrix.version }}

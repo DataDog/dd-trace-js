@@ -12,7 +12,7 @@ runs:
       id: dd-sts
     - uses: ./.github/actions/node/newest-maintenance-lts
     - uses: ./.github/actions/install
-    - run: yarn test:integration:plugins:coverage
+    - run: npm run test:integration:plugins:coverage
       shell: bash
     - uses: ./.github/actions/coverage
       with:

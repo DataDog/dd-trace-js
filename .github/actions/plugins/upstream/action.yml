@@ -15,10 +15,10 @@ runs:
     - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
       uses: ./.github/actions/node/newest-maintenance-lts
     - uses: ./.github/actions/install
-    - run: yarn test:plugins:upstream
+    - run: npm run test:plugins:upstream
       shell: bash
     - uses: ./.github/actions/node/latest
-    - run: yarn test:plugins:upstream
+    - run: npm run test:plugins:upstream
       shell: bash
     # `test:plugins:upstream` runs each plugin's upstream test suite (e.g., axios's own tests)
     # against the unit-test harness, which intentionally does not produce NYC coverage for

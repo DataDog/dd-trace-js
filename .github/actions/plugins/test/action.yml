@@ -15,10 +15,10 @@ runs:
     - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
       uses: ./.github/actions/node/newest-maintenance-lts
     - uses: ./.github/actions/install
-    - run: yarn test:plugins:ci
+    - run: npm run test:plugins:ci
       shell: bash
     - uses: ./.github/actions/node/latest
-    - run: yarn test:plugins:ci
+    - run: npm run test:plugins:ci
       shell: bash
     - uses: ./.github/actions/coverage
       with:

@@ -254,7 +254,7 @@ function isPlainObject (v) {
 }
 
 /**
- * Parse `NAME=value` assignments in front of a command (e.g. `PLUGINS=foo SERVICES=bar yarn ...`).
+ * Parse `NAME=value` assignments in front of a command (e.g. `PLUGINS=foo SERVICES=bar npm run ...`).
  * @param {string} prefix
  * @returns {Record<string, string>}
  */
@@ -276,7 +276,7 @@ function parseInlineAssignments (prefix) {
 /**
  * Find `**` occurrences in a script string that are NOT inside quotes.
  *
- * POSIX sh (which is what `npm run`/`yarn run` invokes) does NOT support globstar, so an
+ * POSIX sh (which is what `npm run` invokes) does NOT support globstar, so an
  * unquoted `**` collapses to `*` (single directory level). For recursive glob matching to
  * reach mocha/glob intact, the pattern must be quoted so the shell passes it through as a
  * literal string. This analyzer cannot rely on `globSync` alone for the check because it
@@ -399,46 +399,21 @@ function expandScriptGlobs (repoRoot, scripts, env = {}) {
 }
 
 /**
- * Find `yarn run <script>` / `npm run <script>` and `yarn <script>` (only when it looks like a script)
- * in a `run:` block.
+ * Find `npm run <script>` invocations in a `run:` block.
  * @param {string} run
- * @param {Set<string>} knownScripts
- * @returns {{ tool: 'yarn'|'npm', script: string, explicit: boolean }[]}
+ * @returns {{ script: string }[]}
  */
-function extractScriptInvocations (run, knownScripts) {
-  /** @type {{ tool: 'yarn'|'npm', script: string, explicit: boolean }[]} */
+function extractScriptInvocations (run) {
+  /** @type {{ script: string }[]} */
   const out = []
 
   const tokens = shellSplit(String(run))
   for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i]
+    if (tokens[i] !== 'npm' || tokens[i + 1] !== 'run') continue
 
-    if (t === 'yarn') {
-      let j = i + 1
-      const isExplicitRun = tokens[j] === 'run'
-      if (isExplicitRun) j++
-      const script = tokens[j]
-      if (!script || !/^[A-Za-z0-9:_-]+$/.test(script)) continue
-
-      // `yarn run <name>` is unambiguously a package script.
-      if (isExplicitRun) {
-        out.push({ tool: 'yarn', script, explicit: true })
-        continue
-      }
-
-      // `yarn <name>` is ambiguous (could be built-in like `yarn config`).
-      // Only treat it as a script when it is known (or looks like a script name by convention).
-      if (knownScripts.has(script) || script.includes(':')) {
-        out.push({ tool: 'yarn', script, explicit: false })
-      }
-      continue
-    }
-
-    if (t === 'npm' && tokens[i + 1] === 'run') {
-      const script = tokens[i + 2]
-      if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
-        out.push({ tool: 'npm', script, explicit: true })
-      }
+    const script = tokens[i + 2]
+    if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
+      out.push({ script })
     }
   }
 
@@ -446,15 +421,14 @@ function extractScriptInvocations (run, knownScripts) {
 }
 
 /**
- * Expand a script and any nested `npm run`/`yarn <script>` calls into matched files.
+ * Expand a script and any nested `npm run` calls into matched files.
  * @param {string} repoRoot
  * @param {Record<string, string>} scripts
- * @param {Set<string>} knownScripts
  * @param {string} scriptName
  * @param {Record<string, string|undefined>} env
  * @returns {{ files: Set<string>, globs: string[], visited: string[] }}
  */
-function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) {
+function expandInvokedScript (repoRoot, scripts, scriptName, env) {
   /** @type {string[]} */
   const visited = []
   /** @type {string[]} */
@@ -492,7 +466,7 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
     }
 
     // Follow nested script invocations.
-    const nested = extractScriptInvocations(cmd, knownScripts)
+    const nested = extractScriptInvocations(cmd)
     for (const n of nested) queue.push(n.script)
   }
 
@@ -616,14 +590,9 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
       const exports = parseExportAssignments(s.run)
       for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
 
-      const idxYarn = s.run.indexOf('yarn ')
       const idxNpm = s.run.indexOf('npm ')
-      let idx = idxNpm
-      if (idxYarn !== -1) {
-        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
-      }
-      if (idx > 0) {
-        const prefix = s.run.slice(0, idx)
+      if (idxNpm > 0) {
+        const prefix = s.run.slice(0, idxNpm)
         const assigns = parseInlineAssignments(prefix)
         for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
       }
@@ -733,15 +702,13 @@ function collectWorkflowRuns (repoRoot) {
 
             const stepEnv = { ...env }
 
-            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
+            // Inline env in `run:` (export lines and prefix assignments before npm).
             const exports = parseExportAssignments(run)
             for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
 
-            const idxYarn = run.indexOf('yarn ')
             const idxNpm = run.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const prefix = run.slice(0, idx)
+            if (idxNpm > 0) {
+              const prefix = run.slice(0, idxNpm)
               const assigns = parseInlineAssignments(prefix)
               for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
             }
@@ -1007,7 +974,6 @@ function main () {
   /** @type {{ scripts?: Record<string, string> }} */
   const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
   const scripts = pkg.scripts || {}
-  const knownScripts = new Set(Object.keys(scripts))
   const scriptPrefixes = buildScriptPrefixSet(scripts)
 
   // Detect `**` globs in scripts that are not wrapped in quotes. POSIX sh drops globstar, so
@@ -1059,7 +1025,7 @@ function main () {
   /** @type {{ workflowFile: string, jobId: string, script: string, env: Record<string, string|undefined> }[]} */
   const invoked = []
   for (const r of workflowRuns) {
-    for (const inv of extractScriptInvocations(r.run, knownScripts)) {
+    for (const inv of extractScriptInvocations(r.run)) {
       invoked.push({ workflowFile: r.workflowFile, jobId: r.jobId, script: inv.script, env: r.env })
     }
   }
@@ -1145,7 +1111,7 @@ function main () {
     // Only use literal PLUGINS for matching; expressions are unknown.
     if (env.PLUGINS && env.PLUGINS.includes(ghaExprStart)) env.PLUGINS = undefined
 
-    const { files, globs: invokedGlobs } = expandInvokedScript(repoRoot, scripts, knownScripts, i.script, env)
+    const { files, globs: invokedGlobs } = expandInvokedScript(repoRoot, scripts, i.script, env)
 
     // Only enforce "matches test files" when the (expanded) script actually contains globs.
     // Some scripts (e.g. `test:plugins:upstream`) run a suite runner and do not directly
