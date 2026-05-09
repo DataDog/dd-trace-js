@@ -35,11 +35,11 @@ jobs:
             .github
             package.json
             scripts
-            yarn.lock
+            bun.lock
       - uses: ./.github/actions/node
         with:
           version: active
-      - run: yarn install --frozen-lockfile --ignore-scripts
+      - run: bun install --frozen-lockfile --ignore-scripts
       - run: node scripts/flakiness.mjs
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
       - id: slack
