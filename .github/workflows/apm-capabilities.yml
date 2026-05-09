@@ -32,7 +32,7 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-macos
@@ -58,7 +58,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-ubuntu-${{ matrix.node-version }}
@@ -82,7 +82,7 @@ jobs:
       - uses: ./.github/actions/install
         with:
           cache: "true"
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/node-crash-report
         if: failure()
       - uses: ./.github/actions/coverage
