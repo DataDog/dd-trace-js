@@ -423,7 +423,6 @@ jobs:
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
-      - run: yarn config set ignore-engines true
       - run: npm run test:integration:cypress:coverage
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
