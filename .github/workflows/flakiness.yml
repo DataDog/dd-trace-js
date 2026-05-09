@@ -41,11 +41,11 @@ jobs:
             .github
             package.json
             scripts
-            yarn.lock
+            bun.lock
       - uses: ./.github/actions/node
         with:
           version: active
-      - run: yarn install --frozen-lockfile --ignore-scripts
+      - run: bun install --frozen-lockfile --ignore-scripts
       - id: flakiness
         continue-on-error: true
         run: node scripts/flakiness.mjs

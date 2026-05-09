@@ -161,7 +161,7 @@ jobs:
         run: |
           content=$(tr '\n' ' ' < ./package.json)
           echo "json=$content" >> "$GITHUB_OUTPUT"
-      - run: yarn
+      - run: bun install
       - name: Build
         working-directory: docs
         run: |

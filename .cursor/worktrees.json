@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "postCreate": "yarn install"
+    "postCreate": "bun install"
   }
 }
