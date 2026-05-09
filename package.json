@@ -11,7 +11,6 @@
     "prepack": "node scripts/release/swap-v5-types.js",
     "bench": "node benchmark/index.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
-    "dependencies:dedupe": "yarn-deduplicate yarn.lock",
     "generate:config:types": "node scripts/generate-config-types.js",
     "verify:config:types": "node scripts/generate-config-types.js --check",
     "generate:supported-integrations": "node scripts/generate-supported-integrations.js",
@@ -230,7 +229,6 @@
     "tiktoken": "^1.0.21",
     "typescript": "^6.0.3",
     "workerpool": "^10.0.2",
-    "yaml": "^2.9.0",
-    "yarn-deduplicate": "^6.0.2"
+    "yaml": "^2.9.0"
   }
 }

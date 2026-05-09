@@ -6,7 +6,7 @@ runs:
     - id: install-cache
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: yarn-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('bun.lock') }}-v2
+        key: install-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('bun.lock') }}-v2
         path: node_modules.tar
       if: inputs.cache == 'true'
     - run: tar -xf node_modules.tar

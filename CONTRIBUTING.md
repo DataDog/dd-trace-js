@@ -110,16 +110,18 @@ such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
 unsure which version of Node.js to use, just use the latest version, which
 should always work.
 
-We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easiest way to install yarn 1.x with with npm:
+We use [bun](https://bun.com/) (~1.3.13, matching `engines.bun` in `package.json`) for installing
+dependencies and the per-plugin sandbox installs. Run-scripts (`test:*`, `lint`, …) go through
+`npm`. The easiest way to install bun:
 
 ```sh
-$ npm install -g yarn
+$ npm install -g bun
 ```
 
-To install dependencies once you have Node and yarn installed, run this in the project directory:
+To install dependencies once you have Node and bun installed, run this in the project directory:
 
 ```sh
-$ yarn
+$ bun install
 ```
 
 ## Coding Standards
@@ -237,7 +239,7 @@ To enable debug logging when running tests or applications:
 DD_TRACE_DEBUG=true node your-app.js
 
 # Run a specific test suite with debug logging
-DD_TRACE_DEBUG=true yarn test:debugger
+DD_TRACE_DEBUG=true npm run test:debugger
 ```
 
 ### JSDoc
@@ -292,8 +294,8 @@ When developing, it's often faster to run individual test files rather than enti
 To target specific tests, use the `--grep` flag with mocha to match test names:
 
 ```sh
-yarn test:debugger --grep "test name pattern"
-yarn test:appsec --grep "specific test"
+npm run test:debugger -- --grep "test name pattern"
+npm run test:appsec -- --grep "specific test"
 ```
 
 **This project uses mocha for testing.**
@@ -364,10 +366,10 @@ Coverage is measured with nyc. To check coverage for your changes, use the `:ci`
 
 ```sh
 # Run tests with coverage for specific components
-yarn test:debugger:ci
-yarn test:appsec:ci
-yarn test:llmobs:sdk:ci
-yarn test:lambda:ci
+npm run test:debugger:ci
+npm run test:appsec:ci
+npm run test:llmobs:sdk:ci
+npm run test:lambda:ci
 ```
 
 **Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards nyc's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
@@ -385,8 +387,8 @@ Instead, you can follow this procedure for the plugin you want to run tests for:
 
 1. Check the CI config in `.github/workflows/*.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
 2. Run the appropriate docker-compose command to start the required services. For example, for the `amqplib` plugin, you would run: `docker compose up -d rabbitmq`.
-3. Run `yarn services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
-4. Now, you can run `yarn test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
+3. Run `npm run services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
+4. Now, you can run `npm run test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
 
 To wrap that all up into a simple few lines of shell commands, here is all of the above, for the `amqplib` plugin:
 
@@ -396,15 +398,15 @@ export SERVICES="rabbitmq" # retrieved from .github/workflows/apm-integrations.y
 export PLUGINS="amqplib" # retrieved from .github/workflows/apm-integrations.yml
 
 docker compose up -d $SERVICES
-yarn services
+npm run services
 
-yarn test:plugins # This one actually runs the tests. Can be run many times.
+npm run test:plugins # This one actually runs the tests. Can be run many times.
 ```
 
-You can also run the tests for multiple plugins at once by separating them with a pipe (`|`) delimiter. For example, to run the tests for the `amqplib` and `bluebird` plugins:
+You can also run the tests for multiple plugins at once by separating them with a pipe (`|`) delimiter. For example, to run the tests for the `amqplib` and `pino` plugins:
 
 ```sh
-PLUGINS="amqplib|bluebird" yarn test:plugins
+PLUGINS="amqplib|pino" npm run test:plugins
 ```
 
 ### Other Unit Tests
@@ -414,11 +416,11 @@ following commands may be useful:
 
 ```sh
 # Tracer core tests (i.e. testing `packages/dd-trace`)
-$ yarn test:trace:core
+$ npm run test:trace:core
 # "Core" library tests (i.e. testing `packages/datadog-core`
-$ yarn test:core
+$ npm run test:core
 # Instrumentations tests (i.e. testing `packages/datadog-instrumentations`
-$ yarn test:instrumentations
+$ npm run test:instrumentations
 ```
 
 Several other components have test commands as well. See `package.json` for
@@ -427,9 +429,9 @@ details.
 ### Integration Tests
 
 When running integration tests, some packages are installed from npm into temporary sandboxes.
-If running locally without an internet connection,
-it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
-which will use the local yarn cache instead of fetching packages from npm.
+If running locally without an internet connection, set `OFFLINE=true` to make the sandbox install
+pass `--prefer-offline` to `bun add`, which serves matching versions from bun's local cache instead
+of fetching from npm.
 
 ### Adding a Plugin Test to CI
 
@@ -445,7 +447,7 @@ conforms to our coding standards.
 To run the linter, use:
 
 ```sh
-$ yarn lint
+$ npm run lint
 ```
 
 This also checks that the `LICENSE-3rdparty.csv` file is up-to-date, and checks
@@ -462,7 +464,7 @@ a benchmark in the `benchmark/index.js` module so that we can keep track of the
 most efficient algorithm. To run your benchmark, use:
 
 ```sh
-$ yarn bench
+$ npm run bench
 ```
 
 [1]: https://docs.datadoghq.com/help

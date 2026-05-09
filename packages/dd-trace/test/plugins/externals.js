@@ -433,12 +433,6 @@ module.exports = {
       versions: ['>=1.27.1'],
     },
   ],
-  moleculer: [
-    {
-      name: 'bluebird',
-      versions: ['3.7.2'],
-    },
-  ],
   'mongodb-core': [
     {
       name: 'bson',

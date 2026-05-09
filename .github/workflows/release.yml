@@ -114,11 +114,11 @@ jobs:
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "json=$content" >> $GITHUB_OUTPUT
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Build
         working-directory: docs
         run: |
-          bun install
+          bun install --frozen-lockfile
           bun run build
           mv out /tmp/out
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
