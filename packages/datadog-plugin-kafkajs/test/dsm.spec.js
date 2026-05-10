@@ -37,7 +37,7 @@ describe('Plugin', () => {
     this.timeout(10000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('kafkajs', 'kafkajs', (version) => {
@@ -63,8 +63,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../dd-trace')
-          await agent.load('kafkajs')
+          tracer = await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
           kafka = new Kafka({

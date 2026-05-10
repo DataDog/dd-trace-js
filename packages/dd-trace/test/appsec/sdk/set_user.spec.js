@@ -9,7 +9,6 @@ const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
@@ -107,6 +106,7 @@ describe('set_user', () => {
     let controller
     let appListener
     let port
+    let tracer
 
     function listener (req, res) {
       if (controller) {
@@ -115,7 +115,7 @@ describe('set_user', () => {
     }
 
     before(async () => {
-      await agent.load('http')
+      tracer = await agent.load('http')
       http = require('http')
     })
 
@@ -134,7 +134,7 @@ describe('set_user', () => {
       appsec.disable()
 
       appListener.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     describe('setUser', () => {

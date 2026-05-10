@@ -147,7 +147,7 @@ describe('Hardcoded Password Analyzer', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should detect vulnerability', (done) => {

@@ -20,7 +20,7 @@ const cipherCh = channel('datadog:crypto:cipher:start')
     let crypto, start, finish, error, hashing, cipher
 
     before(() => agent.load('crypto'))
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     beforeEach(() => {
       start = sinon.stub()

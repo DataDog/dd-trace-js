@@ -17,7 +17,7 @@ withVersions('stripe', 'stripe', version => {
       Stripe = require(`../../../versions/stripe@${version}`).get()
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     describe('client construction', () => {
       it('returns a fully-formed Stripe instance with `new`', () => {

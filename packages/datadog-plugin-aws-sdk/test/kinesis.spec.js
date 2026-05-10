@@ -173,7 +173,6 @@ describe('Kinesis', function () {
         before(() => {
           savedKinesisEnv = process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
           process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
-          agent.wipe()
         })
 
         after(() => {
@@ -182,7 +181,6 @@ describe('Kinesis', function () {
           } else {
             process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = savedKinesisEnv
           }
-          agent.wipe()
         })
 
         it('skip injects trace context to Kinesis putRecord when disabled', done => {

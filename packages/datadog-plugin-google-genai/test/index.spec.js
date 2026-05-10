@@ -20,7 +20,7 @@ describe('Plugin', () => {
     })
 
     after(async () => {
-      await agent.close({ ritmReset: false })
+      await agent.close()
     })
 
     describe('models.generateContent', () => {

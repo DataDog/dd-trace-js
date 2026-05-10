@@ -21,7 +21,7 @@ describe('Plugin', () => {
       client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     describe('messages.create', () => {
       it('creates a span', async () => {

@@ -1658,7 +1658,7 @@ describe('IP blocking', function () {
 
   after(() => {
     appListener && appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('do not block the request', () => {

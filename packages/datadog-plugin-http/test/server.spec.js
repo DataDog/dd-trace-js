@@ -38,7 +38,7 @@ describe('Plugin', () => {
         app = null
         clearTimeout(timeout)
         timeout = null
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('canceled request', () => {

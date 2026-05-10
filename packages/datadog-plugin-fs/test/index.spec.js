@@ -22,7 +22,7 @@ describe('Plugin', () => {
     let fs
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
@@ -75,7 +75,7 @@ describe('Plugin', () => {
     let tmpdir
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')

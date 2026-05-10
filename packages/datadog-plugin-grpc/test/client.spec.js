@@ -103,7 +103,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             withPeerService(
@@ -562,7 +562,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should be configured with the correct values', async () => {
@@ -594,7 +594,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should handle request metadata', async () => {
@@ -650,7 +650,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should handle request metadata', async () => {

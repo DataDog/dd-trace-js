@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 
 const axios = require('axios')
 const agent = require('../plugins/agent')
-const tracer = require('../../../../index')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 
@@ -14,6 +13,7 @@ describe('Attacker fingerprinting', () => {
     let controller
     let appListener
     let port
+    let tracer
 
     function listener (req, res) {
       if (controller) {
@@ -28,7 +28,7 @@ describe('Attacker fingerprinting', () => {
     })
 
     before(async () => {
-      await agent.load('http')
+      tracer = await agent.load('http')
       http = require('http')
     })
 
@@ -44,7 +44,7 @@ describe('Attacker fingerprinting', () => {
     after(() => {
       appListener.close()
       appsec.disable()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should provide fingerprinting on successful user login track', (done) => {

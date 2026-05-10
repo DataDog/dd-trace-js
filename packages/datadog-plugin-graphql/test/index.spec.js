@@ -275,7 +275,7 @@ describe('Plugin', () => {
 
           after(() => {
             server.close()
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should instrument graphql-yoga execution', done => {
@@ -320,7 +320,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withNamingSchema(
@@ -1418,7 +1418,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1481,7 +1481,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1519,7 +1519,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1589,7 +1589,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1641,7 +1641,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1732,7 +1732,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1788,7 +1788,7 @@ describe('Plugin', () => {
           key => config.hooks[key].resetHistory()
         ))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should run the execute hook before graphql.execute span is finished', done => {
           const document = graphql.parse(source)
@@ -1932,7 +1932,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should support apollo-server schema stitching', done => {
