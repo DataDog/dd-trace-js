@@ -2,6 +2,7 @@
 
 const { execFileSync } = require('child_process')
 const { createHash } = require('crypto')
+const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
@@ -65,12 +66,39 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
+  invalidateCacheOnNodeAbiChange()
   await assertPrerequisites()
   install()
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
   // The second install only does something when peer-dependency patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
   if (changed) install()
+}
+
+/**
+ * Bun's isolated linker keeps a single shared copy of every package under
+ * `versions/node_modules/.bun/<name>@<ver>/`, so a native binding compiled
+ * during the first `npm run services` (under one Node major) is reused
+ * verbatim on the second invocation (under a different Node major) and
+ * crashes with `undefined symbol` at load time. Per-workspace yarn 1
+ * rebuilt the binding on every install pass and never hit this. Wipe the
+ * central store when the Node ABI changes so the next `bun install --trust`
+ * reruns lifecycle scripts and rebuilds against the live runtime.
+ */
+function invalidateCacheOnNodeAbiChange () {
+  const versionsDir = join(__dirname, '..', 'versions')
+  const nodeAbiFile = join(versionsDir, '.node-abi')
+  const currentAbi = process.versions.modules
+  let recordedAbi = ''
+  try {
+    recordedAbi = readFileSync(nodeAbiFile, 'utf8').trim()
+  } catch {}
+  if (recordedAbi && recordedAbi !== currentAbi && existsSync(join(versionsDir, 'node_modules'))) {
+    rmSync(join(versionsDir, 'node_modules'), { recursive: true, force: true })
+    rmSync(join(versionsDir, 'bun.lock'), { force: true })
+  }
+  mkdirSync(versionsDir, { recursive: true })
+  writeFileSync(nodeAbiFile, currentAbi)
 }
 
 async function assertPrerequisites () {
