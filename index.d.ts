@@ -2854,6 +2854,16 @@ declare namespace tracer {
       heartbeatEnabled?: boolean;
 
       /**
+       * Whether to replace primitive query values with `?` in the `mongodb.query`
+       * tag and the resource name (when `queryInResourceName` is also enabled).
+       * Keys and operator names are preserved so the redacted query is still a
+       * usable query signature.
+       *
+       * @default false
+       */
+      obfuscateQuery?: boolean;
+
+      /**
        * Whether to include the query contents in the resource name.
        */
       queryInResourceName?: boolean;

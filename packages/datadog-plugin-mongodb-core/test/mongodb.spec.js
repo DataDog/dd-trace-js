@@ -567,6 +567,46 @@ describe('Plugin', () => {
         )
       })
 
+      describe('with obfuscateQuery enabled', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: true,
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should redact scalar values in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"?","age":"?"}`,
+            meta: {
+              'mongodb.query': '{"user":"?","age":"?"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while redacting their values', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"?","$lte":"?"}}',
+            },
+          })
+        })
+      })
+
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', {

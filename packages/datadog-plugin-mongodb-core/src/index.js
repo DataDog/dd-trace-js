@@ -20,6 +20,9 @@ class MongodbCorePlugin extends DatabasePlugin {
 
     this.config.heartbeatEnabled = config.heartbeatEnabled ??
       this._tracerConfig.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+    this.config.obfuscateQuery = config.obfuscateQuery ??
+      this._tracerConfig.DD_TRACE_MONGODB_OBFUSCATE_QUERY ??
+      false
   }
 
   bindStart (ctx) {
@@ -28,7 +31,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
     }
-    const query = getQuery(ops)
+    const query = getQuery(ops, this.config.obfuscateQuery)
     const resource = truncate(getResource(this, ns, query, name))
     const serviceResult = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -106,15 +109,19 @@ function extractQuery (statements) {
   return extractedQueries
 }
 
-function getQuery (cmd) {
+/**
+ * @param {Record<string, unknown> | unknown[] | undefined} cmd
+ * @param {boolean} obfuscate
+ */
+function getQuery (cmd, obfuscate) {
   if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
 
-  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd))
-  if (cmd.query) return sanitiseAndStringify(cmd.query)
-  if (cmd.filter) return sanitiseAndStringify(cmd.filter)
-  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline)
-  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes))
-  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates))
+  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd), obfuscate)
+  if (cmd.query) return sanitiseAndStringify(cmd.query, obfuscate)
+  if (cmd.filter) return sanitiseAndStringify(cmd.filter, obfuscate)
+  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline, obfuscate)
+  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes), obfuscate)
+  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates), obfuscate)
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -138,12 +145,18 @@ function truncate (input) {
 // - lets JSON.stringify call toJSON on other BSON types (ObjectId, Long, Decimal128, Date, Timestamp, ...)
 //   so the result lands here as a primitive or plain object,
 // - returns '?' for BSON types without toJSON (MinKey, MaxKey) where `value === original`,
-// - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to '?'.
-function sanitiseAndStringify (input) {
+// - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to '?',
+// - when `obfuscate` is true, replaces every primitive leaf (including null) with '?' while
+//   preserving keys and structure so the resulting JSON is still a usable query signature.
+/**
+ * @param {Record<string, unknown> | unknown[]} input
+ * @param {boolean} obfuscate
+ */
+function sanitiseAndStringify (input, obfuscate) {
   const ancestors = []
   return JSON.stringify(input, function (key, value) {
     if (typeof value === 'function') return
-    if (typeof value === 'bigint') return value.toString()
+    if (typeof value === 'bigint') return obfuscate ? '?' : value.toString()
 
     const original = key === '' ? value : this[key]
     if (typeof original === 'object' && original !== null) {
@@ -154,7 +167,7 @@ function sanitiseAndStringify (input) {
       }
     }
 
-    if (value === null || typeof value !== 'object') return value
+    if (value === null || typeof value !== 'object') return obfuscate && key !== '' ? '?' : value
 
     while (ancestors.length > 0 && ancestors.at(-1) !== this) ancestors.pop()
     if (ancestors.length >= MAX_DEPTH || ancestors.includes(value)) return '?'
