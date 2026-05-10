@@ -70,10 +70,11 @@ async function run () {
  * `versions/node_modules/.bun/<name>@<ver>/`, so a native binding compiled
  * during the first `npm run services` (under one Node major) is reused
  * verbatim on the second invocation (under a different Node major) and
- * crashes with `undefined symbol` at load time. Per-workspace yarn 1
- * rebuilt the binding on every install pass and never hit this. Wipe the
- * central store when the Node ABI changes so the next `bun install --trust`
- * reruns lifecycle scripts and rebuilds against the live runtime.
+ * crashes with `undefined symbol` at load time. Per-workspace nested
+ * `node_modules` (the layout the previous package manager used) rebuilt the
+ * binding on every install pass and never hit this. Wipe the central store
+ * when the Node ABI changes so the next `bun install --trust` reruns
+ * lifecycle scripts and rebuilds against the live runtime.
  */
 function invalidateCacheOnNodeAbiChange () {
   const versionsDir = join(__dirname, '..', 'versions')
