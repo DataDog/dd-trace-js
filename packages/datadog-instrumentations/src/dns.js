@@ -3,6 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 const { createCallbackInstrumentor } = require('./helpers/callback-instrumentor')
+const { createPromiseInstrumentor } = require('./helpers/promise-instrumentor')
 
 const rrtypes = {
   resolveAny: 'ANY',
@@ -19,29 +20,39 @@ const rrtypes = {
 }
 
 addHook({ name: 'dns' }, dns => {
-  const lookup = createCallbackInstrumentor('apm:dns:lookup', { captureResult: true })
-  const lookupService = createCallbackInstrumentor('apm:dns:lookup_service', { captureResult: true })
-  const resolve = createCallbackInstrumentor('apm:dns:resolve', { captureResult: true })
-  const reverse = createCallbackInstrumentor('apm:dns:reverse', { captureResult: true })
+  patchApi(dns, createCallbackInstrumentor, buildCallbackArgsContext)
 
-  shimmer.wrap(dns, 'lookup', lookup(buildArgsContext()))
-  shimmer.wrap(dns, 'lookupService', lookupService(buildArgsContext()))
-  shimmer.wrap(dns, 'resolve', resolve(buildArgsContext()))
-  shimmer.wrap(dns, 'reverse', reverse(buildArgsContext()))
-
-  patchResolveShorthands(dns, resolve)
-
-  if (dns.Resolver) {
-    shimmer.wrap(dns.Resolver.prototype, 'resolve', resolve(buildArgsContext()))
-    shimmer.wrap(dns.Resolver.prototype, 'reverse', reverse(buildArgsContext()))
-
-    patchResolveShorthands(dns.Resolver.prototype, resolve)
+  // `dns.promises` (and `require('dns/promises')`) returns the same object; wrapping it from
+  // here covers both access patterns when the user has required `dns` somewhere first.
+  if (dns.promises) {
+    patchApi(dns.promises, createPromiseInstrumentor, buildPromiseArgsContext)
   }
 
   return dns
 })
 
-function patchResolveShorthands (prototype, resolve) {
+function patchApi (api, instrumentorFactory, buildArgsContext) {
+  const lookup = instrumentorFactory('apm:dns:lookup', { captureResult: true })
+  const lookupService = instrumentorFactory('apm:dns:lookup_service', { captureResult: true })
+  const resolve = instrumentorFactory('apm:dns:resolve', { captureResult: true })
+  const reverse = instrumentorFactory('apm:dns:reverse', { captureResult: true })
+
+  shimmer.wrap(api, 'lookup', lookup(buildArgsContext()))
+  shimmer.wrap(api, 'lookupService', lookupService(buildArgsContext()))
+  shimmer.wrap(api, 'resolve', resolve(buildArgsContext()))
+  shimmer.wrap(api, 'reverse', reverse(buildArgsContext()))
+
+  patchResolveShorthands(api, resolve, buildArgsContext)
+
+  if (api.Resolver) {
+    shimmer.wrap(api.Resolver.prototype, 'resolve', resolve(buildArgsContext()))
+    shimmer.wrap(api.Resolver.prototype, 'reverse', reverse(buildArgsContext()))
+
+    patchResolveShorthands(api.Resolver.prototype, resolve, buildArgsContext)
+  }
+}
+
+function patchResolveShorthands (prototype, resolve, buildArgsContext) {
   for (const method of Object.keys(rrtypes)) {
     if (prototype[method]) {
       shimmer.wrap(prototype, method, resolve(buildArgsContext(rrtypes[method])))
@@ -49,11 +60,21 @@ function patchResolveShorthands (prototype, resolve) {
   }
 }
 
-function buildArgsContext (rrtype) {
+function buildCallbackArgsContext (rrtype) {
   return function (_, args) {
     if (args.length < 2) return
     const captured = [...args]
     captured.pop() // remove the callback
+    if (rrtype) {
+      captured.push(rrtype)
+    }
+    return { args: captured }
+  }
+}
+
+function buildPromiseArgsContext (rrtype) {
+  return function (_, args) {
+    const captured = [...args]
     if (rrtype) {
       captured.push(rrtype)
     }

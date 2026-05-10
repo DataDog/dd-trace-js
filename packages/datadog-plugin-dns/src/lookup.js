@@ -28,12 +28,14 @@ class DNSLookupPlugin extends ClientPlugin {
     const result = ctx.result
 
     if (Array.isArray(result)) {
-      const addresses = Array.isArray(result)
-        ? result.map(address => address.address).sort()
-        : [result]
-
+      // `lookup(..., { all: true })` or `dns.promises.lookup(..., { all: true })`.
+      const addresses = result.map(entry => entry.address).sort()
       span.setTag('dns.address', addresses[0])
       span.setTag('dns.addresses', addresses.join(','))
+    } else if (result && typeof result === 'object') {
+      // `dns.promises.lookup(...)` resolves to `{ address, family }`; the callback variant
+      // passes the address as a string.
+      span.setTag('dns.address', result.address)
     } else {
       span.setTag('dns.address', result)
     }
