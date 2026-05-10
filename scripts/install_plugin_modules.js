@@ -378,8 +378,19 @@ async function assertWorkspaces () {
       //   `require('collections/shim')`; `shim.js` ships only in
       //   `collections@>=5`, so without this override `q@2`'s spec crashes
       //   with `Cannot find module 'collections/shim'`.
+      // - `@langchain/openai@0.0.34`'s manifest declares
+      //   `@langchain/core: >0.1.56 <0.3.0`. The recorded openai cassettes
+      //   (and the langchain regression specs that send a JSON-message input)
+      //   only succeed when bun lands a `0.2.x` core, which is the highest
+      //   version in that range. Bun's linker picks the lowest satisfying
+      //   version under some conditions (it lands `0.1.63` on the github
+      //   runner image but `0.2.36` on macOS), so pin the floor explicitly
+      //   for the langchain-openai pair without affecting the
+      //   `@langchain/openai@1.x.x` peer constraint resolved elsewhere in
+      //   the workspace.
       overrides: {
         collections: '^5.0.0',
+        '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
       },
       trustedDependencies: [...trustedDependencies].sort(),
     }, null, 2) + '\n'),
