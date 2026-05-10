@@ -355,6 +355,7 @@
 /.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs
+/.github/workflows/install-smoke.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
