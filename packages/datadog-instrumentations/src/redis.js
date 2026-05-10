@@ -140,7 +140,6 @@ function getStartCtx (client, command, args) {
   const { url, connectionName } = instanceInfo.get(client) || {}
 
   return {
-    db: client.selected_db,
     command,
     args,
     connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url,
