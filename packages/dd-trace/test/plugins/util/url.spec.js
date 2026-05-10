@@ -138,6 +138,36 @@ describe('plugins/util/url', () => {
     })
   })
 
+  describe('getQsObfuscator', () => {
+    it('should pass booleans through unchanged', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: true }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: false }), false)
+    })
+
+    it('should map an empty string to false (disabled)', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '' }), false)
+    })
+
+    it('should map ".*" to true (strip everything)', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '.*' }), true)
+    })
+
+    it('should compile a valid regex string into a global, case-insensitive RegExp', () => {
+      const result = url.getQsObfuscator({ queryStringObfuscation: 'secret=.*?(&|$)' })
+      assert.ok(result instanceof RegExp)
+      assert.strictEqual(result.source, 'secret=.*?(&|$)')
+      assert.strictEqual(result.flags, 'gi')
+    })
+
+    it('should fall back to true on an invalid regex string', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '(?' }), true)
+    })
+
+    it('should default to true when the option is absent', () => {
+      assert.strictEqual(url.getQsObfuscator({}), true)
+    })
+  })
+
   describe('extractPathFromUrl', () => {
     it('should return / for empty or missing url', () => {
       assert.strictEqual(url.extractPathFromUrl(''), '/')
