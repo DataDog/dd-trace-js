@@ -1,5 +1,7 @@
 'use strict'
 
+const { errorMonitor } = require('node:events')
+
 const shimmer = require('../../../datadog-shimmer')
 const { addHook, channel } = require('../helpers/instrument')
 
@@ -13,6 +15,19 @@ const errorChannel = channel('apm:http2:client:request:error')
 function createWrapEmit (ctx) {
   return function wrapEmit (emit) {
     return function (event, arg1) {
+      switch (event) {
+        case 'response':
+          this.emit = emit
+          setupTerminalListeners(this, ctx)
+          break
+        case 'error':
+        case 'close':
+          this.emit = emit
+          break
+        default:
+          return emit.apply(this, arguments)
+      }
+
       ctx.eventName = event
       ctx.eventData = arg1
 
@@ -25,6 +40,21 @@ function createWrapEmit (ctx) {
       })
     }
   }
+}
+
+function setupTerminalListeners (req, ctx) {
+  req.once('close', () => {
+    ctx.eventName = 'close'
+    ctx.eventData = undefined
+    asyncStartChannel.runStores(ctx, () => {})
+    asyncEndChannel.publish(ctx)
+  })
+  req.once(errorMonitor, (error) => {
+    ctx.eventName = 'error'
+    ctx.eventData = error
+    asyncStartChannel.runStores(ctx, () => {})
+    asyncEndChannel.publish(ctx)
+  })
 }
 
 function createWrapRequest (authority, options) {

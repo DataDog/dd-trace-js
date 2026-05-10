@@ -555,6 +555,37 @@ describe('Plugin', () => {
           req.end()
         })
 
+        it('should tag the span when the stream errors after the response', done => {
+          let error
+          const app = (stream) => {
+            stream.on('error', () => {})
+            stream.respond({ ':status': 200 })
+          }
+
+          appListener = server(app, port => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].error, 1)
+                assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+                assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              })
+              .then(done)
+              .catch(done)
+
+            const client = http2
+              .connect(`${protocol}://localhost:${port}`)
+              .on('error', () => {})
+
+            const req = client.request({ ':path': '/' })
+              .on('response', () => {
+                req.destroy(new Error('post-response failure'))
+              })
+              .on('error', (err) => { error = err })
+
+            req.end()
+          })
+        })
+
         it('should not record HTTP 5XX responses as errors by default', done => {
           const app = (stream, headers) => {
             stream.respond({
