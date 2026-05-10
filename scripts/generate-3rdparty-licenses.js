@@ -377,17 +377,37 @@ function normalizeRepoUrl (url) {
  */
 function extractCopyright (data) {
   const out = []
-  const author = data.author
-  if (typeof author === 'string' && author.length > 0) out.push(author.replace(/\s*<[^>]+>\s*/, '').trim())
-  else if (author && typeof author === 'object' && typeof author.name === 'string') out.push(author.name)
-
+  const author = extractName(data.author)
+  if (author) out.push(author)
   for (const contributor of data.contributors ?? []) {
-    if (typeof contributor === 'string') out.push(contributor.replace(/\s*<[^>]+>\s*/, '').trim())
-    else if (contributor && typeof contributor === 'object' && typeof contributor.name === 'string') {
-      out.push(contributor.name)
-    }
+    const name = extractName(contributor)
+    if (name) out.push(name)
   }
   return out
+}
+
+/**
+ * npm's `author` / `contributors` entries are either strings shaped like
+ * `Name <email> (url)` or objects with `name` / `email` / `url` fields.
+ * Pull just the name out of either shape so the CSV `copyright` column
+ * matches what `dd-license-attribution` emitted (no email, no URL,
+ * trimmed). Slicing to the first `<` or `(` avoids the regex-on-untrusted-
+ * input pattern CodeQL flags.
+ *
+ * @param {string | { name?: string } | undefined} entry
+ * @returns {string}
+ */
+function extractName (entry) {
+  if (typeof entry === 'string') {
+    let cut = entry.length
+    for (const sep of ['<', '(']) {
+      const at = entry.indexOf(sep)
+      if (at !== -1 && at < cut) cut = at
+    }
+    return entry.slice(0, cut).trim()
+  }
+  if (entry && typeof entry === 'object' && typeof entry.name === 'string') return entry.name.trim()
+  return ''
 }
 
 /**
