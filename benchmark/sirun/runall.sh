@@ -30,11 +30,19 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
+# Install bun at the script level so subsequent `npm run services` /
+# `node ./scripts/install_plugin_modules.js` invocations from inside the
+# benchmark loop find it on `PATH` too. Doing the install inside a subshell
+# leaks the `export` and the benchmark process group loses access to bun
+# the moment the subshell exits.
+if ! command -v bun >/dev/null 2>&1; then
+  curl -fsSL https://bun.sh/install | bash || (sleep 60 && curl -fsSL https://bun.sh/install | bash)
+fi
+export PATH="$HOME/.bun/bin:$PATH"
+
 (
   cd ../../ &&
-  (curl -fsSL https://bun.sh/install | bash) || (sleep 60 && curl -fsSL https://bun.sh/install | bash) \
-    && export PATH="$HOME/.bun/bin:$PATH" \
-    && bun install || (sleep 60 && bun install) \
+  (bun install || (sleep 60 && bun install)) \
     && PLUGINS="bluebird|q|graphql|express" npm run services
 )
 
