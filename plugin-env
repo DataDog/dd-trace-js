@@ -27,9 +27,9 @@ if ! hash node 2>/dev/null; then
   exit 1
 fi
 
-if ! hash yarn 2>/dev/null; then
-  echo "yarn@1.x is not installed. Please install yarn@1.x before running this script."
-  echo "You can install yarn by running 'npm install -g yarn'."
+if ! hash bun 2>/dev/null; then
+  echo "bun is not installed. Please install bun before running this script."
+  echo "You can install bun by running 'curl -fsSL https://bun.sh/install | bash'."
   exit 1
 fi
 
@@ -63,7 +63,7 @@ else
   fi
 fi
 
-yarn services
+npm run services
 
 echo -e $YELLOW
 echo -e "You are now in a sub-shell (i.e. a dev environment) for the dd-trace plugin '$plugin_name'."
@@ -72,7 +72,7 @@ echo -e "\tPLUGINS=$PLUGINS"
 echo -e "\tSERVICES=$SERVICES"
 echo -e "${YELLOW}The ${RESET}versions${YELLOW} directory has been populated, and any ${RESET}\$SERVICES${YELLOW} have been brought up if not already running."
 echo -e "You can now run the plugin's tests with:"
-echo -e "\t${RESET}yarn test:plugins"
+echo -e "\t${RESET}npm run test:plugins"
 echo -e "${YELLOW}To exit this shell, type 'exit' or do Ctrl+D."
 echo -e $RESET
 

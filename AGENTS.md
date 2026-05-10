@@ -3,20 +3,17 @@
 ## Prerequisites
 
 - Node.js >= 18
-- yarn 1.x
+- bun ~1.3.13 (matches `engines.bun` in `package.json`)
 - Docker + docker-compose (for running service dependencies in tests)
 
 ## Setup
 
 **Package manager policy:**
 
-- Use **yarn only for installing dependencies and services**:
-  - `yarn add`
-  - `yarn install`
-  - `yarn services`
-- Use **npm for running scripts and other commands**: `npm run <script>`
-- In this repo, **everything else** (tests, lint, build, etc.) should use **npm**, not yarn.
-- `yarn services` is the only non-install yarn command: it sets up test service/plugin dependencies.
+- Use **bun for installing dependencies**: `bun install`, `bun add`. The per-plugin sandbox install
+  under `versions/` runs the same way (`--linker=isolated` is pinned in `versions/bunfig.toml`).
+- Use **npm for run-scripts**: `npm run <script>`. `npm run services` sets up the test
+  service/plugin dependency sandboxes.
 
 ## Project Overview
 
@@ -90,7 +87,7 @@ To run a single test file directly:
 ```bash
 export SERVICES="rabbitmq" PLUGINS="amqplib"
 docker compose up -d $SERVICES
-yarn services && npm run test:plugins
+npm run services && npm run test:plugins
 ```
 
 **ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
@@ -299,5 +296,6 @@ Example: `feat(appsec): add new WAF rule`
 
 ## Vendoring Dependencies
 
-Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
-(Some deps excluded, e.g., `@opentelemetry/api`)
+Using rspack: `vendor/` installs and bundles via `npm ci --include=dev` (driven by the root
+`prepare` script in `package.json`) and emits the bundle into `packages/node_modules/`.
+(Some deps are excluded, e.g., `@opentelemetry/api`.)

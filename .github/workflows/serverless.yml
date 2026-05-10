@@ -32,13 +32,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
@@ -115,7 +115,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -223,7 +223,7 @@ jobs:
           docker restart ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:integration:plugins:coverage
+      - run: npm run test:integration:plugins:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}

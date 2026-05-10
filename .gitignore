@@ -34,8 +34,6 @@ logs
 *.log
 node-*-junit.xml
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Runtime data
 pids
@@ -86,9 +84,6 @@ typings/
 # Output of 'npm pack'
 *.tgz
 
-# Yarn Integrity file
-.yarn-integrity
-
 # Output of tap
 .tap/*
 
@@ -110,11 +105,9 @@ node-*-junit.xml
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
-/versions
+/versions/*
 .bun
 .next
-bun.lock
-bun.lockb
 package-lock.json
 out
 build
