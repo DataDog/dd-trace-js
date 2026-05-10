@@ -368,6 +368,19 @@ async function assertWorkspaces () {
       dependencies: {
         '@langchain/openai': '0.0.34',
       },
+      // Workspace-wide overrides to repair packages whose published manifest
+      // declares a transitive that the package's own runtime code does not
+      // actually accept. The previous package manager's flat hoist masked
+      // this by always serving the highest workspace-installed version of
+      // the transitive; bun's isolated linker honours each package's
+      // declared range and lands the wrong major in the per-package store.
+      // - `q@2.0.0` declares `collections@^2.0.0`, but `q.js` does
+      //   `require('collections/shim')`; `shim.js` ships only in
+      //   `collections@>=5`, so without this override `q@2`'s spec crashes
+      //   with `Cannot find module 'collections/shim'`.
+      overrides: {
+        collections: '^5.0.0',
+      },
       trustedDependencies: [...trustedDependencies].sort(),
     }, null, 2) + '\n'),
     // Per-sandbox node_modules via bun's isolated linker. Several plugin specs
