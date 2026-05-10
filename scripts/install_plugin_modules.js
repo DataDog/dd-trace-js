@@ -2,7 +2,7 @@
 
 const { execFileSync } = require('child_process')
 const { createHash } = require('crypto')
-const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
+const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
@@ -395,45 +395,84 @@ function install (retry = true) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
   }
-  pruneBunCentralNodeModules()
+  pruneAmbiguousBunCentralSymlinks()
 }
 
 /**
- * Bun's isolated linker keeps a central deduplicated `versions/node_modules/.bun/node_modules/`
- * directory holding one symlink per package, pointing at whichever installed version is
- * highest. The directory sits in Node's `node_modules` walk path from inside any
- * `.bun/<pkg>@<ver>/node_modules/<pkg>/...` file, so e.g. `pino@5`'s `require('pino-pretty')`
- * picks up the central `pino-pretty@13.1.3` symlink and crashes with `pretty is not a function`,
- * which then deadlocks the test process because the throw happens inside an internal pino
- * write loop. The previous package manager's nohoist-everything per-workspace layout never had
- * this leak — pino@5's resolution stopped at `versions/pino@5.0.0/node_modules/pino-pretty@1.0.1`,
- * which is the version pino@5's own devDependency declared.
+ * Bun's isolated linker keeps a central deduplicated
+ * `versions/node_modules/.bun/node_modules/` directory holding one symlink per
+ * package, pointing at whichever installed version is highest. The directory
+ * sits in Node's resolution path from inside `.bun/<pkg>@<ver>/node_modules/<pkg>/...`,
+ * so when several incompatible majors of a package are installed across
+ * sandboxes (e.g. `pino-pretty@1.0.1` for `pino@5` plus `pino-pretty@13.1.3`
+ * for `pino-pretty@>=3`), `pino@5`'s `require('pino-pretty')` picks up the
+ * central `13.1.3` symlink and crashes with `pretty is not a function` —
+ * which deadlocks the test process because the throw happens inside an
+ * internal pino write loop.
  *
- * Removing the central directory restores the per-workspace resolution: each `.bun/<pkg>@<ver>`
- * still has its own `node_modules/` for direct deps, and `NODE_PATH` (set by the test harness
- * to `versions/<plugin>@<ver>/node_modules`) handles the cross-workspace lookups the test
- * helpers expect. The matching transitives that used to live in the central store are
- * unaffected — they're already at `.bun/<pkg>@<ver>/node_modules/<dep>` as direct symlinks.
+ * The previous package manager's nohoist-everything per-workspace layout
+ * never had this leak: each sandbox's resolution stopped at the version its
+ * own devDependency declared. Mirror that here by removing the central
+ * symlink only for packages that have more than one major installed in the
+ * `.bun/` store. Single-version packages (e.g. `collections`, `sqlite3`,
+ * `@grpc/proto-loader`) keep their hoisted symlink so the legitimate
+ * transitive lookups every sandbox relies on still work.
  */
-function pruneBunCentralNodeModules () {
-  rmSync(join(__dirname, '..', 'versions', 'node_modules', '.bun', 'node_modules'), {
-    recursive: true,
-    force: true,
-  })
+function pruneAmbiguousBunCentralSymlinks () {
+  const dotBun = join(__dirname, '..', 'versions', 'node_modules', '.bun')
+  const central = join(dotBun, 'node_modules')
+  if (!existsSync(central)) return
+
+  const installedMajors = collectInstalledMajors(dotBun)
+  for (const [pkg, majors] of installedMajors) {
+    if (majors.size <= 1) continue
+    rmSync(join(central, pkg), { recursive: true, force: true })
+  }
+}
+
+/**
+ * Build `<package-name> -> Set<majorVersion>` from the names of
+ * `versions/node_modules/.bun/<name>@<version>/` directories. Scoped
+ * packages encode the slash as `+` in the central store
+ * (`@grpc+proto-loader@1.2.3`), so reverse that for the key lookup.
+ *
+ * @param {string} dotBun
+ * @returns {Map<string, Set<string>>}
+ */
+function collectInstalledMajors (dotBun) {
+  /** @type {Map<string, Set<string>>} */
+  const byName = new Map()
+  for (const entry of readdirSync(dotBun)) {
+    if (entry === 'node_modules') continue
+    const at = entry.lastIndexOf('@')
+    if (at <= 0) continue
+    const rawName = entry.slice(0, at)
+    const version = entry.slice(at + 1)
+    if (!version) continue
+    const major = version.split('.')[0]
+    const name = rawName.replace('+', '/')
+    let majors = byName.get(name)
+    if (!majors) {
+      majors = new Set()
+      byName.set(name, majors)
+    }
+    majors.add(major)
+  }
+  return byName
 }
 
 /**
  * Resolve a semver range to the highest published version satisfying it.
  *
  * `bun pm view <pkg>@<range> version` returns the lowest matching version,
- * not the highest — the opposite of `yarn add` and what every plugin
- * regression test relied on under yarn classic. Without taking the highest
+ * not the highest — the opposite of what the previous package manager picked
+ * and what every plugin regression test relied on. Without taking the highest
  * we install ancient transitives that, for instance, ship `pino-pretty@1.0.1`
  * into `versions/pino@5.0.0/` (where pino's `prettyPrint: true` then
  * deadlocks the test process) and `@langchain/core@0.1.x` into the
  * langchain sandbox (where `coerceMessageLikeToMessage` rejects the
  * JSON-message regression test). Pull the full version list and use
- * `semver.maxSatisfying` so resolution matches yarn's choice exactly.
+ * `semver.maxSatisfying` so resolution matches the previous tool's choice.
  *
  * @param {string} name
  * @param {string} range
