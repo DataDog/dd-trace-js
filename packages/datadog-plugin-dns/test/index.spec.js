@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { promisify } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../datadog-core')
@@ -432,6 +433,52 @@ describe('Plugin', () => {
             tracePromise,
             resolver.resolve('lvh.me').catch(() => {}),
           ])
+        })
+
+        // Loading both `dns` and `dns/promises` reaches the same exports object through
+        // two ritm hooks. Without a WeakSet guard, the second hook to fire would stack a
+        // second wrap layer and publish `apm:dns:*` events twice per call. The mocha test
+        // agent resets ritm between tests (default `ritmReset: true` in `agent.close`),
+        // so the assertions that prove "one hook fire per call" have to run inside a
+        // single `it` body to share one ritm lifecycle.
+        it('does not double-wrap when both dns and dns/promises are loaded', async () => {
+          const startCh = dc.channel('apm:dns:lookup:start')
+          let startCount = 0
+          const handler = () => { startCount++ }
+          startCh.subscribe(handler)
+          try {
+            const viaDns = require('dns').promises
+            const viaNodeDns = require('node:dns').promises
+            const viaSubpath = require('dns/promises')
+            const viaNodeSubpath = require('node:dns/promises')
+
+            // All four CJS access shapes resolve to the same exports object.
+            assert.strictEqual(viaDns, viaNodeDns)
+            assert.strictEqual(viaDns, viaSubpath)
+            assert.strictEqual(viaDns, viaNodeSubpath)
+
+            // Same wrapped function reference across access shapes — a second wrap
+            // layer would produce a different function identity.
+            assert.strictEqual(viaDns.lookup, viaSubpath.lookup)
+
+            const shapes = [
+              ['require("dns").promises', viaDns],
+              ['require("node:dns").promises', viaNodeDns],
+              ['require("dns/promises")', viaSubpath],
+              ['require("node:dns/promises")', viaNodeSubpath],
+            ]
+
+            for (const [label, api] of shapes) {
+              const before = startCount
+              await api.lookup('localhost', 4)
+              await new Promise(setImmediate)
+              const fired = startCount - before
+              assert.strictEqual(fired, 1,
+                `expected 1 start event for one lookup via ${label}; got ${fired}`)
+            }
+          } finally {
+            startCh.unsubscribe(handler)
+          }
         })
       })
     })

@@ -19,17 +19,32 @@ const rrtypes = {
   resolveSoa: 'SOA',
 }
 
+// `dns.promises` and `require('dns/promises')` resolve to the same exports object. Both
+// access paths register a hook, so without a guard the second hook to fire would stack a
+// second wrap layer on top and publish every `apm:dns:*` event twice per call. The WeakSet
+// collapses the two hooks to one wrap regardless of which one runs first.
+const wrappedPromiseApis = new WeakSet()
+
 addHook({ name: 'dns' }, dns => {
   patchApi(dns, createCallbackInstrumentor, buildCallbackArgsContext)
 
-  // `dns.promises` (and `require('dns/promises')`) returns the same object; wrapping it from
-  // here covers both access patterns when the user has required `dns` somewhere first.
   if (dns.promises) {
-    patchApi(dns.promises, createPromiseInstrumentor, buildPromiseArgsContext)
+    patchPromiseApi(dns.promises)
   }
 
   return dns
 })
+
+addHook({ name: 'dns/promises' }, dnsPromises => {
+  patchPromiseApi(dnsPromises)
+  return dnsPromises
+})
+
+function patchPromiseApi (api) {
+  if (wrappedPromiseApis.has(api)) return
+  wrappedPromiseApis.add(api)
+  patchApi(api, createPromiseInstrumentor, buildPromiseArgsContext)
+}
 
 function patchApi (api, instrumentorFactory, buildArgsContext) {
   const lookup = instrumentorFactory('apm:dns:lookup', { captureResult: true })
