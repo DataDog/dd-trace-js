@@ -1,45 +1,125 @@
 name: Update 3rd-party licenses
 
-# `dd-license-attribution` does not yet read `bun.lock`; it only enumerates
-# root deps from a `package-lock.json` (or other manager-specific lockfiles
-# unrelated to bun). The repo ships only `bun.lock` at the root, so the
-# upstream auto-update tool can no longer rebuild `LICENSE-3rdparty.csv` from
-# scratch — it would drop every root runtime/optional dep on each run. Until
-# bun.lock support lands upstream
-# (https://github.com/watson/dd-license-attribution),
-# `scripts/check_licenses.js` (run via `npm run lint`) is the source of truth
-# for CSV completeness against `bun.lock`, `vendor/package-lock.json`, and
-# `vendored-dependencies.csv`. Any new root runtime/optional dep ships with a
-# manual `LICENSE-3rdparty.csv` update in the same PR; lint catches a missing
-# entry locally and on every PR.
-#
-# This workflow now does the bare minimum needed to keep the existing required
-# check name green — it asserts that `LICENSE-3rdparty.csv` is still present
-# and non-empty on the PR head. The trigger no longer fires on `bun.lock`
-# changes since we have no way to act on them; it stays on the vendor and
-# vendored-deps paths so future tooling work has somewhere to plug back in.
+# `dd-license-attribution` does not yet read `bun.lock`; the project ships only
+# `bun.lock` at the root, so the upstream auto-update tool drops every root
+# runtime/optional dep on each run. `scripts/generate-3rdparty-licenses.js`
+# regenerates `LICENSE-3rdparty.csv` from `bun.lock`,
+# `vendor/package-lock.json`, `.github/vendored-dependencies.csv`, and the npm
+# registry instead. `scripts/check_licenses.js` (run via `npm run lint`)
+# enforces row-level completeness on every PR; this workflow auto-commits the
+# regenerated file for bot PRs and surfaces a clear error otherwise.
 
 on:
   pull_request:
     paths:
       - ".github/vendored-dependencies.csv"
       - "vendor/package-lock.json"
+      - "bun.lock"
 
 jobs:
   check-licenses:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      needs_update: ${{ steps.check.outputs.needs_update }}
+      is_bot_same_repo: ${{ steps.check.outputs.is_bot_same_repo }}
+      head_oid: ${{ steps.check.outputs.head_oid }}
     steps:
-      - name: Check out PR branch
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Verify LICENSE-3rdparty.csv exists
+      - uses: ./.github/actions/node/latest
+
+      - name: Regenerate LICENSE-3rdparty.csv
+        run: node scripts/generate-3rdparty-licenses.js
+
+      - name: Check for LICENSE-3rdparty.csv changes
+        id: check
+        env:
+          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          if [[ ! -s LICENSE-3rdparty.csv ]]; then
-            echo "❌ LICENSE-3rdparty.csv is missing or empty."
-            echo ""
-            echo "Restore the file (or regenerate it manually) and commit the result."
-            exit 1
+          set -e
+          echo "head_oid=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+
+          if git diff --ignore-space-at-eol --exit-code LICENSE-3rdparty.csv; then
+            echo "✅ LICENSE-3rdparty.csv is already up to date"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          else
+            echo "📝 LICENSE-3rdparty.csv was modified by the regen script"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
           fi
-          echo "✅ LICENSE-3rdparty.csv is present (lint enforces row-level completeness)."
+
+          if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "$PR_HEAD_REPO" == "$BASE_REPO" ]]; then
+            echo "is_bot_same_repo=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_bot_same_repo=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload updated LICENSE-3rdparty.csv
+        if: steps.check.outputs.needs_update == 'true' && steps.check.outputs.is_bot_same_repo == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: license-csv
+          path: LICENSE-3rdparty.csv
+          if-no-files-found: error
+
+      - name: Fail for PRs with outdated licenses
+        if: steps.check.outputs.needs_update == 'true' && steps.check.outputs.is_bot_same_repo != 'true'
+        run: |
+          echo "❌ The LICENSE-3rdparty.csv file needs to be updated!"
+          echo ""
+          echo "Run 'node scripts/generate-3rdparty-licenses.js' locally and commit the result."
+          exit 1
+
+  auto-commit-licenses:
+    needs: check-licenses
+    if: needs.check-licenses.outputs.needs_update == 'true' && needs.check-licenses.outputs.is_bot_same_repo == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Mint GitHub App token (octo-sts)
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: update-3rdparty-licenses
+
+      - name: Download updated LICENSE-3rdparty.csv
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: license-csv
+
+      - name: Commit LICENSE-3rdparty.csv via GitHub API
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          EXPECTED_HEAD_OID: ${{ needs.check-licenses.outputs.head_oid }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: |
+          set -e
+
+          echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
+
+          # gh's `-f variables=<json>` does not parse the value as JSON; build
+          # the `{query, variables}` body with jq and pipe via `--input -`.
+          jq -nc \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg branch "$GITHUB_HEAD_REF" \
+            --arg msg "Update LICENSE-3rdparty.csv" \
+            --arg expected "$EXPECTED_HEAD_OID" \
+            --arg path "LICENSE-3rdparty.csv" \
+            --arg contents "$(base64 -w 0 LICENSE-3rdparty.csv)" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }",
+              variables: { input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                message: { headline: $msg },
+                expectedHeadOid: $expected,
+                fileChanges: { additions: [{ path: $path, contents: $contents }] }
+              } }
+            }' | gh api graphql --input - -q '.data.createCommitOnBranch.commit.url' >/dev/null
+
+          echo "✅ Successfully committed and pushed LICENSE-3rdparty.csv updates"
