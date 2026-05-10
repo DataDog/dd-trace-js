@@ -1,15 +1,17 @@
 name: Update 3rd-party licenses
 
-# `dd-license-attribution` only knows how to enumerate root deps from
-# `yarn.lock` or `package-lock.json`. With the yarn → bun migration the repo
-# ships only `bun.lock` at the root, so the upstream auto-update tool can no
-# longer rebuild `LICENSE-3rdparty.csv` from scratch — it would drop every
-# root runtime/optional dep on each run. Until bun.lock support lands upstream
-# (https://github.com/watson/dd-license-attribution), `scripts/check_licenses.js`
-# (run via `npm run lint`) is the source of truth for CSV completeness against
-# `bun.lock`, `vendor/package-lock.json`, and `vendored-dependencies.csv`. Any
-# new root runtime/optional dep ships with a manual `LICENSE-3rdparty.csv`
-# update in the same PR; lint catches a missing entry locally and on every PR.
+# `dd-license-attribution` does not yet read `bun.lock`; it only enumerates
+# root deps from a `package-lock.json` (or other manager-specific lockfiles
+# unrelated to bun). The repo ships only `bun.lock` at the root, so the
+# upstream auto-update tool can no longer rebuild `LICENSE-3rdparty.csv` from
+# scratch — it would drop every root runtime/optional dep on each run. Until
+# bun.lock support lands upstream
+# (https://github.com/watson/dd-license-attribution),
+# `scripts/check_licenses.js` (run via `npm run lint`) is the source of truth
+# for CSV completeness against `bun.lock`, `vendor/package-lock.json`, and
+# `vendored-dependencies.csv`. Any new root runtime/optional dep ships with a
+# manual `LICENSE-3rdparty.csv` update in the same PR; lint catches a missing
+# entry locally and on every PR.
 #
 # This workflow now does the bare minimum needed to keep the existing required
 # check name green — it asserts that `LICENSE-3rdparty.csv` is still present
