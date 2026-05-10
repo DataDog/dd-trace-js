@@ -250,6 +250,21 @@ module.exports = {
       forced: true,
     },
   ],
+  // The vertex-ai test stubs `GoogleAuth.prototype.getAccessToken` via
+  // `require('versions/@google-cloud/vertexai@<ver>').get('google-auth-library/...')`.
+  // `google-auth-library` is a regular transitive of `@google-cloud/vertexai`,
+  // so under bun's isolated linker it lives in vertexai's private store and
+  // isn't reachable from the workspace root. Inject it as a direct dep of
+  // every vertexai sandbox so the test's `getExport` lookup resolves
+  // (the same shape as the bedrock-runtime fix above).
+  '@google-cloud/vertexai': [
+    {
+      name: 'google-auth-library',
+      version: '*',
+      dep: true,
+      forced: true,
+    },
+  ],
   genai: [
     {
       name: '@google/genai',
