@@ -395,14 +395,45 @@ function install (retry = true) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
   }
+  pruneBunCentralNodeModules()
+}
+
+/**
+ * Bun's isolated linker keeps a central deduplicated `versions/node_modules/.bun/node_modules/`
+ * directory holding one symlink per package, pointing at whichever installed version is
+ * highest. The directory sits in Node's `node_modules` walk path from inside any
+ * `.bun/<pkg>@<ver>/node_modules/<pkg>/...` file, so e.g. `pino@5`'s `require('pino-pretty')`
+ * picks up the central `pino-pretty@13.1.3` symlink and crashes with `pretty is not a function`,
+ * which then deadlocks the test process because the throw happens inside an internal pino
+ * write loop. The previous package manager's nohoist-everything per-workspace layout never had
+ * this leak — pino@5's resolution stopped at `versions/pino@5.0.0/node_modules/pino-pretty@1.0.1`,
+ * which is the version pino@5's own devDependency declared.
+ *
+ * Removing the central directory restores the per-workspace resolution: each `.bun/<pkg>@<ver>`
+ * still has its own `node_modules/` for direct deps, and `NODE_PATH` (set by the test harness
+ * to `versions/<plugin>@<ver>/node_modules`) handles the cross-workspace lookups the test
+ * helpers expect. The matching transitives that used to live in the central store are
+ * unaffected — they're already at `.bun/<pkg>@<ver>/node_modules/<dep>` as direct symlinks.
+ */
+function pruneBunCentralNodeModules () {
+  rmSync(join(__dirname, '..', 'versions', 'node_modules', '.bun', 'node_modules'), {
+    recursive: true,
+    force: true,
+  })
 }
 
 /**
  * Resolve a semver range to the highest published version satisfying it.
  *
- * Yarn 1 picked the highest matching version per install; bun picks the lowest.
- * Without pre-resolution the per-major matrix collapses — `<pkg>@<range>` and
- * `<pkg>@<coerced>` would land on the same version under bun.
+ * `bun pm view <pkg>@<range> version` returns the lowest matching version,
+ * not the highest — the opposite of `yarn add` and what every plugin
+ * regression test relied on under yarn classic. Without taking the highest
+ * we install ancient transitives that, for instance, ship `pino-pretty@1.0.1`
+ * into `versions/pino@5.0.0/` (where pino's `prettyPrint: true` then
+ * deadlocks the test process) and `@langchain/core@0.1.x` into the
+ * langchain sandbox (where `coerceMessageLikeToMessage` rejects the
+ * JSON-message regression test). Pull the full version list and use
+ * `semver.maxSatisfying` so resolution matches yarn's choice exactly.
  *
  * @param {string} name
  * @param {string} range
@@ -413,26 +444,32 @@ function resolveLatestSatisfying (name, range) {
   const cacheKey = `${name}@${range}`
   const cached = resolvedRangeCache.get(cacheKey)
   if (cached) return cached
-  let parsed
+  let versions
   try {
-    const stdout = execFileSync('bun', ['pm', 'view', cacheKey, 'version', '--json'], {
+    const stdout = execFileSync('bun', ['pm', 'view', name, 'versions', '--json'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim()
-    parsed = JSON.parse(stdout)
+    versions = JSON.parse(stdout)
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.warn(`bun pm view failed for ${cacheKey}: ${error.message}; deferring to install-time resolution`)
+    console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
     return range
   }
-  if (typeof parsed !== 'string') {
+  if (!Array.isArray(versions) || versions.length === 0) {
     // eslint-disable-next-line no-console
-    console.warn(`bun pm view returned no version for ${cacheKey}: ${JSON.stringify(parsed)}; ` +
+    console.warn(`bun pm view returned no versions for ${name}: ${JSON.stringify(versions)}; ` +
       'deferring to install-time resolution')
     return range
   }
-  resolvedRangeCache.set(cacheKey, parsed)
-  return parsed
+  const resolved = semver.maxSatisfying(versions, range, { includePrerelease: false })
+  if (!resolved) {
+    // eslint-disable-next-line no-console
+    console.warn(`no published ${name} version satisfies ${range}; deferring to install-time resolution`)
+    return range
+  }
+  resolvedRangeCache.set(cacheKey, resolved)
+  return resolved
 }
 
 /**
