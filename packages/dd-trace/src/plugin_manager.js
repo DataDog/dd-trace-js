@@ -128,15 +128,15 @@ module.exports = class PluginManager {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
-    for (const name in pluginClasses) {
+    for (const name of Object.keys(pluginClasses)) {
       this.loadPlugin(name)
     }
   }
 
   // This is basically just for testing. like intrumenter.disable()
   destroy () {
-    for (const name in this._pluginsByName) {
-      this._pluginsByName[name].configure({ enabled: false })
+    for (const plugin of Object.values(this._pluginsByName)) {
+      plugin.configure({ enabled: false })
     }
 
     loadChannel.unsubscribe(this._loadedSubscriber)

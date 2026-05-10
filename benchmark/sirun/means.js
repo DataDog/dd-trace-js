@@ -9,7 +9,7 @@ process.stdin.on('data', (data) => {
 process.stdin.on('end', () => {
   const data = Buffer.concat(chunks).toString()
   const json = JSON.parse(data)
-  for (const testSuite in json) {
+  for (const testSuite of Object.keys(json)) {
     console.log('Test Suite: ', testSuite)
     const variants = Object.keys(json[testSuite])
     const results = {}

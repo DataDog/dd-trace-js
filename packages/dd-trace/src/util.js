@@ -13,9 +13,7 @@ const path = require('path')
  * @returns {boolean}
  */
 function isEmpty (obj) {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) return false
-  return true
+  return Object.keys(obj).length === 0
 }
 
 function isTrue (str) {

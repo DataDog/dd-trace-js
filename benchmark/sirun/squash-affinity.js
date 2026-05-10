@@ -13,8 +13,7 @@ if (process.env.ENABLE_AFFINITY) {
   if (metaJson.variants) {
     const variants = metaJson.variants
 
-    for (const variantName in variants) {
-      const variant = variants[variantName]
+    for (const variant of Object.values(variants)) {
       squashAffinity(variant)
     }
   }

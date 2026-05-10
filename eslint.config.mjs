@@ -444,6 +444,10 @@ export default [
       'no-console': 'error',
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
+      'no-restricted-syntax': ['error', {
+        selector: 'ForInStatement',
+        message: 'Use `for-of` instead of `for-in`.',
+      }],
       'no-useless-assignment': 'error',
       'no-var': 'error',
       'no-void': ['error', { allowAsStatement: true }],
@@ -504,6 +508,9 @@ export default [
       'eslint-rules/eslint-log-printf-style': 'error',
 
       'no-restricted-syntax': ['error', {
+        selector: 'ForInStatement',
+        message: 'Use `for-of` instead of `for-in`.',
+      }, {
         // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
         // `toString()` and run in chromium — coverage counters inside would ReferenceError.
         selector:
@@ -743,6 +750,9 @@ export default [
         ],
       }],
       'no-restricted-syntax': ['error', {
+        selector: 'ForInStatement',
+        message: 'Use `for-of` instead of `for-in`.',
+      }, {
         selector: "CallExpression:matches([callee.name='doesNotThrow'], [callee.property.name='doesNotThrow'])",
         message: 'Do not use `assert.doesNotThrow()`. Execute the expression directly instead.',
       }],

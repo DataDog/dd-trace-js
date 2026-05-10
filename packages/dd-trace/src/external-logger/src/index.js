@@ -33,8 +33,8 @@ class ExternalLogger {
 
   static tagString (tags) {
     const tagArray = []
-    for (const key in tags) {
-      tagArray.push(key + ':' + tags[key])
+    for (const [key, val] of Object.entries(tags)) {
+      tagArray.push(key + ':' + val)
     }
     return tagArray.join(',')
   }

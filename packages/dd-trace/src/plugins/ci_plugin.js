@@ -367,7 +367,7 @@ module.exports = class CiPlugin extends Plugin {
               Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
             }
             // augment with git information (since it will not be available in the worker)
-            for (const key in this.testEnvironmentMetadata) {
+            for (const key of Object.keys(this.testEnvironmentMetadata)) {
               // CAREFUL: this bypasses the metadata/metrics distinction
               // Be careful not to pass numbers in `meta`
               if (key.startsWith('git.')) {

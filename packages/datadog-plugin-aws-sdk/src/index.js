@@ -10,8 +10,7 @@ class AwsSdkPlugin extends Plugin {
   constructor (...args) {
     super(...args)
     this.services = {}
-    for (const name in services) {
-      const ServicePlugin = services[name]
+    for (const [name, ServicePlugin] of Object.entries(services)) {
       this.services[name] = new ServicePlugin(...args)
     }
   }

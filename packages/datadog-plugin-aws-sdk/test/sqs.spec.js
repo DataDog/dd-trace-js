@@ -214,8 +214,8 @@ describe('Plugin', () => {
                 if (err) return reject(err)
 
                 try {
-                  for (const message in data.Messages) {
-                    const recordData = data.Messages[message].MessageAttributes
+                  for (const message of data.Messages) {
+                    const recordData = message.MessageAttributes
                     assert.ok(Object.hasOwn(recordData, '_datadog'))
                     const traceContext = JSON.parse(recordData._datadog.StringValue)
                     assert.ok(Object.hasOwn(traceContext, 'x-datadog-trace-id'))

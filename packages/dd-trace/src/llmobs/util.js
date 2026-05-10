@@ -211,7 +211,7 @@ function getFunctionArguments (fn, args = []) {
 
     const argsObject = {}
 
-    for (const argIdx in args) {
+    for (const argIdx of Object.keys(args)) {
       const name = names[argIdx]
       const arg = args[argIdx]
 

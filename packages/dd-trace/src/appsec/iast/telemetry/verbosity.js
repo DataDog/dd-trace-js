@@ -24,7 +24,7 @@ function getVerbosity (verbosity) {
 }
 
 function getName (verbosityValue) {
-  for (const name in Verbosity) {
+  for (const name of Object.keys(Verbosity)) {
     if (Verbosity[name] === verbosityValue) {
       return name
     }

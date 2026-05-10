@@ -18,7 +18,7 @@ function walk (tree, oldTree, path = []) {
 
   if (tree !== null && typeof tree === 'object') {
     const result = {}
-    for (const name in tree) {
+    for (const name of Object.keys(tree)) {
       if (name in oldTree) {
         result[name] = walk(tree[name], oldTree[name], [...path, name])
       }
