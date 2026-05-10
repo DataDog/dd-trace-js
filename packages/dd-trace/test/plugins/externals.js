@@ -235,6 +235,21 @@ module.exports = {
       forced: true,
     },
   ],
+  // The bedrock-runtime tests reach into `@smithy/node-http-handler` directly
+  // through `versions/@aws-sdk/client-bedrock-runtime@*/index.js.get(...)`.
+  // Under bun's isolated linker that transitive sits only inside aws-sdk's
+  // private store and isn't reachable from the workspace root, so inject it
+  // as a direct dep of every bedrock-runtime sandbox. The constructor and
+  // `send()` API of `@smithy/node-http-handler` have been stable across v2-v4,
+  // so letting bun pick the latest is enough for what the test needs.
+  '@aws-sdk/client-bedrock-runtime': [
+    {
+      name: '@smithy/node-http-handler',
+      version: '*',
+      dep: true,
+      forced: true,
+    },
+  ],
   genai: [
     {
       name: '@google/genai',

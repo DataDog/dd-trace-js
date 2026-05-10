@@ -31,7 +31,14 @@ const resolvedRangeCache = new Map()
 // `trustedDependencies`; native plugins (`aerospike`, `@confluentinc/kafka-javascript`,
 // `pg-native`, ...) need their `install`/`postinstall` to compile, otherwise
 // `node-gyp`'s `bindings` package fails to find the `.node` file at test time.
-const trustedDependencies = new Set()
+// Bun's `trustedDependencies` does not transitively allow nested packages, so
+// transitively-required native modules (e.g. `pg-native` → `libpq`) need their
+// own entry here.
+const trustedDependencies = new Set([
+  // `pg-native` ships JS bindings only; the actual native build sits in `libpq`,
+  // whose `install` script invokes `node-gyp` to produce `addon.node`.
+  'libpq',
+])
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
@@ -257,9 +264,28 @@ function isGeneratedWorkspace (entry, parent = '') {
  * @param {string|null} version
  */
 async function assertIndex (name, version) {
+  // `require.resolve('<name>/package.json')` works for the common case but
+  // throws `ERR_PACKAGE_PATH_NOT_EXPORTED` for packages that ship an `exports`
+  // map without a `./package.json` entry (moleculer, react, ...). Walking
+  // `module.paths` mirrors `requirePackageJson` and stays exports-blind.
   const index = `'use strict'
 
+const path = require('path')
+const fs = require('fs')
+
 const requirePackageJson = require('${requirePackageJsonPath}')
+
+/**
+ * @param {string} id
+ * @returns {string}
+ */
+function findPkgJsonPath (id) {
+  for (const modulePath of module.paths) {
+    const candidate = path.join(modulePath, id, 'package.json')
+    if (fs.existsSync(candidate)) return candidate
+  }
+  throw new Error('could not find ' + id + '/package.json')
+}
 
 module.exports = {
   /**
@@ -282,7 +308,7 @@ module.exports = {
    * @param {string} [id] The module id to resolve.
    * @returns {string | never} The resolved package.json path.
    */
-  pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
+  pkgJsonPath (id) { return findPkgJsonPath(id || '${name}') },
   /**
    * Resolve the package's version for a module id.
    *
