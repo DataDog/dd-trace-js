@@ -15,7 +15,7 @@ function callBindStart (ctx, configOverride) {
     config: {
       heartbeatEnabled: true,
       queryInResourceName: false,
-      obfuscateQuery: false,
+      obfuscateQuery: 'none',
       ...configOverride,
     },
     operationName: () => 'mongodb.query',
@@ -115,35 +115,80 @@ describe('mongodb-core query depth limiter', () => {
 
     assert.deepStrictEqual(JSON.parse(query), { blob: '?' })
   })
+
+  it('coerces bigint leaves to their decimal string with obfuscation off', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { _id: 9999999999999999999999n } },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { _id: '9999999999999999999999' })
+  })
+
+  it('collapses cycles to "?"', () => {
+    const circular = { a: 1 }
+    circular.self = circular
+
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: circular },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { a: 1, self: '?' })
+  })
+
+  it('collapses depth past MAX_DEPTH to "?"', () => {
+    let nested = { leaf: 'value' }
+    for (let i = 0; i < 20; i++) {
+      nested = { inner: nested }
+    }
+
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: nested },
+      name: 'find',
+    })
+
+    let walk = JSON.parse(query)
+    let depth = 0
+    while (typeof walk === 'object' && walk !== null && walk.inner !== undefined) {
+      walk = walk.inner
+      depth++
+    }
+    assert.strictEqual(walk, '?')
+    assert.ok(depth >= 1 && depth <= 20, `unexpected depth before collapse: ${depth}`)
+  })
 })
 
-describe('mongodb-core query obfuscation', () => {
-  it('replaces primitive leaves with "?" when obfuscateQuery is enabled', () => {
+describe('mongodb-core query obfuscation (redact mode)', () => {
+  it('replaces primitive leaves with "?"', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { user: 'alice', age: 30, active: true } },
       name: 'find',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), { user: '?', age: '?', active: '?' })
   })
 
-  it('replaces null leaves with "?" when obfuscateQuery is enabled', () => {
+  it('replaces null leaves with "?"', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { deleted: null, age: 0, name: '' } },
       name: 'find',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), { deleted: '?', age: '?', name: '?' })
   })
 
-  it('preserves operator keys but obfuscates their values', () => {
+  it('preserves operator keys but redacts their values', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { age: { $gte: 18, $lte: 65 }, status: { $in: ['active', 'pending'] } } },
       name: 'find',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), {
       age: { $gte: '?', $lte: '?' },
@@ -151,39 +196,39 @@ describe('mongodb-core query obfuscation', () => {
     })
   })
 
-  it('coerces bigint leaves to "?" when obfuscateQuery is enabled', () => {
+  it('coerces bigint leaves to "?"', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { _id: 9999999999999999999999n } },
       name: 'find',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), { _id: '?' })
   })
 
-  it('obfuscates toJSON-flattened BSON values (ObjectId-shaped) as "?"', () => {
+  it('redacts toJSON-flattened BSON values (ObjectId-shaped) as "?"', () => {
     const objectId = { _bsontype: 'ObjectId', toJSON: () => '123456781234567812345678' }
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { _id: objectId } },
       name: 'find',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), { _id: '?' })
   })
 
-  it('still renders Binary BSON values as "?" with obfuscateQuery enabled', () => {
+  it('still renders Binary BSON values as "?"', () => {
     const binary = { _bsontype: 'Binary', buffer: Buffer.from('payload') }
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { blob: binary } },
       name: 'find',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), { blob: '?' })
   })
 
-  it('preserves pipeline operator shapes while obfuscating leaves', () => {
+  it('preserves pipeline operator shapes while redacting leaves', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: {
@@ -193,7 +238,7 @@ describe('mongodb-core query obfuscation', () => {
         ],
       },
       name: 'aggregate',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), [
       { $match: { user: '?', age: { $gte: '?' } } },
@@ -201,7 +246,7 @@ describe('mongodb-core query obfuscation', () => {
     ])
   })
 
-  it('obfuscates each q across multi-statement updates', () => {
+  it('redacts each q across multi-statement updates', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: {
@@ -211,7 +256,7 @@ describe('mongodb-core query obfuscation', () => {
         ],
       },
       name: 'update',
-    }, { obfuscateQuery: true })
+    }, { obfuscateQuery: 'redact' })
 
     assert.deepStrictEqual(JSON.parse(query), [
       { user: '?' },
@@ -219,13 +264,93 @@ describe('mongodb-core query obfuscation', () => {
     ])
   })
 
-  it('keeps verbatim values when obfuscateQuery is false (regression for default off)', () => {
+  it('keeps verbatim values when obfuscateQuery is "none" (regression for default off)', () => {
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { user: 'alice', age: 30 } },
       name: 'find',
-    }, { obfuscateQuery: false })
+    }, { obfuscateQuery: 'none' })
 
     assert.deepStrictEqual(JSON.parse(query), { user: 'alice', age: 30 })
+  })
+})
+
+describe('mongodb-core query obfuscation (types mode)', () => {
+  it('replaces primitive leaves with their typeof name', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { user: 'alice', age: 30, active: true } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { user: 'string', age: 'number', active: 'boolean' })
+  })
+
+  it('reports null leaves as "null"', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { deleted: null, age: 0, name: '' } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { deleted: 'null', age: 'number', name: 'string' })
+  })
+
+  it('preserves operator keys but reports value types', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { age: { $gte: 18, $lte: 65 }, status: { $in: ['active', 'pending'] } } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      age: { $gte: 'number', $lte: 'number' },
+      status: { $in: ['string', 'string'] },
+    })
+  })
+
+  it('reports bigint leaves as "bigint"', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { _id: 9999999999999999999999n } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { _id: 'bigint' })
+  })
+
+  it('reports toJSON-flattened BSON values (ObjectId-shaped) as "object"', () => {
+    const objectId = { _bsontype: 'ObjectId', toJSON: () => '123456781234567812345678' }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { _id: objectId } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { _id: 'object' })
+  })
+
+  it('reports Binary BSON values as "object"', () => {
+    const binary = { _bsontype: 'Binary', buffer: Buffer.from('payload') }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { blob: binary } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { blob: 'object' })
+  })
+
+  it('collapses cycles to "object"', () => {
+    const circular = { a: 1 }
+    circular.self = circular
+
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: circular },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { a: 'number', self: 'object' })
   })
 })

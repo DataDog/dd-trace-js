@@ -2888,14 +2888,22 @@ declare namespace tracer {
       heartbeatEnabled?: boolean;
 
       /**
-       * Whether to replace primitive query values with `?` in the `mongodb.query`
-       * tag and the resource name (when `queryInResourceName` is also enabled).
-       * Keys and operator names are preserved so the redacted query is still a
-       * usable query signature.
+       * How to mask primitive query values in the `mongodb.query` tag and the
+       * resource name (when `queryInResourceName` is also enabled). Keys,
+       * operator names, and array / pipeline shape are preserved so the masked
+       * query is still a usable query signature.
        *
-       * @default false
+       * - `'types'`: replace each primitive leaf with its `typeof` name
+       *   (`'string'`, `'number'`, `'boolean'`, `'bigint'`, `'object'`,
+       *   `'null'`). Keeps the same redaction guarantee as `'redact'` but
+       *   preserves the value types so the rendered query can still be used
+       *   to design indexes.
+       * - `'redact'`: replace each primitive leaf with `'?'`. Strictest masking.
+       * - `'none'`: do not mask. Values land verbatim on the span.
+       *
+       * @default 'none'
        */
-      obfuscateQuery?: boolean;
+      obfuscateQuery?: 'none' | 'types' | 'redact';
 
       /**
        * Whether to include the query contents in the resource name.
