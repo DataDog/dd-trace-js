@@ -1,7 +1,12 @@
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import ts from 'typescript'
+
+const require = createRequire(import.meta.url)
+const { DD_MAJOR } = require('../version.js')
+const { applyMajorVersionAliasFilters } = require('../packages/dd-trace/src/config/major-version-filters.js')
 
 const IGNORED_CONFIGURATION_NAMES = new Set([
   'tracePropagationStyle',
@@ -76,6 +81,7 @@ function createInspectionResult (overrides) {
 function getSupportedConfigurationInfo (filePath) {
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
   const supportedConfigurations = parsed?.supportedConfigurations
+  applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
   const names = new Set()
   const primaryEnvTargets = new Map()

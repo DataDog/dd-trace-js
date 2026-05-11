@@ -21,15 +21,6 @@ declare namespace tracer {
 
     experimental?: {
       appsec?: boolean | TracerOptions['appsec']
-
-      iast?: boolean | IastOptions
     }
-  }
-
-  interface IastOptions {
-    /**
-     * @env DD_IAST_ENABLED
-     */
-    enabled?: boolean
   }
 }
