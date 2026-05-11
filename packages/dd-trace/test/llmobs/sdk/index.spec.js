@@ -15,7 +15,7 @@ const tracerVersion = require('../../../../../package.json').version
 const agent = require('../../plugins/agent')
 const { removeDestroyHandler } = require('../util')
 
-const { PublicSpan, unwrap } = require('../../../src/opentracing/public/span')
+const { unwrap } = require('../../../src/opentracing/public/span')
 
 const injectCh = channel('dd-trace:span:inject')
 
