@@ -437,6 +437,10 @@ class LLMObsTagger {
     this._setTag(span, MODEL_NAME, modelName)
   }
 
+  setName (span, name) {
+    this._setTag(span, NAME, name)
+  }
+
   #tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
