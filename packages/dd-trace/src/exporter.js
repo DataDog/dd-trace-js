@@ -20,6 +20,7 @@ module.exports = function getExporter (name) {
     case exporters.JEST_WORKER:
     case exporters.CUCUMBER_WORKER:
     case exporters.MOCHA_WORKER:
+    case exporters.NODE_TEST_WORKER:
     case exporters.PLAYWRIGHT_WORKER:
     case exporters.VITEST_WORKER:
       return require('./ci-visibility/exporters/test-worker')

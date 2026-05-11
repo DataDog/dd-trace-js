@@ -279,6 +279,7 @@ interface Plugins {
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
   "net": tracer.plugins.net;
+  "node-test": tracer.plugins.node_test;
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
@@ -2918,6 +2919,12 @@ declare namespace tracer {
      * [net](https://nodejs.org/api/net.html) module.
      */
     interface net extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [node:test](https://nodejs.org/api/test.html) module.
+     */
+    interface node_test extends Integration {}
 
     /**
      * This plugin automatically instruments the

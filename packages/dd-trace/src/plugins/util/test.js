@@ -66,6 +66,7 @@ const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
 const TEST_FINAL_STATUS = 'test.final_status'
+const TEST_PARENT_TRACE_ID = 'test.parent_trace_id'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
@@ -151,6 +152,9 @@ const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
 
+// node:test worker variables
+const NODE_TEST_WORKER_TRACE_PAYLOAD_CODE = 110
+
 const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
 // Library Capabilities Tagging
@@ -166,7 +170,7 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 // Library configuration request error tag
 const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
 
-const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['node-test', 'playwright', 'vitest'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
@@ -186,7 +190,7 @@ const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
   playwright: '>=1.38.0',
 }
 
-const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
+const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'node-test', 'playwright', 'vitest'])
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -270,6 +274,7 @@ module.exports = {
   TEST_SUITE,
   TEST_STATUS,
   TEST_FINAL_STATUS,
+  TEST_PARENT_TRACE_ID,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
@@ -283,6 +288,7 @@ module.exports = {
   JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  NODE_TEST_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
@@ -604,9 +610,9 @@ function getTestTypeFromFramework (testFramework) {
   return 'test'
 }
 
-function finishAllTraceSpans (span) {
+function finishAllTraceSpans (span, spansToKeep) {
   for (const traceSpan of span.context()._trace.started) {
-    if (traceSpan !== span) {
+    if (traceSpan !== span && !spansToKeep?.includes(traceSpan)) {
       traceSpan.finish()
     }
   }

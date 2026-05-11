@@ -1,4 +1,7 @@
 'use strict'
+const fs = require('node:fs')
+const path = require('node:path')
+
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
@@ -36,6 +39,20 @@ class Writer {
     const payload = isVitestWorkerOld
       ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
       : [this._interprocessCode, data]
+
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    const nodeTestWorkerReportsDir = process.env.DD_CIVISIBILITY_NODE_TEST_WORKER_REPORTS_DIR
+    if (nodeTestWorkerReportsDir && this._interprocessCode) {
+      const filename = `trace-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
+      try {
+        fs.writeFileSync(path.join(nodeTestWorkerReportsDir, filename), data)
+      } catch (error) {
+        log.error('Error writing node:test worker payload', error)
+      } finally {
+        onDone()
+      }
+      return
+    }
 
     // child_process workers (jest default, cucumber)
     if (process.send) {

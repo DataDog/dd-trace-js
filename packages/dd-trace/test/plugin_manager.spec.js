@@ -21,6 +21,7 @@ describe('Plugin Manager', () => {
   let Five
   let Six
   let Eight
+  let NodeTest
   let pm
 
   function makeTracerConfig (overrides = {}) {
@@ -66,6 +67,9 @@ describe('Plugin Manager', () => {
         static experimental = true
         static id = 'eight'
       },
+      'node:test': class NodeTest extends FakePlugin {
+        static id = 'node-test'
+      },
     }
 
     Two = plugins.two
@@ -81,6 +85,9 @@ describe('Plugin Manager', () => {
 
     Eight = plugins.eight
     Eight.prototype.configure = sinon.spy()
+
+    NodeTest = plugins['node:test']
+    NodeTest.prototype.configure = sinon.spy()
 
     process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
 
@@ -102,6 +109,7 @@ describe('Plugin Manager', () => {
   afterEach(() => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
     delete process.env.DD_TRACE_EIGHT_ENABLED
+    delete process.env.DD_TRACE_NODE_TEST_ENABLED
     pm.destroy()
   })
 
@@ -319,6 +327,13 @@ describe('Plugin Manager', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       assert.deepStrictEqual(instantiated, ['two', 'four'])
+    })
+
+    it('disables node:test when configured with an environment variable', () => {
+      process.env.DD_TRACE_NODE_TEST_ENABLED = 'false'
+      pm.configure(makeTracerConfig({ isCiVisibility: true }))
+      loadChannel.publish({ name: 'node:test' })
+      sinon.assert.notCalled(NodeTest.prototype.configure)
     })
 
     describe('service naming schema manager', () => {

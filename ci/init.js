@@ -13,6 +13,7 @@ const EXPORTER_MAP = {
   jest: 'jest_worker',
   cucumber: 'cucumber_worker',
   mocha: 'mocha_worker',
+  'node-test': 'node_test_worker',
   playwright: 'playwright_worker',
   vitest: 'vitest_worker',
 }
@@ -23,10 +24,15 @@ function isPackageManager () {
   )
 }
 
+function isNodeTestCli () {
+  return process.execArgv.some(arg => arg === '--test' || arg.startsWith('--test='))
+}
+
 function detectTestWorkerType () {
   if (getEnvironmentVariable('JEST_WORKER_ID')) return 'jest'
   if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) return 'cucumber'
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) return 'mocha'
+  if (getEnvironmentVariable('NODE_TEST_CONTEXT')) return 'node-test'
   if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) return 'playwright'
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) return 'vitest'
   if (getValueFromEnvSources('DD_VITEST_WORKER')) return 'vitest'
@@ -79,6 +85,9 @@ if (isTestWorker) {
 
 if (shouldInit) {
   tracer.init(baseOptions)
+  if (!isTestWorker && isNodeTestCli()) {
+    require('../packages/datadog-instrumentations/src/node-test').startCliParentSession()
+  }
   tracer.use('fs', false)
   tracer.use('child_process', false)
 }
