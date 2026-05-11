@@ -841,6 +841,7 @@ describe('Config', () => {
       { name: 'DD_SITE', value: 'datadoghq.com', origin: 'default' },
       { name: 'DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', value: 'v0', origin: 'default' },
       { name: 'DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_STARTUP_LOGS', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH', value: 512, origin: 'default' },
       { name: 'DD_TELEMETRY_DEBUG', value: false, origin: 'default' },

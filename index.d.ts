@@ -1276,7 +1276,7 @@ declare namespace tracer {
 
     /**
      * Whether to use Datadog legacy baggage extraction and injection behavior.
-     * @default false
+     * @default true
      * @env DD_TRACE_LEGACY_BAGGAGE_ENABLED
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
