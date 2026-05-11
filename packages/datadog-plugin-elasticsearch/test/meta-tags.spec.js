@@ -43,13 +43,13 @@ describe('ElasticsearchPlugin params meta tag', () => {
     assert.strictEqual(meta['elasticsearch.params'], '{"from":0,"size":10}')
   })
 
-  it('skips the params tag when querystring is an empty object', () => {
+  it('sends the params tag even when querystring is an empty object', () => {
     const meta = captureMeta(ElasticsearchPlugin, {
       path: '/_cluster/health',
       method: 'GET',
       querystring: {},
     })
-    assert.ok(!('elasticsearch.params' in meta))
+    assert.strictEqual(meta['elasticsearch.params'], '{}')
   })
 
   it('skips the params tag when both querystring and query are absent', () => {

@@ -33,10 +33,7 @@ class ElasticsearchPlugin extends DatabasePlugin {
 
     const queryString = params.querystring || params.query
     if (queryString) {
-      const stringifiedQueryString = JSON.stringify(queryString)
-      if (stringifiedQueryString.length > 2) {
-        meta[this.#paramsTag] = stringifiedQueryString
-      }
+      meta[this.#paramsTag] = JSON.stringify(queryString)
     }
 
     this.startSpan(this.operationName(), {
