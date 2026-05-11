@@ -11,6 +11,10 @@ const SPAN_KIND_BY_TYPE = {
   custom: 'task',
 }
 
+// Lifecycle methods are awaited by agents-core. Share one resolved Promise
+// across every callback so we don't allocate per span event.
+const RESOLVED = Promise.resolve()
+
 /**
  * dd-trace-js implementation of the agents-core `TracingProcessor` interface.
  * Registered via `addTraceProcessor(new DDOpenAIAgentsProcessor(integration))` inside
@@ -25,66 +29,78 @@ const SPAN_KIND_BY_TYPE = {
  * Promise even though the work is synchronous.
  */
 class DDOpenAIAgentsProcessor {
-  constructor (integration) {
-    this._integration = integration
+  /**
+   * @param {() => (object | undefined)} getIntegration - Lazy accessor for the
+   *   current OpenAIAgentsIntegration singleton. Read on each lifecycle event
+   *   so re-instantiating the plugin doesn't strand the processor against an
+   *   old integration reference inside agents-core.
+   */
+  constructor (getIntegration) {
+    this._getIntegration = getIntegration
   }
 
   onTraceStart (oaiTrace) {
-    if (!this._integration.enabled) return Promise.resolve()
+    const integration = this._getIntegration()
+    if (!integration?.enabled) return RESOLVED
     try {
-      this._integration.startTrace(oaiTrace)
+      integration.startTrace(oaiTrace)
     } catch (err) {
       log.warn('[openai-agents] onTraceStart failed: %s', err)
     }
-    return Promise.resolve()
+    return RESOLVED
   }
 
   onTraceEnd (oaiTrace) {
-    if (!this._integration.enabled) return Promise.resolve()
+    const integration = this._getIntegration()
+    if (!integration?.enabled) return RESOLVED
     try {
-      this._integration.endTrace(oaiTrace)
+      integration.endTrace(oaiTrace)
     } catch (err) {
       log.warn('[openai-agents] onTraceEnd failed: %s', err)
     }
-    return Promise.resolve()
+    return RESOLVED
   }
 
   onSpanStart (oaiSpan) {
-    if (!this._integration.enabled) return Promise.resolve()
-    if (!oaiSpan?.spanData) return Promise.resolve() // guard NoopSpan
+    const integration = this._getIntegration()
+    if (!integration?.enabled) return RESOLVED
+    if (!oaiSpan?.spanData) return RESOLVED // guard NoopSpan
     const kind = SPAN_KIND_BY_TYPE[oaiSpan.spanData.type]
-    if (!kind) return Promise.resolve() // span types without an LLMObs kind are not traced
+    if (!kind) return RESOLVED // span types without an LLMObs kind are not traced
     try {
-      this._integration.startSpan(oaiSpan, kind)
+      integration.startSpan(oaiSpan, kind)
     } catch (err) {
       log.warn('[openai-agents] onSpanStart failed: %s', err)
     }
-    return Promise.resolve()
+    return RESOLVED
   }
 
   onSpanEnd (oaiSpan) {
-    if (!this._integration.enabled) return Promise.resolve()
-    if (!oaiSpan?.spanData) return Promise.resolve()
+    const integration = this._getIntegration()
+    if (!integration?.enabled) return RESOLVED
+    if (!oaiSpan?.spanData) return RESOLVED
     try {
-      this._integration.endSpan(oaiSpan)
+      integration.endSpan(oaiSpan)
     } catch (err) {
       log.warn('[openai-agents] onSpanEnd failed: %s', err)
     }
-    return Promise.resolve()
+    return RESOLVED
   }
 
   forceFlush () {
     // dd-trace exports on its own schedule; nothing to force here.
-    return Promise.resolve()
+    return RESOLVED
   }
 
   shutdown () {
+    const integration = this._getIntegration()
+    if (!integration) return RESOLVED
     try {
-      this._integration.clearState()
+      integration.clearState()
     } catch (err) {
       log.warn('[openai-agents] shutdown cleanup failed: %s', err)
     }
-    return Promise.resolve()
+    return RESOLVED
   }
 }
 
