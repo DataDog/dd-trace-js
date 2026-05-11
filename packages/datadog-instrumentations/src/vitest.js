@@ -63,15 +63,15 @@ const newTestsWithDynamicNames = new Set()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
+const attemptToFixRetryTasks = new WeakSet()
 const modifiedTasks = new WeakSet()
+const efdRetryTasks = new WeakSet()
 const efdDeterminedRetries = new WeakMap()
 const efdSlowAbortedTasks = new WeakSet()
 const efdExecutionStartByTask = new WeakMap()
 const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
-let isRetryReasonEfd = false
-let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
 const workerProcesses = new WeakSet()
 let isFlakyTestRetriesEnabled = false
@@ -327,6 +327,36 @@ function wrapBeforeEachCleanupResult (task, result) {
   }
 
   return result
+}
+
+/**
+ * Gets the task associated with a Vitest hook invocation.
+ * @param {unknown[]} args
+ * @param {object} fallbackTask
+ * @returns {object}
+ */
+function getTaskFromHookArgs (args, fallbackTask) {
+  return args[0]?.task || fallbackTask
+}
+
+/**
+ * Wraps a Vitest hook so it runs inside the span context for the current test.
+ * @param {'beforeEach'|'afterEach'} hookType
+ * @param {Function} fn
+ * @param {object} fallbackTask
+ * @returns {Function}
+ */
+function wrapSuiteHookFn (hookType, fn, fallbackTask) {
+  return shimmer.wrapFunction(fn, fn => function (...args) {
+    const task = getTaskFromHookArgs(args, fallbackTask)
+    const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
+
+    if (hookType === 'beforeEach') {
+      return wrapBeforeEachCleanupResult(task, result)
+    }
+
+    return result
+  })
 }
 
 function getSortWrapper (sort, frameworkVersion) {
@@ -708,7 +738,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         testName,
         onDone: (isAttemptToFix) => {
           if (isAttemptToFix) {
-            isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
+            if (task.repeats !== testManagementAttemptToFixRetries) {
+              attemptToFixRetryTasks.add(task)
+            }
             task.repeats = testManagementAttemptToFixRetries
             attemptToFixTasks.add(task)
             attemptToFixTaskToStatuses.set(task, [])
@@ -738,7 +770,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isImpacted) => {
           if (isImpacted) {
             if (isEarlyFlakeDetectionEnabled) {
-              isRetryReasonEfd = true
+              efdRetryTasks.add(task)
               task.repeats = numRepeats
             }
             modifiedTasks.add(task)
@@ -756,7 +788,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isNew) => {
           if (isNew && !attemptToFixTasks.has(task)) {
             if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
-              isRetryReasonEfd = true
+              efdRetryTasks.add(task)
               task.repeats = numRepeats
             }
             newTasks.add(task)
@@ -850,6 +882,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
+    const isConcurrentTask = task.concurrent === true
     const isEfdManagedTask = isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)
 
     if (isEfdManagedTask && numRepetition > 0 && !efdDeterminedRetries.has(task)) {
@@ -886,13 +919,15 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
-      const shouldWaitForHitProbe = isDiEnabled && numAttempt > 1
+      // Failed Test Replay keeps active probe ownership at plugin level, so concurrent tests could attach a
+      // breakpoint snapshot to the wrong test span.
+      const shouldWaitForHitProbe = isDiEnabled && !isConcurrentTask && numAttempt > 1
       if (shouldWaitForHitProbe) {
         await waitForHitProbe()
       }
 
       const promises = {}
-      const shouldSetProbe = isDiEnabled && numAttempt === 1
+      const shouldSetProbe = isDiEnabled && !isConcurrentTask && numAttempt === 1
       const ctx = taskToCtx.get(task)
       const testError = task.result?.errors?.[0]
       if (ctx) {
@@ -961,18 +996,18 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     const isRetryReasonAtr = numAttempt > 0 &&
       isFlakyTestRetriesEnabled &&
-      !isRetryReasonAttemptToFix &&
-      !isRetryReasonEfd
+      !attemptToFixRetryTasks.has(task) &&
+      !efdRetryTasks.has(task)
 
     const ctx = {
       testName,
       testSuiteAbsolutePath: task.file.filepath,
       isRetry: numAttempt > 0 || numRepetition > 0,
-      isRetryReasonEfd,
-      isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
+      isRetryReasonEfd: efdRetryTasks.has(task),
+      isRetryReasonAttemptToFix: attemptToFixRetryTasks.has(task) && numRepetition > 0,
       isNew,
       hasDynamicName: dynamicNameTasks.has(task),
-      mightHitProbe: isDiEnabled && numAttempt > 0,
+      mightHitProbe: isDiEnabled && !isConcurrentTask && numAttempt > 0,
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
       isQuarantined,
@@ -1013,17 +1048,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (!hookArray) continue
           for (let i = 0; i < hookArray.length; i++) {
             const currentFn = hookArray[i]
-            const originalFn = originalHookFns.get(currentFn) || currentFn
-            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function (...args) {
-              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
-
-              if (hookType === 'beforeEach') {
-                return wrapBeforeEachCleanupResult(task, result)
-              }
-
-              return result
-            })
-            originalHookFns.set(wrappedFn, originalFn)
+            if (originalHookFns.has(currentFn)) continue
+            const wrappedFn = wrapSuiteHookFn(hookType, currentFn, task)
+            originalHookFns.set(wrappedFn, currentFn)
             hookArray[i] = wrappedFn
           }
         }
