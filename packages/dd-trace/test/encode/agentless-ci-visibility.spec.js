@@ -288,5 +288,51 @@ describe('agentless-ci-visibility-encode', () => {
       encoder.addMetadataTags({})
       assert.deepStrictEqual(encoder.metadataTags, { test: { tag: 'value1' } })
     })
+
+    // The CI Visibility flow calls `addMetadataTags` from two channels —
+    // `ci:<framework>:session:start` adds `test_session.name`, and the async
+    // `ci:<framework>:library-configuration` callback adds capability tags
+    // once the backend responds. If an integration finishes a span between
+    // those two calls (e.g. a `dns.promises.lookup` from vite startup), the
+    // encoder previously flushed the payload prefix on the first `encode()`
+    // and the later capability tags never reached the wire.
+    it('encodes metadata at flush time, not at first encode', () => {
+      encoder.addMetadataTags({ test: { 'test_session.name': 'my-session' } })
+      encoder.encode(trace)
+      encoder.addMetadataTags({
+        test: { '_dd.library_capabilities.auto_test_retries': '1' },
+        test_session_end: { 'test_session.name': 'my-session' },
+      })
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      assert.deepStrictEqual(decoded.metadata.test, {
+        'test_session.name': 'my-session',
+        '_dd.library_capabilities.auto_test_retries': '1',
+      })
+      assert.deepStrictEqual(decoded.metadata.test_session_end, {
+        'test_session.name': 'my-session',
+      })
+      assert.strictEqual(decoded.events.length, 1)
+    })
+
+    it('encodes metadata added across multiple flushes', () => {
+      encoder.encode(trace)
+      encoder.addMetadataTags({ test: { 'first.flush.tag': '1' } })
+      const firstBuffer = encoder.makePayload()
+      const firstDecoded = msgpack.decode(firstBuffer, { useBigInt64: true })
+      assert.deepStrictEqual(firstDecoded.metadata.test, { 'first.flush.tag': '1' })
+
+      encoder.encode(trace)
+      encoder.addMetadataTags({ test: { 'second.flush.tag': '2' } })
+      const secondBuffer = encoder.makePayload()
+      const secondDecoded = msgpack.decode(secondBuffer, { useBigInt64: true })
+
+      assert.deepStrictEqual(secondDecoded.metadata.test, {
+        'first.flush.tag': '1',
+        'second.flush.tag': '2',
+      })
+    })
   })
 })
