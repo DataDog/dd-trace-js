@@ -19,6 +19,18 @@ The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
 names for several majors.
 
+### AppSec extended-data-collection programmatic config removed from types
+
+`appsec.extendedHeadersCollection.{enabled,redaction,maxHeaders}` and
+`appsec.rasp.bodyCollection` are no longer part of the v6 TypeScript surface.
+Configure these features through the Datadog UI and Remote Configuration
+instead — the runtime keeps consuming the values pushed by RC.
+
+The matching `DD_APPSEC_COLLECT_ALL_HEADERS`,
+`DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED`,
+`DD_APPSEC_MAX_COLLECTED_HEADERS`, and `DD_APPSEC_RASP_COLLECT_REQUEST_BODY`
+environment variables are deprecated in v6 and will follow in a future major.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported
