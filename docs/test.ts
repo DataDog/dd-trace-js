@@ -124,18 +124,12 @@ tracer.init({
       endpointCollectionMessageLimit: 300
     },
     rasp: {
-      enabled: true,
-      bodyCollection: true
+      enabled: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
-    },
-    extendedHeadersCollection: {
-      enabled: true,
-      redaction: false,
-      maxHeaders: 42
     }
   },
   iast: {
