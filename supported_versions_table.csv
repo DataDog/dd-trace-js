@@ -82,6 +82,7 @@ node:http,http,18.0.0,25.9.0,True
 node:http2,http2,18.0.0,25.9.0,True
 node:https,http,18.0.0,25.9.0,True
 node:net,net,18.0.0,25.9.0,True
+node:test,node-test,18.0.0,25.9.0,True
 nyc,nyc,17.0.0,17.1.0,True
 openai,openai,3.0.0,6.18.0,True
 oracledb,oracledb,5.0.0,6.10.0,True
