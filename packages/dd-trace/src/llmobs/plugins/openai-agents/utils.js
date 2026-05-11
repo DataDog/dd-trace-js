@@ -79,41 +79,41 @@ function extractInputMessages (input, instructions) {
  * @returns {Array<{ role: string, content: string }>}
  */
 function extractOutputMessages (result) {
-  if (!result?.output) return [{ content: '', role: '' }]
-
   const messages = []
 
-  for (const item of result.output) {
-    if (item.type === 'message') {
-      let content = ''
-      if (Array.isArray(item.content)) {
-        const textParts = item.content
-          .filter(c => c.type === 'output_text')
-          .map(c => c.text)
-        content = textParts.join('')
-      } else if (typeof item.content === 'string') {
-        content = item.content
-      }
-
-      messages.push({ role: item.role || 'assistant', content })
-    } else if (item.type === 'function_call') {
-      let args = item.arguments
-      if (typeof args === 'string') {
-        try {
-          args = JSON.parse(args)
-        } catch {
-          args = {}
+  if (result?.output) {
+    for (const item of result.output) {
+      if (item.type === 'message') {
+        let content = ''
+        if (Array.isArray(item.content)) {
+          const textParts = item.content
+            .filter(c => c.type === 'output_text')
+            .map(c => c.text)
+          content = textParts.join('')
+        } else if (typeof item.content === 'string') {
+          content = item.content
         }
+
+        messages.push({ role: item.role || 'assistant', content })
+      } else if (item.type === 'function_call') {
+        let args = item.arguments
+        if (typeof args === 'string') {
+          try {
+            args = JSON.parse(args)
+          } catch {
+            args = {}
+          }
+        }
+        messages.push({
+          role: 'assistant',
+          toolCalls: [{
+            toolId: item.call_id,
+            name: item.name,
+            arguments: args,
+            type: item.type,
+          }],
+        })
       }
-      messages.push({
-        role: 'assistant',
-        toolCalls: [{
-          toolId: item.call_id,
-          name: item.name,
-          arguments: args,
-          type: item.type,
-        }],
-      })
     }
   }
 
@@ -121,16 +121,18 @@ function extractOutputMessages (result) {
 }
 
 /**
- * Extracts token usage metrics from the model response.
+ * Extracts token usage metrics from the model response. Returns `undefined`
+ * when there's nothing to tag, so callers can skip the tagger call without
+ * allocating an Object.keys array.
  *
  * @param {{ usage?: { inputTokens?: number, outputTokens?: number, totalTokens?: number,
  *   outputTokensDetails?: { reasoningTokens?: number } } }} result
- * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number, reasoningTokens?: number }}
+ * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number,
+ *   reasoningOutputTokens?: number } | undefined}
  */
 function extractMetrics (result) {
-  const metrics = {}
   const usage = result?.usage
-  if (!usage) return metrics
+  if (!usage) return
 
   const inputTokens = usage.inputTokens ?? usage.input_tokens
   const outputTokens = usage.outputTokens ?? usage.output_tokens
@@ -138,6 +140,10 @@ function extractMetrics (result) {
   const reasoningTokens = usage.outputTokensDetails?.reasoningTokens ??
     usage.output_tokens_details?.reasoning_tokens
 
+  if (inputTokens === undefined && outputTokens === undefined &&
+      totalTokens === undefined && !reasoningTokens) return
+
+  const metrics = {}
   if (inputTokens !== undefined) metrics.inputTokens = inputTokens
   if (outputTokens !== undefined) metrics.outputTokens = outputTokens
   // Tagger maps `reasoningOutputTokens` → `reasoning_output_tokens` in the
@@ -171,23 +177,26 @@ const RESPONSE_METADATA_FIELDS = [
 /**
  * Extracts metadata from the model response. Mirrors Python's
  * `OaiSpanAdapter.llmobs_metadata` — emits all response-echoed configuration
- * fields plus `text` when present.
+ * fields plus `text` when present. Returns `undefined` when nothing was
+ * captured, so callers can skip the tagger call without allocating.
  *
  * @param {object | undefined} response
- * @returns {object}
+ * @returns {object | undefined}
  */
 function extractMetadata (response) {
-  const metadata = {}
-  if (!response) return metadata
+  if (!response) return
 
+  let metadata
   for (const field of RESPONSE_METADATA_FIELDS) {
     const value = response[field]
     if (value !== undefined && value !== null) {
+      metadata ??= {}
       metadata[field] = value
     }
   }
 
   if (response.text) {
+    metadata ??= {}
     metadata.text = response.text
   }
 
