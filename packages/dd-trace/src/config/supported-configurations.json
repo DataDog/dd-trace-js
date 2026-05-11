@@ -780,9 +780,9 @@
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
-        "default": "${os.tmpdir()}/dd-trace-git-cache"
+        "default": null
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": [

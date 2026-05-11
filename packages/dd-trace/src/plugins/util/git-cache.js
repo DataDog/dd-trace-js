@@ -16,6 +16,8 @@ function ensureCacheDir () {
   if (isGitEnabled === undefined) {
     const config = getConfig()
     isGitEnabled = config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED
+    // TODO: Move the default to config/index.js applyCalculated
+    // when using the config singleton.
     gitCacheDir = config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR ||
       path.join(os.tmpdir(), 'dd-trace-git-cache')
   }
