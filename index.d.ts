@@ -3495,16 +3495,6 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls. This option is not supported when
-     * using ESM.
-     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * environment variable instead. This option will be removed in the next major version.
-     * @env DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    securityControlsConfiguration?: string,
-
-    /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      * @env DD_IAST_TELEMETRY_VERBOSITY
      * Programmatic configuration takes precedence over the environment variables listed above.
