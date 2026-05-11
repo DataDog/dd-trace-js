@@ -24,6 +24,12 @@ names for several majors.
 Startup configuration is logged to the console by default. Set
 `DD_TRACE_STARTUP_LOGS=false` to silence it.
 
+### `experimental.iast` configuration removed
+
+The `experimental.iast.*` programmatic aliases have been removed. Use the
+canonical top-level `iast.*` fields and `DD_IAST_*` environment variables
+instead.
+
 ### AppSec extended-data-collection programmatic config removed from types
 
 `appsec.extendedHeadersCollection.{enabled,redaction,maxHeaders}` and
