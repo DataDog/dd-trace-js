@@ -19,6 +19,12 @@ The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
 names for several majors.
 
+### `experimental.iast` configuration removed
+
+The `experimental.iast.*` programmatic aliases have been removed. Use the
+canonical top-level `iast.*` fields and `DD_IAST_*` environment variables
+instead.
+
 ### AppSec extended-data-collection programmatic config removed from types
 
 `appsec.extendedHeadersCollection.{enabled,redaction,maxHeaders}` and
