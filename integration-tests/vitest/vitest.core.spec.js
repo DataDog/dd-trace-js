@@ -280,6 +280,32 @@ versions.forEach((version) => {
           )
           assert.strictEqual(cleanupHookHttpSpans.length, 2,
             'should have 2 http spans from beforeEach and its returned cleanup as children of test span')
+
+          const concurrentHookTestNames = [
+            'vitest-test-concurrent-hook-http first concurrent hook http is linked to first test span',
+            'vitest-test-concurrent-hook-http second concurrent hook http is linked to second test span',
+            'vitest-describe-concurrent-hook-http first inherited concurrent hook http is linked to first test span',
+            'vitest-describe-concurrent-hook-http second inherited concurrent hook http is linked to second test span',
+            'vitest-mixed-concurrent-hook-http serial hook http is linked to serial test span',
+            'vitest-mixed-concurrent-hook-http first mixed concurrent hook http is linked to first test span',
+            'vitest-mixed-concurrent-hook-http second mixed concurrent hook http is linked to second test span',
+          ]
+          for (const testName of concurrentHookTestNames) {
+            const concurrentHookTestSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+            assert.ok(concurrentHookTestSpan, `should have concurrent hook test span for ${testName}`)
+            assert.strictEqual(concurrentHookTestSpan.meta[TEST_STATUS], 'pass')
+
+            const concurrentHookHttpSpans = spans.filter(span =>
+              span.name === 'http.request' &&
+              span.trace_id.toString() === concurrentHookTestSpan.trace_id.toString() &&
+              span.parent_id.toString() === concurrentHookTestSpan.span_id.toString()
+            )
+            assert.strictEqual(
+              concurrentHookHttpSpans.length,
+              3,
+              `should have beforeEach, test body, and afterEach HTTP spans as children of ${testName}`
+            )
+          }
         }, 25000)
 
       childProcess = exec(
