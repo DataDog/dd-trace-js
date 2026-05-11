@@ -369,19 +369,19 @@ class FakeCiVisIntake extends FakeAgent {
     return super.stop()
   }
 
-  // Gather payloads while childProcess runs; resolve as soon as onPayload accepts the
-  // buffer mid-stream, otherwise run onPayload once more after `gracePeriod` ms of
-  // post-exit drain. `hardTimeout` is a backstop for a genuinely hung child — bump it
-  // per-call only when a workload's child runtime is provably above the default.
+  // Gather payloads while childProcess runs, then run onPayload once on the
+  // accumulated buffer after the child emits `'exit'` plus `gracePeriod` ms of HTTP
+  // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
+  // only when a workload's child runtime is provably above the default.
   /**
    * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy
    *   accepts everything.
-   * @param {(payloads: object[]) => void} onPayload Assertion callback. Must be
-   *   idempotent over the same `payloads` reference — it is invoked once per match
-   *   and once more after the post-exit grace period.
+   * @param {(payloads: object[]) => void} onPayload Assertion callback, invoked once
+   *   on the post-exit buffer. Callers can read `childProcess.exitCode` immediately
+   *   after the returned promise resolves.
    * @param {{ gracePeriod?: number, hardTimeout?: number }} [options]
    */
   gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
@@ -390,6 +390,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     return new Promise((resolve, reject) => {
       let settled = false
+      let graceTimer = null
 
       const cleanup = () => {
         settled = true
@@ -399,30 +400,13 @@ class FakeCiVisIntake extends FakeAgent {
         clearTimeout(graceTimer)
       }
 
-      const finishGather = (final) => {
-        if (settled) return
-        try {
-          onPayload(payloads)
-          cleanup()
-          resolve()
-        } catch (error) {
-          if (!final) {
-            return
-          }
-          cleanup()
-          reject(error)
-        }
-      }
-
       const messageHandler = (message) => {
         if (settled) return
         if (!payloadMatch || payloadMatch(message)) {
           payloads.push(message)
-          finishGather(false)
         }
       }
 
-      let graceTimer = null
       const exitHandler = () => {
         if (settled) return
         graceTimer = setTimeout(() => {
@@ -435,7 +419,14 @@ class FakeCiVisIntake extends FakeAgent {
             ))
             return
           }
-          finishGather(true)
+          try {
+            onPayload(payloads)
+            cleanup()
+            resolve()
+          } catch (error) {
+            cleanup()
+            reject(error)
+          }
         }, gracePeriod)
       }
 

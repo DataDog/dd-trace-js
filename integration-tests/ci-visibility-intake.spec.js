@@ -25,29 +25,13 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
 
   afterEach(() => intake.stop())
 
-  it('resolves immediately when the caller assertion passes on an early payload', async () => {
+  it('runs the assertion once after child exit + grace and resolves on success', async () => {
     const child = fakeChildProcess()
     const promise = intake.gatherPayloadsUntilChildExit(
       child,
       ({ url }) => url === '/api/v2/citestcycle',
       (payloads) => {
-        assert.strictEqual(payloads.length, 1)
-      },
-      { gracePeriod: 50, hardTimeout: 5000 }
-    )
-
-    intake.emit('message', { url: '/api/v2/citestcycle', payload: {} })
-
-    await promise
-  })
-
-  it('resolves after child exit + grace when the assertion only passes once all events are in', async () => {
-    const child = fakeChildProcess()
-    const promise = intake.gatherPayloadsUntilChildExit(
-      child,
-      ({ url }) => url === '/api/v2/citestcycle',
-      (payloads) => {
-        assert.strictEqual(payloads.length, 3, 'expected exactly three payloads')
+        assert.strictEqual(payloads.length, 3)
       },
       { gracePeriod: 50, hardTimeout: 5000 }
     )
@@ -60,7 +44,29 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     await promise
   })
 
-  it('still picks up payloads that arrive during the grace period after child exit', async () => {
+  it('does not resolve before child exit, even when the buffer would satisfy the assertion', async () => {
+    const child = fakeChildProcess()
+    let assertionRuns = 0
+    const promise = intake.gatherPayloadsUntilChildExit(
+      child,
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        assertionRuns += 1
+        assert.strictEqual(payloads.length, 1)
+      },
+      { gracePeriod: 50, hardTimeout: 5000 }
+    )
+
+    intake.emit('message', { url: '/api/v2/citestcycle', payload: { i: 1 } })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    assert.strictEqual(assertionRuns, 0, 'onPayload must not run before child exit')
+
+    child.simulateExit(0)
+    await promise
+    assert.strictEqual(assertionRuns, 1, 'onPayload runs exactly once on the post-exit buffer')
+  })
+
+  it('picks up payloads that arrive during the grace period after child exit', async () => {
     const child = fakeChildProcess()
     const promise = intake.gatherPayloadsUntilChildExit(
       child,
@@ -94,7 +100,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     await assert.rejects(promise, /child exited with no matching payloads/)
   })
 
-  it('rejects with the caller assertion error when payloads arrived but the assertion fails', async () => {
+  it('rejects with the caller assertion error when the post-exit buffer fails the assertion', async () => {
     const child = fakeChildProcess()
     const promise = intake.gatherPayloadsUntilChildExit(
       child,
@@ -111,7 +117,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     await assert.rejects(promise, /expected five payloads/)
   })
 
-  it('rejects with a hard-timeout error when the child neither exits nor satisfies the assertion', async () => {
+  it('rejects with a hard-timeout error when the child neither exits nor produces payloads', async () => {
     const child = fakeChildProcess()
     const promise = intake.gatherPayloadsUntilChildExit(
       child,
@@ -123,7 +129,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     await assert.rejects(promise, /hard timeout of 100ms/)
   })
 
-  it('treats a child that already exited as exit + grace, with no pre-subscribe payloads', async () => {
+  it('treats a child that already exited as exit + grace', async () => {
     const child = fakeChildProcess()
     child.exitCode = 0
 
@@ -132,7 +138,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     const promise = intake.gatherPayloadsUntilChildExit(
       child,
       ({ url }) => url === '/api/v2/citestcycle',
-      () => assert.fail('onPayload must not run when no payloads matched'),
+      () => assert.fail('pre-subscribe payloads must not be captured'),
       { gracePeriod: 50, hardTimeout: 5000 }
     )
 
