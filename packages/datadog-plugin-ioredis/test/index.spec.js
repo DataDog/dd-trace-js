@@ -55,6 +55,22 @@ describe('Plugin', () => {
           }, { spanResourceMatch: /^get$/ })
         })
 
+        it('formats numeric args without coercing to ?', async () => {
+          await redis.expire('foo', 60)
+
+          await agent.assertFirstTraceSpan({
+            meta: { 'redis.raw_command': 'EXPIRE foo 60' },
+          }, { spanResourceMatch: /^expire$/ })
+        })
+
+        it('redacts non-string non-number args as ?', async () => {
+          await redis.set('foo', Buffer.from('binary-value'))
+
+          await agent.assertFirstTraceSpan({
+            meta: { 'redis.raw_command': 'SET foo ?' },
+          }, { spanResourceMatch: /^set$/ })
+        })
+
         it('should run the callback in the parent context', () => {
           const span = tracer.startSpan('test')
 
