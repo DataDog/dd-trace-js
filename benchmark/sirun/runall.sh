@@ -32,6 +32,11 @@ fi
     && PLUGINS="bluebird|q|graphql|express" yarn services
 )
 
+(
+  cd "${CWD}/startup/everything-fixture" &&
+  npm ci --no-audit --no-fund || (sleep 60 && npm ci --no-audit --no-fund)
+)
+
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
