@@ -3,12 +3,13 @@
 const assert = require('node:assert/strict')
 
 const { channel } = require('dc-polyfill')
-const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
@@ -152,16 +153,23 @@ describe('module', () => {
       )
     })
 
-    it('does not write x-datadog-tags when trace tag propagation is disabled', () => {
-      llmobsModule.enable({
-        llmobs: { mlApp: 'test', agentlessEnabled: false },
-        tagsHeaderMaxLength: 0,
+    describe('with DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0', () => {
+      let config
+
+      before(() => {
+        process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = '0'
+        config = getConfigFresh({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+        delete process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
       })
 
-      const carrier = {}
-      injectCh.publish({ carrier })
+      it('does not write x-datadog-tags', () => {
+        llmobsModule.enable(config)
 
-      assert.ok(!('x-datadog-tags' in carrier))
+        const carrier = {}
+        injectCh.publish({ carrier })
+
+        assert.ok(!('x-datadog-tags' in carrier))
+      })
     })
   })
 

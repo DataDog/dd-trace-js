@@ -110,7 +110,7 @@ function disable () {
 function handleLLMObsParentIdInjection ({ carrier }) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
-  if (globalTracerConfig.tagsHeaderMaxLength === 0) return
+  if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
 
   const parent = storage.getStore()?.span
   const mlObsSpanTags = LLMObsTagger.tagMap.get(parent)
