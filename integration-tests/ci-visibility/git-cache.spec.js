@@ -176,6 +176,33 @@ describe('git-cache integration tests', () => {
     assert.match(secondError.message, /git/)
   })
 
+  it('should cache when DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED is true and cache dir is unset', function () {
+    delete process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR
+
+    delete require.cache[require.resolve('../../packages/dd-trace/src/plugins/util/git-cache')]
+    const defaultDirGitCache = require('../../packages/dd-trace/src/plugins/util/git-cache')
+
+    const firstResultStr = String(defaultDirGitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)).trim()
+    assert.strictEqual(firstResultStr, FIXED_COMMIT_MESSAGE)
+
+    const cacheKey = defaultDirGitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
+    const cacheFilePath = defaultDirGitCache.getCacheFilePath(cacheKey)
+    assert.strictEqual(path.dirname(cacheFilePath), DEFAULT_CACHE_DIR)
+    assert.strictEqual(fs.existsSync(cacheFilePath), true)
+
+    removeGitFromPath()
+
+    const secondResult = String(defaultDirGitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)).trim()
+    assert.strictEqual(secondResult, firstResultStr)
+
+    fs.rmSync(cacheFilePath, { force: true })
+    try {
+      fs.rmdirSync(DEFAULT_CACHE_DIR)
+    } catch {
+      // Ignore, if the directory is not empty
+    }
+  })
+
   context('invalid DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR', () => {
     function runInvalidCacheTest (invalidCacheDir) {
       process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = invalidCacheDir
