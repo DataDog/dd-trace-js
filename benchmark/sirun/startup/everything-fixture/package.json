@@ -5,7 +5,7 @@
   "description": "Dependency fixture for the startup/everything sirun benchmark. See ../README.md.",
   "main": "index.js",
   "dependencies": {
-    "@aws-sdk/client-s3": "3.967.0",
+    "@aws-sdk/client-s3": "3.1045.0",
     "ajv": "8.20.0",
     "amqplib": "1.0.6",
     "axios": "1.16.0",
