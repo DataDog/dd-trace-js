@@ -46,6 +46,11 @@ ruleTester.run('eslint-config-names-sync', rule, {
       code: '',
       options: [getFixtureOptions('internal-env-and-ignored-names')],
     },
+    {
+      filename: path.join(fixturesDirectory, 'deprecated-skips-cross-check', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('deprecated-skips-cross-check')],
+    },
   ],
   invalid: [
     {

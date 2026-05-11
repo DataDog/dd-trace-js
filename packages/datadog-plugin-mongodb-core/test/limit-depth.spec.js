@@ -48,4 +48,66 @@ describe('mongodb-core query depth limiter', () => {
 
     assert.deepStrictEqual(JSON.parse(query), { outer: { ownNested: 'kept' } })
   })
+
+  it('extracts cmd.filter when no .query is present', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { filter: { user: 'alice' } },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { user: 'alice' })
+  })
+
+  it('extracts cmd.pipeline when no .query / .filter is present', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { pipeline: [{ $match: { user: 'alice' } }, { $count: 'total' }] },
+      name: 'aggregate',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), [
+      { $match: { user: 'alice' } },
+      { $count: 'total' },
+    ])
+  })
+
+  it('extracts the inner q from a single cmd.deletes statement', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { deletes: [{ q: { user: 'alice' }, limit: 1 }] },
+      name: 'delete',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { user: 'alice' })
+  })
+
+  it('collects every q from multi-statement cmd.updates', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: {
+        updates: [
+          { q: { user: 'alice' }, u: { $set: { a: 1 } } },
+          { q: { user: 'bob' }, u: { $set: { b: 2 } } },
+        ],
+      },
+      name: 'update',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), [
+      { user: 'alice' },
+      { user: 'bob' },
+    ])
+  })
+
+  it('renders Binary BSON values as "?"', () => {
+    const binary = { _bsontype: 'Binary', buffer: Buffer.from('payload') }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { blob: binary } },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { blob: '?' })
+  })
 })

@@ -6,7 +6,7 @@ class CloudwatchLogs extends BaseAwsSdkPlugin {
   static id = 'cloudwatchlogs'
 
   generateTags (params, operation) {
-    if (!params?.logGroupName) return {}
+    if (!params?.logGroupName) return
 
     return {
       'resource.name': `${operation} ${params.logGroupName}`,
