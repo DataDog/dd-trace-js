@@ -9,6 +9,13 @@ const zeroId = new Uint8Array(8)
 
 let batch = 0
 
+// When DD_TRACE_SECURE_RANDOM=true, bypass the batch buffer entirely and call
+// randomFillSync on a fresh 8-byte buffer per ID. The batch buffer is heap state
+// that may be duplicated across process copies; per-call kernel reads have no
+// buffered state and guarantee ID uniqueness regardless of process origin.
+const _secureRandom = process.env.DD_TRACE_SECURE_RANDOM === 'true'
+const _secureBuf = _secureRandom ? new Uint8Array(8) : null
+
 // Internal representation of a trace or span ID.
 class Identifier {
   /** @type {number[] | Uint8Array} */
@@ -205,6 +212,14 @@ function toNumberString (buffer, radix) {
  * @returns {number[] | Uint8Array}
  */
 function pseudoRandom () {
+  if (_secureBuf) {
+    randomFillSync(_secureBuf)
+    return [
+      _secureBuf[0] & 0x7F,
+      _secureBuf[1], _secureBuf[2], _secureBuf[3],
+      _secureBuf[4], _secureBuf[5], _secureBuf[6], _secureBuf[7],
+    ]
+  }
   if (batch === 0) {
     randomFillSync(data)
   }
