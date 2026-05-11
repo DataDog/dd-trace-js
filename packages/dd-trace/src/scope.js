@@ -3,10 +3,12 @@
 const { storage } = require('../../datadog-core')
 const { PublicSpan, unwrap } = require('./opentracing/public/span')
 
+const legacyStorage = storage('legacy')
+
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 class Scope {
   active () {
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     const span = (store && store.span) || null
 
     return span ? new PublicSpan(span) : null
@@ -17,10 +19,10 @@ class Scope {
 
     span = unwrap(span)
 
-    const oldStore = storage('legacy').getStore()
-    const newStore = span ? storage('legacy').getStore(span._store) : oldStore
+    const oldStore = legacyStorage.getStore()
+    const newStore = span ? legacyStorage.getStore(span._store) : oldStore
 
-    storage('legacy').enterWith({ ...newStore, span })
+    legacyStorage.enterWith({ ...newStore, span })
 
     try {
       return callback()
@@ -31,7 +33,7 @@ class Scope {
 
       throw e
     } finally {
-      storage('legacy').enterWith(oldStore)
+      legacyStorage.enterWith(oldStore)
     }
   }
 

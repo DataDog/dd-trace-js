@@ -15,6 +15,8 @@ const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
+const legacyStorage = storage('legacy')
+
 let extractIp
 
 const WEB = types.WEB
@@ -127,7 +129,7 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
-    context.store = storage('legacy').getStore()
+    context.store = legacyStorage.getStore()
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
@@ -205,7 +207,7 @@ const web = {
   startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
     let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
@@ -330,7 +332,7 @@ const web = {
       },
       set (value) {
         ends.set(this, function (...args) {
-          return storage('legacy').run(context.store, value, ...args)
+          return legacyStorage.run(context.store, value, ...args)
         })
       },
     })
