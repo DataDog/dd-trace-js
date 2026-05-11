@@ -35,18 +35,18 @@ git add package.json package-lock.json
 
 Do not commit `node_modules/`; `runall.sh` re-installs via `npm ci`.
 
-The bench runs across every Node major dd-trace supports (18+), so every
-pinned version must:
+The bench runs across the Node majors listed in
+`.gitlab/benchmarks.yml` (currently 20–26), so every pinned version
+must:
 
-1. Have an `engines.node` range that includes Node 18, including all
-   transitive dependencies after `npm install` resolves.
+1. Have an `engines.node` range that includes the matrix floor,
+   including all transitive dependencies after `npm install` resolves.
 2. Be loadable through CJS `require()`. ESM-only releases (recent `got`,
    `uuid`) break the fixture's `require(name)` walk; pin a CJS-era
    version (e.g. `got@11`, `uuid@9`) instead.
 
-Some top-level packages still satisfy (1) and (2) themselves but pull in
-transitive deps that bumped to Node 20+ (e.g. `fastify@5` resolves
-`find-my-way@>=9.3` which requires Node 20). When that happens, add an
-`overrides` entry pinning the offending transitive dep to the last
-release that supports Node 18; do not downgrade the top-level package
-unless it has no other Node-18-compatible release.
+Some top-level packages still satisfy (1) and (2) themselves but pull
+in transitive deps that bumped past the matrix floor. When that
+happens, add an `overrides` entry pinning the offending transitive dep
+to the last release that supports the floor; do not downgrade the
+top-level package unless it has no other compatible release.
