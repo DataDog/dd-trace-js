@@ -43,6 +43,8 @@ benchmarks-pr-comment:
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
+    - if: '$CI_PIPELINE_SOURCE != "merge_request_event"'
+      when: never
     - when: on_success
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
@@ -56,6 +58,8 @@ check-big-regressions:
   needs: [ benchmark, benchmark-serverless ]
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE != "merge_request_event"'
       when: never
     - if: $CI_COMMIT_BRANCH == 'master'
       interruptible: false
