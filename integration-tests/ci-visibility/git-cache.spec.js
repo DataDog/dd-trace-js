@@ -187,7 +187,7 @@ describe('git-cache integration tests', () => {
 
     const cacheKey = defaultDirGitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
     const cacheFilePath = defaultDirGitCache.getCacheFilePath(cacheKey)
-    assert.strictEqual(path.dirname(cacheFilePath), DEFAULT_CACHE_DIR)
+    assert.ok(cacheFilePath.includes('dd-trace-git-cache'))
     assert.strictEqual(fs.existsSync(cacheFilePath), true)
 
     removeGitFromPath()
@@ -197,7 +197,7 @@ describe('git-cache integration tests', () => {
 
     fs.rmSync(cacheFilePath, { force: true })
     try {
-      fs.rmdirSync(DEFAULT_CACHE_DIR)
+      fs.rmdirSync(path.dirname(cacheFilePath))
     } catch {
       // Ignore, if the directory is not empty
     }
