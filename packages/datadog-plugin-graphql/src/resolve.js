@@ -1,6 +1,7 @@
 'use strict'
 
 const dc = require('dc-polyfill')
+const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const collapsedPathSym = Symbol('collapsedPaths')
@@ -9,28 +10,29 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'resolve'
 
-  start (fieldCtx) {
+  bindStart (fieldCtx) {
+    // The same `fieldCtx` is reused across collapsed list siblings. Re-enter the existing
+    // store so every sibling sees the shared `graphql.resolve` span as its active scope.
+    if (fieldCtx.currentStore) return fieldCtx.currentStore
+
     const { info, rootCtx, args, path: pathAsArray, pathString } = fieldCtx
 
     const path = getPath(this.config, pathAsArray)
-
-    // we need to get the parent span to the field if it exists for correct span parenting
-    // of nested fields
     const parentField = getParentField(rootCtx, pathString)
     const childOf = parentField?.ctx?.currentStore?.span
 
     fieldCtx.parent = parentField
 
-    if (!shouldInstrument(this.config, path)) return
+    const parentStore = storage('legacy').getStore()
+
+    if (!shouldInstrument(this.config, path)) return parentStore
     const computedPathString = path.join('.')
 
     if (this.config.collapse) {
-      if (rootCtx.fields[computedPathString]) return
-
       if (!rootCtx[collapsedPathSym]) {
         rootCtx[collapsedPathSym] = Object.create(null)
       } else if (rootCtx[collapsedPathSym][computedPathString]) {
-        return
+        return parentStore
       }
 
       rootCtx[collapsedPathSym][computedPathString] = true
