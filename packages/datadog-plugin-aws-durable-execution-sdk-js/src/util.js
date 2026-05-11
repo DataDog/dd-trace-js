@@ -11,14 +11,10 @@ const shimmer = require('../../datadog-shimmer')
  * @returns {boolean}
  */
 function isReplayedOp (ctxImpl) {
-  try {
-    const stepId = ctxImpl?.getNextStepId?.()
-    if (!stepId) return false
-    const stepData = ctxImpl?._executionContext?.getStepData?.(stepId)
-    return stepData?.Status === 'SUCCEEDED'
-  } catch {
-    return false
-  }
+  const stepId = ctxImpl?.getNextStepId?.()
+  if (!stepId) return false
+  const stepData = ctxImpl?._executionContext?.getStepData?.(stepId)
+  return stepData?.Status === 'SUCCEEDED'
 }
 
 /**
@@ -29,11 +25,9 @@ function isReplayedOp (ctxImpl) {
  * @returns {string|undefined}
  */
 function getOperationId (ctxImpl) {
-  try {
-    const stepId = ctxImpl?.getNextStepId?.()
-    if (!stepId) return
-    return createHash('md5').update(stepId).digest('hex').slice(0, 16)
-  } catch {}
+  const stepId = ctxImpl?.getNextStepId?.()
+  if (!stepId) return
+  return createHash('md5').update(stepId).digest('hex').slice(0, 16)
 }
 
 /**
@@ -69,38 +63,20 @@ function unwrapDurableError (ctxOrError) {
 function observeDurablePromise (dp, onSettle) {
   if (!dp || typeof dp.then !== 'function') return
   const proto = Object.getPrototypeOf(dp)
-  let settled = false
+  let attached = false
 
   // Use the prototype's `.then` directly to avoid recursing into our
-  // instance-level wrapper. Underlying `_promise` is cached on first call so
-  // this and any user-facing `.then`/`.catch`/`.finally` calls all chain off
-  // the same native Promise.
+  // instance-level wrapper. The promise can only settle once, so calling
+  // attachSpy at most once gives us exactly one onSettle invocation.
   const attachSpy = () => {
-    proto.then.call(dp,
-      () => {
-        if (settled) return
-        settled = true
-        onSettle()
-      },
-      err => {
-        if (settled) return
-        settled = true
-        onSettle(err)
-      }
-    )
+    if (attached) return
+    attached = true
+    proto.then.call(dp, () => onSettle(), err => onSettle(err))
   }
 
-  shimmer.wrap(dp, 'then', original => function (onFulfilled, onRejected) {
+  shimmer.massWrap(dp, ['then', 'catch', 'finally'], original => function (...args) {
     attachSpy()
-    return original.call(this, onFulfilled, onRejected)
-  })
-  shimmer.wrap(dp, 'catch', original => function (onRejected) {
-    attachSpy()
-    return original.call(this, onRejected)
-  })
-  shimmer.wrap(dp, 'finally', original => function (onFinally) {
-    attachSpy()
-    return original.call(this, onFinally)
+    return original.apply(this, args)
   })
 }
 

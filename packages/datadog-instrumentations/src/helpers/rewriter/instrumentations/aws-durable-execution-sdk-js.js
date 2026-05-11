@@ -2,39 +2,38 @@
 
 const baseModule = { name: '@aws/durable-execution-sdk-js', versionRange: '>=1.1.0' }
 
-const syncMethods = [
-  ['DurableContextImpl', 'step'],
-  ['DurableContextImpl', 'invoke'],
-  ['DurableContextImpl', 'runInChildContext'],
-  ['DurableContextImpl', 'wait'],
-  ['DurableContextImpl', 'waitForCondition'],
-  ['DurableContextImpl', 'waitForCallback'],
-  ['DurableContextImpl', 'createCallback'],
-  ['DurableContextImpl', 'map'],
-  ['DurableContextImpl', 'parallel'],
+const contextMethods = [
+  'step',
+  'invoke',
+  'runInChildContext',
+  'wait',
+  'waitForCondition',
+  'waitForCallback',
+  'createCallback',
+  'map',
+  'parallel',
 ]
 
-const asyncMethods = [
-  ['CheckpointManager', 'checkpoint'],
-]
-
-const buildEntries = filePath => [
-  {
-    module: { ...baseModule, filePath },
-    functionQuery: { functionName: 'runHandler', kind: 'Async' },
-    channelName: 'withDurableExecution',
-  },
-  ...syncMethods.map(([className, methodName]) => ({
-    module: { ...baseModule, filePath },
-    functionQuery: { className, methodName, kind: 'Sync' },
-    channelName: `${className}_${methodName}`,
-  })),
-  ...asyncMethods.map(([className, methodName]) => ({
-    module: { ...baseModule, filePath },
-    functionQuery: { className, methodName, kind: 'Async' },
-    channelName: `${className}_${methodName}`,
-  })),
-]
+const buildEntries = filePath => {
+  const module = { ...baseModule, filePath }
+  return [
+    {
+      module,
+      functionQuery: { functionName: 'runHandler', kind: 'Async' },
+      channelName: 'withDurableExecution',
+    },
+    ...contextMethods.map(methodName => ({
+      module,
+      functionQuery: { className: 'DurableContextImpl', methodName, kind: 'Sync' },
+      channelName: `DurableContextImpl_${methodName}`,
+    })),
+    {
+      module,
+      functionQuery: { className: 'CheckpointManager', methodName: 'checkpoint', kind: 'Async' },
+      channelName: 'CheckpointManager_checkpoint',
+    },
+  ]
+}
 
 module.exports = [
   ...buildEntries('dist/index.mjs'),

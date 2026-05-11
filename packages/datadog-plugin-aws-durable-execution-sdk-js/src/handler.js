@@ -32,31 +32,22 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    const span = ctx?.currentStore?.span || this.activeSpan
+    const span = ctx?.currentStore?.span
     const status = ctx?.result?.Status
     if (span && typeof status === 'string') {
       span.setTag('aws.durable.invocation_status', status.toLowerCase())
+      // When the workflow suspends (status=PENDING), the SDK intentionally leaves
+      // the suspended operations' DurablePromise pending — neither resolves nor
+      // rejects them. Operation spans' asyncEnd therefore never fire, so we
+      // finish them here so the trace processor can flush the trace.
+      if (status === 'PENDING') finishOpenChildSpans(span)
     }
-
-    // When the workflow suspends (status=PENDING), the SDK intentionally leaves the
-    // suspended operations DurablePromise pending, neither resolves nor rejects them.
-    // The operation span asyncEnd therefore never fires and the span stays open.
-    if (span && status?.toUpperCase() === 'PENDING') {
-      finishOpenChildSpans(span)
-    }
-
     super.finish(ctx)
   }
 }
 
-/**
- * Finishes any open spans in the same trace that were created by this plugin,
- * except the execute span itself (the caller finishes that one). Used on
- * suspension so the trace processor can flush the invocation's trace.
- *
- * @param {object} executeSpan - The execute span (its trace contains all op spans
- *   created within this invocation).
- */
+// Finishes any open spans in the same trace that were created by this plugin,
+// except the execute span itself (the caller finishes that one).
 function finishOpenChildSpans (executeSpan) {
   const trace = executeSpan?._spanContext?._trace
   if (!trace?.started) return

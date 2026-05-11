@@ -1,52 +1,33 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 /**
  * On retries, execution is suspended and error/asyncEnd are not called.
  * Finish the span (possibly with error) from the checkpoint.
  */
-class AwsDurableExecutionSdkJsCheckpointPlugin extends Plugin {
+class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
+  static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint'
 
-  constructor (...args) {
-    super(...args)
-
-    this.addSub(
-      'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint:start',
-      (ctx) => this._onCheckpointStart(ctx)
-    )
-    this.addSub(
-      'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint:asyncEnd',
-      (ctx) => this._onCheckpointAsyncEnd(ctx)
-    )
-  }
-
-  _onCheckpointStart (ctx) {
+  start (ctx) {
     const data = ctx?.arguments?.[1]
-    if (!data || data.Action !== 'RETRY' || !data.Error) return
+    if (data?.Action !== 'RETRY' || !data.Error) return
 
-    const span = storage('legacy').getStore()?.span
-    if (!span) return
-    if (span._spanContext?._tags?.error) return
+    const span = this.activeSpan
+    if (!span || span._spanContext?._tags?.error) return
 
-    const { ErrorMessage: message, ErrorType: type, StackTrace } = data.Error
-    const stack = Array.isArray(StackTrace) ? StackTrace.join('\n') : undefined
-
+    const { ErrorMessage, ErrorType, StackTrace } = data.Error
     span.setTag('error', 1)
-    if (message) span.setTag('error.message', message)
-    if (type) span.setTag('error.type', type)
-    if (stack) span.setTag('error.stack', stack)
+    if (ErrorMessage) span.setTag('error.message', ErrorMessage)
+    if (ErrorType) span.setTag('error.type', ErrorType)
+    if (Array.isArray(StackTrace)) span.setTag('error.stack', StackTrace.join('\n'))
 
     ctx._ddRetryStepSpan = span
   }
 
-  _onCheckpointAsyncEnd (ctx) {
-    const span = ctx?._ddRetryStepSpan
-    if (!span) return
-    ctx._ddRetryStepSpan = undefined
-    span.finish()
+  asyncEnd (ctx) {
+    ctx._ddRetryStepSpan?.finish()
   }
 }
 
