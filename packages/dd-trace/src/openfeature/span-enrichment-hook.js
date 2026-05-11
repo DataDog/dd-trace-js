@@ -66,7 +66,8 @@ class SpanEnrichmentHook {
    * @param {object} evaluationDetails - Full evaluation details including flag metadata
    * @param {object} [evaluationDetails.flagMetadata] - Metadata from the provider
    * @param {number} [evaluationDetails.flagMetadata.__dd_split_serial_id] - Serial ID from UFC split
-   * @param {boolean} [evaluationDetails.flagMetadata.doLog] - Whether to log subject
+   * @param {boolean} [evaluationDetails.flagMetadata.__dd_do_log] - Whether to log subject (preferred)
+   * @param {boolean} [evaluationDetails.flagMetadata.doLog] - Whether to log subject (deprecated)
    * @param {string} [evaluationDetails.reason] - Evaluation reason
    * @param {boolean|string|number|object} [evaluationDetails.value] - Evaluated value
    * @returns {void}
@@ -83,7 +84,9 @@ class SpanEnrichmentHook {
       // Extract serial ID and doLog from flagMetadata (set by provider)
       // eslint-disable-next-line camelcase
       const serialId = flagMetadata?.__dd_split_serial_id
-      const doLog = flagMetadata?.doLog ?? false
+      // Prefer new key, fallback to deprecated
+      // eslint-disable-next-line camelcase
+      const doLog = flagMetadata?.__dd_do_log ?? flagMetadata?.doLog ?? false
       // targetingKey is in hookContext.context (OpenFeature evaluation context)
       const targetingKey = context?.targetingKey
 

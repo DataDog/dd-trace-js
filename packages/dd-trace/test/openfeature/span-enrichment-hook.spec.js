@@ -81,7 +81,7 @@ describe('SpanEnrichmentHook', () => {
 
   function evalDetails (overrides = {}) {
     return {
-      flagMetadata: { __dd_split_serial_id: 100, doLog: false },
+      flagMetadata: { __dd_split_serial_id: 100, __dd_do_log: false },
       reason: 'TARGETING_MATCH',
       value: true,
       ...overrides,
@@ -121,12 +121,12 @@ describe('SpanEnrichmentHook', () => {
       assert.ok(tagCall, 'ffe_flags_enc tag should be set')
     })
 
-    it('should add subject when doLog is true and targetingKey present', () => {
+    it('should add subject when __dd_do_log is true and targetingKey present', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
 
       hook.finally(
         hookContext({ context: { targetingKey: 'user-456' } }),
-        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: true } })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, __dd_do_log: true } })
       )
 
       finishSubscriber(mockRootSpan)
@@ -137,12 +137,12 @@ describe('SpanEnrichmentHook', () => {
       assert.strictEqual(Object.keys(subjects).length, 1)
     })
 
-    it('should not add subject when doLog is false', () => {
+    it('should not add subject when __dd_do_log is false', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
 
       hook.finally(
         hookContext({ context: { targetingKey: 'user-456' } }),
-        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: false } })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, __dd_do_log: false } })
       )
 
       finishSubscriber(mockRootSpan)
@@ -156,13 +156,27 @@ describe('SpanEnrichmentHook', () => {
 
       hook.finally(
         hookContext({ context: {} }),
-        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: true } })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, __dd_do_log: true } })
       )
 
       finishSubscriber(mockRootSpan)
 
       const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_subjects_enc')
       assert.strictEqual(tagCall, undefined, 'ffe_subjects_enc should not be set without targetingKey')
+    })
+
+    it('should fallback to deprecated doLog when __dd_do_log is not present', () => {
+      const hook = new SpanEnrichmentHook(mockTracer)
+
+      hook.finally(
+        hookContext({ context: { targetingKey: 'user-789' } }),
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: true } })
+      )
+
+      finishSubscriber(mockRootSpan)
+
+      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_subjects_enc')
+      assert.ok(tagCall, 'ffe_subjects_enc tag should be set when using deprecated doLog')
     })
 
     it('should add default when reason is DEFAULT and no serialId', () => {
