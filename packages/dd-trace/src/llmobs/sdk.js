@@ -119,12 +119,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (publicSpan, cb) =>
-        this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(span, cb))
+        this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(publicSpan, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, publicSpan =>
-      this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(span))
+      this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(publicSpan))
     )
   }
 
@@ -249,7 +249,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('Cannot annotate a finished span')
       }
 
-      this._annotate(span, options)
+      this.#annotate(span, options)
     } catch (e) {
       if (e.ddErrorTag) {
         err = e.ddErrorTag

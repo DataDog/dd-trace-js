@@ -78,7 +78,7 @@ class NoopProxy {
   startSpan (name, options) {
     options = markManualService(options)
 
-    const childOf = unwrap(options.childOf)
+    const childOf = unwrap(options?.childOf)
 
     if (childOf !== undefined) {
       options = { ...options, childOf }
