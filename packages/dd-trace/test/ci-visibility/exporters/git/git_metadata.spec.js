@@ -37,11 +37,16 @@ describe('git_metadata', () => {
   before(() => {
     fs.writeFileSync(temporaryPackFile, '')
     fs.writeFileSync(secondTemporaryPackFile, '')
+    // Any request that escapes a nock interceptor used to hang up to the per
+    // request 15 s timeout and blow the mocha wall on slow Windows CI; flip the
+    // failure into an immediate `NetConnectNotAllowedError` at the call site.
+    nock.disableNetConnect()
   })
 
   after(() => {
     fs.unlinkSync(temporaryPackFile)
     fs.unlinkSync(secondTemporaryPackFile)
+    nock.enableNetConnect()
   })
 
   beforeEach(() => {
