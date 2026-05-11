@@ -11,7 +11,7 @@ class S3 extends BaseAwsSdkPlugin {
   static isPayloadReporter = true
 
   generateTags (params, operation, response) {
-    if (!params?.Bucket) return {}
+    if (!params?.Bucket) return
 
     return {
       'resource.name': `${operation} ${params.Bucket}`,
