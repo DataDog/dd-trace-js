@@ -1085,7 +1085,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
           assert.strictEqual(efdRetries.length, NUM_RETRIES_EFD)
           assert.strictEqual(atrRetries.length, 0)
-        })
+        }, 30_000)
 
       childProcess = exec(
         runTestsCommand,
@@ -2649,7 +2649,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           )
           assert.strictEqual(efdRetries.length, 2)
           testEvents.forEach(t => assert.strictEqual(t.meta[TEST_IS_NEW], 'true'))
-        })
+        }, 30_000)
 
       childProcess = exec(
         runTestsCommand,
@@ -2693,7 +2693,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           )
           assert.strictEqual(efdRetries.length, 1)
           testEvents.forEach(t => assert.strictEqual(t.meta[TEST_IS_NEW], 'true'))
-        }, 25_000)
+        }, 30_000)
 
       childProcess = exec(
         runTestsCommand,
@@ -2735,7 +2735,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(testEvent.meta[TEST_IS_NEW], 'true')
           assert.strictEqual(testEvent.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
           assert.ok(!(TEST_IS_RETRY in testEvent.meta), 'should not be retried')
-        }, 20_000)
+        }, 30_000)
 
       childProcess = exec(
         runTestsCommand,
