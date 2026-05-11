@@ -15,6 +15,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
   TEST_IS_NEW,
@@ -536,6 +537,63 @@ moduleTypes.forEach(({
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
+        })
+
+        it('keeps after hook failures on attempt to fix tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix-after-hook.js': {
+                  tests: {
+                    'attempt to fix after hook passes before after hook fails': {
+                      properties: {
+                        attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const attemptToFixTests = tests
+                .filter(test => test.meta[TEST_NAME] === 'attempt to fix after hook passes before after hook fails')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(attemptToFixTests.length, 4)
+
+              const lastAttempt = attemptToFixTests[attemptToFixTests.length - 1]
+              assert.strictEqual(lastAttempt.meta[TEST_STATUS], 'fail')
+              assert.match(lastAttempt.meta[ERROR_MESSAGE], /error in after hook/)
+              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            }, 25000)
+
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
+          const specToRun = 'cypress/e2e/attempt-to-fix-after-hook.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 1)
         })
 
         it('does not attempt to fix tests if test management is not enabled', async () => {

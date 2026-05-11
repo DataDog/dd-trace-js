@@ -37,6 +37,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestSessionName,
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
@@ -60,10 +61,13 @@ const {
   getSessionItrSkippingEnabledTags,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
+  getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -268,6 +272,36 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
+function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatus, preferIndexedMatch = false) {
+  let matchingTestByIndex
+  let matchingTestByStatus
+  let matchingTestIndex = 0
+
+  for (const cypressTest of cypressTests) {
+    if (cypressTest.title.join(' ') !== testName) {
+      continue
+    }
+
+    if (matchingTestIndex === attemptIndex) {
+      matchingTestByIndex = cypressTest
+    }
+    matchingTestIndex++
+
+    if (!matchingTestByStatus && CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === testStatus) {
+      matchingTestByStatus = cypressTest
+    }
+  }
+
+  return preferIndexedMatch
+    ? matchingTestByIndex || matchingTestByStatus
+    : matchingTestByStatus || matchingTestByIndex
+}
+
+function isCypressHookFailure (cypressTest) {
+  return CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === 'fail' &&
+    /\bhook\b/.test(String(cypressTest.displayError || ''))
+}
+
 const FINAL_STATUS_RETRY_KIND = {
   none: 'none',
   atr: 'atr',
@@ -332,8 +366,13 @@ class CypressPlugin {
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
+  isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionSlowTestRetries = {}
+  efdRetryCountByTest = {}
+  efdSlowAbortedTests = {}
+  earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
   hasForcedToRunSuites = false
@@ -406,8 +445,13 @@ class CypressPlugin {
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
     this.isEarlyFlakeDetectionEnabled = false
+    this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
+    this.earlyFlakeDetectionSlowTestRetries = {}
+    this.efdRetryCountByTest = {}
+    this.efdSlowAbortedTests = {}
+    this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
     this.hasForcedToRunSuites = false
@@ -489,6 +533,8 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
+              earlyFlakeDetectionSlowTestRetries,
+              earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
               isKnownTestsEnabled,
@@ -501,6 +547,8 @@ class CypressPlugin {
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
+          this.earlyFlakeDetectionFaultyThreshold = earlyFlakeDetectionFaultyThreshold
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
@@ -539,6 +587,70 @@ class CypressPlugin {
       this.getTestSuiteProperties(testSuite)?.[testName]?.properties || {}
 
     return { isAttemptToFix, isDisabled, isQuarantined }
+  }
+
+  /**
+   * Returns how many EFD retries must be scheduled before the first duration is known.
+   *
+   * @returns {number}
+   */
+  getConfiguredEfdRetryCount () {
+    const { earlyFlakeDetectionSlowTestRetries } = this
+    if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
+      return this.earlyFlakeDetectionNumRetries
+    }
+    return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  }
+
+  /**
+   * Returns the selected EFD retry count for a test, or the scheduling count if it has not run yet.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @returns {number}
+   */
+  getEfdRetryCountForTest (testSuite, testName) {
+    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
+    if (!testSuiteRetries || testSuiteRetries[testName] === undefined) {
+      return this.getConfiguredEfdRetryCount()
+    }
+    return testSuiteRetries[testName]
+  }
+
+  /**
+   * Stores the selected EFD retry count for a test after its first execution duration is known.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @param {number | undefined} duration
+   * @returns {number}
+   */
+  setEfdRetryCountForTest (testSuite, testName, duration) {
+    if (!this.efdRetryCountByTest[testSuite]) {
+      this.efdRetryCountByTest[testSuite] = {}
+    }
+    const retryCount = getEfdRetryCount(duration ?? 0, this.earlyFlakeDetectionSlowTestRetries)
+    this.efdRetryCountByTest[testSuite][testName] = retryCount
+    if (retryCount === 0) {
+      if (!this.efdSlowAbortedTests[testSuite]) {
+        this.efdSlowAbortedTests[testSuite] = {}
+      }
+      this.efdSlowAbortedTests[testSuite][testName] = true
+    }
+    return retryCount
+  }
+
+  /**
+   * Returns whether an EFD retry clone is beyond the selected retry count and should be discarded.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @param {number} efdRetryIndex
+   * @returns {boolean}
+   */
+  shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
+    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
+    return testSuiteRetries?.[testName] !== undefined && efdRetryIndex > testSuiteRetries[testName]
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -687,12 +799,27 @@ class CypressPlugin {
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        if (knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]) {
+        if (knownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
           this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
         } else {
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
         }
+      }
+    }
+
+    if (this.isKnownTestsEnabled && details.specs) {
+      const testSuites = details.specs.map(({ relative }) => relative)
+      const isFaulty = getIsFaultyEarlyFlakeDetection(
+        testSuites,
+        this.knownTestsByTestSuite,
+        this.earlyFlakeDetectionFaultyThreshold
+      )
+      if (isFaulty) {
+        log.warn('New test detection is disabled because the number of new test files is too high.')
+        this.isEarlyFlakeDetectionEnabled = false
+        this.isEarlyFlakeDetectionFaulty = true
+        this.isKnownTestsEnabled = false
       }
     }
 
@@ -757,6 +884,9 @@ class CypressPlugin {
 
     if (this.isEarlyFlakeDetectionEnabled) {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
+    }
+    if (this.isEarlyFlakeDetectionFaulty) {
+      testSessionSpanMetadata[TEST_EARLY_FLAKE_ABORT_REASON] = 'faulty'
     }
 
     const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
@@ -966,17 +1096,25 @@ class CypressPlugin {
 
     for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
-        // TODO: there could be multiple if there have been retries!
-        // potentially we need to match the test status!
-        const cypressTest = cypressTests.find(test => test.title.join(' ') === testName)
+        // We can check if this is the last attempt regardless of the retry mechanism
+        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
+        const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
+        const cypressTest = isDatadogManagedAttempt
+          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus, isLastAttempt) ||
+            cypressTests.find(test => test.title.join(' ') === testName)
+          : cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
           continue
         }
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
-        let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
-        if (cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
+        const shouldUseCapturedStatus = isDatadogManagedAttempt && !(isLastAttempt && isCypressHookFailure(cypressTest))
+        let cypressTestStatus = shouldUseCapturedStatus
+          ? finishedTest.testStatus
+          : CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        if (!finishedTest.isEfdManagedTest && !finishedTest.isAttemptToFix &&
+          cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&
@@ -993,6 +1131,9 @@ class CypressPlugin {
             }
           }
         }
+        if (finishedTest.isEfdManagedTest && finishedTest.testStatus !== 'skip' && cypressTestStatus === 'skip') {
+          cypressTestStatus = finishedTest.testStatus
+        }
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
         }
@@ -1002,6 +1143,9 @@ class CypressPlugin {
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
+          if (finishedTest.isAttemptToFix && cypressTestStatus === 'fail') {
+            finishedTest.testSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+          }
         }
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
@@ -1021,8 +1165,6 @@ class CypressPlugin {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
         }
 
-        // We can check if this is the last attempt regardless of the retry mechanism
-        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         if (isLastAttempt) {
           const testSpanTags = finishedTest.testSpan.context()._tags
           const retryKind = getFinalStatusRetryKind({
@@ -1074,7 +1216,8 @@ class CypressPlugin {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries,
+          earlyFlakeDetectionNumRetries: this.getConfiguredEfdRetryCount(),
+          earlyFlakeDetectionSlowTestRetries: this.earlyFlakeDetectionSlowTestRetries,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
@@ -1090,7 +1233,10 @@ class CypressPlugin {
         return suitePayload
       },
       'dd:beforeEach': (test) => {
-        const { testName, testSuite } = test
+        const { testName, testSuite, isEfdRetry, efdRetryIndex } = test
+        if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
+          return { shouldSkip: true, shouldDiscard: true }
+        }
         const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
@@ -1147,6 +1293,7 @@ class CypressPlugin {
           isEfdRetry,
           isAttemptToFix,
           isModified,
+          duration,
           isQuarantined: isQuarantinedFromSupport,
           isDisabled: isDisabledFromSupport,
         } = test
@@ -1168,7 +1315,19 @@ class CypressPlugin {
           }
           this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
-        const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+        const isEfdManagedTest = (isNew || isModified) && this.isEarlyFlakeDetectionEnabled && !isAttemptToFix
+        let testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+        let didAbortSlowEfdRetries = false
+        if (isEfdManagedTest && !isEfdRetry && this.efdRetryCountByTest[testSuite]?.[testName] === undefined) {
+          const retryCount = this.setEfdRetryCountForTest(testSuite, testName, duration)
+          if (retryCount === 0) {
+            didAbortSlowEfdRetries = true
+            this.activeTestSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'slow')
+          }
+        }
+        if (didAbortSlowEfdRetries && testStatus === 'skip' && !error && duration > 0) {
+          testStatus = 'pass'
+        }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
         // Save the test status to know if it has passed all retries
@@ -1231,9 +1390,10 @@ class CypressPlugin {
           }
         }
         // Check if all EFD retries failed
-        if ((isNew || isModified) && this.earlyFlakeDetectionNumRetries > 0) {
-          const isLastEfdAttempt = testStatuses.length === this.earlyFlakeDetectionNumRetries + 1
-          if (isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+        if (isEfdManagedTest) {
+          const efdRetryCount = this.getEfdRetryCountForTest(testSuite, testName)
+          const isLastEfdAttempt = testStatuses.length === efdRetryCount + 1
+          if (efdRetryCount > 0 && isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
             this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
           }
         }
@@ -1284,6 +1444,7 @@ class CypressPlugin {
           finishTime: this._now(),
           testSpan: this.activeTestSpan,
           isEfdRetry,
+          isEfdManagedTest,
           isAttemptToFix,
         }
         if (this.finishedTestsByFile[testSuite]) {
