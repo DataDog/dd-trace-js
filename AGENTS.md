@@ -102,6 +102,13 @@ unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 PLUGINS="<name>" npm run test:plugins
 ```
 
+**ELECTRON_RUN_AS_NODE from Claude Code / VS Code:** Claude Code (and VS Code's extension host) set `ELECTRON_RUN_AS_NODE=1` so they can use the Electron binary as a plain Node.js runtime. Any shell spawned by these tools inherits the variable. Electron integration tests run packaged binaries that must start as full Electron apps — with `ELECTRON_RUN_AS_NODE=1` set, the binary silently exits without executing app code. Unset before running:
+
+```bash
+unset ELECTRON_RUN_AS_NODE
+npm run test:integration:electron
+```
+
 ### Test Coverage
 
 ```bash
