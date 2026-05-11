@@ -120,7 +120,11 @@ function getSupportedConfigurationInfo (filePath) {
 
       for (const name of entry.configurationNames ?? []) {
         if (typeof name === 'string' && !IGNORED_CONFIGURATION_NAMES.has(name)) {
-          names.add(name)
+          // Deprecated entries opt out of the cross-check against `index.d.ts` so a
+          // major-version drop of the public type does not strand the env var here.
+          if (!entry.deprecated) {
+            names.add(name)
+          }
           targets.add(name)
         }
       }
