@@ -46,13 +46,44 @@ class AgentEncoder extends BaseEncoder {
       this._encodeId(bytes, span.trace_id)
       this._encodeId(bytes, span.span_id)
       this._encodeId(bytes, span.parent_id)
-      this._encodeLong(bytes, span.start || 0)
-      this._encodeLong(bytes, span.duration || 0)
-      this._encodeInteger(bytes, span.error)
+      this._encodeIntOrFloat(bytes, span.start || 0)
+      this._encodeIntOrFloat(bytes, span.duration || 0)
+      this._encodeIntOrFloat(bytes, span.error)
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
     }
+  }
+
+  // Override the inherited 0.4 `_encodeMap` so the v0.5 wire emits each numeric
+  // value via `_encodeIntOrFloat` (compact unsigned/signed int when integer,
+  // float64 otherwise) instead of always float64. The 0.4 base method stays on
+  // float64 because the CI-visibility encoders inherit it and target a
+  // different intake.
+  _encodeMap (bytes, value) {
+    const offset = bytes.length
+    bytes.reserve(5)
+    bytes.buffer[offset] = 0xDF
+
+    let count = 0
+    for (const key of Object.keys(value)) {
+      const entryValue = value[key]
+      if (typeof entryValue === 'string') {
+        this._encodeString(bytes, key)
+        this._encodeString(bytes, entryValue)
+        count++
+      } else if (typeof entryValue === 'number') {
+        this._encodeString(bytes, key)
+        this._encodeIntOrFloat(bytes, entryValue)
+        count++
+      }
+    }
+
+    const target = bytes.buffer
+    target[offset + 1] = count >>> 24
+    target[offset + 2] = count >>> 16
+    target[offset + 3] = count >>> 8
+    target[offset + 4] = count
   }
 
   _encodeString (bytes, value = '') {
