@@ -163,8 +163,12 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_m
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
 
-// Library configuration request error tag
-const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
+// Library configuration request error tags
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS = '_dd.ci.library_configuration_error.settings'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS = '_dd.ci.library_configuration_error.skippable_tests'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS = '_dd.ci.library_configuration_error.known_tests'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS =
+  '_dd.ci.library_configuration_error.test_management_tests'
 
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -230,10 +234,34 @@ const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trun
  */
 function getSessionRequestErrorTags (sessionSpan) {
   const tags = sessionSpan?.context()._tags
+  const sessionRequestErrorTags = {}
   if (!tags || typeof tags !== 'object') return {}
-  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS] = 'true'
+  }
+  return sessionRequestErrorTags
+}
+
+/**
+ * Returns ITR skipping-enabled tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionItrSkippingEnabledTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[TEST_ITR_SKIPPING_ENABLED] !== undefined) {
     return {
-      [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
+      [TEST_ITR_SKIPPING_ENABLED]: tags[TEST_ITR_SKIPPING_ENABLED],
     }
   }
   return {}
@@ -318,6 +346,7 @@ module.exports = {
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
+  getMaxEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -349,7 +378,11 @@ module.exports = {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
   getSessionRequestErrorTags,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  getSessionItrSkippingEnabledTags,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
@@ -922,9 +955,7 @@ function getCoveredFilenamesFromCoverage (coverage) {
     .filter(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
+      return Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
     })
 }
 
@@ -1043,6 +1074,22 @@ function getEfdRetryCount (durationMs, slowTestRetries) {
     }
   }
   return 0 // ≥ 5 min — abort
+}
+
+/**
+ * Returns the maximum retry count configured by the backend for EFD.
+ *
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @returns {number}
+ */
+function getMaxEfdRetryCount (slowTestRetries) {
+  let maxRetries = 0
+  for (const retryCount of Object.values(slowTestRetries || {})) {
+    if (retryCount > maxRetries) {
+      maxRetries = retryCount
+    }
+  }
+  return maxRetries
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
@@ -1276,10 +1323,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   let bestScore = Infinity
   for (const branch of Object.keys(metrics)) {
     const score = metrics[branch].ahead
-    if (score < bestScore) {
-      bestScore = score
-      bestBranch = branch
-    } else if (score === bestScore && isDefaultBranch(branch)) {
+    if (score < bestScore || score === bestScore && isDefaultBranch(branch)) {
       bestScore = score
       bestBranch = branch
     }

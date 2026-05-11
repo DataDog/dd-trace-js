@@ -826,7 +826,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -862,7 +861,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -900,7 +898,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -1441,12 +1438,12 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             try {
               assert.strictEqual(storage.getStore(), store)
+              res.status(200).send()
               done()
             } catch (e) {
+              res.status(200).send()
               done(e)
             }
-
-            res.status(200).send()
           })
 
           appListener = app.listen(0, 'localhost', () => {

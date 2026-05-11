@@ -1070,15 +1070,6 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
-
-        /** Whether to enable request body collection on RASP event
-         * @default false
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_RASP_COLLECT_REQUEST_BODY
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        bodyCollection?: boolean
       },
       /**
        * Configuration for stack trace reporting
@@ -1105,39 +1096,6 @@ declare namespace tracer {
          */
         maxDepth?: number,
       },
-      /**
-       * Configuration for extended headers collection tied to security events
-       *
-       * @deprecated Use UI and Remote Configuration to enable extended data collection
-       */
-      extendedHeadersCollection?: {
-        /** Whether to enable extended headers collection
-         * @default false
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_COLLECT_ALL_HEADERS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        enabled: boolean,
-
-        /** Whether to redact collected headers
-         * @default true
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        redaction: boolean,
-
-        /** Specifies the maximum number of headers collected.
-         * @default 50
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_MAX_COLLECTED_HEADERS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        maxHeaders: number,
-      }
     }
 
     /**
@@ -1998,6 +1956,20 @@ declare namespace tracer {
     interface Instrumentation extends Integration, Analyzable {}
 
     /** @hidden */
+    interface DatabaseInstrumentation extends Instrumentation {
+      /**
+       * Truncate the resource name (e.g. the query) to the given length.
+       * When set to `true`, truncates to 5000 characters (matching the
+       * Datadog agent's default). When set to a number, truncates to that
+       * many characters. This can help prevent large queries from blocking
+       * the event loop during trace encoding.
+       *
+       * @default false
+       */
+      truncate?: boolean | number;
+    }
+
+    /** @hidden */
     interface Http extends Instrumentation {
       /**
        * List of URLs/paths that should be instrumented.
@@ -2011,14 +1983,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
        * List of URLs/paths that should not be instrumented. Takes precedence over
        * allowlist if a URL matches an entry in both.
        *
@@ -2029,14 +1993,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a URL/path is allowed.
@@ -2217,7 +2173,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Prisma extends Instrumentation {}
+    interface Prisma extends DatabaseInstrumentation {}
 
     /** @hidden */
     interface PrismaClient extends Prisma {}
@@ -2684,14 +2640,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2699,14 +2647,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -2741,14 +2681,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2756,14 +2688,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Valkey command should be instrumented.
@@ -2849,13 +2773,13 @@ declare namespace tracer {
      * [mocha](https://mochajs.org/) module.
      */
     interface mocha extends Integration {}
-    
+
     /**
      * This plugin automatically instruments the
      * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
      */
     interface modelcontextprotocol_sdk extends Instrumentation {}
-    
+
     /**
      * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
@@ -2982,7 +2906,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [pg](https://node-postgres.com/) module.
      */
-    interface pg extends Instrumentation {
+    interface pg extends DatabaseInstrumentation {
       /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
@@ -3040,28 +2964,12 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both.
        *
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -3545,16 +3453,6 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls. This option is not supported when
-     * using ESM.
-     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * environment variable instead. This option will be removed in the next major version.
-     * @env DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    securityControlsConfiguration?: string,
-
-    /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      * @env DD_IAST_TELEMETRY_VERBOSITY
      * Programmatic configuration takes precedence over the environment variables listed above.
@@ -3723,6 +3621,11 @@ declare namespace tracer {
     }
 
     interface LLMObservabilitySpan {
+      /**
+       * The span kind
+       */
+      kind: spanKind,
+
       /**
        * The input content associated with the span.
        */

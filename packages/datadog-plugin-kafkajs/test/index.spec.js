@@ -53,7 +53,7 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
-            waitForLeaders: false,
+            waitForLeaders: true,
             topics: [{
               topic: testTopic,
               numPartitions: 1,
@@ -252,11 +252,11 @@ describe('Plugin', () => {
               try {
                 assert.notDeepStrictEqual(currentSpan, firstSpan)
                 assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                eachMessage = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachMessage = () => {}
                 done(e)
-              } finally {
-                eachMessage = () => {} // avoid being called for each message
               }
             }
 
@@ -315,11 +315,11 @@ describe('Plugin', () => {
             let eachBatch = async ({ batch }) => {
               try {
                 assert.strictEqual(batch.isEmpty(), false)
+                eachBatch = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachBatch = () => {}
                 done(e)
-              } finally {
-                eachBatch = () => {} // avoid being called for each message
               }
             }
 
@@ -358,11 +358,11 @@ describe('Plugin', () => {
                 const name = spy.firstCall.args[1]
                 assert.strictEqual(name, afterStart.name)
 
+                eachMessage = () => {}
                 done()
               } catch (e) {
-                done(e)
-              } finally {
                 eachMessage = () => {}
+                done(e)
               }
             }
 
@@ -457,11 +457,11 @@ describe('Plugin', () => {
               try {
                 assert.notEqual(currentSpan, firstSpan)
                 assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                eachBatch = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachBatch = () => {}
                 done(e)
-              } finally {
-                eachBatch = () => {} // avoid being called for each message
               }
             }
 

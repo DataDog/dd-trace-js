@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 
+const sinon = require('sinon')
+
 const shimmer = require('../src/shimmer')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -161,8 +163,8 @@ describe('shimmer', () => {
       }
       const obj = { Counter }
 
-      shimmer.wrap(obj, 'Counter', Counter => function () {
-        Counter.apply(this, arguments)
+      shimmer.wrap(obj, 'Counter', Counter => function (...args) {
+        Counter.apply(this, args)
         this.value++
       })
 
@@ -432,6 +434,27 @@ describe('shimmer', () => {
       Counter.toString = 'invalid'
 
       assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
+    })
+
+    it('should detect class constructors without materializing the source', () => {
+      const spy = sinon.spy(Function.prototype, 'toString')
+      try {
+        const count = inc => inc
+        shimmer.wrapFunction(count, count => () => {})
+
+        function legacyCtor (start) { this.value = start }
+        shimmer.wrapFunction(legacyCtor, ctor => function (...args) { ctor.apply(this, args) })
+
+        class Counter {}
+        assert.throws(
+          () => shimmer.wrapFunction(Counter, Counter => function () {}),
+          /Target is a native class constructor and cannot be wrapped\./
+        )
+
+        assert.strictEqual(spy.callCount, 0)
+      } finally {
+        spy.restore()
+      }
     })
 
     it('should preserve property descriptors from the original', () => {

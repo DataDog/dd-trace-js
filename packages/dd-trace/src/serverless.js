@@ -24,11 +24,8 @@ function enableGCPPubSubPushSubscription () {
 }
 
 function getIsAzureFunction () {
-  const isAzureFunction =
-    getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
+  return getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
     getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME') !== undefined
-
-  return isAzureFunction
 }
 
 function getIsFlexConsumptionAzureFunction () {
