@@ -17,7 +17,7 @@ channel('datadog:apm:electron:export').subscribe(traces => {
 })
 
 const path = require('path')
-const { app, BrowserWindow, ipcMain, net } = require('electron/main')
+const { app, BrowserWindow, ipcMain, net } = require('electron')
 
 const BRIDGE_CONFIG_CHANNEL = 'datadog:bridge-config'
 

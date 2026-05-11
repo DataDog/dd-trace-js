@@ -37,10 +37,8 @@ describe('Electron + webpack integration', function () {
     )
     execFileSync('npm', ['install'], { cwd: appDir, stdio: 'pipe' })
 
-    // Bundle main.js — no DatadogWebpackPlugin. target:'electron-main' externalises
-    // the legacy electron API names and Node built-ins automatically, but electron/main
-    // and electron/renderer must be listed explicitly because webpack's ElectronTargetPlugin
-    // only covers the old-style names (electron, app, ipc, …) not modern sub-path imports.
+    // Bundle main.js — no DatadogWebpackPlugin, no explicit externals.
+    // target:'electron-main' auto-externalises electron and Node built-ins.
     const buildScript = [
       "'use strict'",
       "const path = require('path')",
@@ -53,11 +51,6 @@ describe('Electron + webpack integration', function () {
       '  output: {',
       "    filename: 'bundle.js',",
       `    path: ${JSON.stringify(appDir)},`,
-      '  },',
-      '  externals: {',
-      "    'electron/main': 'commonjs2 electron/main',",
-      "    'electron/renderer': 'commonjs2 electron/renderer',",
-      "    'electron/common': 'commonjs2 electron/common',",
       '  },',
       '}, (err, stats) => {',
       '  if (err) {',

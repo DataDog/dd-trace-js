@@ -1,6 +1,6 @@
 'use strict'
 
-const { ipcRenderer } = require('electron/renderer')
+const { ipcRenderer } = require('electron')
 
 // Receive the ping from the main process.
 // The electron instrumentation wraps ipcRenderer.on so this creates an
