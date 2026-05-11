@@ -76,7 +76,21 @@ class ExposuresWriter extends BaseFFEWriter {
         [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
       },
     })
-    this.#context = this.#buildContext()
+
+    /** @type {ExposureContext} */
+    const context = {
+      service: this._config.service || 'unknown',
+    }
+
+    if (this._config.version !== undefined) {
+      context.version = this._config.version
+    }
+
+    if (this._config.env !== undefined) {
+      context.env = this._config.env
+    }
+
+    this.#context = context
   }
 
   /**
@@ -86,9 +100,7 @@ class ExposuresWriter extends BaseFFEWriter {
     this.#enabled = enabled
 
     if (enabled && this.#pendingEvents.length > 0) {
-      // Append before clearing: if `super.append` throws (e.g. a serialization
-      // failure on a circular `subject.attributes`), the buffered events are
-      // still queued for the next flush instead of being silently dropped.
+      // Flush all pending events as a batch
       super.append(this.#pendingEvents)
       this.#pendingEvents = []
     }
@@ -113,7 +125,7 @@ class ExposuresWriter extends BaseFFEWriter {
       if (!this.#dropWarned) {
         this.#dropWarned = true
         log.warn(
-          '%s dropped %d exposure event(s) at cap %d. Provider dedupe cache may invalidate experiment results.',
+          '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
           this.constructor.name, dropped, PENDING_MAX_EVENTS)
       }
     }
@@ -142,54 +154,30 @@ class ExposuresWriter extends BaseFFEWriter {
    * @returns {ExposureEventPayload} Formatted payload with service context
    */
   makePayload (events) {
-    const formattedEvents = events.map(event => this.#formatExposureEvent(event))
+    const formattedEvents = events.map(event => {
+      /** @type {ExposureEvent} */
+      return {
+        timestamp: event.timestamp || Date.now(),
+        allocation: {
+          key: event.allocation?.key || event['allocation.key'],
+        },
+        flag: {
+          key: event.flag?.key || event['flag.key'],
+        },
+        variant: {
+          key: event.variant?.key || event['variant.key'],
+        },
+        subject: {
+          id: event.subject?.id || event['subject.id'],
+          type: event.subject?.type,
+          attributes: event.subject?.attributes,
+        },
+      }
+    })
 
     return {
       context: this.#context,
       exposures: formattedEvents,
-    }
-  }
-
-  /**
-   * @returns {ExposureContext} Service context
-   */
-  #buildContext () {
-    const context = {
-      service: this._config.service || 'unknown',
-    }
-
-    if (this._config.version !== undefined) {
-      context.version = this._config.version
-    }
-
-    if (this._config.env !== undefined) {
-      context.env = this._config.env
-    }
-
-    return context
-  }
-
-  /**
-   * @param {ExposureEvent} event - Raw exposure event
-   * @returns {ExposureEvent} Formatted exposure event
-   */
-  #formatExposureEvent (event) {
-    return {
-      timestamp: event.timestamp || Date.now(),
-      allocation: {
-        key: event.allocation?.key || event['allocation.key'],
-      },
-      flag: {
-        key: event.flag?.key || event['flag.key'],
-      },
-      variant: {
-        key: event.variant?.key || event['variant.key'],
-      },
-      subject: {
-        id: event.subject?.id || event['subject.id'],
-        type: event.subject?.type,
-        attributes: event.subject?.attributes,
-      },
     }
   }
 }
