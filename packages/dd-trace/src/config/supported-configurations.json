@@ -1062,10 +1062,7 @@
       {
         "implementation": "B",
         "type": "string",
-        "configurationNames": [
-          "iast.securityControlsConfiguration",
-          "experimental.iast.securityControlsConfiguration"
-        ],
+        "internalPropertyName": "iast.securityControlsConfiguration",
         "default": null
       }
     ],

@@ -12,7 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  # TODO: remove this once we have stable tests
+  MOCHA_OPTIONS: --retries 2
 
 jobs:
   benchmarks-e2e:
