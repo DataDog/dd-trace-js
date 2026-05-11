@@ -35,7 +35,6 @@
     "ws": "8.20.0"
   },
   "overrides": {
-    "find-my-way": "9.2.0",
-    "thread-stream": "3.1.0"
+    "fast-xml-parser": "5.7.2"
   }
 }
