@@ -804,9 +804,12 @@ moduleTypes.forEach(({
         '',
       ].join('\n'))
       fs.mkdirSync(path.join(subprojectDir, 'cypress', 'support'), { recursive: true })
-      fs.copyFileSync(
-        path.join(cwd, 'cypress', 'support', 'e2e.js'),
-        path.join(subprojectDir, 'cypress', 'support', 'e2e.js')
+      // The sandbox's `cypress/support/e2e.js` resolves a sibling fixture via a
+      // relative path that webpack only follows from the sandbox root. Copying
+      // the file into this subproject breaks that bundle and silences the spec.
+      fs.writeFileSync(
+        path.join(subprojectDir, 'cypress', 'support', 'e2e.js'),
+        "require('dd-trace/ci/cypress/support')\n"
       )
       // Minimal passing spec so the test is self-contained and doesn't
       // depend on the rest of the sandbox's e2e tree.

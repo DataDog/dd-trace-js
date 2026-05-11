@@ -6,7 +6,7 @@ describe('attempt to fix after hook', () => {
   })
 
   it('passes before after hook fails', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })

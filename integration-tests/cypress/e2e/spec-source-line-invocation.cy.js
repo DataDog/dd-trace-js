@@ -7,7 +7,7 @@
 
 describe('spec source line invocation details js', () => {
   it('uses invocation details line as source line', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })

@@ -7,17 +7,17 @@ describe('hook-test-error tests', () => {
     }
   })
   it('passes', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })
   it('will fail because afterEach fails', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })
   it('does not run because earlier afterEach fails', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })

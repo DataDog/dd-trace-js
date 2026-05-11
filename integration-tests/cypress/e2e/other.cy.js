@@ -1,7 +1,7 @@
 /* eslint-disable */
 describe('context', () => {
   it('passes', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })

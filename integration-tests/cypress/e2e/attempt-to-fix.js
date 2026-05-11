@@ -13,7 +13,7 @@ function getTextToAssert () {
 
 describe('attempt to fix', () => {
   it('is attempt to fix', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', getTextToAssert())
   })

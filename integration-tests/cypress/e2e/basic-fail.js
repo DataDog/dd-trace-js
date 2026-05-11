@@ -1,7 +1,7 @@
 /* eslint-disable */
 describe('basic fail suite', () => {
   beforeEach(() => {
-    cy.visit('/')
+    cy.visitTestPage()
     cy.task('dd:addTags', { addTagsBeforeEach: 'customBeforeEach' })
   })
 

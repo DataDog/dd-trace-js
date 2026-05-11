@@ -1,7 +1,7 @@
 /* eslint-disable */
 describe('skipped', () => {
   it.skip('skipped', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })

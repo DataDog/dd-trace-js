@@ -1,7 +1,7 @@
 /* eslint-disable */
 describe('quarantined with hooks', () => {
   beforeEach(() => {
-    cy.visit('/')
+    cy.visitTestPage()
   })
   afterEach(() => {
     // cleanup
@@ -16,7 +16,7 @@ describe('quarantined with hooks', () => {
 
 describe('quarantined with failing afterEach', () => {
   beforeEach(() => {
-    cy.visit('/')
+    cy.visitTestPage()
   })
   afterEach(() => {
     throw new Error('error in afterEach hook')
@@ -28,7 +28,7 @@ describe('quarantined with failing afterEach', () => {
 
 describe('disabled with hooks', () => {
   beforeEach(() => {
-    cy.visit('/')
+    cy.visitTestPage()
   })
   afterEach(() => {
     // cleanup

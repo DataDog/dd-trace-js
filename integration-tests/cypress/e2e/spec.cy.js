@@ -4,7 +4,7 @@
  */
 describe('context', () => {
   it('passes', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello World')
   })
@@ -12,7 +12,7 @@ describe('context', () => {
 
 describe('other context', () => {
   it('fails', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello Warld')
   })

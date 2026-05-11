@@ -2,7 +2,7 @@
 let numAttempt = 0
 describe('flaky with hooks', () => {
   beforeEach(() => {
-    cy.visit('/')
+    cy.visitTestPage()
   })
   afterEach(() => {
     // cleanup

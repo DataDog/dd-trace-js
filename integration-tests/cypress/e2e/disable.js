@@ -1,7 +1,7 @@
 /* eslint-disable */
 describe('disable', () => {
   it('is disabled', () => {
-    cy.visit('/')
+    cy.visitTestPage()
       .get('.hello-world')
       .should('have.text', 'Hello Warld')
   })

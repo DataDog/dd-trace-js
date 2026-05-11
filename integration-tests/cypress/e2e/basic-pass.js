@@ -1,7 +1,7 @@
 /* eslint-disable */
 describe('basic pass suite', () => {
   beforeEach(() => {
-    cy.visit('/')
+    cy.visitTestPage()
     cy.task('dd:addTags', { addTagsBeforeEach: 'customBeforeEach' })
   })
 
