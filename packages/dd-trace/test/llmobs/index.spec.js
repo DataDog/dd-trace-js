@@ -130,11 +130,6 @@ describe('module', () => {
     })
 
     it('does not produce a literal "undefined" prefix when carrier has no x-datadog-tags', () => {
-      // Regression test for MLOS-642: when the standard tags injection path
-      // doesn't pre-populate carrier['x-datadog-tags'] (e.g. when the trace
-      // has no _dd.p.* tags, or DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0), the
-      // LLMObs handler used to do `undefined += ',foo=bar'` and emit the
-      // string "undefined,foo=bar".
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {}
@@ -155,6 +150,18 @@ describe('module', () => {
         carrier['x-datadog-tags'],
         '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
       )
+    })
+
+    it('does not write x-datadog-tags when trace tag propagation is disabled', () => {
+      llmobsModule.enable({
+        llmobs: { mlApp: 'test', agentlessEnabled: false },
+        tagsHeaderMaxLength: 0,
+      })
+
+      const carrier = {}
+      injectCh.publish({ carrier })
+
+      assert.ok(!('x-datadog-tags' in carrier))
     })
   })
 

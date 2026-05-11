@@ -108,6 +108,10 @@ function disable () {
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propagate the parent id and mlApp.
 function handleLLMObsParentIdInjection ({ carrier }) {
+  // Respect the standard propagator's gate: when trace tag propagation is
+  // disabled, don't write `x-datadog-tags` for LLMObs either.
+  if (globalTracerConfig.tagsHeaderMaxLength === 0) return
+
   const parent = storage.getStore()?.span
   const mlObsSpanTags = LLMObsTagger.tagMap.get(parent)
 
@@ -118,14 +122,15 @@ function handleLLMObsParentIdInjection ({ carrier }) {
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
     globalTracerConfig.llmobs.mlApp
 
-  // The standard tags injection path only writes carrier['x-datadog-tags']
-  // when the trace has at least one `_dd.p.*` tag, so the property may be
-  // undefined here. Coalesce before appending to avoid emitting the literal
-  // string `"undefined,..."` (MLOS-642).
-  let tags = carrier['x-datadog-tags'] || ''
+  if (!parentId && !mlApp) return
+
+  // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
+  // tags, so it may be undefined here — coalesce before appending.
+  const existing = carrier['x-datadog-tags']
+  let tags = existing || ''
   if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
-  if (tags) carrier['x-datadog-tags'] = tags
+  if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
 
 function handleFlush () {
