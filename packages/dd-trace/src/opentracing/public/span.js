@@ -84,8 +84,7 @@ class PublicSpan {
   }
 
   static _unwrap (value) {
-    if (!value) return
-    return value.#span ?? value
+    return value instanceof PublicSpan ? value.#span : value
   }
 }
 

@@ -78,10 +78,7 @@ class NoopProxy {
   startSpan (name, options) {
     options = markManualService(options)
 
-    let childOf
-    if (options?.childOf instanceof PublicSpan) {
-      childOf = unwrap(options.childOf)
-    }
+    const childOf = unwrap(options.childOf)
 
     if (childOf !== undefined) {
       options = { ...options, childOf }
@@ -91,9 +88,8 @@ class NoopProxy {
   }
 
   inject (context, format, carrier) {
-    if (context instanceof PublicSpan) {
-      context = unwrap(context)
-    }
+    context = unwrap(context)
+
     return this._tracer.inject(context, format, carrier)
   }
 

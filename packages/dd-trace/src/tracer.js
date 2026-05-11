@@ -60,7 +60,7 @@ class DatadogTracer extends Tracer {
 
   trace (name, options, fn) {
     options = { childOf: this.scope().active(), ...options }
-    if (options?.childOf instanceof PublicSpan) options.childOf = unwrap(options.childOf)
+    options.childOf = unwrap(options.childOf)
 
     const span = new PublicSpan(this.startSpan(name, options))
 

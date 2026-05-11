@@ -24,8 +24,7 @@ function tagsHaveManualService (tags) {
  * @returns {T}
  */
 function markManualService (options) {
-  if (options == null) return options
-  if (!options.service && !tagsHaveManualService(options.tags)) return options
+  if (options == null || !options.service && !tagsHaveManualService(options.tags)) return options
   return { ...options, tags: { ...options.tags, [SVC_SRC_KEY]: MANUAL } }
 }
 

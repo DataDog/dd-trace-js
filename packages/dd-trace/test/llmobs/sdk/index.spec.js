@@ -60,7 +60,7 @@ describe('sdk', () => {
     })
     const tagMap = LLMObsTagger.tagMap
     const originalGet = tagMap.get.bind(tagMap)
-    tagMap.get = (span) => originalGet(span instanceof PublicSpan ? unwrap(span) : span)
+    tagMap.get = (span) => originalGet(unwrap(span))
   })
 
   afterEach(() => {

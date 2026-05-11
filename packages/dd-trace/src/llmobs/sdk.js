@@ -118,13 +118,13 @@ class LLMObs extends NoopLLMObs {
     } = this.#extractOptions(options)
 
     if (fn.length > 1) {
-      return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this.#activate(unwrap(span), { kind, ...llmobsOptions }, () => fn(span, cb))
+      return this._tracer.trace(name, spanOptions, (publicSpan, cb) =>
+        this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
-    return this._tracer.trace(name, spanOptions, span =>
-      this.#activate(unwrap(span), { kind, ...llmobsOptions }, () => fn(span))
+    return this._tracer.trace(name, spanOptions, publicSpan =>
+      this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -215,15 +215,16 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  annotate (span, options, autoinstrumented = false) {
+  annotate (publicSpan, options, autoinstrumented = false) {
     if (!this.enabled) return
 
-    if (!span) {
+    let span
+    if (!publicSpan) {
       span = this._active()
-    } else if (span instanceof PublicSpan) {
-      span = unwrap(span)
+    } else if (publicSpan instanceof PublicSpan) {
+      span = unwrap(publicSpan)
     } else if (!options) {
-      options = span
+      options = publicSpan
       span = this._active()
     }
 
@@ -261,7 +262,7 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  _annotate (span, options) {
+  #annotate (span, options) {
     if (!this.enabled) return
 
     const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
@@ -303,8 +304,8 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  exportSpan (span) {
-    span = span ? unwrap(span) : this._active()
+  exportSpan (publicSpan) {
+    const span = publicSpan ? unwrap(publicSpan) : this._active()
     let err = ''
     try {
       if (!span) {
@@ -537,7 +538,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     if ((annotations.inputData || annotations.outputData) && LLMObsTagger.tagMap.has(span)) {
-      this._annotate(span, annotations)
+      this.#annotate(span, annotations)
     }
   }
 

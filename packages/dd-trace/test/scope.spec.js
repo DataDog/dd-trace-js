@@ -135,16 +135,16 @@ describe('Scope', () => {
 
     it('should handle errors', () => {
       const error = new Error('boom')
-      const innerSpan = unwrap(span)
+      const internalSpan = unwrap(span)
 
-      sinon.spy(innerSpan, 'setTag')
+      sinon.spy(internalSpan, 'setTag')
 
       try {
         scope.activate(span, () => {
           throw error
         })
       } catch (e) {
-        sinon.assert.calledWith(innerSpan.setTag, 'error', e)
+        sinon.assert.calledWith(internalSpan.setTag, 'error', e)
       }
     })
   })

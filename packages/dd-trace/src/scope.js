@@ -14,10 +14,10 @@ class Scope {
     return span ? new PublicSpan(span) : null
   }
 
-  activate (span, callback) {
+  activate (publicSpan, callback) {
     if (typeof callback !== 'function') return callback
 
-    span = unwrap(span)
+    const span = unwrap(publicSpan)
 
     const oldStore = legacyStorage.getStore()
     const newStore = span ? legacyStorage.getStore(span._store) : oldStore

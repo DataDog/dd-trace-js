@@ -143,13 +143,9 @@ describe('PublicSpan', () => {
       assert.strictEqual(unwrap(publicSpan), inner)
     })
 
-    it('returns undefined for null/undefined inputs (early return)', () => {
-      assert.strictEqual(unwrap(null), undefined)
-      assert.strictEqual(unwrap(undefined), undefined)
-    })
-
-    it('throws when given a non-PublicSpan object (private field access)', () => {
-      assert.throws(() => unwrap({ foo: 'bar' }), TypeError)
+    it('returns value when not instance of PublicSpan', () => {
+      const someOtherValue = {}
+      assert.strictEqual(unwrap(someOtherValue), someOtherValue)
     })
 
     it('cannot be reached via PublicSpan._unwrap (stripped from the public surface)', () => {
