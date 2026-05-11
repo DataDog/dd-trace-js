@@ -50,9 +50,9 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
 }
 
 /**
- * Finishes any open spans in the same trace as `executeSpan`, except the execute
- * span itself (the caller finishes that one). Used on suspension so the trace
- * processor can flush the invocation's trace.
+ * Finishes any open spans in the same trace that were created by this plugin,
+ * except the execute span itself (the caller finishes that one). Used on
+ * suspension so the trace processor can flush the invocation's trace.
  *
  * @param {object} executeSpan - The execute span (its trace contains all op spans
  *   created within this invocation).
@@ -63,6 +63,7 @@ function finishOpenChildSpans (executeSpan) {
 
   for (const span of trace.started) {
     if (span === executeSpan) continue
+    if (span._integrationName !== AwsDurableExecutionSdkJsHandlerPlugin.id) continue
     if (span._duration === undefined) {
       span.finish()
     }

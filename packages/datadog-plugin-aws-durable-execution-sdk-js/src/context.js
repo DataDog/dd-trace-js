@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
+const { getOperationId, isReplayedOp, observeDurablePromise, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -59,11 +59,24 @@ class BaseAwsDurableExecutionSdkJsContextPlugin extends TracingPlugin {
     return typeof args[0] === 'string' ? args[0] : undefined
   }
 
-  asyncEnd (ctx) {
-    super.finish(ctx)
+  // invoke is wrapped with kind:'Sync'. The returned DurablePromise is observed
+  // lazily so the span finishes when user code awaits the result.
+  end (ctx) {
+    if (ctx._ddSuppressed) return
+    observeDurablePromise(ctx.result, err => {
+      if (ctx._ddFinished) return
+      ctx._ddFinished = true
+      if (err !== undefined) {
+        const errCtx = unwrapDurableError({ ...ctx, error: err })
+        ctx.currentStore?.span?.setTag('error', errCtx.error)
+      }
+      this.finish(ctx)
+    })
   }
 
   error (ctxOrError) {
+    if (ctxOrError?._ddFinished) return
+    if (ctxOrError && typeof ctxOrError === 'object') ctxOrError._ddFinished = true
     super.error(unwrapDurableError(ctxOrError))
     super.finish(ctxOrError)
   }
@@ -83,11 +96,6 @@ class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionS
       return store
     }
     return super.bindStart(ctx)
-  }
-
-  asyncEnd (ctx) {
-    if (ctx._ddSuppressed) return
-    super.asyncEnd(ctx)
   }
 
   error (ctxOrError) {

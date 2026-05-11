@@ -1,7 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
+const { getOperationId, isReplayedOp, observeDurablePromise, unwrapDurableError } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -39,11 +39,23 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
-  asyncEnd (ctx) {
-    super.finish(ctx)
+  // invoke is wrapped with kind:'Sync'. The returned DurablePromise is observed
+  // lazily so the span finishes when user code awaits the result.
+  end (ctx) {
+    observeDurablePromise(ctx.result, err => {
+      if (ctx._ddFinished) return
+      ctx._ddFinished = true
+      if (err !== undefined) {
+        const errCtx = unwrapDurableError({ ...ctx, error: err })
+        ctx.currentStore?.span?.setTag('error', errCtx.error)
+      }
+      this.finish(ctx)
+    })
   }
 
   error (ctxOrError) {
+    if (ctxOrError?._ddFinished) return
+    if (ctxOrError && typeof ctxOrError === 'object') ctxOrError._ddFinished = true
     super.error(unwrapDurableError(ctxOrError))
     super.finish(ctxOrError)
   }

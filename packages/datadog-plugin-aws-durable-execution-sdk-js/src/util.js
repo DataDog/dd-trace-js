@@ -2,6 +2,8 @@
 
 const { createHash } = require('node:crypto')
 
+const shimmer = require('../../datadog-shimmer')
+
 /**
  * Returns true if the op the DurableContextImpl is about to run will be served
  * from the SDK's checkpoint (i.e. the next stepId already has a SUCCEEDED entry).
@@ -50,4 +52,56 @@ function unwrapDurableError (ctxOrError) {
   return { ...ctxOrError, error: err }
 }
 
-module.exports = { isReplayedOp, getOperationId, unwrapDurableError }
+/**
+ * Wraps a DurablePromise's `.then`/`.catch`/`.finally` so the supplied
+ * `onSettle(err)` callback fires exactly once when the underlying promise
+ * settles — but only after user code first awaits / chains.
+ *
+ * Using `kind: 'Async'` in Orchestrion would side-chain `.then()` immediately
+ * on the returned thenable, prematurely triggering the SDK's
+ * `ensureExecution()` and `markOperationAwaited`. Instead, callers pair
+ * `kind: 'Sync'` with this helper to preserve the SDK's lazy semantics.
+ *
+ * @param {object} dp - The returned DurablePromise instance.
+ * @param {(err: unknown) => void} onSettle - Called with `undefined` on
+ *   success or the rejection reason on failure. Invoked once.
+ */
+function observeDurablePromise (dp, onSettle) {
+  if (!dp || typeof dp.then !== 'function') return
+  const proto = Object.getPrototypeOf(dp)
+  let settled = false
+
+  // Use the prototype's `.then` directly to avoid recursing into our
+  // instance-level wrapper. Underlying `_promise` is cached on first call so
+  // this and any user-facing `.then`/`.catch`/`.finally` calls all chain off
+  // the same native Promise.
+  const attachSpy = () => {
+    proto.then.call(dp,
+      () => {
+        if (settled) return
+        settled = true
+        onSettle()
+      },
+      err => {
+        if (settled) return
+        settled = true
+        onSettle(err)
+      }
+    )
+  }
+
+  shimmer.wrap(dp, 'then', original => function (onFulfilled, onRejected) {
+    attachSpy()
+    return original.call(this, onFulfilled, onRejected)
+  })
+  shimmer.wrap(dp, 'catch', original => function (onRejected) {
+    attachSpy()
+    return original.call(this, onRejected)
+  })
+  shimmer.wrap(dp, 'finally', original => function (onFinally) {
+    attachSpy()
+    return original.call(this, onFinally)
+  })
+}
+
+module.exports = { isReplayedOp, getOperationId, unwrapDurableError, observeDurablePromise }
