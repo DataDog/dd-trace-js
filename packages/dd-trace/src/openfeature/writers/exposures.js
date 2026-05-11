@@ -126,7 +126,7 @@ class ExposuresWriter extends BaseFFEWriter {
         this.#dropWarned = true
         log.warn(
           '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
-          this.constructor.name, dropped, PENDING_MAX_EVENTS)
+          this.constructor.name, PENDING_MAX_EVENTS)
       }
     }
   }
