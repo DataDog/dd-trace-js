@@ -43,6 +43,15 @@ describe('client', () => {
     errorChannel.unsubscribe(errorChannelCb)
   })
 
+  it('ignores http.client.response.finish for requests not started by the wrap', () => {
+    // Requests created outside `instrumentRequest` (e.g. before the wrap is
+    // attached, or via unrelated `http.ClientRequest` constructors) still cause
+    // Node to publish on this channel; the handler has to no-op on those.
+    const fakeRequest = new (require('events').EventEmitter)()
+    const fakeResponse = new (require('events').EventEmitter)()
+    dc.channel('http.client.response.finish').publish({ request: fakeRequest, response: fakeResponse })
+  })
+
   /*
    * Necessary because the tracer makes extra requests to the agent
    * and the same stub could be called multiple times

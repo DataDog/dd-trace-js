@@ -983,6 +983,31 @@ describe('Plugin', () => {
         })
       })
 
+      describe('stack noise', () => {
+        beforeEach(() => {
+          return agent.load('http', { server: false })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        it('keeps datadog-instrumentations frames off the req error-listener stack on connection failure', done => {
+          const req = http.request(`${protocol}://localhost:7357/user`)
+
+          req.on('error', () => {
+            const handlerStack = new Error('frame check').stack
+            assert.doesNotMatch(
+              handlerStack,
+              /datadog-instrumentations\/src\/http\/client\.js/,
+              'dd-trace http client frame in user error-listener stack'
+            )
+            done()
+          })
+
+          req.end()
+        })
+      })
+
       describe('with late plugin initialization and an external subscriber', () => {
         let ch
         let sub

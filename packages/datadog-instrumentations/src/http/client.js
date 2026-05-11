@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable no-fallthrough */
-
 const url = require('url')
 const { errorMonitor } = require('events')
 const { channel, addHook } = require('../helpers/instrument')
@@ -16,8 +14,47 @@ const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
+// Subscribe at module load. Node 18+ publishes this for every client response
+// *before* invoking the user's `'response'` listeners, and unlike a
+// `req.once('response')` listener the subscription does not bump
+// `req.listenerCount('response')` — so Node's `_dump()` fallback that drains
+// an unread response stays intact.
+const nativeClientResponseFinishChannel = channel('http.client.response.finish')
+
+const requestContexts = new WeakMap()
+
+nativeClientResponseFinishChannel.subscribe(onNativeClientResponseFinish)
+
 addHook({ name: 'http' }, hookFn)
 addHook({ name: 'https' }, hookFn)
+
+/**
+ * @param {{ finished?: boolean }} ctx Instrumentation context. Mutated with `finished`.
+ */
+function finishRequest (ctx) {
+  if (!ctx.finished) {
+    ctx.finished = true
+    finishChannel.publish(ctx)
+  }
+}
+
+/**
+ * @param {{ request: import('http').ClientRequest, response: import('http').IncomingMessage }} payload
+ */
+function onNativeClientResponseFinish ({ request, response }) {
+  const ctx = requestContexts.get(request)
+  if (ctx === undefined) return
+
+  ctx.res = response
+  const onResponseSettled = () => finishRequest(ctx)
+  response.once('end', onResponseSettled)
+  response.once(errorMonitor, onResponseSettled)
+
+  const instrumentation = setupResponseInstrumentation(ctx, response)
+  if (instrumentation) {
+    queueMicrotask(instrumentation.finalizeIfNeeded)
+  }
+}
 
 function hookFn (http) {
   patch(http, 'request')
@@ -185,7 +222,6 @@ function patch (http, methodName) {
       const ctx = { args, http, abortController }
 
       return startChannel.runStores(ctx, () => {
-        let finished = false
         let callback = args.callback
 
         if (callback) {
@@ -198,64 +234,45 @@ function patch (http, methodName) {
 
         const options = args.options
 
-        const finish = () => {
-          if (!finished) {
-            finished = true
-            finishChannel.publish(ctx)
-          }
-        }
-
         try {
           const req = request.call(this, options, callback)
-          const emit = req.emit
           const setTimeout = req.setTimeout
 
           ctx.req = req
+          requestContexts.set(req, ctx)
 
           // tracked to accurately discern custom request socket timeout
-          let customRequestTimeout = false
+          ctx.customRequestTimeout = false
           req.setTimeout = function (...args) {
-            customRequestTimeout = true
+            ctx.customRequestTimeout = true
             return setTimeout.apply(this, args)
           }
 
-          req.emit = function (eventName, arg) {
-            switch (eventName) {
-              case 'response': {
-                const res = arg
-                ctx.res = res
-                res.once('end', finish)
-                res.once(errorMonitor, finish)
+          // Per-event listeners — not a lifetime `req.emit` reassignment — so
+          // the dd-trace frame stays off the stack the user's listeners see.
+          // See https://github.com/DataDog/dd-trace-js/issues/1564.
+          req.once('connect', (res) => {
+            ctx.res = res
+            finishRequest(ctx)
+          })
 
-                const instrumentation = setupResponseInstrumentation(ctx, res)
+          req.once('upgrade', (res) => {
+            ctx.res = res
+            finishRequest(ctx)
+          })
 
-                if (!instrumentation) {
-                  break
-                }
+          req.on(errorMonitor, (error) => {
+            ctx.error = error
+            errorChannel.publish(ctx)
+            finishRequest(ctx)
+          })
 
-                const result = emit.apply(this, arguments)
+          req.once('timeout', () => {
+            errorChannel.publish(ctx)
+            finishRequest(ctx)
+          })
 
-                instrumentation.finalizeIfNeeded()
-
-                return result
-              }
-              case 'connect':
-              case 'upgrade':
-                ctx.res = arg
-                finish()
-                break
-              case 'error':
-              case 'timeout':
-                ctx.error = arg
-                ctx.customRequestTimeout = customRequestTimeout
-                errorChannel.publish(ctx)
-              case 'abort': // deprecated and replaced by `close` in node 17
-              case 'close':
-                finish()
-            }
-
-            return emit.apply(this, arguments)
-          }
+          req.once('close', () => finishRequest(ctx))
 
           if (abortController.signal.aborted) {
             req.destroy(abortController.signal.reason || new Error('Aborted'))
@@ -268,7 +285,7 @@ function patch (http, methodName) {
           // if the initial request failed, ctx.req will be unset, we must close the span here
           // fix for: https://github.com/DataDog/dd-trace-js/issues/5016
           if (!ctx.req) {
-            finish()
+            finishRequest(ctx)
           }
           throw e
         } finally {
