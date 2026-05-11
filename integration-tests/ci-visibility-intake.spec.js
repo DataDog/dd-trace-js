@@ -129,6 +129,25 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     await assert.rejects(promise, /hard timeout of 100ms/)
   })
 
+  it('does not surface a hard-timeout error when the child exits just before the backstop', async () => {
+    const child = fakeChildProcess()
+    const promise = intake.gatherPayloadsUntilChildExit(
+      child,
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        assert.strictEqual(payloads.length, 1)
+      },
+      { gracePeriod: 50, hardTimeout: 100 }
+    )
+
+    setTimeout(() => {
+      intake.emit('message', { url: '/api/v2/citestcycle', payload: {} })
+      child.simulateExit(0)
+    }, 80)
+
+    await promise
+  })
+
   it('treats a child that already exited as exit + grace', async () => {
     const child = fakeChildProcess()
     child.exitCode = 0

@@ -409,6 +409,12 @@ class FakeCiVisIntake extends FakeAgent {
 
       const exitHandler = () => {
         if (settled) return
+        // Hung-child backstop is moot once the child has exited; only the
+        // grace period applies from here. Without this, a child exiting
+        // close to `hardTimeout` races the grace timer and rejects with a
+        // wrong "child still running" message instead of running the
+        // assertion.
+        clearTimeout(hardTimer)
         graceTimer = setTimeout(() => {
           if (settled) return
           if (payloads.length === 0) {
