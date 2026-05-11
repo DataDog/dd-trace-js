@@ -784,6 +784,17 @@ describe('Plugin', () => {
           )
         })
 
+        it('reuses prepared statements across calls without "must be unique" error', async () => {
+          const buildQuery = () => ({
+            name: 'pgRepeatedSelect',
+            text: 'SELECT $1::text as message',
+          })
+
+          await client.query(buildQuery(), ['first'])
+          await client.query(buildQuery(), ['second'])
+          await client.query(buildQuery(), ['third'])
+        })
+
         it('should not fail when using query object with getters', done => {
           const query = {
             name: 'pgSelectQuery',

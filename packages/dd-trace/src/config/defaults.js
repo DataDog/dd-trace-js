@@ -14,18 +14,20 @@ let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
 
-if (DD_MAJOR >= 6) {
-  // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is not supported
-  // in newer major versions. This is special handled here until a better solution is found.
-  // TODO: Remove the programmatic configuration from supported-configurations.json once v5 is not supported anymore.
-  supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName =
-    supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames?.[0]
-  delete supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames
-} else {
+if (DD_MAJOR < 6) {
   // Default value for DD_TRACE_STARTUP_LOGS is 'false' in older major versions.
-  // This is special handled here until a better solution is found.
   // TODO: Remove this here once v5 is not supported anymore.
   supportedConfigurations.DD_TRACE_STARTUP_LOGS[0].default = 'false'
+
+  // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is still supported
+  // on v5; restore the configurationNames that the env-only v6 shape drops.
+  // TODO: Remove this branch once v5 is not supported anymore.
+  const iastEntry = supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
+  iastEntry.configurationNames = [
+    iastEntry.internalPropertyName,
+    'experimental.iast.securityControlsConfiguration',
+  ]
+  delete iastEntry.internalPropertyName
 }
 
 /**

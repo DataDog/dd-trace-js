@@ -35,8 +35,12 @@ describe('dd-trace', () => {
       assert.strictEqual(payload[0][0].service, 'test')
       assert.strictEqual(payload[0][0].name, 'hello')
       assert.strictEqual(payload[0][0].resource, '/hello/:name')
-      assert.strictEqual(typeof payload[0][0].start, 'bigint')
-      assert.strictEqual(typeof payload[0][0].duration, 'bigint')
+      // Compact-int encoding picks the smallest msgpack int that fits, so
+      // small `duration` values decode as `Number` and large `start`
+      // timestamps decode as `BigInt`. Coerce both to BigInt before checking
+      // the round-trip values so the test is encoding-agnostic.
+      assert.ok(BigInt(payload[0][0].start) > 0n)
+      assert.ok(BigInt(payload[0][0].duration) >= 0n)
       assert.ok(Object.hasOwn(payload[0][0].metrics, SAMPLING_PRIORITY_KEY))
       assert.ok(Object.hasOwn(payload[0][0].meta, DECISION_MAKER_KEY))
     })
