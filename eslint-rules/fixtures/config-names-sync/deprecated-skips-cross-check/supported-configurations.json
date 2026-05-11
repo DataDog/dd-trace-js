@@ -1,0 +1,19 @@
+{
+  "supportedConfigurations": {
+    "DD_KEPT": [
+      {
+        "configurationNames": [
+          "kept"
+        ]
+      }
+    ],
+    "DD_DROPPED_FROM_TYPES": [
+      {
+        "configurationNames": [
+          "dropped"
+        ],
+        "deprecated": true
+      }
+    ]
+  }
+}
