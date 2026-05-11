@@ -581,6 +581,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "node:test",
+    "integration": "node-test",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "25.9.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "nyc",
     "integration": "nyc",
     "minimum_tracer_supported": "17.0.0",

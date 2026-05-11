@@ -31,7 +31,7 @@ const builtinModules = new Set(Module.builtinModules.map(stripNodePrefix))
 
 function isBuiltinModuleName (name) {
   if (typeof name !== 'string') return false
-  return builtinModules.has(stripNodePrefix(name))
+  return Module.isBuiltin(name) || builtinModules.has(stripNodePrefix(name))
 }
 
 function normalizeModuleName (name) {

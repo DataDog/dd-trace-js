@@ -10,6 +10,7 @@ module.exports = {
   http2: () => require('../http2'),
   https: () => require('../http'),
   net: () => require('../net'),
+  'node:test': { esmFirst: true, fn: () => require('../node-test') },
   url: () => require('../url'),
   vm: () => require('../vm'),
   zlib: () => require('../zlib'),

@@ -27,6 +27,14 @@ const disabledInstrumentations = new Set(
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
+function isNodeTestCli () {
+  return process.execArgv.some(arg => arg === '--test' || arg.startsWith('--test='))
+}
+
+function isNodeTestProcess () {
+  return isNodeTestCli() || getValueFromEnvSources('NODE_TEST_CONTEXT')
+}
+
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
@@ -69,6 +77,10 @@ if (disabledInstrumentations.size) {
     }
   }
   builtinsSet.clear()
+}
+
+if (!disabledInstrumentations.has('node:test') && isNodeTestProcess()) {
+  require('../node-test')
 }
 
 for (const name of names) {

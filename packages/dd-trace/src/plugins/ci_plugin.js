@@ -85,6 +85,7 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   cucumber: 'cucumber-js',
   playwright: 'playwright test',
   jest: 'jest',
+  'node-test': 'node --test',
 }
 
 const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
@@ -92,6 +93,7 @@ const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
   jest_worker: 'jest',
   cucumber_worker: 'cucumber',
   mocha_worker: 'mocha',
+  node_test_worker: 'node-test',
   playwright_worker: 'playwright',
 }
 
@@ -100,6 +102,7 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'jest',
   'mocha',
   'cucumber',
+  'node-test',
 ])
 
 function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
@@ -245,16 +248,17 @@ module.exports = class CiPlugin extends Plugin {
         integrationName: this.constructor.id,
       })
       setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
-      // only for vitest
-      // These are added for the worker threads to use
-      if (this.constructor.id === 'vitest') {
-        // TODO: Figure out alternative ways to pass this information to the worker threads
+      // These are added for test framework workers to use.
+      if (this.constructor.id === 'vitest' || this.constructor.id === 'node-test') {
+        // TODO: Figure out alternative ways to pass this information to workers.
         // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
         // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
         // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
+        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.constructor.id === 'node-test'
+          ? FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id]
+          : this.command
       }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
@@ -396,7 +400,15 @@ module.exports = class CiPlugin extends Plugin {
 
           // Jest and Vitest worker test spans are serialized in the worker and may not include
           // request error tags; add them from the session span in the main process.
-          if ((span.name === 'jest.test' || span.name === 'vitest.test') && this.testSessionSpan) {
+          if (
+            (
+              span.name === 'jest.test' ||
+              span.name === 'vitest.test' ||
+              span.name === 'node-test.test' ||
+              span.name === 'node-test.test_suite'
+            ) &&
+            this.testSessionSpan
+          ) {
             Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
           }
         }

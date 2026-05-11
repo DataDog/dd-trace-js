@@ -3194,6 +3194,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_NODE_TEST_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_NYC_ENABLED": [
       {
         "implementation": "A",
