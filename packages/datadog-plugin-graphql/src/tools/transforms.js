@@ -75,8 +75,7 @@ function transformForSignature (ast) {
 function printWithReducedWhitespace (ast) {
   return printer.print(ast)
     .replaceAll(/\s+/g, ' ')
-    .replaceAll(/([^_a-zA-Z0-9]) /g, '$1')
-    .replaceAll(/ ([^_a-zA-Z0-9])/g, '$1')
+    .replaceAll(/ (?=[^_a-zA-Z0-9])|(?<=[^_a-zA-Z0-9]) /g, '')
 }
 
 function sortByName (items) {
