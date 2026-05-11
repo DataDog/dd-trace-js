@@ -205,7 +205,7 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(writer._buffer.at(-1).seq, cap)
       assert.strictEqual(writer.droppedEventCount, 1)
       sinon.assert.calledOnce(log.warn)
-      assert.match(format(...log.warn.firstCall.args), /dropped 1 exposure event\(s\) at cap 1000/)
+      assert.match(format(...log.warn.firstCall.args), /dropped exposure event\(s\) at cap 1000/)
     })
 
     it('should throttle the drop warning while still counting every dropped event', () => {
