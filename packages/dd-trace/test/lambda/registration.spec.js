@@ -21,10 +21,10 @@ function loadLambdaWithHookSpy () {
   const HookSpy = (modules, onrequire) => {
     hookCalls.push({ modules, onrequire })
   }
-  const lambdaModule = proxyquire('../../src/lambda', {
+  proxyquire('../../src/lambda', {
     '../../../datadog-instrumentations/src/helpers/hook': HookSpy,
   })
-  return { hookCalls, registerLambdaHook: lambdaModule.registerLambdaHook }
+  return { hookCalls }
 }
 
 describe('lambda', () => {
