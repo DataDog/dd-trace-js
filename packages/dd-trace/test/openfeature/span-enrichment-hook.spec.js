@@ -81,7 +81,7 @@ describe('SpanEnrichmentHook', () => {
 
   function evalDetails (overrides = {}) {
     return {
-      flagMetadata: { serialId: 100, doLog: false },
+      flagMetadata: { __dd_split_serial_id: 100, doLog: false },
       reason: 'TARGETING_MATCH',
       value: true,
       ...overrides,
@@ -111,7 +111,7 @@ describe('SpanEnrichmentHook', () => {
     it('should add serial ID when present in flagMetadata', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
 
-      hook.finally(hookContext(), evalDetails({ flagMetadata: { serialId: 42 } }))
+      hook.finally(hookContext(), evalDetails({ flagMetadata: { __dd_split_serial_id: 42 } }))
 
       // Trigger span finish to verify state was accumulated
       finishSubscriber(mockRootSpan)
@@ -126,7 +126,7 @@ describe('SpanEnrichmentHook', () => {
 
       hook.finally(
         hookContext({ context: { targetingKey: 'user-456' } }),
-        evalDetails({ flagMetadata: { serialId: 100, doLog: true } })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: true } })
       )
 
       finishSubscriber(mockRootSpan)
@@ -142,7 +142,7 @@ describe('SpanEnrichmentHook', () => {
 
       hook.finally(
         hookContext({ context: { targetingKey: 'user-456' } }),
-        evalDetails({ flagMetadata: { serialId: 100, doLog: false } })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: false } })
       )
 
       finishSubscriber(mockRootSpan)
@@ -156,7 +156,7 @@ describe('SpanEnrichmentHook', () => {
 
       hook.finally(
         hookContext({ context: {} }),
-        evalDetails({ flagMetadata: { serialId: 100, doLog: true } })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: true } })
       )
 
       finishSubscriber(mockRootSpan)
@@ -202,7 +202,7 @@ describe('SpanEnrichmentHook', () => {
 
       hook.finally(
         hookContext(),
-        evalDetails({ flagMetadata: { serialId: 100 }, reason: 'DEFAULT', value: 'ignored' })
+        evalDetails({ flagMetadata: { __dd_split_serial_id: 100 }, reason: 'DEFAULT', value: 'ignored' })
       )
 
       finishSubscriber(mockRootSpan)
@@ -214,9 +214,9 @@ describe('SpanEnrichmentHook', () => {
     it('should accumulate multiple flag evaluations on same span', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
 
-      hook.finally(hookContext(), evalDetails({ flagMetadata: { serialId: 100 } }))
-      hook.finally(hookContext(), evalDetails({ flagMetadata: { serialId: 200 } }))
-      hook.finally(hookContext(), evalDetails({ flagMetadata: { serialId: 300 } }))
+      hook.finally(hookContext(), evalDetails({ flagMetadata: { __dd_split_serial_id: 100 } }))
+      hook.finally(hookContext(), evalDetails({ flagMetadata: { __dd_split_serial_id: 200 } }))
+      hook.finally(hookContext(), evalDetails({ flagMetadata: { __dd_split_serial_id: 300 } }))
 
       finishSubscriber(mockRootSpan)
 

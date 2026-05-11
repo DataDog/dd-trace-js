@@ -65,7 +65,7 @@ class SpanEnrichmentHook {
    * @param {string} [hookContext.evaluationContext.targetingKey] - Targeting key
    * @param {object} evaluationDetails - Full evaluation details including flag metadata
    * @param {object} [evaluationDetails.flagMetadata] - Metadata from the provider
-   * @param {number} [evaluationDetails.flagMetadata.serialId] - Serial ID from UFC
+   * @param {number} [evaluationDetails.flagMetadata.__dd_split_serial_id] - Serial ID from UFC split
    * @param {boolean} [evaluationDetails.flagMetadata.doLog] - Whether to log subject
    * @param {string} [evaluationDetails.reason] - Evaluation reason
    * @param {boolean|string|number|object} [evaluationDetails.value] - Evaluated value
@@ -81,7 +81,8 @@ class SpanEnrichmentHook {
       const { flagMetadata, reason, value } = evaluationDetails || {}
 
       // Extract serial ID and doLog from flagMetadata (set by provider)
-      const serialId = flagMetadata?.serialId
+      // eslint-disable-next-line camelcase
+      const serialId = flagMetadata?.__dd_split_serial_id
       const doLog = flagMetadata?.doLog ?? false
       // targetingKey is in hookContext.context (OpenFeature evaluation context)
       const targetingKey = context?.targetingKey
