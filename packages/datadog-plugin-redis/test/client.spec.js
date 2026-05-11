@@ -73,7 +73,6 @@ describe('Plugin', () => {
                 resource: 'GET',
                 type: 'redis',
                 meta: {
-                  'db.name': '0',
                   'db.type': 'redis',
                   'span.kind': 'client',
                   'redis.raw_command': 'GET foo',
@@ -125,7 +124,6 @@ describe('Plugin', () => {
                 resource: 'GET',
                 type: 'redis',
                 meta: {
-                  'db.name': '0',
                   'db.type': 'redis',
                   'span.kind': 'client',
                   'redis.raw_command': 'GET foo',

@@ -18,10 +18,9 @@ function wrapRedis (Redis) {
 
     const options = this.options || {}
     const connectionName = options.connectionName
-    const db = options.db
     const connectionOptions = { host: options.host, port: options.port }
 
-    const ctx = { db, command: command.name, args: command.args, connectionOptions, connectionName }
+    const ctx = { command: command.name, args: command.args, connectionOptions, connectionName }
     return startCh.runStores(ctx, () => {
       command.promise.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
 
