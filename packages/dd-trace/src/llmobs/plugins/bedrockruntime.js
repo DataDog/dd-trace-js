@@ -14,7 +14,17 @@ const llmobsStore = storage('llmobs')
 
 const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
 
-const requestIdsToTokens = {}
+/**
+ * @typedef {{
+ *   inputTokensFromHeaders?: number,
+ *   outputTokensFromHeaders?: number,
+ *   cacheReadTokensFromHeaders?: number,
+ *   cacheWriteTokensFromHeaders?: number,
+ * }} HeaderTokens
+ */
+
+/** @type {Map<string, HeaderTokens>} */
+const pendingTokenHeaders = new Map()
 
 class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   constructor () {
@@ -24,33 +34,39 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const { response } = ctx
       const request = response.request
       const operation = request.operation
+
+      // Release the cached headers even for operations the plugin does not tag,
+      // so non-LLM Bedrock calls do not leak entries into pendingTokenHeaders.
+      const tokensFromHeaders = consumeTokenHeaders(response.$metadata?.requestId)
+
       // avoids instrumenting other non supported runtime operations
-      if (!ENABLED_OPERATIONS.has(operation)) {
-        return
-      }
+      if (!ENABLED_OPERATIONS.has(operation)) return
+
       const { modelProvider, modelName } = parseModelId(request.params.modelId)
 
       // avoids instrumenting non llm type
-      if (modelName.includes('embed')) {
-        return
-      }
+      if (modelName.includes('embed')) return
+
       const span = ctx.currentStore?.span
-      this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName })
+      this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     })
 
     this.addSub('apm:aws:response:deserialize:bedrockruntime', ({ headers }) => {
       const requestId = headers['x-amzn-requestid']
+      // No request id means no way to correlate with the :complete: event.
+      if (!requestId) return
+
       const inputTokenCount = headers['x-amzn-bedrock-input-token-count']
       const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
       const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
-      requestIdsToTokens[requestId] = {
+      pendingTokenHeaders.set(requestId, {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount),
         cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount),
         cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount),
-      }
+      })
     })
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
@@ -60,7 +76,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
   }
 
-  setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName }) {
+  setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders }) {
     const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
@@ -97,7 +113,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
     // add token metrics
     const { inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens } = extractTokens({
-      requestId: response.$metadata.requestId,
+      tokensFromHeaders,
       usage: textAndResponseReason.usage,
     })
     this._tagger.tagMetrics(span, {
@@ -110,14 +126,28 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   }
 }
 
-function extractTokens ({ requestId, usage }) {
+/**
+ * @param {string | undefined} requestId
+ * @returns {HeaderTokens | undefined}
+ */
+function consumeTokenHeaders (requestId) {
+  const tokens = pendingTokenHeaders.get(requestId)
+  pendingTokenHeaders.delete(requestId)
+  return tokens
+}
+
+/**
+ * Combine response-body usage with header-derived counts, preferring the body.
+ *
+ * @param {{ tokensFromHeaders: HeaderTokens | undefined, usage: Record<string, number | undefined> }} options
+ */
+function extractTokens ({ tokensFromHeaders, usage }) {
   const {
     inputTokensFromHeaders,
     outputTokensFromHeaders,
     cacheReadTokensFromHeaders,
     cacheWriteTokensFromHeaders,
-  } = requestIdsToTokens[requestId] || {}
-  delete requestIdsToTokens[requestId]
+  } = tokensFromHeaders ?? {}
 
   const inputTokens = usage.inputTokens || inputTokensFromHeaders || 0
   const outputTokens = usage.outputTokens || outputTokensFromHeaders || 0
