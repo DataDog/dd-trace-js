@@ -22,6 +22,7 @@ describe('esm', () => {
     let proc
     let setup
     let teardown
+    let cosmosClient
 
     useSandbox([
       `@azure/functions@${version}`,
@@ -39,7 +40,7 @@ describe('esm', () => {
       teardown = helpers.teardown
 
       agent = await new FakeAgent().start()
-      await setup()
+      cosmosClient = await setup()
 
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
@@ -49,7 +50,7 @@ describe('esm', () => {
 
     after(async () => {
       await stopProc(proc, { signal: 'SIGINT' })
-      await teardown()
+      await teardown(cosmosClient)
       await agent.stop()
     })
 

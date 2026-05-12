@@ -18,9 +18,9 @@ export async function setup () {
     id: 'testContainer',
     partitionKey: { paths: ['/productName'], kind: 'Hash' },
   })
+  return client
 }
 
-export async function teardown () {
-  const client = new CosmosClient(getMyCosmosDbConnection())
+export async function teardown (client) {
   await client.database('testDatabase').delete()
 }
