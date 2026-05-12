@@ -64,7 +64,9 @@ describe('bullmq producer telemetry metadata injection', () => {
     instance.config = { filter }
 
     assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
-    sinon.assert.calledOnceWithExactly(filter, { name: 'skip', data: { id: 1 }, opts: { attempts: 1 }, queueName: undefined })
+    sinon.assert.calledOnceWithExactly(filter, {
+      name: 'skip', data: { id: 1 }, opts: { attempts: 1 }, queueName: undefined,
+    })
     sinon.assert.notCalled(instance.tracer.inject)
   })
 
@@ -116,8 +118,12 @@ describe('bullmq producer telemetry metadata injection', () => {
     assert.deepStrictEqual(JSON.parse(secondJob.opts.telemetry.metadata), {
       _datadog: { 'x-datadog-trace-id': '1' },
     })
-    sinon.assert.calledWithExactly(filter.firstCall, { name: 'skip', data: { id: 1 }, opts: firstJob.opts, queueName: 'test-queue' })
-    sinon.assert.calledWithExactly(filter.secondCall, { name: 'keep', data: { id: 2 }, opts: secondJob.opts, queueName: 'test-queue' })
+    sinon.assert.calledWithExactly(filter.firstCall, {
+      name: 'skip', data: { id: 1 }, opts: firstJob.opts, queueName: 'test-queue',
+    })
+    sinon.assert.calledWithExactly(filter.secondCall, {
+      name: 'keep', data: { id: 2 }, opts: secondJob.opts, queueName: 'test-queue',
+    })
     sinon.assert.calledTwice(filter)
     assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 1)
   })
