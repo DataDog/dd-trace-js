@@ -67,7 +67,7 @@ if (SHAPE === 'tags') {
 }
 
 if (FINISH !== 'now') {
-  for (let index = 0; index < 100_000; index++) {
-    spans[index].finish()
+  for (let i = 0; i < 1000000; i++) {
+    spans[i].finish()
   }
 }

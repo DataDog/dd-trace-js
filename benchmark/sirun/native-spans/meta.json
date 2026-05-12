@@ -1,0 +1,52 @@
+{
+  "name": "native-spans",
+  "cachegrind": false,
+  "iterations": 2,
+  "instructions": true,
+  "variants": {
+    "creation-bare": {
+      "run": "node creation.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node creation.js\"",
+      "env": { "SCENARIO": "bare", "DD_TRACE_SCOPE": "noop" }
+    },
+    "creation-10tags": {
+      "run": "node creation.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node creation.js\"",
+      "env": { "SCENARIO": "10tags", "DD_TRACE_SCOPE": "noop" }
+    },
+
+    "tagging-settag": {
+      "run": "node tagging.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node tagging.js\"",
+      "env": { "SCENARIO": "settag", "DD_TRACE_SCOPE": "noop" }
+    },
+    "tagging-addtags": {
+      "run": "node tagging.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node tagging.js\"",
+      "env": { "SCENARIO": "addtags", "DD_TRACE_SCOPE": "noop" }
+    },
+
+    "parent-child-3deep": {
+      "run": "node parent-child.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node parent-child.js\"",
+      "env": { "DEPTH": "3", "DD_TRACE_SCOPE": "noop" }
+    },
+    "parent-child-10deep": {
+      "run": "node parent-child.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node parent-child.js\"",
+      "env": { "DEPTH": "10", "DD_TRACE_SCOPE": "noop" }
+    },
+
+    "pipeline": {
+      "run": "node pipeline.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node pipeline.js\"",
+      "env": { "DD_TRACE_SCOPE": "noop" }
+    },
+
+    "getTag": {
+      "run": "node get-tag.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node get-tag.js\"",
+      "env": { "DD_TRACE_SCOPE": "noop" }
+    }
+  }
+}

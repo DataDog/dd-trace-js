@@ -3,7 +3,7 @@
   "run": "node spans.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node spans.js\"",
   "cachegrind": false,
-  "iterations": 80,
+  "iterations": 2,
   "instructions": true,
   "variants": {
     "finish-immediately": {
@@ -16,22 +16,6 @@
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "later"
-      }
-    },
-    "finish-immediately-with-tags": {
-      "baseline": "finish-immediately",
-      "env": {
-        "DD_TRACE_SCOPE": "noop",
-        "FINISH": "now",
-        "SHAPE": "tags"
-      }
-    },
-    "finish-immediately-with-tags-and-otel": {
-      "baseline": "finish-immediately",
-      "env": {
-        "DD_TRACE_SCOPE": "noop",
-        "FINISH": "now",
-        "SHAPE": "tags-and-otel"
       }
     }
   }
