@@ -386,14 +386,14 @@ module.exports = {
    * @overload
    * @param {string | string[]} pluginNames
    * @param {Record<string, unknown>} [config]
-   * @param {Record<string, unknown>} [tracerConfig={}]
+   * @param {Record<string, unknown>} [tracerConfig]
    * @returns {Promise<import('../../..').default>}
    */
   /**
    * @overload
    * @param {string[]} pluginNames
    * @param {Record<string, unknown>[]} config
-   * @param {Record<string, unknown>} [tracerConfig={}]
+   * @param {Record<string, unknown>} [tracerConfig]
    * @returns {Promise<import('../../..').default>}
    */
   async load (pluginNames, config, tracerConfig = {}) {
@@ -683,8 +683,6 @@ module.exports = {
    * Tear down the mock agent and reset every per-test expectation. Idempotent.
    * The next `agent.load` decides for itself whether to reuse the cached
    * tracer or rebuild it; tests do not pass options here.
-   *
-   * @returns {Promise<void>}
    */
   close () {
     if (listener === null) {
