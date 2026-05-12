@@ -767,7 +767,7 @@ function testEndHandler ({
   const efdRetryCount = getEfdRetryCountForTest(test)
   if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
     (test._ddIsNew || test._ddIsModified) &&
-    test._ddIsEfdRetry &&
+    isEarlyFlakeDetectionEnabled &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }

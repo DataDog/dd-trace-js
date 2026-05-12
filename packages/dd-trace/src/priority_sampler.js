@@ -110,7 +110,7 @@ class PrioritySampler {
    * Assigns a sampling priority to a span if not already set.
    *
    * @param {DatadogSpan} span
-   * @param {boolean} [auto=true] - Whether to use automatic sampling if no manual tags are present.
+   * @param {boolean} [auto] - Whether to use automatic sampling if no manual tags are present.
    * @returns {void}
    */
   sample (span, auto = true) {

@@ -784,6 +784,17 @@ describe('Plugin', () => {
           )
         })
 
+        it('reuses prepared statements across calls without "must be unique" error', async () => {
+          const buildQuery = () => ({
+            name: 'pgRepeatedSelect',
+            text: 'SELECT $1::text as message',
+          })
+
+          await client.query(buildQuery(), ['first'])
+          await client.query(buildQuery(), ['second'])
+          await client.query(buildQuery(), ['third'])
+        })
+
         it('should not fail when using query object with getters', done => {
           const query = {
             name: 'pgSelectQuery',
@@ -796,6 +807,65 @@ describe('Plugin', () => {
           assert.strictEqual(client[queryQueueName][0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message')
+        })
+
+        it('does not accumulate the DBM comment when reusing a prepared-statement query object', done => {
+          const expected =
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          const query = {
+            name: 'pgSelectQuery',
+            text: 'SELECT $1::text as message',
+          }
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.query(query, ['Hello world!'], (err2) => {
+              if (err2) return done(err2)
+
+              assert.strictEqual(query.text, expected)
+              done()
+            })
+          })
+        })
+
+        it('does not accumulate the DBM comment when reusing a getter-shaped query object', done => {
+          const expected =
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          const query = {
+            name: 'pgSelectQuery',
+            get text () { return 'SELECT $1::text as message' },
+          }
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.query(query, ['Hello world!'], (err2) => {
+              if (err2) return done(err2)
+
+              assert.strictEqual(query.text, expected)
+              done()
+            })
+          })
+        })
+
+        it('handles a non-configurable text property without crashing', done => {
+          const query = { name: 'pgSelectQuery' }
+          Object.defineProperty(query, 'text', {
+            value: 'SELECT $1::text as message',
+            writable: true,
+            enumerable: true,
+            configurable: false,
+          })
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            assert.strictEqual(query.text, 'SELECT $1::text as message')
+            done()
+          })
         })
 
         it('should not fail when using query object that is an EventEmitter', done => {
@@ -863,6 +933,56 @@ describe('Plugin', () => {
 
           await queryPromise
         })
+      })
+    })
+
+    // Lives outside `withVersions` so the global-tracer wipe needed to test
+    // tracer-level config (third `agent.load` arg) does not strand sibling
+    // describe blocks in the next pg-version iteration.
+    describe('with DBM propagation enabled with append comment using tracer configuration', () => {
+      before(async () => {
+        // Tracer-level config (third arg) only takes effect if the global
+        // tracer is wiped first; tracer.init() short-circuits once the
+        // process-wide singleton has been initialized by an earlier load.
+        agent.wipe()
+        await agent.load('pg', {
+          appendComment: true,
+          service: () => 'serviced',
+        }, {
+          dbmPropagationMode: 'service',
+        })
+        pg = require('../../../versions/pg').get()
+      })
+
+      after(() => {
+        return agent.close({ ritmReset: false, wipe: true })
+      })
+
+      beforeEach((done) => {
+        client = new pg.Client({
+          host: '127.0.0.1',
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres',
+        })
+        client.connect(err => done(err))
+      })
+
+      afterEach((done) => {
+        client.end(done)
+      })
+
+      it('should append service mode comment in query text', async () => {
+        const queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
+        const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
+
+        assert.strictEqual(client[queryQueueName][0].text,
+          'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
+            `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
+        )
+
+        await queryPromise
       })
     })
   })

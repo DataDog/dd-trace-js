@@ -1,11 +1,28 @@
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import ts from 'typescript'
 
+const require = createRequire(import.meta.url)
+const { DD_MAJOR } = require('../version.js')
+const applyMajorOverrides = require('../packages/dd-trace/src/config/major-overrides.js')
+
 const IGNORED_CONFIGURATION_NAMES = new Set([
+  // v6 drops `experimental.b3` from `index.d.ts`; v5 still consumes the env var.
+  'experimental.b3',
   'tracePropagationStyle',
   'tracing',
+])
+// Configuration name prefixes that are intentionally only present in
+// `supported-configurations.json` for v5 backports and stripped at runtime in
+// v6. Keep these out of the `index.d.ts` ↔ JSON parity check.
+const IGNORED_CONFIGURATION_NAME_PREFIXES = [
+  'experimental.appsec.',
+  'ingestion.',
+]
+const IGNORED_CONFIGURATION_LEAVES = new Set([
+  'experimental.appsec',
 ])
 const UNSUPPORTED_CONFIGURATION_ROOTS = new Set([
   'isCiVisibility',
@@ -76,6 +93,7 @@ function createInspectionResult (overrides) {
 function getSupportedConfigurationInfo (filePath) {
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
   const supportedConfigurations = parsed?.supportedConfigurations
+  applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
   const names = new Set()
   const primaryEnvTargets = new Map()
@@ -113,10 +131,19 @@ function getSupportedConfigurationInfo (filePath) {
       }
 
       for (const name of entry.configurationNames ?? []) {
-        if (typeof name === 'string' && !IGNORED_CONFIGURATION_NAMES.has(name)) {
-          names.add(name)
-          targets.add(name)
+        if (typeof name !== 'string' || IGNORED_CONFIGURATION_NAMES.has(name)) {
+          continue
         }
+        if (IGNORED_CONFIGURATION_LEAVES.has(name)) {
+          continue
+        }
+        if (IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+          continue
+        }
+        if (!entry.deprecated) {
+          names.add(name)
+        }
+        targets.add(name)
       }
     }
 
@@ -472,6 +499,14 @@ function getIndexDtsConfigurationNames (filePath, supportedConfigurationInfo) {
 
   for (const ignoredConfigurationName of IGNORED_CONFIGURATION_NAMES) {
     names.delete(ignoredConfigurationName)
+  }
+  for (const leaf of IGNORED_CONFIGURATION_LEAVES) {
+    names.delete(leaf)
+  }
+  for (const name of names) {
+    if (IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+      names.delete(name)
+    }
   }
 
   return names

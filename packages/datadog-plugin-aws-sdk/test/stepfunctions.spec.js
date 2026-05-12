@@ -6,8 +6,7 @@ const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const helloWorldSMD = {
   Comment: 'A Hello World example of the Amazon States Language using a Pass state',
   StartAt: 'HelloWorld',
@@ -23,7 +22,7 @@ const helloWorldSMD = {
 describe('Sfn', () => {
   let tracer
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let stateMachineArn
     let client
 

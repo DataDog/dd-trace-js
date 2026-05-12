@@ -54,9 +54,13 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
      * - Inject batch span context + metadata into all message attributes for downstream
      *   consumers to reconstruct the trace and understand batch relationships
      */
-    const spanLinkData = hasTraceContext
-      ? messages.slice(1).map(msg => this.#extractSpanLink(msg.attributes)).filter(Boolean)
-      : []
+    const spanLinkData = []
+    if (hasTraceContext) {
+      for (let i = 1; i < messageCount; i++) {
+        const link = this.#extractSpanLink(messages[i].attributes)
+        if (link) spanLinkData.push(link)
+      }
+    }
 
     const firstAttrs = messages[0]?.attributes
     const parentData = firstAttrs?.['x-datadog-trace-id'] && firstAttrs['x-datadog-parent-id']
@@ -107,35 +111,40 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       ))
     }
 
-    for (let i = 0; i < messages.length; i++) {
+    const messageCountStr = String(messageCount)
+    const startTimeStr = String(Math.floor(batchSpan._startTime))
+    const dsmEnabled = this.config.dsmEnabled
+
+    for (let i = 0; i < messageCount; i++) {
       const msg = messages[i]
-      msg.attributes ??= {}
+      const attributes = msg.attributes ??= {}
 
       if (!hasTraceContext) {
-        this.tracer.inject(batchSpan, 'text_map', msg.attributes)
+        this.tracer.inject(batchSpan, 'text_map', attributes)
       }
 
-      Object.assign(msg.attributes, {
-        '_dd.pubsub_request.trace_id': batchTraceIdHex,
-        '_dd.pubsub_request.span_id': batchSpanIdHex,
-        '_dd.batch.size': String(messageCount),
-        '_dd.batch.index': String(i),
-        'gcloud.project_id': projectId,
-        'pubsub.topic': topic,
-        'x-dd-publish-start-time': String(Math.floor(batchSpan._startTime)),
-      })
+      // Assign keys one-by-one rather than via `Object.assign({...})` so V8
+      // keeps the attributes object on its existing hidden class instead of
+      // allocating a fresh literal per message.
+      attributes['_dd.pubsub_request.trace_id'] = batchTraceIdHex
+      attributes['_dd.pubsub_request.span_id'] = batchSpanIdHex
+      attributes['_dd.batch.size'] = messageCountStr
+      attributes['_dd.batch.index'] = String(i)
+      attributes['gcloud.project_id'] = projectId
+      attributes['pubsub.topic'] = topic
+      attributes['x-dd-publish-start-time'] = startTimeStr
 
       if (batchTraceIdUpper) {
-        msg.attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
+        attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
       }
 
-      if (this.config.dsmEnabled) {
+      if (dsmEnabled) {
         const dataStreamsContext = this.tracer.setCheckpoint(
           ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
           batchSpan,
           getHeadersSize(msg)
         )
-        DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
+        DsmPathwayCodec.encode(dataStreamsContext, attributes)
       }
     }
 
