@@ -60,6 +60,7 @@ jobs:
           token: ${{ steps.octo-sts.outputs.token }}
           upload: never
           output: ${{ runner.temp }}/sarif-results
+          category: /language:${{ matrix.language }}
 
       - name: Upload SARIF results
         env:
