@@ -12,6 +12,7 @@ const {
   addIntelligentTestRunnerSpanTags,
   finishAllTraceSpans,
   getTestEndLine,
+  getRelativeCoverageFiles,
   getTestSuiteCommonTags,
   getTestSuitePath,
   isModifiedTest,
@@ -71,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isSuitesSkipped,
       numSkippedSuites,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       hasUnskippableSuites,
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
@@ -104,6 +106,13 @@ class CucumberPlugin extends CiPlugin {
       }
       if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      }
+
+      if (testSessionCoverageFiles?.length && this.libraryConfig?.isCodeCoverageEnabled) {
+        this.tracer._exporter.exportCoverage({
+          sessionId: this.testSessionSpan.context()._traceId,
+          files: getRelativeCoverageFiles(testSessionCoverageFiles, this.repositoryRoot || this.sourceRoot),
+        })
       }
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -197,8 +206,10 @@ class CucumberPlugin extends CiPlugin {
       }
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot))
+      const relativeCoverageFiles = getRelativeCoverageFiles(
+        [...coverageFiles, suiteFile],
+        this.repositoryRoot
+      )
 
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 

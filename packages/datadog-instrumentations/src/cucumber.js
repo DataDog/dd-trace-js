@@ -7,10 +7,12 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
+  getTestCoverageLinesPercentage,
   getTestSuitePath,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
@@ -82,6 +84,7 @@ let pickleByFile = {}
 const pickleResultByFile = {}
 
 let skippableSuites = []
+let skippableSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
@@ -654,6 +657,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
+      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage ?? {}
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator
@@ -736,13 +740,19 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     let testCodeCoverageLinesTotal
+    let testSessionCoverageFiles
 
     if (global.__coverage__) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
-        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+          originalCoverageMap,
+          skippableSuitesCoverage,
+          process.cwd()
+        )
+        testSessionCoverageFiles = getExecutableFilesFromCoverage(originalCoverageMap)
       } catch {
         // ignore errors
       }
@@ -754,6 +764,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       status: success ? 'pass' : 'fail',
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites: skippedSuites.length,
       hasUnskippableSuites: isUnskippable,
       hasForcedToRunSuites: isForcedToRun,
@@ -925,7 +936,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       // last test in suite
       const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
       if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
