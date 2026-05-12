@@ -1985,7 +1985,10 @@ moduleTypes.forEach(({
         const coverages = coveragePayloads.map(coverage => coverage.content)
           .flatMap(content => content.coverages)
 
-        coverages.forEach(coverage => {
+        const testCoverages = coverages.filter(coverage => Object.hasOwn(coverage, 'test_suite_id'))
+        const sessionCoverage = coverages.find(coverage => !Object.hasOwn(coverage, 'test_suite_id'))
+
+        testCoverages.forEach(coverage => {
           assert.ok(Object.hasOwn(coverage, 'test_session_id'))
           assert.ok(Object.hasOwn(coverage, 'test_suite_id'))
           assert.ok(Object.hasOwn(coverage, 'span_id'))
@@ -1997,6 +2000,19 @@ moduleTypes.forEach(({
           .map(file => file.filename)
 
         assertObjectContains(fileNames, Object.keys(coverageFixture))
+        assert.ok(
+          coverages
+            .flatMap(coverageAttachment => coverageAttachment.files)
+            .filter(file => Object.hasOwn(coverageFixture, file.filename))
+            .every(file => file.bitmap),
+          'covered source files should report line coverage bitmaps'
+        )
+        assert.ok(sessionCoverage, 'session executable line coverage should be reported')
+        assert.ok(!Object.hasOwn(sessionCoverage, 'span_id'))
+        assert.ok(
+          sessionCoverage.files.every(file => file.bitmap),
+          'session executable line coverage files should report bitmaps'
+        )
       }, 25000)
 
       childProcess = exec(

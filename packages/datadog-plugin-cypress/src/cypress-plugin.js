@@ -25,7 +25,9 @@ const {
   TEST_MODULE,
   TEST_SOURCE_START,
   finishAllTraceSpans,
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
@@ -70,6 +72,7 @@ const {
   getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
+  mergeCoverageBitmaps,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -386,6 +389,7 @@ class CypressPlugin {
   newTestsWithDynamicNames = new Set()
   attemptToFixExecutions = new Map()
   loggedAttemptToFixTests = new Set()
+  testSessionCoverageFilesByFilename = new Map()
 
   constructor () {
     const {
@@ -466,6 +470,7 @@ class CypressPlugin {
     this.modifiedFiles = []
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
+    this.testSessionCoverageFilesByFilename = new Map()
     this.activeTestSpan = null
     this.testSuiteSpan = null
     this.testModuleSpan = null
@@ -491,6 +496,45 @@ class CypressPlugin {
    */
   _now () {
     return this._timeOrigin + performance.now() - this._perfOrigin
+  }
+
+  /**
+   * Adds executable-line coverage from a Cypress coverage snapshot to the session aggregate.
+   *
+   * @param {object} coverage - Istanbul coverage map or raw coverage object.
+   * @returns {void}
+   */
+  addTestSessionCoverage (coverage) {
+    for (const { filename, bitmap } of getExecutableFilesFromCoverage(coverage)) {
+      const currentBitmap = this.testSessionCoverageFilesByFilename.get(filename)
+      this.testSessionCoverageFilesByFilename.set(filename, mergeCoverageBitmaps(currentBitmap, bitmap))
+    }
+  }
+
+  /**
+   * Reports session-level executable-line coverage for the current Cypress run.
+   *
+   * @returns {void}
+   */
+  reportTestSessionCoverage () {
+    if (
+      !this.testSessionSpan ||
+      !this.isCodeCoverageEnabled ||
+      !this.tracer._tracer._exporter?.exportCoverage ||
+      !this.testSessionCoverageFilesByFilename.size
+    ) {
+      return
+    }
+
+    const files = []
+    for (const [filename, bitmap] of this.testSessionCoverageFilesByFilename) {
+      files.push({ filename, bitmap })
+    }
+
+    this.tracer._tracer._exporter.exportCoverage({
+      sessionId: this.testSessionSpan.context()._traceId,
+      files: getRelativeCoverageFiles(files, this.repositoryRoot || this.rootDir),
+    })
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
@@ -826,7 +870,10 @@ class CypressPlugin {
     if (this.isSuitesSkippingEnabled) {
       const skippableTestsResponse = await getSkippableTests(
         this.tracer,
-        this.testConfiguration
+        {
+          ...this.testConfiguration,
+          isCodeCoverageEnabled: this.isCodeCoverageEnabled,
+        }
       )
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
@@ -988,6 +1035,8 @@ class CypressPlugin {
         attemptToFixExecutions: this.attemptToFixExecutions,
         newTestsWithDynamicNames: this.newTestsWithDynamicNames,
       })
+
+      this.reportTestSessionCoverage()
 
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -1298,9 +1347,18 @@ class CypressPlugin {
           isDisabled: isDisabledFromSupport,
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
-          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+          this.addTestSessionCoverage(coverage)
+          const coverageFiles = getCoveredFilesFromCoverage(coverage)
           const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
-            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+            file => {
+              if (typeof file === 'string') {
+                return getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+              }
+              return {
+                ...file,
+                filename: getTestSuitePath(file.filename, this.repositoryRoot || this.rootDir),
+              }
+            }
           )
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)

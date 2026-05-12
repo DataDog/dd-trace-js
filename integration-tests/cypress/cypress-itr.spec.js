@@ -318,6 +318,61 @@ moduleTypes.forEach(({
         ])
       })
 
+      it('does not skip tests with missing line coverage when code coverage is enabled', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'test',
+          attributes: {
+            name: 'context passes',
+            suite: 'cypress/e2e/other.cy.js',
+            _missing_line_code_coverage: true,
+          },
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event =>
+              event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+            ).content
+
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(test.meta[TEST_SKIPPED_BY_ITR], undefined)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'test')
+            assertItrSkippingEnabledTags(events, 'true')
+          }, 25000)
+
+        const skippableRequestPromise = receiver
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 25000)
+          .then(skippableRequest => {
+            assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
+          })
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/other.cy.js',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+          skippableRequestPromise,
+        ])
+      })
+
       it('does not skip tests if test skipping is disabled by the API', async () => {
         let hasRequestedSkippable = false
         receiver.setSettings({
