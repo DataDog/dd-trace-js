@@ -81,6 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
@@ -89,10 +90,16 @@ jobs:
       - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) --strip-components=1
       - run: yarn --prod --ignore-optional
       - run: ls -lisa
+      - name: Get GitHub Token via dd-octo-sts
+        id: generate-token
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        with:
+          scope: DataDog/dd-trace-js
+          policy: self.package-size-report
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@1e02edbdda803a45537a808ede97866db47756d3 # Unreleased
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.generate-token.outputs.token }}
 
   static-analysis:
     runs-on: ubuntu-latest
