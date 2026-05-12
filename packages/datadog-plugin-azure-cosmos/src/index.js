@@ -15,11 +15,11 @@ class AzureCosmosPlugin extends DatabasePlugin {
   static prefix = 'tracing:orchestrion:@azure/cosmos:executePlugins'
   static peerServicePrecursors = ['db.name']
 
-  operationName () {
+  operationName() {
     return 'cosmosdb.query'
   }
 
-  asyncEnd (ctx) {
+  asyncEnd(ctx) {
     if (!ctx.span) return
     const span = ctx.currentStore?.span
     if (span) {
@@ -30,7 +30,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     }
   }
 
-  error (ctx) {
+  error(ctx) {
     if (!ctx.span) return
     const span = ctx.currentStore?.span
     if (span) {
@@ -41,7 +41,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     }
   }
 
-  bindStart (ctx) {
+  bindStart(ctx) {
     const requestContext = ctx.arguments[1]
     const resource = this.getResource(requestContext)
     const { dbName, containerName } = this.getDbInfo(requestContext)
@@ -49,12 +49,12 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const { outHost, userAgent } = this.getHttpInfo(requestContext)
     const pluginOn = ctx.arguments[3]
 
-    // only trace operations not requests (pluginOn)
-    // trace requests only if they are read or query operations not on docs
-    // prevents doubled read spans for createIfNotExists calls
     if (pluginOn != null && requestContext.operationType != null && requestContext.resourceType != null) {
       const operationType = requestContext.operationType
       const resourceType = requestContext.resourceType
+      // only trace operations not requests (pluginOn)
+      // trace requests only if they are read or query operations not on docs
+      // prevents doubled read spans for createIfNotExists calls
       if (pluginOn === 'request' && ((operationType !== 'read' && operationType !== 'query') ||
         (operationType === 'read' && resourceType !== 'docs'))) {
         ctx.currentStore = { ...storage('legacy').getStore() }
@@ -89,7 +89,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
-  getResource (requestContext) {
+  getResource(requestContext) {
     const path = requestContext.path
     const parts = path.split('/')
     let modified = false
@@ -103,7 +103,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return `${requestContext.operationType} ${modified ? parts.join('/') : path}`
   }
 
-  getDbInfo (requestContext) {
+  getDbInfo(requestContext) {
     let dbName = null
     let containerName = null
 
@@ -127,7 +127,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return { dbName, containerName }
   }
 
-  getConnectionMode (requestContext) {
+  getConnectionMode(requestContext) {
     const mode = requestContext.client?.connectionPolicy?.connectionMode
     if (mode === 0) {
       return 'gateway'
@@ -137,7 +137,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return 'other'
   }
 
-  getHttpInfo (requestContext) {
+  getHttpInfo(requestContext) {
     const outHost = requestContext.client?.cosmosClientOptions?.endpoint
     const userAgent = requestContext.headers?.['User-Agent']
     return { outHost, userAgent }

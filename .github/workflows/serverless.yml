@@ -232,12 +232,7 @@ jobs:
         run: |
           docker restart ${{ job.services.azureeventhubsemulator.id }}
           docker restart ${{ job.services.azureservicebusemulator.id }}
-      # Cosmos DB trigger runs in the .NET Functions host (extension bundle). Newer bundles pull
-      # Microsoft.Azure.Cosmos bits that reference .NET 8 facades (e.g. System.Diagnostics.StackTrace v8);
-      # ubuntu-latest images do not include .NET 8 unless we install it.
       - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
-        with:
-          dotnet-version: '8.x'
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:plugins:coverage
