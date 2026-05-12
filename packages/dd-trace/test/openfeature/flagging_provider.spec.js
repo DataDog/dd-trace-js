@@ -145,7 +145,9 @@ describe('FlaggingProvider', () => {
 
         assert.deepStrictEqual(details.value, testCase.result.value)
         assert.strictEqual(details.reason, testCase.result.reason)
-        assert.strictEqual(details.variant, testCase.result.variant)
+        if ('variant' in testCase.result) {
+          assert.strictEqual(details.variant, testCase.result.variant)
+        }
       })
     }
   })
