@@ -194,23 +194,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-
-            // new tests are detected but not retried
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 1)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-          }, 25000)
-
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
@@ -225,10 +208,25 @@ moduleTypes.forEach(({
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+
+            // new tests are detected but not retried
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.strictEqual(newTests.length, 1)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+          }
+        )
       })
     })
 
@@ -236,19 +234,6 @@ moduleTypes.forEach(({
     if (version === 'latest') {
       it('does not crash for multi origin tests', async () => {
         const envVars = getCiVisEvpProxyConfig(receiver.port)
-
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-              .filter(event => event.type !== 'span')
-            assert.strictEqual(events.length, 4)
-
-            const test = events.find(event => event.type === 'test').content
-            assert.strictEqual(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
-            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-            // cypress@latest esm + multi-origin browser context switching adds cold-start overhead
-            // the suite-level `warmCypressBinary` (commonJS path) doesn't reach.
-          }, 50_000)
 
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
@@ -282,26 +267,30 @@ moduleTypes.forEach(({
         )
 
         await Promise.all([
-          once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          receiverPromise,
+          // cypress@latest esm + multi-origin browser context switching adds cold-start overhead
+          // that the suite-level `warmCypressBinary` (commonJS path) doesn't reach, so this one
+          // child run takes measurably longer than the rest of the suite and earns its own backstop.
+          receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type !== 'span')
+              assert.strictEqual(events.length, 4)
+
+              const test = events.find(event => event.type === 'test').content
+              assert.strictEqual(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            },
+            { hardTimeout: 50_000 }
+          ),
         ])
       })
     }
 
     it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async () => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testEvents = events.filter(event => event.type === 'test')
-
-          testEvents.forEach(({ content: { meta } }) => {
-            assert.strictEqual(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
-          })
-        }, 25000)
-
       const envVars = getCiVisEvpProxyConfig(receiver.port)
 
       childProcess = exec(
@@ -317,10 +306,19 @@ moduleTypes.forEach(({
         }
       )
 
-      await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+
+          testEvents.forEach(({ content: { meta } }) => {
+            assert.strictEqual(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+          })
+        }
+      )
     })
 
     context('test management', () => {
@@ -343,15 +341,15 @@ moduleTypes.forEach(({
           })
         })
 
-        const getTestAssertions = ({
+        const awaitTestAssertions = ({
           isAttemptToFix,
           shouldAlwaysPass,
           shouldFailSometimes,
           isQuarantined,
           isDisabled,
-        }) =>
+        }, child) =>
           receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const testSession = events.find(event => event.type === 'test_session_end').content
@@ -420,7 +418,7 @@ moduleTypes.forEach(({
                   }
                 }
               }
-            }, 25000)
+            })
 
         /**
          * @param {{
@@ -440,13 +438,6 @@ moduleTypes.forEach(({
           isDisabled,
           extraEnvVars = {},
         } = {}) => {
-          const testAssertionsPromise = getTestAssertions({
-            isAttemptToFix,
-            shouldAlwaysPass,
-            shouldFailSometimes,
-            isQuarantined,
-            isDisabled,
-          })
           let stdout = ''
 
           const envVars = getCiVisEvpProxyConfig(receiver.port)
@@ -477,10 +468,13 @@ moduleTypes.forEach(({
             process.stderr.write(data)
           })
 
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            testAssertionsPromise,
-          ])
+          await awaitTestAssertions({
+            isAttemptToFix,
+            shouldAlwaysPass,
+            shouldFailSometimes,
+            isQuarantined,
+            isDisabled,
+          }, childProcess)
 
           if (isAttemptToFix) {
             assert.match(stdout, /Datadog Test Optimization: attempting to fix .*attempt to fix is attempt to fix/)
@@ -515,9 +509,9 @@ moduleTypes.forEach(({
           }
 
           if (shouldAlwaysPass) {
-            assert.strictEqual(exitCode, 0)
+            assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.strictEqual(exitCode, 1)
+            assert.strictEqual(childProcess.exitCode, 1)
           }
         }
 
@@ -557,22 +551,6 @@ moduleTypes.forEach(({
             },
           })
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const attemptToFixTests = tests
-                .filter(test => test.meta[TEST_NAME] === 'attempt to fix after hook passes before after hook fails')
-                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-              assert.strictEqual(attemptToFixTests.length, 4)
-
-              const lastAttempt = attemptToFixTests[attemptToFixTests.length - 1]
-              assert.strictEqual(lastAttempt.meta[TEST_STATUS], 'fail')
-              assert.match(lastAttempt.meta[ERROR_MESSAGE], /error in after hook/)
-              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-            }, 25000)
-
           const envVars = getCiVisEvpProxyConfig(receiver.port)
           const specToRun = 'cypress/e2e/attempt-to-fix-after-hook.js'
 
@@ -588,12 +566,26 @@ moduleTypes.forEach(({
             }
           )
 
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            receiverPromise,
-          ])
+          await receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const attemptToFixTests = tests
+                .filter(test => test.meta[TEST_NAME] === 'attempt to fix after hook passes before after hook fails')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-          assert.strictEqual(exitCode, 1)
+              assert.strictEqual(attemptToFixTests.length, 4)
+
+              const lastAttempt = attemptToFixTests[attemptToFixTests.length - 1]
+              assert.strictEqual(lastAttempt.meta[TEST_STATUS], 'fail')
+              assert.match(lastAttempt.meta[ERROR_MESSAGE], /error in after hook/)
+              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            }
+          )
+
+          assert.strictEqual(childProcess.exitCode, 1)
         })
 
         it('does not attempt to fix tests if test management is not enabled', async () => {
@@ -626,22 +618,6 @@ moduleTypes.forEach(({
             known_tests_enabled: true,
           })
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const atfTests = tests.filter(
-                t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
-              )
-              assert.ok(atfTests.length > 0)
-              for (const test of atfTests) {
-                assert.ok(
-                  !(TEST_IS_NEW in test.meta),
-                  'ATF test that is in known tests should not be tagged as new'
-                )
-              }
-            }, 25000)
-
           const envVars = getCiVisEvpProxyConfig(receiver.port)
           const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
@@ -658,10 +634,24 @@ moduleTypes.forEach(({
             }
           )
 
-          await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-          ])
+          await receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const atfTests = tests.filter(
+                t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              )
+              assert.ok(atfTests.length > 0)
+              for (const test of atfTests) {
+                assert.ok(
+                  !(TEST_IS_NEW in test.meta),
+                  'ATF test that is in known tests should not be tagged as new'
+                )
+              }
+            }
+          )
         })
 
         it('ignores quarantine when attempting to fix a test', async () => {
@@ -728,9 +718,9 @@ moduleTypes.forEach(({
           })
         })
 
-        const getTestAssertions = (isDisabling) =>
+        const awaitTestAssertions = (isDisabling, child) =>
           receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const failedTest = events.find(event => event.type === 'test').content
               const testSession = events.find(event => event.type === 'test_session_end').content
@@ -750,11 +740,9 @@ moduleTypes.forEach(({
                 assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
                 assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in failedTest.meta))
               }
-            }, 25000)
+            })
 
         const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
-          const testAssertionsPromise = getTestAssertions(isDisabling)
-
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           const specToRun = 'cypress/e2e/disable.js'
@@ -772,15 +760,12 @@ moduleTypes.forEach(({
             }
           )
 
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            testAssertionsPromise,
-          ])
+          await awaitTestAssertions(isDisabling, childProcess)
 
           if (isDisabling) {
-            assert.strictEqual(exitCode, 0)
+            assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.strictEqual(exitCode, 1)
+            assert.strictEqual(childProcess.exitCode, 1)
           }
         }
 
@@ -822,9 +807,9 @@ moduleTypes.forEach(({
           })
         })
 
-        const getTestAssertions = (isQuarantining) =>
+        const awaitTestAssertions = (isQuarantining, child) =>
           receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const failedTest = events.find(event => event.type === 'test').content
               const testSession = events.find(event => event.type === 'test_session_end').content
@@ -850,11 +835,9 @@ moduleTypes.forEach(({
                 assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
                 assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in failedTest.meta))
               }
-            }, 25000)
+            })
 
         const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
-          const testAssertionsPromise = getTestAssertions(isQuarantining)
-
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           const specToRun = 'cypress/e2e/quarantine.js'
@@ -872,15 +855,12 @@ moduleTypes.forEach(({
             }
           )
 
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            testAssertionsPromise,
-          ])
+          await awaitTestAssertions(isQuarantining, childProcess)
 
           if (isQuarantining) {
-            assert.strictEqual(exitCode, 0)
+            assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.strictEqual(exitCode, 1)
+            assert.strictEqual(childProcess.exitCode, 1)
           }
         }
 
@@ -910,18 +890,6 @@ moduleTypes.forEach(({
         })
         receiver.setTestManagementTestsResponseCode(404)
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSessionEnd = events.find(event => event.type === 'test_session_end')
-            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
-            const testSession = testSessionEnd.content
-            assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            // it is not retried
-            assert.strictEqual(tests.length, 1)
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/attempt-to-fix.js'
@@ -939,10 +907,20 @@ moduleTypes.forEach(({
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSessionEnd = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+            const testSession = testSessionEnd.content
+            assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // it is not retried
+            assert.strictEqual(tests.length, 1)
+          }
+        )
       })
 
       over12It('does not retry attempt to fix tests when testIsolation is false', async () => {
@@ -966,8 +944,28 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              CYPRESS_SHOULD_ALWAYS_PASS: '1',
+              CYPRESS_TEST_ISOLATION: 'false',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const testSession = events.find(event => event.type === 'test_session_end').content
@@ -989,30 +987,8 @@ moduleTypes.forEach(({
               assert.ok(!(TEST_IS_RETRY in test.meta))
               assert.ok(!(TEST_RETRY_REASON in test.meta))
             })
-          }, 25000)
-
-        const envVars = getCiVisEvpProxyConfig(receiver.port)
-
-        const specToRun = 'cypress/e2e/attempt-to-fix.js'
-
-        childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-          {
-            cwd,
-            env: {
-              ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun,
-              CYPRESS_SHOULD_ALWAYS_PASS: '1',
-              CYPRESS_TEST_ISOLATION: 'false',
-            },
           }
         )
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
       })
 
       it('retries attempt to fix tests in the correct order (right after original test)', async () => {
@@ -1041,44 +1017,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // 1 test with attempt to fix (1 original + 3 retries) + 2 tests without = 6 tests total
-            assert.equal(tests.length, 6)
-
-            // Extract test execution order with full details
-            const testExecutionOrder = tests.map(test => ({
-              name: test.meta[TEST_NAME],
-              isRetry: test.meta[TEST_IS_RETRY] === 'true',
-              isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true',
-            }))
-
-            // Expected order:
-            // 1. "first test" (original, no retries)
-            // 2. "second test" (original)
-            // 3. "second test" (retry 1)
-            // 4. "second test" (retry 2)
-            // 5. "second test" (retry 3)
-            // 6. "third test" (original, no retries)
-
-            assertObjectContains(testExecutionOrder, [
-              { name: 'attempt to fix order first test', isRetry: false, isAttemptToFix: false },
-              { name: 'attempt to fix order second test', isRetry: false, isAttemptToFix: true },
-              { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
-              { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
-              { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
-              { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false },
-            ])
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assertObjectContains(testSession.meta, {
-              [TEST_MANAGEMENT_ENABLED]: 'true',
-            })
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/attempt-to-fix-order.js'
@@ -1103,10 +1041,48 @@ moduleTypes.forEach(({
         })
 
         await Promise.all([
-          once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          receiverPromise,
+          receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // 1 test with attempt to fix (1 original + 3 retries) + 2 tests without = 6 tests total
+              assert.equal(tests.length, 6)
+
+              // Extract test execution order with full details
+              const testExecutionOrder = tests.map(test => ({
+                name: test.meta[TEST_NAME],
+                isRetry: test.meta[TEST_IS_RETRY] === 'true',
+                isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true',
+              }))
+
+              // Expected order:
+              // 1. "first test" (original, no retries)
+              // 2. "second test" (original)
+              // 3. "second test" (retry 1)
+              // 4. "second test" (retry 2)
+              // 5. "second test" (retry 3)
+              // 6. "third test" (original, no retries)
+
+              assertObjectContains(testExecutionOrder, [
+                { name: 'attempt to fix order first test', isRetry: false, isAttemptToFix: false },
+                { name: 'attempt to fix order second test', isRetry: false, isAttemptToFix: true },
+                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
+                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
+                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
+                { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false },
+              ])
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assertObjectContains(testSession.meta, {
+                [TEST_MANAGEMENT_ENABLED]: 'true',
+              })
+            }
+          ),
         ])
 
         assert.match(testOutput, /Retrying "attempt to fix order second test" because it is an attempt to fix/)

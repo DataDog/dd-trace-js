@@ -299,6 +299,7 @@ module.exports = {
         CHANGE_TARGET,
       } = env
       const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
+      const DD_CUSTOM_PARENT_ID = getValueFromEnvSources('DD_CUSTOM_PARENT_ID')
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -308,7 +309,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID, DD_CUSTOM_PARENT_ID }),
         [CI_NODE_NAME]: NODE_NAME,
         [PR_NUMBER]: CHANGE_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET,
@@ -738,11 +739,11 @@ module.exports = {
         }),
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
-        [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
         [CI_JOB_ID]: BUILDKITE_JOB_ID,
       }
 
-      if (BUILDKITE_PULL_REQUEST) {
+      if (BUILDKITE_PULL_REQUEST && BUILDKITE_PULL_REQUEST !== 'false') {
+        tags[PR_NUMBER] = BUILDKITE_PULL_REQUEST
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = BUILDKITE_PULL_REQUEST_BASE_BRANCH
       }
     }

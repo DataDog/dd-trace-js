@@ -700,28 +700,6 @@ declare namespace tracer {
     protocolVersion?: string
 
     /**
-     * Deprecated in favor of the global versions of the variables provided under this option
-     *
-     * @deprecated
-     * @hidden
-     */
-    ingestion?: {
-      /**
-       * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-       * @env DD_TRACE_SAMPLE_RATE
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      sampleRate?: number
-
-      /**
-       * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
-       * @env DD_TRACE_RATE_LIMIT
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      rateLimit?: number
-    };
-
-    /**
      * Whether to enable inferred proxy services.
      * @default false
      * @env DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED
@@ -744,13 +722,6 @@ declare namespace tracer {
     experimental?: {
 
       /**
-       * @default false
-       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      b3?: boolean
-
-      /**
        * Whether to write traces to log output or agentless, rather than send to an agent
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
@@ -764,34 +735,6 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enableGetRumData?: boolean
-
-      /**
-       * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
-       * @deprecated Please use the non-experimental `iast` option instead.
-       */
-      iast?: boolean | IastOptions
-
-      /**
-       * Configuration of the AppSec. Can be a boolean as an alias to `appsec.enabled`.
-       * @deprecated Please use the non-experimental `appsec` option instead.
-       */
-      appsec?: boolean | {
-        /**
-         * Configuration of Standalone ASM mode
-         * Deprecated in favor of `apmTracingEnabled`.
-         *
-         * @deprecated Please use `apmTracingEnabled` instead.
-         */
-        standalone?: {
-          /**
-           * Whether to enable Standalone ASM.
-           * @default false
-           * @env DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
-           * Programmatic configuration takes precedence over the environment variables listed above.
-           */
-          enabled?: boolean
-        }
-      } | TracerOptions['appsec'],
 
       aiguard?: {
         /**
@@ -1282,7 +1225,7 @@ declare namespace tracer {
 
     /**
      * Whether to use Datadog legacy baggage extraction and injection behavior.
-     * @default false
+     * @default true
      * @env DD_TRACE_LEGACY_BAGGAGE_ENABLED
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
