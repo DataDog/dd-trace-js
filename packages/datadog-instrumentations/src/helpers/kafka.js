@@ -1,5 +1,14 @@
 'use strict'
 
+// Side-table mapping a kafkajs producer/consumer to the cluster captured at
+// creation time. The boundary uses it to read `cluster.brokerPool` lazily on
+// first send/consume instead of opening a parallel admin connection. A
+// WeakMap keeps the kafkajs object itself untouched: no Symbol-keyed
+// property to leak through `Reflect.ownKeys`, no string-keyed underscore for
+// user serializers to pick up, and the entry drops as soon as the producer
+// is GC'd.
+const clientToCluster = new WeakMap()
+
 /**
  * Shallow-clone each message and its headers so the boundary, kafkajs, and
  * the user never share the same nested objects. With `ensureHeaders` true
@@ -27,5 +36,6 @@ function cloneMessages (messages, ensureHeaders) {
 }
 
 module.exports = {
+  clientToCluster,
   cloneMessages,
 }
