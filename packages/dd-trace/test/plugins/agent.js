@@ -570,8 +570,8 @@ module.exports = {
    * - wipe: false
    *
    * @param {object} [options]
-   * @param {boolean} [options.ritmReset] - Resets the Require In The Middle cache. Defaults to true.
-   * @param {boolean} [options.wipe] - Wipes tracer and non-native modules from require cache. Defaults to false.
+   * @param {boolean} [options.ritmReset] - Resets the Require In The Middle cache.
+   * @param {boolean} [options.wipe] - Wipes tracer and non-native modules from require cache.
    *     You probably don't need this.
    * @returns
    */
