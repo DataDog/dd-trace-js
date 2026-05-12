@@ -11,8 +11,7 @@ const HIGH_CARDINALITY_PARENT_SPAN_NAMES = new Set([
   'aws.durable.parallel',
 ])
 
-// The SDK calls intermediate operations for which we don't want to create
-// spans to keep consistency with other tracers' implementations.
+// The SDK emits these subTypes as internal scaffolding around map/parallel iterations; not user-visible operations.
 const SUPPRESSED_CHILD_CONTEXT_SUBTYPES = new Set([
   'Map',
   'Parallel',
@@ -49,9 +48,7 @@ class BaseContextPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  // Extracts the operation name from arguments.
-  // All context methods have 2 overrides: method(string, other) and method(other)
-  // where args[0] is the name.
+  // All context methods have two overloads: method(name, …) and method(…); args[0] is the name in the first form.
   getOperationName (ctx) {
     const args = ctx.arguments || []
     return typeof args[0] === 'string' ? args[0] : undefined
@@ -109,8 +106,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
   }
 }
 
-// Extracts subType from runInChildContext arguments. The SDK has two
-// overrides: `(name, fn, options)` and `(fn, options)`.
+// runInChildContext has two overloads: `(name, fn, options)` and `(fn, options)`.
 function getRunInChildContextSubType (ctx) {
   const args = ctx.arguments || []
   const opts = typeof args[0] === 'string' ? args[2] : args[1]

@@ -31,10 +31,11 @@ function getOperationId (ctxImpl) {
 }
 
 /**
- * The SDK wraps user errors in typed classes (StepError, ChildContextError, etc.). For
- * span tagging we want the user's original Error, so we follow the `.cause` chain back
- * out of the wrapper hierarchy. SDK wrappers expose a string `errorType` field, so the
- * loop stops once we leave the wrappers.
+ * The SDK wraps user errors in typed classes (StepError, ChildContextError, etc.); we follow the
+ * `.cause` chain to recover the user's original Error. SDK wrappers expose a string `errorType`
+ * field, so the loop stops once we leave the wrapper hierarchy.
+ * @param {{ error?: unknown } | unknown} ctxOrError
+ * @returns {{ error?: unknown } | unknown}
  */
 function unwrapDurableError (ctxOrError) {
   let err = ctxOrError?.error
@@ -47,18 +48,14 @@ function unwrapDurableError (ctxOrError) {
 }
 
 /**
- * Wraps a DurablePromise's `.then`/`.catch`/`.finally` so the supplied
- * `onSettle(err)` callback fires exactly once when the underlying promise
- * settles — but only after user code first awaits / chains.
- *
- * Using `kind: 'Async'` in Orchestrion would side-chain `.then()` immediately
- * on the returned thenable, prematurely triggering the SDK's
- * `ensureExecution()` and `markOperationAwaited`. Instead, callers pair
- * `kind: 'Sync'` with this helper to preserve the SDK's lazy semantics.
- *
+ * Using `kind: 'Async'` in Orchestrion would side-chain `.then()` immediately on the returned
+ * thenable, prematurely triggering the SDK's `ensureExecution()` and `markOperationAwaited`.
+ * Callers pair `kind: 'Sync'` with this helper so `onSettle` only fires after user code first
+ * awaits / chains, preserving the SDK's lazy semantics.
  * @param {object} dp - The returned DurablePromise instance.
- * @param {(err: unknown) => void} onSettle - Called with `undefined` on
- *   success or the rejection reason on failure. Invoked once.
+ * @param {(err: unknown) => void} onSettle - Called once with `undefined` on success or the
+ *   rejection reason on failure.
+ * @returns {void}
  */
 function observeDurablePromise (dp, onSettle) {
   if (!dp || typeof dp.then !== 'function') return

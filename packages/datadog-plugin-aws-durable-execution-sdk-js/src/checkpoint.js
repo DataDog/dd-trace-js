@@ -2,10 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-/**
- * On retries, execution is suspended and error/asyncEnd are not called.
- * Finish the span (possibly with error) from the checkpoint.
- */
+// On retries the SDK suspends execution without firing error/asyncEnd; finish the span here.
 class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint'

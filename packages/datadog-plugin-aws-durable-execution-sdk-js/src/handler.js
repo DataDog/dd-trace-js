@@ -46,8 +46,6 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   }
 }
 
-// Finishes any open spans in the same trace that were created by this plugin,
-// except the execute span itself (the caller finishes that one).
 function finishOpenChildSpans (executeSpan) {
   const trace = executeSpan?._spanContext?._trace
   if (!trace?.started) return
