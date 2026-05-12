@@ -19,7 +19,7 @@ const { channel } = require('./instrument')
  *
  * @param {string} prefix
  * @param {object} [options]
- * @param {boolean} [options.captureResult=false] set `ctx.result` to the callback's first
+ * @param {boolean} [options.captureResult] set `ctx.result` to the callback's first
  *   non-error argument before publishing `:finish`. Plugins that tag spans from the call's
  *   return value (e.g. the DNS lookup plugin) rely on this.
  * @returns {(buildContext: (thisArg: unknown, args: IArguments) => object | undefined) =>

@@ -289,7 +289,7 @@ module.exports = {
    * @overload
    * @param {string | string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
-   * @param {Record<string, unknown>} [tracerConfig={}]
+   * @param {Record<string, unknown>} [tracerConfig]
    * @returns Promise<void>
    */
   /**
@@ -298,7 +298,7 @@ module.exports = {
    * @overload
    * @param {string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>[]} config
-   * @param {Record<string, unknown>} [tracerConfig={}]
+   * @param {Record<string, unknown>} [tracerConfig]
    * @returns Promise<void>
    */
   async load (pluginNames, config, tracerConfig = {}) {
@@ -570,9 +570,9 @@ module.exports = {
    * - wipe: false
    *
    * @param {object} [options]
-   * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
-   * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
-   *     need this.
+   * @param {boolean} [options.ritmReset] - Resets the Require In The Middle cache.
+   * @param {boolean} [options.wipe] - Wipes tracer and non-native modules from require cache.
+   *     You probably don't need this.
    * @returns
    */
   close ({ ritmReset = true, wipe = false } = {}) {

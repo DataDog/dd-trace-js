@@ -78,11 +78,9 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
   beforeEach(() => {
     const tracer = require('../../..')
     const config = getConfigFresh({
-      experimental: {
-        iast: {
-          enabled: true,
-          requestSampling: 100,
-        },
+      iast: {
+        enabled: true,
+        requestSampling: 100,
       },
     })
     iast.enable(config, tracer)
