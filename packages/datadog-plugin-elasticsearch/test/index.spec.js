@@ -171,7 +171,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const meta = traces[0][0].meta
               assert.ok(!('elasticsearch.body' in meta))
-              assert.ok(!('elasticsearch.params' in meta))
+              assert.strictEqual(meta['opensearch.params'], '{}')
             })
             .then(done)
             .catch(done)
