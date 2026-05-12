@@ -21,8 +21,6 @@ jobs:
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
@@ -40,6 +38,8 @@ jobs:
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
       - run: node scripts/release/notes
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   publish-v4:
     if: github.event_name == 'push' && github.event.ref == 'refs/heads/v4.x'
@@ -49,8 +49,6 @@ jobs:
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
@@ -68,6 +66,8 @@ jobs:
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
       - run: node scripts/release/notes
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   publish-latest:
     if: github.event_name == 'push' && github.event.ref == 'refs/heads/v5.x'
@@ -77,8 +77,6 @@ jobs:
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
