@@ -259,6 +259,7 @@ describe('Plugin', () => {
         })
       })
 
+      // see https://github.com/DataDog/dd-trace-js/issues/2334
       describe('with hooks configuration', () => {
         beforeEach(() => {
           return agent.load('http', {
@@ -268,6 +269,10 @@ describe('Plugin', () => {
                 request: (span, req, res) => {
                   assert.ok(span instanceof PublicSpan)
                   span.setTag('hook.tag', 'test')
+                  span.setTag('test.hook', 'ran')
+                  if (req.url?.startsWith('/products')) {
+                    span.setTag('resource.name', 'GET /products')
+                  }
                 },
               },
             },
@@ -294,37 +299,6 @@ describe('Plugin', () => {
             .catch(done)
 
           axios.get(`http://localhost:${port}/user`).catch(done)
-        })
-      })
-
-      // see https://github.com/DataDog/dd-trace-js/issues/2334
-      describe('with hooks configuration', () => {
-        beforeEach(() => {
-          return agent.load('http', {
-            client: false,
-            server: {
-              hooks: {
-                request: (span, req) => {
-                  span.setTag('test.hook', 'ran')
-                  if (req.url?.startsWith('/products')) {
-                    span.setTag('resource.name', 'GET /products')
-                  }
-                },
-              },
-            },
-          })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-            })
-        })
-
-        beforeEach(done => {
-          const server = new http.Server(listener)
-          appListener = server
-            .listen(0, 'localhost', () => {
-              port = appListener.address().port
-              done()
-            })
         })
 
         it('should let the request hook override the default resource name', done => {
