@@ -143,7 +143,7 @@ class Span extends BridgeSpanBase {
     const hrStartTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const startTime = hrTimeToMilliseconds(hrStartTime)
 
-    const ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
+    const spanFields = {
       operationName: spanNameMapper(spanName, kind, attributes),
       context: spanContext._ddContext,
       startTime,
@@ -155,7 +155,22 @@ class Span extends BridgeSpanBase {
         [SPAN_KIND]: spanKindNames[kind],
       },
       links,
-    }, _tracer._debug)
+    }
+
+    // Native spans are always selected when libdatadog is available; the
+    // JS-only `DatadogSpan` path is kept solely for the graceful-degradation
+    // fallback where libdatadog could not load (and `_tracer._nativeSpans`
+    // is therefore null).
+    let ddSpan
+    if (_tracer._nativeSpans === null) {
+      ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, spanFields, _tracer._debug)
+    } else {
+      const NativeDatadogSpan = require('../native').NativeDatadogSpan
+      ddSpan = new NativeDatadogSpan(
+        _tracer, _tracer._processor, _tracer._prioritySampler,
+        spanFields, _tracer._debug, _tracer._nativeSpans
+      )
+    }
 
     super(ddSpan)
 

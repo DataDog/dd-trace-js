@@ -5,19 +5,29 @@ const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
+const { OpCode } = require('./native')
+const {
+  SAMPLING_MECHANISM_MANUAL,
+  DECISION_MAKER_KEY,
+} = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config) {
+  constructor (exporter, prioritySampler, config, nativeSpans = null) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this._nativeSpans = nativeSpans
+
+    // In native mode with stats, the WASM concentrator handles stats aggregation
+    // (spans are fed to it during flush_chunk), so we skip the JS stats processor.
+    const isNativeStats = nativeSpans !== null && config.stats?.enabled
 
     // TODO: This should already have been calculated in `config.js`.
-    if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.enabled && !config.appsec?.standalone?.enabled && !isNativeStats) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config)
     }
@@ -32,14 +42,121 @@ class SpanProcessor {
 
   sample (span) {
     const spanContext = span.context()
-    this._prioritySampler.sample(spanContext)
+
+    if (this._nativeSpans === null) {
+      this._prioritySampler.sample(spanContext)
+    } else {
+      this._sampleNative(span, spanContext)
+    }
+
+    // Single span sampling always runs in JS
     this._spanSampler.sample(spanContext)
+  }
+
+  /**
+   * Perform sampling in native mode.
+   *
+   * Sampling itself runs JS-side: manual overrides are evaluated first via
+   * `_getPriorityFromTags`, otherwise the standard JS priority sampler runs.
+   * The decision is then mirrored into native storage so the WASM exporter
+   * sees the same priority/mechanism the JS path observes.
+   *
+   * @param {object} span - The span to sample
+   * @param {object} spanContext - The span's context
+   * @private
+   */
+  _sampleNative (span, spanContext) {
+    const root = spanContext._trace.started[0]
+
+    // Already sampled - return early
+    if (spanContext._sampling.priority !== undefined) return
+    if (!root) return // noop span
+
+    // Check for manual override tags first (stays in JS)
+    const manualPriority = this._prioritySampler._getPriorityFromTags(
+      spanContext.getTags(),
+      spanContext
+    )
+
+    if (this._prioritySampler.validate(manualPriority)) {
+      // Manual override - set in JS context
+      spanContext._sampling.priority = manualPriority
+      spanContext._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+
+      // Sync manual decision to native storage
+      const slotIndex = spanContext._slotIndex
+      if (slotIndex !== undefined) {
+        this._syncSamplingToNative(spanContext, slotIndex)
+      }
+    } else {
+      // Use JS-side sampling
+      this._prioritySampler.sample(spanContext)
+
+      // Sync sampling decision to native storage if span is in native storage
+      if (spanContext._slotIndex !== undefined) {
+        this._syncSamplingToNative(spanContext, spanContext._slotIndex)
+      }
+    }
+
+    // Add decision maker tag
+    this._addDecisionMaker(root)
+  }
+
+  /**
+   * Sync sampling decision from JS to native storage.
+   *
+   * @param {object} spanContext - The span context
+   * @param {number} slotIndex - The native slot index
+   * @private
+   */
+  _syncSamplingToNative (spanContext, slotIndex) {
+    // Sync priority as trace metric
+    this._nativeSpans.queueOp(
+      OpCode.SetTraceMetricsAttr,
+      slotIndex,
+      '_sampling_priority_v1',
+      ['f64', spanContext._sampling.priority]
+    )
+
+    // Sync mechanism as trace meta if set
+    if (spanContext._sampling.mechanism !== undefined) {
+      this._nativeSpans.queueOp(
+        OpCode.SetTraceMetaAttr,
+        slotIndex,
+        '_dd.p.dm',
+        `-${spanContext._sampling.mechanism}`
+      )
+    }
+  }
+
+  /**
+   * Add decision maker trace tag when priority is keep.
+   *
+   * @param {object} span - The root span
+   * @private
+   */
+  _addDecisionMaker (span) {
+    const context = span.context()
+    const trace = context._trace
+    const priority = context._sampling.priority
+    const mechanism = context._sampling.mechanism
+
+    // AUTO_KEEP = 0, so priority >= 0 means keep
+    if (priority >= 0) {
+      if (!trace.tags[DECISION_MAKER_KEY] && mechanism !== undefined) {
+        trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
+      }
+    } else if (DECISION_MAKER_KEY in trace.tags) {
+      // Guard the `delete` so the common drop path doesn't pay the V8
+      // dictionary-mode transition unless a prior keep decision actually
+      // set the tag.
+      delete trace.tags[DECISION_MAKER_KEY]
+    }
   }
 
   process (span) {
     const spanContext = span.context()
     const active = []
-    const formatted = []
     const trace = spanContext._trace
     const { flushMinSpans, tracing } = this._config
     const { started, finished } = trace
@@ -53,21 +170,43 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
+      // Native mode (the only intended mode): pass raw spans to the native
+      // exporter; the WASM pipeline does its own formatting. When native
+      // stats are enabled the concentrator handles stats aggregation during
+      // flush_chunk (no spanFormat call needed). When native stats are NOT
+      // enabled but JS stats are, we still need spanFormat for the JS stats
+      // processor.
+      //
+      // Fallback path: when libdatadog is unavailable, `_nativeSpans` is null
+      // and `_exporter` is the JS-side AgentExporter (or OTLP exporter).
+      // That exporter expects pre-formatted spans, so we run spanFormat on
+      // every finished span. This path keeps the tracer functional on
+      // platforms where libdatadog cannot load.
+      const useJsFormatter = this._nativeSpans === null
+      const finishedSpansToExport = []
       let isFirstSpanInChunk = true
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
-        } else {
+        } else if (useJsFormatter) {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           isFirstSpanInChunk = false
           this._stats?.onSpanFinished(formattedSpan)
-          formatted.push(formattedSpan)
+          finishedSpansToExport.push(formattedSpan)
+        } else {
+          finishedSpansToExport.push(span)
+          // JS stats fallback (only when native stats are disabled)
+          if (this._stats) {
+            const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+            isFirstSpanInChunk = false
+            this._stats.onSpanFinished(formattedSpan)
+          }
         }
       }
 
-      if (formatted.length !== 0 && trace.isRecording !== false) {
-        this._exporter.export(formatted)
+      if (finishedSpansToExport.length !== 0 && trace.isRecording !== false) {
+        this._exporter.export(finishedSpansToExport)
       }
 
       this._erase(trace, active)
