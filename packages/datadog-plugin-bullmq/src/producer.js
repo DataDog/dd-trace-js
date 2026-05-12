@@ -114,7 +114,12 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:Queue_add'
 
   isEnabled (ctx) {
-    return this.config.filter(ctx.arguments?.[0], ctx.arguments?.[1], ctx.arguments?.[2])
+    return this.config.filter({
+      name: ctx.arguments?.[0],
+      data: ctx.arguments?.[1],
+      opts: ctx.arguments?.[2],
+      queueName: ctx.self?.name,
+    })
   }
 
   getSpanData (ctx) {
@@ -171,7 +176,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 
     const allowedJobs = []
     for (const job of jobs) {
-      if (job && this.config.filter(job.name, job.data, job.opts)) {
+      if (job && this.config.filter({ name: job.name, data: job.data, opts: job.opts, queueName: ctx.self?.name })) {
         allowedJobs.push(job)
       }
     }
@@ -216,7 +221,6 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
       payloadSize,
       optsTarget: jobs[0]?.opts,
     }
-    ctx._ddMetadata = cache
   }
 
   setProducerCheckpoint (span, ctx) {
@@ -243,7 +247,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
 
   isEnabled (ctx) {
     const flow = ctx.arguments?.[0]
-    return this.config.filter(flow?.name, flow?.data, flow?.opts)
+    return this.config.filter({ name: flow?.name, data: flow?.data, opts: flow?.opts, queueName: flow?.queueName })
   }
 
   getSpanData (ctx) {
