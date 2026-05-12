@@ -51,6 +51,7 @@ describe('esm', () => {
         // Cosmos deps load npm `cookie`; skip that instrumentation so `hooks.js` never requires `../cookie`
         // (can fail to resolve inside the Functions worker despite existing on disk).
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'cookie',
+        NODE_OPTIONS: '--experimental-global-webcrypto',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
     })
