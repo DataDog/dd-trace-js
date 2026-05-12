@@ -1141,7 +1141,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         //
         // Meanwhile tests run and report normally as mocha.test spans.
 
-        it.only('reports a suite event for a single file with only top-level tests', async () => {
+        it('reports a suite event for a single file with only top-level tests', async () => {
           const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js'
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1163,7 +1163,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-        it.only('reports suite events for two files with only top-level tests', async () => {
+        it('reports suite events for two files with only top-level tests', async () => {
           const suiteFiles = [
             'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
             'ci-visibility/mocha-plugin-tests/top-level-it-no-describe2.js',
@@ -1193,7 +1193,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-        it.only('reports a suite event for a file with mixed top-level and nested tests', async () => {
+        it('reports a suite event for a file with mixed top-level and nested tests', async () => {
           const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1215,7 +1215,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-        it.only('reports suite events for two files with mixed top-level and nested tests', async () => {
+        it('reports suite events for two files with mixed top-level and nested tests', async () => {
           const suiteFiles = [
             'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js',
             'ci-visibility/mocha-plugin-tests/top-level-it-mixed2.js',
