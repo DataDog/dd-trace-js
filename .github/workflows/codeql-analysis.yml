@@ -1,14 +1,3 @@
-# For most projects, this workflow file will not need changing; you simply need
-# to commit it to your repository.
-#
-# You may wish to alter this file to override the set of languages analyzed,
-# or to provide custom queries or build logic.
-#
-# ******** NOTE ********
-# We have attempted to detect the languages in your repository. Please check
-# the `language` matrix defined below to confirm you have the correct set of
-# supported CodeQL languages.
-#
 name: "CodeQL"
 
 on:
@@ -23,14 +12,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # We shell out to the CodeQL CLI directly rather than using github/codeql-action.
+  # The official action wraps the CLI but also makes GitHub API calls (bundle version
+  # checks, check-run updates) using whatever token is provided. Those calls reach
+  # github/codeql-action — a repo outside the DataDog org — which a dd-octo-sts
+  # installation token scoped to DataDog/dd-trace-js cannot access, causing 404s
+  # that the action surfaces as a misleading permissions error. By invoking the CLI
+  # directly we keep GitHub API usage to checkout (dd-octo-sts token) and the single
+  # SARIF upload + status-poll (dd-octo-sts token), with no cross-org calls.
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
-      actions: read
-      security-events: write
 
     strategy:
       fail-fast: false
@@ -49,24 +43,78 @@ jobs:
         with:
           token: ${{ steps.octo-sts.outputs.token }}
 
-      # Initializes the CodeQL tools for scanning.
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
+      - name: Cache CodeQL CLI
+        id: cache-codeql
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          languages: ${{ matrix.language }}
-          config-file: .github/codeql_config.yml
-          token: ${{ steps.octo-sts.outputs.token }}
-          # If you wish to specify custom queries, you can do so here or in a config file.
-          # By default, queries listed here will override any specified in a config file.
-          # Prefix the list here with "+" to use these queries and those in the config file.
-          # queries: ./path/to/local/query, your-org/your-repo/queries@main
+          path: ${{ runner.temp }}/codeql
+          key: codeql-bundle-2.25.4-linux64
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
-        with:
-          token: ${{ steps.octo-sts.outputs.token }}
+      - name: Download CodeQL CLI
+        if: steps.cache-codeql.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -sLO \
+            "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.25.4/codeql-bundle-linux64.tar.zst"
+          echo "5be716024bd600fdc6602b1721b3b9ba86a9ed4c98fede6d7373367b819a0dcf  codeql-bundle-linux64.tar.zst" | sha256sum -c
+          tar -x --zstd -C "$RUNNER_TEMP" -f codeql-bundle-linux64.tar.zst
+          rm codeql-bundle-linux64.tar.zst
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
-        with:
-          token: ${{ steps.octo-sts.outputs.token }}
+      - name: Add CodeQL CLI to PATH
+        run: echo "$RUNNER_TEMP/codeql" >> "$GITHUB_PATH"
+
+      - name: Create CodeQL database
+        run: |
+          codeql database create "$RUNNER_TEMP/codeql-db" \
+            --language=${{ matrix.language }} \
+            --source-root=. \
+            --codescanning-config=.github/codeql_config.yml \
+            --overwrite
+
+      - name: Run CodeQL analysis
+        run: |
+          codeql database analyze "$RUNNER_TEMP/codeql-db" \
+            'codeql/javascript-queries:codeql-suites/javascript-code-scanning.qls' \
+            --format=sarif-latest \
+            --output="$RUNNER_TEMP/results.sarif" \
+            --sarif-category=${{ matrix.language }} \
+            --threads=0
+
+      - name: Upload SARIF results
+        env:
+          TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: |
+          RESPONSE=$(jq -n \
+            --arg commit_sha "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            --arg sarif "$(gzip -c "$RUNNER_TEMP/results.sarif" | base64 -w0)" \
+            '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif}' \
+          | curl -sf -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs" \
+            --data-binary @-)
+          SARIF_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "SARIF upload accepted (id: $SARIF_ID)"
+
+          # Poll every 10s (30x = 5 min total), matching the official action's timeout
+          # but halving the API calls vs the official action's 5s interval.
+          for i in $(seq 1 30); do
+            RESULT=$(curl -sf \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs/$SARIF_ID")
+            STATUS=$(echo "$RESULT" | jq -r '.processing_status')
+            echo "Processing status: $STATUS"
+            if [ "$STATUS" = "complete" ]; then exit 0; fi
+            if [ "$STATUS" = "failed" ]; then
+              echo "$RESULT" | jq -r '.errors // empty'
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "SARIF processing timed out after 5 minutes"
+          exit 1
