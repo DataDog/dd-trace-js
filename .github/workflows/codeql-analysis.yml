@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      checks: write
 
     strategy:
       fail-fast: false
@@ -41,6 +42,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.octo-sts.outputs.token }}
+
+      - name: Record analysis start time
+        run: echo "CODEQL_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
       - name: Initialize CodeQL
         id: init-codeql
@@ -65,9 +69,13 @@ jobs:
       - name: Upload SARIF results
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          MATRIX_LANGUAGE: ${{ matrix.language }}
         run: |
-          # For PRs use the head ref/SHA so GitHub links results to the PR branch.
-          # For pushes GITHUB_REF/SHA are already correct.
+          SARIF_FILE=$(find "$RUNNER_TEMP/sarif-results" -name "*.sarif" | head -1)
+          [ -n "$SARIF_FILE" ] || { echo "No SARIF file found"; exit 1; }
+
+          # For PRs use the head ref/SHA; for pushes GITHUB_REF/SHA are correct.
           HEAD_SHA=$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH")
           if [ -n "$HEAD_SHA" ]; then
             UPLOAD_REF="${GITHUB_REF/\/merge/\/head}"
@@ -77,12 +85,36 @@ jobs:
             UPLOAD_SHA="$GITHUB_SHA"
           fi
 
+          # Create code scanning check run (mirrors official action behaviour).
+          CHECK_RUN_ID=$(jq -n \
+            --arg head_sha "$UPLOAD_SHA" \
+            --arg started_at "$CODEQL_STARTED_AT" \
+            '{name:"Code scanning results / CodeQL",head_sha:$head_sha,
+              status:"in_progress",started_at:$started_at}' \
+          | curl -sf -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/check-runs" \
+            --data-binary @- | jq -r '.id')
+
+          # environment matches the format the official action sends.
+          ENVIRONMENT=$(jq -cn \
+            --arg lang "$MATRIX_LANGUAGE" \
+            '{"build-mode":"none","language":$lang,
+              "category":("/language:"+$lang),"runner":"[\"ubuntu-latest\"]"}')
+
           RESPONSE=$(jq -n \
             --arg commit_sha "$UPLOAD_SHA" \
             --arg ref "$UPLOAD_REF" \
-            --arg sarif "$(gzip -c "$RUNNER_TEMP/sarif-results/javascript.sarif" | base64 -w0)" \
+            --arg sarif "$(gzip -c "$SARIF_FILE" | base64 -w0)" \
             --arg checkout_uri "file://$GITHUB_WORKSPACE/" \
-            '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif, checkout_uri: $checkout_uri}' \
+            --arg started_at "$CODEQL_STARTED_AT" \
+            --arg environment "$ENVIRONMENT" \
+            '{commit_sha:$commit_sha,ref:$ref,sarif:$sarif,
+              checkout_uri:$checkout_uri,started_at:$started_at,
+              environment:$environment}' \
           | curl -sf -X POST \
             -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -95,6 +127,8 @@ jobs:
 
           # Poll every 10s (30x = 5 min total), matching the official action's timeout
           # but halving the API calls vs the official action's 5s interval.
+          CONCLUSION="failure"
+          ERRORS=""
           for i in $(seq 1 30); do
             RESULT=$(curl -sf \
               -H "Authorization: Bearer $TOKEN" \
@@ -103,12 +137,28 @@ jobs:
               "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs/$SARIF_ID")
             STATUS=$(echo "$RESULT" | jq -r '.processing_status')
             echo "Processing status: $STATUS"
-            if [ "$STATUS" = "complete" ]; then exit 0; fi
+            if [ "$STATUS" = "complete" ]; then CONCLUSION="success"; break; fi
             if [ "$STATUS" = "failed" ]; then
-              echo "$RESULT" | jq -r '.errors // empty'
-              exit 1
+              ERRORS=$(echo "$RESULT" | jq -r '.errors // empty')
+              echo "$ERRORS"
+              break
             fi
             sleep 10
           done
-          echo "SARIF processing timed out after 5 minutes"
-          exit 1
+
+          # Update check run to reflect final status.
+          jq -n \
+            --arg conclusion "$CONCLUSION" \
+            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg summary "$ERRORS" \
+            '{status:"completed",conclusion:$conclusion,completed_at:$completed_at,
+              output:{title:"CodeQL analysis results",summary:$summary}}' \
+          | curl -sf -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/check-runs/$CHECK_RUN_ID" \
+            --data-binary @-
+
+          [ "$CONCLUSION" = "success" ] || exit 1
