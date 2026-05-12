@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
+// const { storage } = require('../../datadog-core')
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
@@ -41,6 +41,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     }
   }
 
+  // try flipping the logic - only create span when I want it (so like reverse the if statements)
   bindStart (ctx) {
     const requestContext = ctx.arguments[1]
     const resource = this.getResource(requestContext)
@@ -55,37 +56,39 @@ class AzureCosmosPlugin extends DatabasePlugin {
     if (pluginOn != null && requestContext.operationType != null && requestContext.resourceType != null) {
       const operationType = requestContext.operationType
       const resourceType = requestContext.resourceType
-      if (pluginOn === 'request' && ((operationType !== 'read' && operationType !== 'query') ||
-        (operationType === 'read' && resourceType !== 'docs'))) {
-        ctx.currentStore = { ...storage('legacy').getStore() }
-        return ctx.currentStore
-      }
 
-      // separately, skip tracing read requests without a path, these don't
+      // skip tracing read requests without a path, these don't
       // represent CRUD operations on a resource we care about
       // not returning current store because we don't want the child http.request spans
       // to be created
       if (operationType === 'read' && requestContext.path === '') {
         return
       }
+
+      // Negation of: request plugin AND ((not read/query) OR (read on non-docs))
+      // i.e. skip span when not request plugin, OR when (read|query) AND (not read|docs)
+      if (pluginOn !== 'request' ||
+        ((operationType === 'read' || operationType === 'query') &&
+          (operationType !== 'read' || resourceType === 'docs'))) {
+        const span = this.startSpan(this.operationName(), {
+          resource,
+          type: 'cosmosdb',
+          kind: 'client',
+          meta: {
+            component: 'azure_cosmos',
+            'db.system': 'cosmosdb',
+            'db.name': dbName,
+            'cosmosdb.container': containerName,
+            'cosmosdb.connection.mode': connectionMode,
+            'http.useragent': userAgent,
+            'out.host': outHost,
+          },
+        }, ctx)
+
+        ctx.span = span
+      }
     }
 
-    const span = this.startSpan(this.operationName(), {
-      resource,
-      type: 'cosmosdb',
-      kind: 'client',
-      meta: {
-        component: 'azure_cosmos',
-        'db.system': 'cosmosdb',
-        'db.name': dbName,
-        'cosmosdb.container': containerName,
-        'cosmosdb.connection.mode': connectionMode,
-        'http.useragent': userAgent,
-        'out.host': outHost,
-      },
-    }, ctx)
-
-    ctx.span = span
     return ctx.currentStore
   }
 

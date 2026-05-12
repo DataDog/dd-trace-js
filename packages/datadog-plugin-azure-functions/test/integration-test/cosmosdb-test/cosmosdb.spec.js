@@ -26,19 +26,13 @@ describe('esm', () => {
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
-      '@azure/cosmos',
-      // Bun’s hoisted sandbox can omit nested node_modules that @azure/cosmos (and its HTTP stack) still
-      // resolve to; pin x.y.z so createSandbox skips versions/latests (helpers + plugins/versions).
-      'http-proxy-agent@7.0.2',
-      'https-proxy-agent@7.0.6',
-      'priorityqueuejs@2.0.0',
-      'semaphore@1.1.0',
+      '@azure/cosmos@4.9.2',
     ],
     false,
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
       './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
-    before(async () => {
+    before(async function () {
       this.timeout(60000)
       const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
       setup = helpers.setup
@@ -49,10 +43,6 @@ describe('esm', () => {
 
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        // Cosmos deps load npm `cookie`; skip that instrumentation so `hooks.js` never requires `../cookie`
-        // (can fail to resolve inside the Functions worker despite existing on disk).
-        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'cookie',
-        NODE_OPTIONS: '--experimental-global-webcrypto',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
     })
