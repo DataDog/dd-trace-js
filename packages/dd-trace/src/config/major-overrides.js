@@ -4,37 +4,33 @@
  * @typedef {import('./helper').SupportedConfigurationsJson['supportedConfigurations']} SupportedConfigurations
  */
 
+const EXPERIMENTAL_APPSEC_PREFIX = 'experimental.appsec'
 const EXPERIMENTAL_IAST_PREFIX = 'experimental.iast'
-
-const filtered = new WeakSet()
+const INGESTION_PREFIX = 'ingestion.'
 
 /**
- * Shared between `helper.js` / `defaults.js` (runtime) and `eslint-config-names-sync` (lint) so
- * the JSON ↔ `index.d.ts` sync check uses the same view as the runtime parser. Idempotent on a
- * per-object basis so callers don't have to coordinate load order.
- *
  * @param {SupportedConfigurations} supportedConfigurations Mutated in place.
  * @param {number} majorVersion
  */
-function applyMajorVersionAliasFilters (supportedConfigurations, majorVersion) {
-  if (filtered.has(supportedConfigurations)) return
-  filtered.add(supportedConfigurations)
-
+function applyMajorOverrides (supportedConfigurations, majorVersion) {
   if (majorVersion < 6) return
 
-  // v6 strips both the bare `experimental.iast` alias and its nested forms so
-  // `#applyOptions` warns "Unknown option" instead of writing user-supplied
-  // objects into `iast.enabled` via the bare alias.
   for (const entries of Object.values(supportedConfigurations)) {
     for (const entry of entries) {
       if (Array.isArray(entry.configurationNames)) {
         entry.configurationNames = entry.configurationNames.filter(
-          (name) => name !== EXPERIMENTAL_IAST_PREFIX && !name.startsWith(`${EXPERIMENTAL_IAST_PREFIX}.`)
+          (name) =>
+            name !== EXPERIMENTAL_APPSEC_PREFIX &&
+            name !== EXPERIMENTAL_IAST_PREFIX &&
+            !name.startsWith(`${EXPERIMENTAL_APPSEC_PREFIX}.`) &&
+            !name.startsWith(`${EXPERIMENTAL_IAST_PREFIX}.`) &&
+            !name.startsWith(INGESTION_PREFIX)
         )
+        if (entry.configurationNames.length === 0) delete entry.configurationNames
       }
     }
   }
-
+  delete supportedConfigurations.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
   delete supportedConfigurations.DD_TRACE_EXPERIMENTAL_B3_ENABLED
 
   /* eslint-disable eslint-rules/eslint-env-aliases */
@@ -62,10 +58,6 @@ function applyMajorVersionAliasFilters (supportedConfigurations, majorVersion) {
 }
 
 /**
- * Filter aliases on a canonical entry in-place. `dropPredicate` may be a string (exact match) or
- * a function called per alias. No-op when the canonical is missing so this stays usable against
- * the eslint sync test fixtures.
- *
  * @param {SupportedConfigurations[string] | undefined} entries
  * @param {string | ((alias: string) => boolean)} dropPredicate
  */
@@ -76,7 +68,9 @@ function dropAlias (entries, dropPredicate) {
     ? (alias) => alias === dropPredicate
     : dropPredicate
   entry.aliases = entry.aliases.filter((alias) => !matches(alias))
-  if (entry.aliases.length === 0) delete entry.aliases
+  if (entry.aliases.length === 0) {
+    delete entry.aliases
+  }
 }
 
-module.exports = { applyMajorVersionAliasFilters }
+module.exports = applyMajorOverrides
