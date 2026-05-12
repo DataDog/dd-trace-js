@@ -19,8 +19,8 @@ class AgentlessWriter extends BaseWriter {
   /**
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
-   * @param {string} [options.site='datadoghq.com'] - The Datadog site
-   * @param {object} [options.metadata={}] - Metadata to pass to the encoder (hostname, env, etc.)
+   * @param {string} [options.site] - The Datadog site
+   * @param {object} [options.metadata] - Metadata to pass to the encoder (hostname, env, etc.)
    */
   constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
     super({ url })
