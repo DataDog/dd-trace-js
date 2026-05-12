@@ -165,7 +165,7 @@ class Config extends ConfigBase {
   }
 
   /**
-   * @param {TracerOptions} [options={}]
+   * @param {TracerOptions} [options]
    */
   constructor (options = {}) {
     super()

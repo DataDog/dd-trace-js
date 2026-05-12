@@ -5,9 +5,12 @@ const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
 const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
 let log
 let seqId = 0

@@ -55,9 +55,9 @@ exports.getHooks = function getHooks (names) {
  * @param {object} args
  * @param {string} args.name module name
  * @param {string[]} [args.versions] array of semver range strings
- * @param {string} [args.file='index.js'] path to file within package to instrument
+ * @param {string} [args.file] path to file within package to instrument. Defaults to 'index.js'.
  * @param {string} [args.filePattern] pattern to match files within package to instrument
- * @param {boolean} [args.patchDefault=true] whether to patch the default export
+ * @param {boolean} [args.patchDefault] whether to patch the default export. Defaults to true.
  * @param {(moduleExports: unknown, version: string, isIitm?: boolean) => unknown} [hook] Patches module exports
  */
 exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {

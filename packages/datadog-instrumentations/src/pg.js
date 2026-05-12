@@ -15,6 +15,10 @@ const errorCh = channel('apm:pg:query:error')
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
+// Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
+// the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
+const originalTextCache = new WeakMap()
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -43,20 +47,14 @@ function wrapQuery (query) {
       : { text: args[0] }
 
     const textPropObj = pgQuery.cursor ?? pgQuery
-    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
-    let originalText
-    if (!textProp || textProp.configurable) {
+    let originalText = originalTextCache.get(textPropObj)
+    if (originalText === undefined) {
       originalText = textPropObj.text
-
-      Object.defineProperty(textPropObj, 'text', {
-        get () {
-          return this?.__ddInjectableQuery || originalText
-        },
-      })
+      originalTextCache.set(textPropObj, originalText)
     }
+
     const abortController = new AbortController()
     const ctx = {
       params: this.connectionParameters,
@@ -107,6 +105,22 @@ function wrapQuery (query) {
         }
 
         return Promise.reject(error)
+      }
+
+      const injected = ctx.injected
+      if (injected !== undefined) {
+        // Skip the per-read getter trampoline when `text` is a configurable, writable data
+        // property (the pg / pg-cursor common shape). Accessor descriptors and read-only data
+        // still go through `defineProperty(get)` so `get text ()` query objects keep working.
+        const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+        if (textProp?.configurable === true && textProp.writable === true) {
+          textPropObj.text = injected
+        } else if (textProp === undefined || textProp.configurable === true) {
+          Object.defineProperty(textPropObj, 'text', {
+            configurable: true,
+            get () { return injected },
+          })
+        }
       }
 
       args[0] = pgQuery

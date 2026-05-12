@@ -784,6 +784,17 @@ describe('Plugin', () => {
           )
         })
 
+        it('reuses prepared statements across calls without "must be unique" error', async () => {
+          const buildQuery = () => ({
+            name: 'pgRepeatedSelect',
+            text: 'SELECT $1::text as message',
+          })
+
+          await client.query(buildQuery(), ['first'])
+          await client.query(buildQuery(), ['second'])
+          await client.query(buildQuery(), ['third'])
+        })
+
         it('should not fail when using query object with getters', done => {
           const query = {
             name: 'pgSelectQuery',
@@ -796,6 +807,65 @@ describe('Plugin', () => {
           assert.strictEqual(client[queryQueueName][0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message')
+        })
+
+        it('does not accumulate the DBM comment when reusing a prepared-statement query object', done => {
+          const expected =
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          const query = {
+            name: 'pgSelectQuery',
+            text: 'SELECT $1::text as message',
+          }
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.query(query, ['Hello world!'], (err2) => {
+              if (err2) return done(err2)
+
+              assert.strictEqual(query.text, expected)
+              done()
+            })
+          })
+        })
+
+        it('does not accumulate the DBM comment when reusing a getter-shaped query object', done => {
+          const expected =
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          const query = {
+            name: 'pgSelectQuery',
+            get text () { return 'SELECT $1::text as message' },
+          }
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.query(query, ['Hello world!'], (err2) => {
+              if (err2) return done(err2)
+
+              assert.strictEqual(query.text, expected)
+              done()
+            })
+          })
+        })
+
+        it('handles a non-configurable text property without crashing', done => {
+          const query = { name: 'pgSelectQuery' }
+          Object.defineProperty(query, 'text', {
+            value: 'SELECT $1::text as message',
+            writable: true,
+            enumerable: true,
+            configurable: false,
+          })
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            assert.strictEqual(query.text, 'SELECT $1::text as message')
+            done()
+          })
         })
 
         it('should not fail when using query object that is an EventEmitter', done => {
