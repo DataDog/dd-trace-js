@@ -15,6 +15,7 @@ let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
 
+// Idempotent; mirrors the call in `helper.js` so either module load order produces the same shape.
 applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
 if (DD_MAJOR < 6) {

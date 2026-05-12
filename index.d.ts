@@ -744,13 +744,6 @@ declare namespace tracer {
     experimental?: {
 
       /**
-       * @default false
-       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      b3?: boolean
-
-      /**
        * Whether to write traces to log output or agentless, rather than send to an agent
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
