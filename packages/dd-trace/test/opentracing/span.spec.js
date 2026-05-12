@@ -451,7 +451,52 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), { foo: 'bar' })
+    })
+  })
+
+  describe('fields.tags merge', () => {
+    it('should merge fields.tags into the existing context tags object', () => {
+      // Constructor uses Object.assign(getTags(), tags) (not getTags() = tags),
+      // so tags carried by an inherited context survive alongside the new
+      // fields.tags. Pin this so a future refactor doesn't silently swap
+      // back to the replace-the-object form.
+      const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+      parent.context().getTags()['inherited.key'] = 'inherited-value'
+
+      const child = new Span(tracer, processor, prioritySampler, {
+        operationName: 'child',
+        context: parent.context(),
+        tags: { 'new.key': 'new-value' },
+      })
+
+      assert.strictEqual(child.context().getTags()['inherited.key'], 'inherited-value')
+      assert.strictEqual(child.context().getTags()['new.key'], 'new-value')
+    })
+
+    it('fields.tags overwrites colliding inherited keys (Object.assign semantics)', () => {
+      const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+      parent.context().getTags().shared = 'inherited'
+
+      const child = new Span(tracer, processor, prioritySampler, {
+        operationName: 'child',
+        context: parent.context(),
+        tags: { shared: 'overridden' },
+      })
+
+      assert.strictEqual(child.context().getTags().shared, 'overridden')
+    })
+
+    it('skips the merge when fields.tags is undefined', () => {
+      const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+      parent.context().getTags().inherited = 'value'
+
+      const child = new Span(tracer, processor, prioritySampler, {
+        operationName: 'child',
+        context: parent.context(),
+      })
+
+      assert.strictEqual(child.context().getTags().inherited, 'value')
     })
   })
 
@@ -465,7 +510,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), tags)
     })
 
     it('should sample based on the tags', () => {
@@ -512,7 +557,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
+      assertObjectContains(span._spanContext.getTags(), { '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {
@@ -534,13 +579,21 @@ describe('Span', () => {
       })
 
       it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
-        tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'ignore' } }
+        tracer = {
+          _config: {
+            DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'ignore',
+          },
+        }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, {})
       })
 
       it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
-        tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
+        tracer = {
+          _config: {
+            DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart',
+          },
+        }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar' })
       })

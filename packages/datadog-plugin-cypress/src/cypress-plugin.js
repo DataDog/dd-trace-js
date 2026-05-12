@@ -1145,7 +1145,7 @@ class CypressPlugin {
         }
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1172,7 +1172,7 @@ class CypressPlugin {
         }
 
         if (isLastAttempt) {
-          const testSpanTags = finishedTest.testSpan.context()._tags
+          const testSpanTags = finishedTest.testSpan.context().getTags()
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
@@ -1343,7 +1343,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
-        const activeSpanTags = this.activeTestSpan.context()._tags
+        const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
