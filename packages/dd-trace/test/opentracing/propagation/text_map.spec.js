@@ -10,12 +10,16 @@ const { channel } = require('dc-polyfill')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 const { getConfigFresh } = require('../../helpers/config')
+const { DD_MAJOR } = require('../../../../../version')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+
+// v5 spells single-header B3 propagation as `'b3 single header'`; v6 reuses `'b3'` for it.
+const B3_SINGLE_STYLE = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -325,7 +329,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3']
+      config.tracePropagationStyle.inject = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -352,7 +356,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3']
+      config.tracePropagationStyle.inject = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -371,7 +375,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3']
+      config.tracePropagationStyle.inject = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -420,6 +424,73 @@ describe('TextMapPropagator', () => {
 
       assert.ok(!('x-b3-traceid' in carrier))
     })
+
+    it(`should inject the b3 single header when style is "${B3_SINGLE_STYLE}"`, () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456'),
+        sampling: { priority: USER_KEEP },
+      })
+
+      config.tracePropagationStyle.inject = [B3_SINGLE_STYLE]
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+      assert.ok(!('x-b3-traceid' in carrier))
+    })
+
+    if (DD_MAJOR >= 6) {
+      it('should treat inject:["b3"] as the single-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
+
+      it('should treat inject:["b3multi"] as the multi-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3multi']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier['x-b3-spanid'], '0000000000000456')
+        assert.ok(!('b3' in carrier))
+      })
+
+      it('should treat inject:["b3 single header"] as the single-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3 single header']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
+    }
 
     it('should skip injection of traceparent header without the feature flag', () => {
       const carrier = {}
@@ -1355,7 +1426,10 @@ describe('TextMapPropagator', () => {
       })
     })
 
-    describe('with B3 propagation from DD_TRACE_PROPAGATION_STYLE', () => {
+    // v6 routes `'b3'` to the single-header path regardless of source, so the v5-only
+    // dispatch-by-source distinction tested below has nothing left to assert on v6.
+    const describeOrSkip = DD_MAJOR < 6 ? describe : describe.skip
+    describeOrSkip('with B3 propagation from DD_TRACE_PROPAGATION_STYLE', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3']
         config.getOrigin = sinon.stub().withArgs('tracePropagationStyle.extract').returns('env_var')
@@ -1427,7 +1501,7 @@ describe('TextMapPropagator', () => {
 
     describe('with B3 propagation as a single header', () => {
       beforeEach(() => {
-        config.tracePropagationStyle.extract = ['b3 single header']
+        config.tracePropagationStyle.extract = [B3_SINGLE_STYLE]
 
         delete textMap['x-datadog-trace-id']
         delete textMap['x-datadog-parent-id']
@@ -1572,7 +1646,7 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(log.debug)
         assert.strictEqual(
           log.debug.firstCall.args[0](),
-          `Extract from carrier (b3 single header): {"b3":"${textMap.b3}"}.`
+          `Extract from carrier (${B3_SINGLE_STYLE}): {"b3":"${textMap.b3}"}.`
         )
       })
     })
