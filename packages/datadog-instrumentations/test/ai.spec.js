@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const { wrapModelWithAIGuard } = require('../src/ai')
 
-const evaluateChannel = channel('dd-trace:vercel-ai:evaluate')
+const evaluateChannel = channel('dd-trace:ai:aiguard')
 
 const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
 

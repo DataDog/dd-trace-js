@@ -7,7 +7,7 @@ const { convertOpenAIResponseItemsToMessages } = require('./helpers/ai-messages'
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
-const evaluateCh = dc.channel('apm:openai:request:evaluate')
+const aiguardChannel = dc.channel('dd-trace:ai:aiguard')
 
 const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses'])
 
@@ -19,7 +19,7 @@ const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses
  */
 function publishEvaluation (messages) {
   return new Promise((resolve, reject) => {
-    evaluateCh.publish({ messages, resolve, reject })
+    aiguardChannel.publish({ messages, integration: 'openai', resolve, reject })
   })
 }
 
@@ -322,7 +322,7 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function (...args) {
-          if (!ch.start.hasSubscribers && !evaluateCh.hasSubscribers) {
+          if (!ch.start.hasSubscribers && !aiguardChannel.hasSubscribers) {
             return methodFn.apply(this, args)
           }
           // The OpenAI library lets you set `stream: true` on the options arg to any method
@@ -334,7 +334,7 @@ for (const extension of extensions) {
           // Guard only evaluates non-streaming responses.
           const aiguardApplicable = !stream &&
             AIGUARD_CONVERSATIONAL_RESOURCES.has(baseResource) &&
-            evaluateCh.hasSubscribers
+            aiguardChannel.hasSubscribers
 
           if (!ch.start.hasSubscribers && !aiguardApplicable) {
             return methodFn.apply(this, args)

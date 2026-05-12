@@ -7,20 +7,20 @@ const { convertVercelPromptToMessages, buildOutputMessages } = require('./helper
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
-const vercelAiEvaluateChannel = channel('dd-trace:vercel-ai:evaluate')
+const aiguardChannel = channel('dd-trace:ai:aiguard')
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes already-converted AI-style messages to the Vercel AI evaluation channel.
+ * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
  *
  * @param {Array<object>} messages - AI-style messages to evaluate.
  * @returns {Promise<void>}
  */
 function publishEvaluation (messages) {
   return new Promise((resolve, reject) => {
-    vercelAiEvaluateChannel.publish({ messages, resolve, reject })
+    aiguardChannel.publish({ messages, integration: 'ai', resolve, reject })
   })
 }
 
@@ -39,7 +39,7 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!vercelAiEvaluateChannel.hasSubscribers) return originalResult
+        if (!aiguardChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
         const inputMessages = convertVercelPromptToMessages(options.prompt)
@@ -63,7 +63,7 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!vercelAiEvaluateChannel.hasSubscribers) return originalResult
+        if (!aiguardChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
         const inputMessages = convertVercelPromptToMessages(options.prompt)

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { channel } = require('dc-polyfill')
 const { before, beforeEach, describe, it } = require('mocha')
 
-const evaluateChannel = channel('apm:openai:request:evaluate')
+const evaluateChannel = channel('dd-trace:ai:aiguard')
 
 // Minimal APIPromise stand-in. The real SDK APIPromise has a `parse()` method that
 // returns the parsed response body, and user-facing `.then` routes through `.parse()`.
