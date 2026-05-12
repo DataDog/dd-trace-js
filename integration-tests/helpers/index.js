@@ -308,7 +308,7 @@ async function stopProc (proc, options = {}) {
 }
 
 /**
- * Tear down a CI-Visibility integration fixture between tests.
+ * Tear down a Test Optimization integration fixture between tests.
  *
  * Awaits each step so the next test starts from a clean slate — letting the
  * previous child outlive `afterEach` leaks sockets and file descriptors that
