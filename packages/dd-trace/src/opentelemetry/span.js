@@ -216,7 +216,7 @@ class Span extends BridgeSpanBase {
       'ptr.hash': ptrHash,
       'link.kind': 'span-pointer',
     }
-    return this.addLink(zeroContext, attributes)
+    return this.addLink({ context: zeroContext, attributes })
   }
 
   /**

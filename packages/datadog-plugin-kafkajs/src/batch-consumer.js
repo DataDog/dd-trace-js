@@ -34,7 +34,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
       if (headers) {
         const childOf = this.tracer.extract('text_map', headers)
         if (childOf) {
-          span.addLink(childOf)
+          span.addLink({ context: childOf })
         }
       }
 
