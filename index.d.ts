@@ -354,17 +354,6 @@ declare namespace tracer {
     context (): SpanContext;
 
     /**
-     * Causally links another span to the current span
-     *
-     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
-     * This will be removed in the next major version.
-     * @param {SpanContext} context The context of the span to link to.
-     * @param {Object} attributes An optional key value pair of arbitrary values.
-     * @returns {void}
-     */
-    addLink (context: SpanContext, attributes?: Object): void;
-
-    /**
      * Adds a single link to the span.
      *
      * Links added after the creation will not affect the sampling decision.
@@ -3263,16 +3252,6 @@ declare namespace tracer {
        *     use the current time.
        */
       recordException(exception: Exception, time?: TimeInput): void;
-
-      /**
-       * Causally links another span to the current span
-       *
-       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
-       * @param {otel.SpanContext} context The context of the span to link to.
-       * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
-       * @returns {void}
-       */
-      addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
 
       /**
        * Adds a single link to the span.
