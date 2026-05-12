@@ -236,6 +236,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
  *   trace.
  * @param {string} [options.sourceFile] - The source file path. Defaults to `deployedFile` if not provided.
  * @param {number} [options.stackIndex] - The stack index to use when inferring the file from the stack trace.
+ *   Defaults to 0.
  * @returns {BreakpointInfo[]} An array of breakpoint information objects found in the file.
  */
 function getBreakpointInfo ({ deployedFile, sourceFile = deployedFile, stackIndex = 0 } = {}) {

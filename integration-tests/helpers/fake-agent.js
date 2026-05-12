@@ -97,7 +97,7 @@ module.exports = class FakeAgent extends EventEmitter {
   /**
    * Add a config object to be returned by the fake Remote Config endpoint.
    * @param {object} config - Object containing the Remote Config "file" and metadata
-   * @param {number} [config.orgId] - The Datadog organization ID
+   * @param {number} [config.orgId] - The Datadog organization ID. Defaults to 2.
    * @param {string} config.product - The Remote Config product name
    * @param {string} config.id - The Remote Config config ID
    * @param {string} [config.name] - The Remote Config "name". Defaults to the sha256 hash of `config.id`
@@ -218,9 +218,10 @@ module.exports = class FakeAgent extends EventEmitter {
    * @param {Function} [options.fn] - Function called with each matching telemetry message. If it throws,
    *     the error is collected and the listener stays alive for the next message. Defaults to a no-op.
    * @param {string} options.requestType - The telemetry request type to match.
-   * @param {number} [options.timeout] - Timeout in milliseconds before the promise rejects.
-   * @param {number} [options.expectedMessageCount] - Number of matching messages to wait for.
+   * @param {number} [options.timeout] - Timeout in milliseconds before the promise rejects. Defaults to 30 seconds.
+   * @param {number} [options.expectedMessageCount] - Number of matching messages to wait for. Defaults to 1.
    * @param {boolean} [options.resolveAtFirstSuccess] - Resolve as soon as `fn` first runs without throwing.
+   *     Defaults to false.
    * @param {string} [options.namespace] - If set, only consider messages whose payload namespace equals this value.
    * @returns {Promise<void>} A promise that resolves when the expected telemetry messages are received and `fn` has
    *     run successfully. If `fn` throws on every matching message, the promise rejects once `timeout` is reached.
@@ -288,8 +289,8 @@ module.exports = class FakeAgent extends EventEmitter {
    * @param {object} options
    * @param {() => Promise<unknown>} options.trigger Fired once the listener is in place.
    * @param {(group: object[]) => boolean} options.predicate Group-level filter.
-   * @param {number} [options.expectedCount] Resolve after this many matching groups arrive.
-   * @param {number} [options.timeout] Timeout in milliseconds before the promise rejects.
+   * @param {number} [options.expectedCount] Resolve after this many matching groups arrive. Defaults to 1.
+   * @param {number} [options.timeout] Timeout in milliseconds before the promise rejects. Defaults to 30 seconds.
    * @returns {Promise<object[][]>} The matching groups, in arrival order.
    */
   collectGroups ({ trigger, predicate, expectedCount = 1, timeout = 30_000 }) {

@@ -277,8 +277,8 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
- * @param {NodeJS.Signals} [options.signal] - Signal to send before escalating.
- * @param {number} [options.timeoutMs] - Max wait per signal in milliseconds.
+ * @param {NodeJS.Signals} [options.signal] - Signal to send before escalating. Defaults to `SIGTERM`.
+ * @param {number} [options.timeoutMs] - Max wait per signal in milliseconds. Defaults to the stop-proc timeout.
  * @returns {Promise<void>}
  */
 async function stopProc (proc, options = {}) {
