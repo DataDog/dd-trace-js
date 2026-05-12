@@ -56,6 +56,45 @@ The matching `DD_APPSEC_COLLECT_ALL_HEADERS`,
 `DD_APPSEC_MAX_COLLECTED_HEADERS`, and `DD_APPSEC_RASP_COLLECT_REQUEST_BODY`
 environment variables are deprecated in v6 and will follow in a future major.
 
+### `experimental.b3` removed
+
+The `experimental.b3` programmatic flag and `DD_TRACE_EXPERIMENTAL_B3_ENABLED`
+env var are gone. Configure b3 propagation via `DD_TRACE_PROPAGATION_STYLE`
+directly (see the renamed-style note below).
+
+### Profiling experimental aliases removed
+
+`DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED`,
+`DD_PROFILING_EXPERIMENTAL_CPU_ENABLED`,
+`DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED`, and
+`DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED` are gone. Use the canonical names
+without the `_EXPERIMENTAL_` segment.
+
+### `DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED` removed
+
+Use `DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED` instead.
+
+### `"b3 single header"` propagation style renamed to `"b3"`
+
+The historical `'b3'` value used to mean multi-header; per the OTel `b3`
+propagator spec, `'b3'` now means single-header. Multi-header propagation is
+the existing `'b3multi'` value. The legacy `'b3 single header'` spelling is
+still accepted on `DD_TRACE_PROPAGATION_STYLE` and the programmatic option as
+a quiet alias for `'b3'`; prefer the canonical `'b3'` going forward.
+
+### `experimental.appsec` configuration removed
+
+The `experimental.appsec.*` programmatic aliases (and
+`experimental.appsec.standalone.enabled`) have been removed. Use the canonical
+top-level `appsec.*` fields, and `apmTracingEnabled` (or
+`DD_APM_TRACING_ENABLED`) to control standalone ASM mode.
+
+### `ingestion` option removed
+
+The `ingestion: { sampleRate, rateLimit }` wrapper has been removed. Set
+`sampleRate` and `rateLimit` directly on the top-level `TracerOptions` object,
+or use `DD_TRACE_SAMPLE_RATE` / `DD_TRACE_RATE_LIMIT`.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported
