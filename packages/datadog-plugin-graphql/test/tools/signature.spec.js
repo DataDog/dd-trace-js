@@ -1,9 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
+
+/**
+ * @typedef {{ filename?: string }} ModuleParent
+ * @typedef {(request: string, parent: ModuleParent | undefined, isMain: boolean) => unknown} ModuleLoad
+ * @typedef {typeof import('node:module') & { _load: ModuleLoad }} LoadableModule
+ */
+
+const loadableModule = /** @type {LoadableModule} */ (Module)
 
 // The transforms module reads `globalThis[Symbol.for('dd-trace')].graphql_*`
 // at require time, so populate them before requiring the tools.
@@ -15,6 +24,8 @@ ddGlobal.graphql_printer = printer
 ddGlobal.graphql_utilities = require('graphql/utilities')
 
 const { parse } = require('graphql')
+
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { defaultEngineReportingSignature } = require('../../src/tools/signature')
 
 describe('graphql signature memoization', () => {
@@ -139,5 +150,94 @@ describe('graphql signature byte output', () => {
       defaultEngineReportingSignature(ast, 'Q'),
       'query Q($a:ID!,$z:Int){f(a:0,b:0,ids:[]){x y}}'
     )
+  })
+
+  it('keeps duplicate variable and directive sort keys stable', () => {
+    const ast = parse(`
+      query Q($a: Int, $a: String) {
+        ...F
+      }
+      fragment F on Query @same(b: 2) @same(a: 1) {
+        f
+      }
+    `)
+
+    assert.equal(
+      defaultEngineReportingSignature(ast, 'Q'),
+      'query Q($a:Int,$a:String){...F}fragment F on Query@same(b:0)@same(a:0){f}'
+    )
+  })
+})
+
+describe('graphql signature fallback', () => {
+  it('uses the tools signature when they can load', () => {
+    delete require.cache[require.resolve('../../src/utils')]
+    const { getSignature } = require('../../src/utils')
+    const ast = parse('query Q { f(a: "value") }')
+
+    assert.equal(getSignature(ast, 'Q', 'query'), 'query Q{f(a:"")}')
+  })
+
+  it('uses operation type and name when the tools cannot load', () => {
+    const utilsPath = require.resolve('../../src/utils')
+    const toolsPath = require.resolve('../../src/tools')
+    const originalLoad = loadableModule._load
+
+    delete require.cache[utilsPath]
+    delete require.cache[toolsPath]
+    loadableModule._load = function (request, parent, isMain) {
+      if (parent?.filename === utilsPath && request === './tools') {
+        throw new Error('load failed')
+      }
+      return originalLoad(request, parent, isMain)
+    }
+
+    try {
+      const { getSignature } = require('../../src/utils')
+
+      assert.equal(getSignature({}, 'Q', 'query'), 'query Q')
+      assert.equal(getSignature({}, 'Q'), 'Q')
+    } finally {
+      loadableModule._load = originalLoad
+      delete require.cache[utilsPath]
+      delete require.cache[toolsPath]
+    }
+  })
+
+  it('adds configured error extensions to span events', () => {
+    const { extractErrorIntoSpanEvent } = require('../../src/utils')
+    const span = {
+      addEvent: sinon.spy(),
+    }
+    const error = {
+      name: 'GraphQLError',
+      message: 'test',
+      stack: 'stack',
+      extensions: {
+        code: 'E_TEST',
+        retryable: true,
+        detail: 42,
+      },
+      locations: [{ line: 1, column: 2 }],
+      path: ['hello', 0],
+    }
+
+    extractErrorIntoSpanEvent({
+      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS: ['code', 'retryable', 'detail', 'missing'],
+    }, span, error)
+
+    const [name, attributes] = span.addEvent.firstCall.args
+    assert.equal(name, 'dd.graphql.query.error')
+    assertObjectContains(attributes, {
+      type: 'GraphQLError',
+      message: 'test',
+      stacktrace: 'stack',
+      'extensions.code': 'E_TEST',
+      'extensions.retryable': true,
+      'extensions.detail': 42,
+      locations: ['1:2'],
+      path: ['hello', '0'],
+    })
+    assert.ok(!Object.hasOwn(attributes, 'extensions.missing'))
   })
 })
