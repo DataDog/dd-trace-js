@@ -65,11 +65,23 @@ jobs:
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
+          # For PRs use the head ref/SHA so GitHub links results to the PR branch.
+          # For pushes GITHUB_REF/SHA are already correct.
+          HEAD_SHA=$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$HEAD_SHA" ]; then
+            UPLOAD_REF="${GITHUB_REF/\/merge/\/head}"
+            UPLOAD_SHA="$HEAD_SHA"
+          else
+            UPLOAD_REF="$GITHUB_REF"
+            UPLOAD_SHA="$GITHUB_SHA"
+          fi
+
           RESPONSE=$(jq -n \
-            --arg commit_sha "$GITHUB_SHA" \
-            --arg ref "$GITHUB_REF" \
+            --arg commit_sha "$UPLOAD_SHA" \
+            --arg ref "$UPLOAD_REF" \
             --arg sarif "$(gzip -c "$RUNNER_TEMP/sarif-results/javascript.sarif" | base64 -w0)" \
-            '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif}' \
+            --arg checkout_uri "file://$GITHUB_WORKSPACE/" \
+            '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif, checkout_uri: $checkout_uri}' \
           | curl -sf -X POST \
             -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.github+json" \
