@@ -122,6 +122,7 @@
 /integration-tests/vitest/ @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
+/integration-tests/ci-visibility-intake.spec.js @DataDog/ci-app-libraries
 /integration-tests/CODEOWNERS @DataDog/ci-app-libraries
 /integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
 /integration-tests/config-jest.js @DataDog/ci-app-libraries

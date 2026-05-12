@@ -304,7 +304,7 @@ async function assertWorkspaces () {
 }
 
 /**
- * @param {boolean} [retry=true]
+ * @param {boolean} [retry]
  */
 function install (retry = true) {
   try {

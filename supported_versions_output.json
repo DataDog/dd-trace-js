@@ -199,7 +199,7 @@
     "dependency": "@vitest/runner",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.0",
+    "max_tracer_supported": "4.1.5",
     "auto-instrumented": "True"
   },
   {
@@ -290,7 +290,7 @@
     "dependency": "cypress",
     "integration": "cypress",
     "minimum_tracer_supported": "12.0.0",
-    "max_tracer_supported": "15.13.0",
+    "max_tracer_supported": "15.14.2",
     "auto-instrumented": "True"
   },
   {
@@ -703,7 +703,7 @@
     "dependency": "vitest",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.0",
+    "max_tracer_supported": "4.1.5",
     "auto-instrumented": "True"
   },
   {

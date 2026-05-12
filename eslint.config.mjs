@@ -276,8 +276,7 @@ export default [
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
-      // no-defaults: This should be activated, since the defaults will not be picked up in a description.
-      'jsdoc/no-defaults': 'off',
+      'jsdoc/no-defaults': 'error',
       'jsdoc/no-undefined-types': 'off',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
