@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const tracer = require('../../..').init()
+const tracer = require('../../..').init()._tracer
 
 tracer._tracer._processor.process = function process (span) {
   const trace = span.context()._trace
