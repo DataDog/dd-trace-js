@@ -12,9 +12,9 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   // They're distinguished by whether args[1] is a string (named form) or not.
   bindStart (ctx) {
     const args = ctx.arguments || []
-    const hasName = typeof args[0] === 'string' && typeof args[1] === 'string'
-    const operationName = hasName ? args[0] : undefined
-    const functionName = hasName ? args[1] : args[0]
+    const isNamed = typeof args[1] === 'string'
+    const operationName = isNamed ? args[0] : undefined
+    const functionName = isNamed ? args[1] : args[0]
 
     const meta = {
       'aws.durable.replayed': String(isReplayedOp(ctx.self)),

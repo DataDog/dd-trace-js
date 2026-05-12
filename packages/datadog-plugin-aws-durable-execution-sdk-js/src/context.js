@@ -11,12 +11,14 @@ const HIGH_CARDINALITY_PARENT_SPAN_NAMES = new Set([
   'aws.durable.parallel',
 ])
 
-// The SDK emits these subTypes as internal scaffolding around map/parallel iterations; not user-visible operations.
+// The SDK emits these subTypes as internal scaffolding around map/parallel iterations
+// and waitForCallback; not user-visible operations.
 const SUPPRESSED_CHILD_CONTEXT_SUBTYPES = new Set([
   'Map',
   'Parallel',
   'MapIteration',
   'ParallelBranch',
+  'WaitForCallback',
 ])
 
 class BaseContextPlugin extends TracingPlugin {
@@ -109,7 +111,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
 // runInChildContext has two overloads: `(name, fn, options)` and `(fn, options)`.
 function getRunInChildContextSubType (ctx) {
   const args = ctx.arguments || []
-  const opts = typeof args[0] === 'string' ? args[2] : args[1]
+  const opts = typeof args[0] === 'function' ? args[1] : args[2]
   return opts?.subType
 }
 
