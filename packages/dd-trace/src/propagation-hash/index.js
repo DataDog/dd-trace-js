@@ -33,7 +33,7 @@ class PropagationHashManager {
    * @returns {boolean}
    */
   isEnabled () {
-    return this._config?.propagateProcessTags?.enabled === true
+    return this._config?.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED === true
   }
 
   /**

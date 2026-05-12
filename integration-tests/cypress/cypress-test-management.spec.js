@@ -11,9 +11,11 @@ const {
   useSandbox,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
   TEST_IS_NEW,
@@ -33,7 +35,9 @@ const {
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
@@ -44,7 +48,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -54,9 +61,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -91,21 +98,16 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    // typescript@5 is pinned because typescript@6 emits "use strict" on line 1 for
-    // non-module files, shifting compiled line numbers and breaking source map resolution.
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript@5'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
 
     after(async () => {
@@ -244,7 +246,9 @@ moduleTypes.forEach(({
             const test = events.find(event => event.type === 'test').content
             assert.strictEqual(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
             assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-          }, 25000)
+            // cypress@latest esm + multi-origin browser context switching adds cold-start overhead
+            // the suite-level `warmCypressBinary` (commonJS path) doesn't reach.
+          }, 50_000)
 
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
@@ -443,6 +447,7 @@ moduleTypes.forEach(({
             isQuarantined,
             isDisabled,
           })
+          let stdout = ''
 
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -463,16 +468,53 @@ moduleTypes.forEach(({
             }
           )
 
-          // TODO: remove this once we have figured out flakiness
-          childProcess.stdout?.pipe(process.stdout)
-          childProcess.stderr?.pipe(process.stderr)
+          childProcess.stdout?.on('data', data => {
+            stdout += data
+            process.stdout.write(data)
+          })
+          childProcess.stderr?.on('data', data => {
+            stdout += data
+            process.stderr.write(data)
+          })
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
             testAssertionsPromise,
           ])
 
-          if (shouldAlwaysPass || isQuarantined || isDisabled) {
+          if (isAttemptToFix) {
+            assert.match(stdout, /Datadog Test Optimization: attempting to fix .*attempt to fix is attempt to fix/)
+            assert.strictEqual(
+              (stdout.match(
+                /Datadog Test Optimization: attempting to fix .*attempt to fix is attempt to fix/g
+              ) || []).length,
+              1
+            )
+            assert.match(stdout, /Datadog Test Optimization/)
+            if (shouldAlwaysPass) {
+              assert.match(stdout, /Attempt to fix passed/)
+            } else {
+              assert.match(stdout, /Attempt to fix failed/)
+              assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+            }
+            if (isQuarantined || isDisabled) {
+              assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+            }
+            if (isQuarantined) {
+              assert.match(
+                stdout,
+                /Test was marked as quarantined but was not quarantined because it is attempt to fix\./
+              )
+            }
+            if (isDisabled) {
+              assert.match(
+                stdout,
+                /Test was marked as disabled but was run because it is attempt to fix\./
+              )
+            }
+          }
+
+          if (shouldAlwaysPass) {
             assert.strictEqual(exitCode, 0)
           } else {
             assert.strictEqual(exitCode, 1)
@@ -495,6 +537,63 @@ moduleTypes.forEach(({
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
+        })
+
+        it('keeps after hook failures on attempt to fix tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix-after-hook.js': {
+                  tests: {
+                    'attempt to fix after hook passes before after hook fails': {
+                      properties: {
+                        attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const attemptToFixTests = tests
+                .filter(test => test.meta[TEST_NAME] === 'attempt to fix after hook passes before after hook fails')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(attemptToFixTests.length, 4)
+
+              const lastAttempt = attemptToFixTests[attemptToFixTests.length - 1]
+              assert.strictEqual(lastAttempt.meta[TEST_STATUS], 'fail')
+              assert.match(lastAttempt.meta[ERROR_MESSAGE], /error in after hook/)
+              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            }, 25000)
+
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
+          const specToRun = 'cypress/e2e/attempt-to-fix-after-hook.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 1)
         })
 
         it('does not attempt to fix tests if test management is not enabled', async () => {
@@ -565,12 +664,7 @@ moduleTypes.forEach(({
           ])
         })
 
-        /**
-         * TODO:
-         * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
-         * Cypress will skip the test instead.
-         */
-        it('can mark tests as quarantined and tests are not skipped', async () => {
+        it('ignores quarantine when attempting to fix a test', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             cypress: {
@@ -592,12 +686,7 @@ moduleTypes.forEach(({
           await runAttemptToFixTest({ isAttemptToFix: true, isQuarantined: true })
         })
 
-        /**
-         * TODO:
-         * When a test is disabled and attempted to fix, the spec is to run the test and ignore its result.
-         * Cypress will run the test, but it won't ignore its result.
-         */
-        it('can mark tests as disabled and tests are not skipped', async () => {
+        it('ignores disabled when attempting to fix a test', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             cypress: {
@@ -819,9 +908,8 @@ moduleTypes.forEach(({
           test_management: { enabled: true },
           flaky_test_retries_enabled: false,
         })
-        receiver.setTestManagementTestsResponseCode(500)
+        receiver.setTestManagementTestsResponseCode(404)
 
-        // Request module waits before retrying; browser runs are slow — need longer gather timeout
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)

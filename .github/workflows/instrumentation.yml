@@ -104,7 +104,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -218,7 +218,7 @@ jobs:
       id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
@@ -244,7 +244,7 @@ jobs:
       id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -293,7 +293,7 @@ jobs:
       id-token: write
     services:
       postgres:
-        image: postgres:9.5
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -364,7 +364,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:instrumentations:misc:ci
@@ -382,10 +381,6 @@ jobs:
         with:
           flags: platform-instrumentations-misc
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: test-${{ github.job }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -405,14 +400,24 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:${{ matrix.bundler }}
+      - if: matrix.bundler == 'esbuild'
+        run: yarn test:integration:esbuild:coverage
+      # TODO: Webpack bundles dd-trace into a single file with the customer code, so the
+      # NYC counters end up bundled too and the bootstrap can't find them at the original
+      # paths. Switch to `:coverage` once the harness handles bundled output.
+      - if: matrix.bundler == 'webpack'
+        run: yarn test:integration:webpack
+      - if: matrix.bundler == 'esbuild'
+        uses: ./.github/actions/coverage
+        with:
+          flags: instrumentations-integration-esbuild-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

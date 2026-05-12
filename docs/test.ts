@@ -51,10 +51,10 @@ tracer.init({
     rateLimit: 500
   },
   experimental: {
-    iast: true,
     b3: true,
     exporter: 'log'
   },
+  iast: true,
   hostname: 'agent',
   logger: {
     error (message: string | Error) {},
@@ -124,18 +124,12 @@ tracer.init({
       endpointCollectionMessageLimit: 300
     },
     rasp: {
-      enabled: true,
-      bodyCollection: true
+      enabled: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
-    },
-    extendedHeadersCollection: {
-      enabled: true,
-      redaction: false,
-      maxHeaders: 42
     }
   },
   iast: {
@@ -157,23 +151,23 @@ tracer.init({
 
 tracer.init({
   experimental: {
-    iast: {
-      enabled: true,
-      requestSampling: 50,
-      maxConcurrentRequests: 4,
-      maxContextOperations: 30,
-      dbRowsToTaint: 6,
-      deduplicationEnabled: true,
-      redactionEnabled: true,
-      redactionNamePattern: 'password',
-      redactionValuePattern: 'bearer',
-      telemetryVerbosity: 'OFF'
-    },
     appsec: {
       standalone: {
         enabled: true
       }
     }
+  },
+  iast: {
+    enabled: true,
+    requestSampling: 50,
+    maxConcurrentRequests: 4,
+    maxContextOperations: 30,
+    dbRowsToTaint: 6,
+    deduplicationEnabled: true,
+    redactionEnabled: true,
+    redactionNamePattern: 'password',
+    redactionValuePattern: 'bearer',
+    telemetryVerbosity: 'OFF'
   }
 })
 
@@ -400,6 +394,8 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pg', { appendComment: true });
+tracer.use('pg', { truncate: true });
+tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
@@ -691,7 +687,8 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {},
+  tags: { team: 'ml' },
+  costTags: ['team'],
   prompt: {
     id: '123',
     version: '1.0.0',
@@ -703,7 +700,8 @@ llmobs.annotate(span, {
   outputData: 'output',
   metadata: {},
   metrics: {},
-  tags: {}
+  tags: { team: 'ml' },
+  costTags: ['team']
 })
 
 

@@ -90,9 +90,8 @@ class MongodbCorePlugin extends DatabasePlugin {
   }
 }
 
-function sanitizeBigInt (data) {
-  return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
-}
+const MAX_DEPTH = 10
+const MAX_QUERY_LENGTH = 10_000
 
 function extractQuery (statements) {
   if (statements.length === 1 && statements[0].q) return statements[0].q
@@ -100,7 +99,7 @@ function extractQuery (statements) {
   const extractedQueries = []
   for (let i = 0; i < statements.length; i++) {
     if (statements[i].q) {
-      extractedQueries.push(limitDepth(statements[i].q))
+      extractedQueries.push(statements[i].q)
     }
   }
 
@@ -110,12 +109,12 @@ function extractQuery (statements) {
 function getQuery (cmd) {
   if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
 
-  if (Array.isArray(cmd)) return sanitizeBigInt(extractQuery(cmd))
-  if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
-  if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
-  if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
-  if (cmd.deletes) return sanitizeBigInt(extractQuery(cmd.deletes))
-  if (cmd.updates) return sanitizeBigInt(extractQuery(cmd.updates))
+  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd))
+  if (cmd.query) return sanitiseAndStringify(cmd.query)
+  if (cmd.filter) return sanitiseAndStringify(cmd.filter)
+  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline)
+  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes))
+  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates))
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -129,73 +128,40 @@ function getResource (plugin, ns, query, operationName) {
 }
 
 function truncate (input) {
-  return input.slice(0, Math.min(input.length, 10_000))
+  return input.length > MAX_QUERY_LENGTH ? input.slice(0, MAX_QUERY_LENGTH) : input
 }
 
-function shouldSimplify (input) {
-  return !isObject(input) || typeof input.toJSON === 'function'
-}
+// Single-pass sanitisation. The replacer:
+// - skips functions and coerces bigint to its decimal string,
+// - returns '?' for Buffer / BSON Binary on the *original* value (JSON.stringify already invoked
+//   toJSON before calling us; Buffer / Binary do have toJSON outputs we want to suppress),
+// - lets JSON.stringify call toJSON on other BSON types (ObjectId, Long, Decimal128, Date, Timestamp, ...)
+//   so the result lands here as a primitive or plain object,
+// - returns '?' for BSON types without toJSON (MinKey, MaxKey) where `value === original`,
+// - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to '?'.
+function sanitiseAndStringify (input) {
+  const ancestors = []
+  return JSON.stringify(input, function (key, value) {
+    if (typeof value === 'function') return
+    if (typeof value === 'bigint') return value.toString()
 
-function shouldHide (input) {
-  return Buffer.isBuffer(input) || typeof input === 'function' || isBinary(input)
-}
-
-function limitDepth (input) {
-  if (isBSON(input)) {
-    input = input.toJSON()
-  }
-
-  if (shouldHide(input)) return '?'
-  if (shouldSimplify(input)) return input
-
-  const output = {}
-  const queue = [{
-    input,
-    output,
-    depth: 0,
-  }]
-
-  while (queue.length) {
-    const {
-      input, output, depth,
-    } = queue.pop()
-    const nextDepth = depth + 1
-    for (const key in input) {
-      if (typeof input[key] === 'function') continue
-
-      let child = input[key]
-
-      if (isBSON(child)) {
-        child = typeof child.toJSON === 'function' ? child.toJSON() : '?'
-      }
-
-      if (depth >= 10 || shouldHide(child)) {
-        output[key] = '?'
-      } else if (shouldSimplify(child)) {
-        output[key] = child
-      } else {
-        queue.push({
-          input: child,
-          output: output[key] = {},
-          depth: nextDepth,
-        })
+    const original = key === '' ? value : this[key]
+    if (typeof original === 'object' && original !== null) {
+      if (Buffer.isBuffer(original)) return '?'
+      const bsontype = original._bsontype
+      if (bsontype !== undefined && (bsontype === 'Binary' || value === original)) {
+        return '?'
       }
     }
-  }
 
-  return output
-}
+    if (value === null || typeof value !== 'object') return value
 
-function isObject (val) {
-  return val !== null && typeof val === 'object' && !Array.isArray(val)
-}
+    while (ancestors.length > 0 && ancestors.at(-1) !== this) ancestors.pop()
+    if (ancestors.length >= MAX_DEPTH || ancestors.includes(value)) return '?'
+    ancestors.push(value)
 
-function isBSON (val) {
-  return val && val._bsontype && !isBinary(val)
-}
-
-function isBinary (val) {
-  return val && val._bsontype === 'Binary'
+    return value
+  })
 }
 
 function isHeartbeat (ops, config) {

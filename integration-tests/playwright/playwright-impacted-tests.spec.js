@@ -48,11 +48,9 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
-    this.retries(2)
     this.timeout(80000)
 
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
@@ -203,7 +201,7 @@ versions.forEach((version) => {
               assert.strictEqual(retriedTestNew, isNew ? NUM_RETRIES_EFD * 2 : 0)
               assert.strictEqual(retriedTestsWithReason, NUM_RETRIES_EFD * 2)
             }
-          }, 25000)
+          }, 60000)
 
       const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
@@ -266,6 +264,7 @@ versions.forEach((version) => {
               enabled: true,
               slow_test_retries: {
                 '5s': NUM_RETRIES_EFD,
+                '10s': NUM_RETRIES_EFD,
               },
             },
             known_tests_enabled: true,

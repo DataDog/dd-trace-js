@@ -174,7 +174,7 @@ class NetDecorator {
   }
 }
 
-class FilesystemDecorator {
+class KeyValueDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
   }
@@ -194,13 +194,26 @@ class FilesystemDecorator {
   }
 }
 
+class ZlibDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+    this.operationNameLabelKey = stringTable.dedup('operation')
+  }
+
+  decorateSample (sampleInput, item) {
+    sampleInput.label.push(labelFromStr(this.stringTable, this.operationNameLabelKey, item.detail.operation))
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  fs: FilesystemDecorator,
+  crypto: KeyValueDecorator,
+  fs: KeyValueDecorator,
   dns: DNSDecorator,
   gc: GCDecorator,
   net: NetDecorator,
+  zlib: ZlibDecorator,
 }
 
 // Translates performance entries into pprof samples.
@@ -348,12 +361,14 @@ class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
     // List all entries explicitly for bundlers to pick up the require calls correctly.
     const plugins = [
+      require('./event_plugins/crypto'),
       require('./event_plugins/dns_lookup'),
       require('./event_plugins/dns_lookupservice'),
       require('./event_plugins/dns_resolve'),
       require('./event_plugins/dns_reverse'),
       require('./event_plugins/fs'),
       require('./event_plugins/net'),
+      require('./event_plugins/zlib'),
     ]
     this.plugins = plugins.map((Plugin) => {
       return new Plugin(eventHandler, eventFilter)

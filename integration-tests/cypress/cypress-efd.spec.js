@@ -10,6 +10,7 @@ const {
   useSandbox,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -18,15 +19,19 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_NAME,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
+  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
@@ -38,7 +43,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -48,9 +56,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -85,21 +93,16 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    // typescript@5 is pinned because typescript@6 emits "use strict" on line 1 for
-    // non-module files, shifting compiled line numbers and breaking source map resolution.
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript@5'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
 
     beforeEach(async function () {
@@ -214,6 +217,69 @@ moduleTypes.forEach(({
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('uses the retry count from the matching slow_test_retries bucket', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          cypress: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const instantTests = tests.filter(test => test.resource ===
+              'cypress/e2e/efd-duration.cy.js.efd duration retries instant test'
+            )
+            assert.strictEqual(instantTests.length, 3)
+            assert.strictEqual(
+              instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+              2
+            )
+
+            const slowTests = tests.filter(test => test.resource ===
+              'cypress/e2e/efd-duration.cy.js.efd duration retries slightly slow test'
+            )
+            assert.strictEqual(slowTests.length, 1)
+            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(slowTests[0].meta[TEST_FINAL_STATUS], 'pass')
+            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+          }, 30_000)
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+        const specToRun = 'cypress/e2e/efd-duration.cy.js'
 
         childProcess = exec(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
@@ -377,6 +443,61 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.strictEqual(newTests.length, 0)
+          }, 60000)
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('bails out of EFD if the percentage of new test files is too high', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+            faulty_session_threshold: 0,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          cypress: {},
+        })
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.strictEqual(newTests.length, 0)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
           }, 60000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'

@@ -14,7 +14,9 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
-      uses: DataDog/junit-upload-github-action@ce82dc1f14a32888a057bfeeb47adfd0fd96e555 # v3.1.0
-      with:
-        api_key: ${{ inputs.dd_api_key }}
-        service: dd-trace-js-tests
+      uses: ./.github/actions/datadog-ci
+    - if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: datadog-ci junit upload --service dd-trace-js-tests .
+      env:
+        DD_API_KEY: ${{ inputs.dd_api_key }}

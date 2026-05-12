@@ -12,7 +12,7 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -37,7 +37,6 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
-        const messages2 = [{ key: 'key2', value: 'test3' }]
 
         beforeEach(async () => {
           tracer = require('../../dd-trace')
@@ -53,6 +52,7 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
+            waitForLeaders: true,
             topics: [{
               topic: testTopic,
               numPartitions: 1,
@@ -96,6 +96,17 @@ describe('Plugin', () => {
             '127.0.0.1:9092',
             'messaging.kafka.bootstrap.servers'
           )
+
+          it('should not mutate user-supplied message objects', async () => {
+            // Deep-freezing the input means any accidental write to a
+            // message, its headers, or the array itself throws synchronously.
+            const userMessages = deepFreeze([
+              { key: 'key', value: 'value', headers: { foo: 'bar' } },
+              { key: 'key2', value: 'value2' },
+            ])
+
+            await sendMessages(kafka, testTopic, userMessages)
+          })
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
@@ -189,16 +200,38 @@ describe('Plugin', () => {
             })
 
             it('should hit an error for the first send and not inject headers in later sends', async () => {
-              await assert.rejects(producer.send({ topic: testTopic, messages }), error)
+              const startCh = dc.channel('apm:kafkajs:produce:start')
+              const sentMessageBatches = []
+              const captureStart = (ctx) => sentMessageBatches.push(ctx.messages)
+              startCh.subscribe(captureStart)
 
-              assert.ok(Object.hasOwn(messages[0].headers, 'x-datadog-trace-id'))
+              // Freeze both batches: any boundary or plugin write to the
+              // user's array, its messages, or their headers throws here.
+              const firstBatch = deepFreeze([{ key: 'key1', value: 'test2' }])
+              const secondBatch = deepFreeze([{ key: 'key2', value: 'test3' }])
 
-              // restore the stub to allow the next send to succeed
-              sendRequestStub.restore()
+              try {
+                await assert.rejects(producer.send({ topic: testTopic, messages: firstBatch }), error)
 
-              const result2 = await producer.send({ topic: testTopic, messages: messages2 })
-              assert.strictEqual(messages2[0].headers, undefined)
-              assert.strictEqual(result2[0].errorCode, 0)
+                // The first send injects trace headers into the cloned
+                // batch that kafkajs serializes.
+                assert.ok(Object.hasOwn(sentMessageBatches[0][0].headers, 'x-datadog-trace-id'))
+
+                sendRequestStub.restore()
+
+                const result2 = await producer.send({ topic: testTopic, messages: secondBatch })
+
+                // After UNKNOWN the boundary clones with `cloneMessages`
+                // (frozen input stays untouched) and the clone has no
+                // `headers` field at all — brokers that reject any header
+                // field can recover.
+                const [clonedAfterDisable] = sentMessageBatches[1]
+                assert.notStrictEqual(clonedAfterDisable, secondBatch[0])
+                assert.strictEqual(Object.hasOwn(clonedAfterDisable, 'headers'), false)
+                assert.strictEqual(result2[0].errorCode, 0)
+              } finally {
+                startCh.unsubscribe(captureStart)
+              }
             })
           })
 
@@ -214,7 +247,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
           })
 
           afterEach(async () => {
@@ -251,11 +284,11 @@ describe('Plugin', () => {
               try {
                 assert.notDeepStrictEqual(currentSpan, firstSpan)
                 assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                eachMessage = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachMessage = () => {}
                 done(e)
-              } finally {
-                eachMessage = () => {} // avoid being called for each message
               }
             }
 
@@ -300,7 +333,6 @@ describe('Plugin', () => {
 
             })
 
-            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {
                 throw fakeError
@@ -315,11 +347,11 @@ describe('Plugin', () => {
             let eachBatch = async ({ batch }) => {
               try {
                 assert.strictEqual(batch.isEmpty(), false)
+                eachBatch = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachBatch = () => {}
                 done(e)
-              } finally {
-                eachBatch = () => {} // avoid being called for each message
               }
             }
 
@@ -358,11 +390,11 @@ describe('Plugin', () => {
                 const name = spy.firstCall.args[1]
                 assert.strictEqual(name, afterStart.name)
 
+                eachMessage = () => {}
                 done()
               } catch (e) {
-                done(e)
-              } finally {
                 eachMessage = () => {}
+                done(e)
               }
             }
 
@@ -457,11 +489,11 @@ describe('Plugin', () => {
               try {
                 assert.notEqual(currentSpan, firstSpan)
                 assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                eachBatch = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachBatch = () => {}
                 done(e)
-              } finally {
-                eachBatch = () => {} // avoid being called for each message
               }
             }
 

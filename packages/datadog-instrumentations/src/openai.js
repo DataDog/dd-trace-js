@@ -256,18 +256,18 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   methodNames.shift() // remove leading 'constructor' method
 
   for (const methodName of methodNames) {
-    shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
+    shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function (...args) {
       if (!ch.start.hasSubscribers) {
-        return fn.apply(this, arguments)
+        return fn.apply(this, args)
       }
 
       const ctx = {
         methodName,
-        args: arguments,
+        args,
         basePath: this.basePath,
       }
 
-      return ch.tracePromise(fn, ctx, this, ...arguments)
+      return ch.tracePromise(fn, ctx, this, ...args)
     })
   }
 
@@ -281,10 +281,10 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
  */
 function wrapStreamIterator (response, options, ctx) {
   return function (itr) {
-    return function () {
-      const iterator = itr.apply(this, arguments)
-      shimmer.wrap(iterator, 'next', next => function () {
-        return next.apply(this, arguments)
+    return function (...args) {
+      const iterator = itr.apply(this, args)
+      shimmer.wrap(iterator, 'next', next => function (...args) {
+        return next.apply(this, args)
           .then(res => {
             const { done, value: chunk } = res
             onStreamedChunkCh.publish({ ctx, chunk, done })
@@ -321,14 +321,14 @@ for (const extension of extensions) {
       const targetPrototype = exports[targetClass].prototype
 
       for (const methodName of methods) {
-        shimmer.wrap(targetPrototype, methodName, methodFn => function () {
-          if (!ch.start.hasSubscribers && !evaluateCh.hasSubscribers) {
-            return methodFn.apply(this, arguments)
+        shimmer.wrap(targetPrototype, methodName, methodFn => function (...args) {
+          if (!ch.start.hasSubscribers) {
+            return methodFn.apply(this, args)
           }
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
-          const stream = streamedResponse && getOption(arguments, 'stream', false)
+          const stream = streamedResponse && getOption(args, 'stream', false)
 
           // Streaming AI Guard support lands in a follow-up PR. For now, provider-level AI
           // Guard only evaluates non-streaming responses.
@@ -344,7 +344,7 @@ for (const extension of extensions) {
 
           const ctx = {
             methodName: `${baseResource}.${methodName}`,
-            args: arguments,
+            args,
             basePath: client.baseURL,
           }
 
@@ -353,7 +353,7 @@ for (const extension of extensions) {
           const aiguardInputMessages = aiguardApplicable ? getInputMessages(baseResource, arguments[0]) : undefined
 
           return ch.start.runStores(ctx, () => {
-            const apiProm = methodFn.apply(this, arguments)
+            const apiProm = methodFn.apply(this, args)
 
             // Start Before Model evaluation only when the OpenAI APIPromise is consumed,
             // then reuse the same result for parse/_thenUnwrap/asResponse.
@@ -368,15 +368,15 @@ for (const extension of extensions) {
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
-              shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function () {
+              shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function (...args) {
                 // TODO(sam.brenner): I wonder if we can patch the APIPromise prototype instead, although
                 // we might not have access to everything we need...
 
                 // this is a new apipromise instance
-                const unwrappedPromise = origApiPromThenUnwrap.apply(this, arguments)
+                const unwrappedPromise = origApiPromThenUnwrap.apply(this, args)
 
-                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function () {
-                  const parsedPromise = origApiPromParse.apply(this, arguments)
+                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function (...args) {
+                  const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
                   return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)
@@ -388,8 +388,8 @@ for (const extension of extensions) {
 
             // wrapping `parse` avoids problematic wrapping of `then` when trying to call
             // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-            shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-              const parsedPromise = origApiPromParse.apply(this, arguments)
+            shimmer.wrap(apiProm, 'parse', origApiPromParse => function (...args) {
+              const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
               return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)

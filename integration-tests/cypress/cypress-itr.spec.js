@@ -10,6 +10,7 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -27,8 +28,17 @@ const {
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
-const version = process.env.CYPRESS_VERSION
+const requestedVersion = process.env.CYPRESS_VERSION
+const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
+const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
+
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
 
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
@@ -37,7 +47,10 @@ function shouldTestsRun (type) {
     }
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
-      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
+      if (NODE_MAJOR <= 18) {
+        return version === '12.0.0' || version === '14.5.4'
+      }
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   if (DD_MAJOR === 6) {
@@ -47,9 +60,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '10.2.0' || version === '14.5.4'
+        return version === '12.0.0' || version === '14.5.4'
       }
-      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
+      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -84,21 +97,16 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80_000)
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    // typescript@5 is pinned because typescript@6 emits "use strict" on line 1 for
-    // non-module files, shifting compiled line numbers and breaking source map resolution.
-    // TODO: Update tests files accordingly and test with different TS versions
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript@5'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
-      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
-      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
+      await warmCypressBinary(cwd)
     })
 
     beforeEach(async function () {
@@ -269,6 +277,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
             assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'test')
+            assertItrSkippingEnabledTags(events, 'true')
           }, 25000)
 
         const coverageRequestPromise = receiver
@@ -527,6 +536,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
             assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+            assertItrSkippingEnabledTags(events, 'true')
           }, 30000)
 
         const skippableRequestPromise = receiver

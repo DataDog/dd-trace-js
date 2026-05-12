@@ -3,11 +3,6 @@ stages:
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  - macrobenchmarks
-  - macrobenchmarks-gate
-  - macrobenchmarks-notify
-  # These benchmarks ultimately will replace the legacy ones
-  # They will run alongside them at first before replacing them all together
   - node-express-realworld-parallel
   - node-express-realworld-parallel-slo
   - node-hapi-redis-parallel
@@ -31,7 +26,6 @@ update_central_configurations_version_range_v2:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
-  - local: ".gitlab/macrobenchmarks.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
     ref: "main"

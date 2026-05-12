@@ -13,6 +13,7 @@ const errorCh = channel('apm:redis:command:error')
 let createClientUrl
 let createClientName
 const instanceInfo = new WeakMap()
+const connectionInfoCache = new WeakMap()
 
 function wrapAddCommand (addCommand) {
   return function (command) {
@@ -20,10 +21,7 @@ function wrapAddCommand (addCommand) {
       return addCommand.apply(this, arguments)
     }
 
-    const name = command[0]
-    const args = command.slice(1)
-
-    const ctx = getStartCtx(this, name, args)
+    const ctx = getStartCtx(this, command[0], command, 1)
     return startCh.runStores(ctx, () => {
       const res = addCommand.apply(this, arguments)
 
@@ -35,7 +33,7 @@ function wrapAddCommand (addCommand) {
 }
 
 function wrapCommandQueueClass (cls) {
-  const ret = class RedisCommandQueue extends cls {
+  return class RedisCommandQueue extends cls {
     constructor (...args) {
       super(...args)
       let url = { host: 'localhost', port: 6379 }
@@ -50,7 +48,6 @@ function wrapCommandQueueClass (cls) {
       instanceInfo.set(this, { connectionName: createClientName, url })
     }
   }
-  return ret
 }
 
 function wrapCreateClient (request) {
@@ -137,22 +134,33 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   return redis
 })
 
-function getStartCtx (client, command, args) {
-  const { url, connectionName } = instanceInfo.get(client) || {}
+function getStartCtx (client, command, args, argsStartIndex) {
+  let cached = connectionInfoCache.get(client)
+  if (cached === undefined) {
+    const info = instanceInfo.get(client)
+    cached = {
+      connectionOptions:
+        client.connection_options || client.connection_option || client.connectionOption || info?.url,
+      connectionName: info?.connectionName,
+    }
+    connectionInfoCache.set(client, cached)
+  }
 
   return {
     db: client.selected_db,
     command,
     args,
-    connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url,
-    connectionName,
+    argsStartIndex,
+    connectionOptions: cached.connectionOptions,
+    connectionName: cached.connectionName,
   }
 }
 
 function wrapCallback (finishCh, errorCh, ctx, callback) {
-  return shimmer.wrapFunction(callback, callback => function (err) {
+  if (typeof callback !== 'function') return callback
+  return function (err) {
     return finish(finishCh, errorCh, ctx, err, callback, this, arguments)
-  })
+  }
 }
 
 function finish (finishCh, errorCh, ctx, error, callback, thisArg, args) {

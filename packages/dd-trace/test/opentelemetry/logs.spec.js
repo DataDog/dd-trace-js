@@ -24,7 +24,7 @@ describe('OpenTelemetry Logs', () => {
 
     logs.disable()
     const config = getConfigFresh()
-    if (config.otelLogsEnabled) {
+    if (config.DD_LOGS_OTEL_ENABLED) {
       const { initializeOpenTelemetryLogs } =
         proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
       initializeOpenTelemetryLogs(config)

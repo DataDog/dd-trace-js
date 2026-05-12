@@ -8,11 +8,11 @@ const { threadId } = require('worker_threads')
 const log = require('./log')
 
 async function scheduleSnapshot (config, total) {
-  if (total > config.heapSnapshot.count) return
+  if (total > config.DD_HEAP_SNAPSHOT_COUNT) return
 
-  await setTimeout(config.heapSnapshot.interval * 1000, null, { ref: false })
+  await setTimeout(config.DD_HEAP_SNAPSHOT_INTERVAL * 1000, null, { ref: false })
   await clearMemory()
-  writeHeapSnapshot(getName(config.heapSnapshot.destination))
+  writeHeapSnapshot(getName(config.DD_HEAP_SNAPSHOT_DESTINATION))
   await scheduleSnapshot(config, total + 1)
 }
 
@@ -49,7 +49,7 @@ module.exports = {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   async start (config) {
-    const destination = config.heapSnapshot.destination
+    const destination = config.DD_HEAP_SNAPSHOT_DESTINATION
 
     try {
       await scheduleSnapshot(config, 1)

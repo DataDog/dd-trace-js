@@ -22,10 +22,18 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
+  formatAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -84,6 +92,16 @@ describe('getTestSuitePath', () => {
 describe('getTestSessionName', () => {
   let originalEnv
 
+  function getTestSessionNameWithMajor (ddMajor) {
+    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+      '../../../../version': { DD_MAJOR: ddMajor },
+    })
+
+    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+      '../../ci-visibility/lage': lage,
+    }).getTestSessionName
+  }
+
   beforeEach(() => {
     originalEnv = { ...process.env }
     delete process.env.DD_ENABLE_LAGE_PACKAGE_NAME
@@ -99,7 +117,7 @@ describe('getTestSessionName', () => {
     process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
     process.env.LAGE_PACKAGE_NAME = 'lage-package'
 
-    const testSessionName = getTestSessionName({ ciVisibilityTestSessionName: 'explicit-session' }, 'jest', {})
+    const testSessionName = getTestSessionName({ DD_TEST_SESSION_NAME: 'explicit-session' }, 'jest', {})
 
     assert.strictEqual(testSessionName, 'explicit-session')
   })
@@ -113,6 +131,283 @@ describe('getTestSessionName', () => {
     process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
 
     assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
+  })
+
+  it('returns the current Lage package name by default in v6', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(6)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package')
+  })
+
+  it('does not return the current Lage package name by default in v5', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(5)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'jest')
+  })
+})
+
+describe('attempt to fix summary', () => {
+  it('reports when every attempt to fix execution passes', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    assert.strictEqual(
+      formatAttemptToFixSummary(executions),
+      'Attempt to fix passed: all 2 execution(s) passed for 1 test(s).'
+    )
+  })
+
+  it('reports failed executions without error messages', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.ok(!summary.includes('Error:'))
+    assert.ok(!summary.includes('execution 1:'))
+  })
+
+  it('reports when quarantine and disabled were ignored for attempt to fix', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+  })
+
+  it('reports ignored quarantine and disabled for passing attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
+  it('lists each failed test once', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'fail',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'fail',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'always fails',
+      status: 'fail',
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 3 of 4 execution\(s\) failed across 2 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails sometimes/)
+    assert.match(summary, /suite\.js › always fails/)
+    assert.strictEqual(summary.match(/suite\.js › fails sometimes/g).length, 1)
+    assert.doesNotMatch(summary, /execution \d+:/)
+  })
+
+  it('collects attempt to fix executions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'fail',
+            'test.test_management.is_quarantined': 'true',
+            'error.message': 'worker failure',
+            'error.stack': 'Error: worker failure\n    at worker-suite.js:10:5',
+          },
+        },
+      ],
+    ])
+
+    collectAttemptToFixExecutionsFromTraces(payload, executions)
+
+    const summary = formatAttemptToFixSummary(executions)
+    assert.match(summary, /worker-suite\.js › worker test/)
+    assert.ok(!summary.includes('worker failure'))
+    assert.ok(!summary.includes('worker-suite.js:10:5'))
+    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
+  it('collects test optimization summaries from worker traces with one parse', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'pass',
+          },
+        },
+        {
+          meta: {
+            '_dd.has_dynamic_name': 'true',
+            'test.suite': 'dynamic-suite.js',
+            'test.name': 'dynamic 123',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, {
+      attemptToFixExecutions: executions,
+      newTestsWithDynamicNames,
+    })
+
+    assert.deepStrictEqual([...newTestsWithDynamicNames], ['dynamic-suite.js › dynamic 123'])
+    assert.match(formatAttemptToFixSummary(executions), /worker-suite\.js › worker test/)
+  })
+
+  it('logs and clears the attempt to fix summary', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Datadog Test Optimization/)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+  })
+
+  it('logs a compact progress line when an attempt to fix execution starts', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name')
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+  })
+
+  it('logs the attempt to fix progress line once for a test effort', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'other test', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+    assert.strictEqual(
+      consoleWarn.secondCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › other test'
+    )
+  })
+
+  it('combines attempt to fix and dynamic name sections into one session report', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set(['dynamic-suite.js › dynamic test 123'])
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions, newTestsWithDynamicNames })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+    assert.match(consoleWarn.firstCall.args[0], /dynamic-suite\.js › dynamic test 123/)
   })
 })
 
@@ -662,6 +957,41 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     assert.strictEqual(isFaulty, true)
+  })
+})
+
+describe('getEfdRetryCount', () => {
+  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+
+  it('returns retries for the matching duration bucket', () => {
+    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
+    assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
+    assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
+    assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
+  })
+
+  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
+    assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
+    assert.strictEqual(getEfdRetryCount(0, {}), 0)
+    assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
+    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
+  })
+})
+
+describe('getMaxEfdRetryCount', () => {
+  it('returns the largest retry count from slow test retry buckets', () => {
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
+  })
+
+  it('preserves an explicit all-zero configuration', () => {
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
+  })
+
+  it('returns 0 when no slow test retry buckets are configured', () => {
+    assert.strictEqual(getMaxEfdRetryCount({}), 0)
+    assert.strictEqual(getMaxEfdRetryCount(undefined), 0)
   })
 })
 

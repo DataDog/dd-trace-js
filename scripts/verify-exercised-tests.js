@@ -610,7 +610,10 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 
       const idxYarn = s.run.indexOf('yarn ')
       const idxNpm = s.run.indexOf('npm ')
-      const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+      let idx = idxNpm
+      if (idxYarn !== -1) {
+        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
+      }
       if (idx > 0) {
         const prefix = s.run.slice(0, idx)
         const assigns = parseInlineAssignments(prefix)
@@ -1039,6 +1042,22 @@ function main () {
 
   const invokedScripts = new Set(invoked.map(i => i.script))
 
+  /**
+   * A script counts as "invoked" when either itself or its `:coverage` sibling (or base, if the
+   * script is the `:coverage` variant) is referenced by CI. Pair-matching keeps duplicate
+   * coverage/non-coverage definitions from each forcing their own CI step.
+   *
+   * @param {string} scriptName
+   * @returns {boolean}
+   */
+  const isInvokedOrCoverageSibling = (scriptName) => {
+    if (invokedScripts.has(scriptName)) return true
+    if (scriptName.endsWith(':coverage')) {
+      return invokedScripts.has(scriptName.slice(0, -':coverage'.length))
+    }
+    return invokedScripts.has(`${scriptName}:coverage`)
+  }
+
   // CI must not invoke missing scripts.
   for (const i of invoked) {
     if (!scripts[i.script]) {
@@ -1050,7 +1069,7 @@ function main () {
   // All :ci scripts should be referenced by CI.
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.endsWith(':ci')) continue
-    if (!invokedScripts.has(name)) {
+    if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
   }
@@ -1058,11 +1077,11 @@ function main () {
   // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.startsWith('test:integration')) continue
-    // Skip test:integration:plugins - it's a convenience script for running only plugin integration
-    // tests locally, but in CI these are already covered by test:plugins:ci (which runs all plugin
-    // tests including integration tests).
-    if (name === 'test:integration:plugins') continue
-    if (!invokedScripts.has(name)) {
+    // Skip test:integration:plugins (and its coverage sibling) - it's a convenience script for
+    // running only plugin integration tests locally, but in CI these are already covered by
+    // test:plugins:ci (which runs all plugin tests including integration tests).
+    if (name === 'test:integration:plugins' || name === 'test:integration:plugins:coverage') continue
+    if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
   }
@@ -1166,7 +1185,6 @@ function main () {
             pushError(
               `${i.workflowFile}#${i.jobId}: PLUGINS includes "${p}" but packages/datadog-plugin-${p} does not exist`
             )
-            continue
           }
         }
       }

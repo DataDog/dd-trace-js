@@ -1,7 +1,12 @@
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import ts from 'typescript'
+
+const require = createRequire(import.meta.url)
+const { DD_MAJOR } = require('../version.js')
+const { applyMajorVersionAliasFilters } = require('../packages/dd-trace/src/config/major-version-filters.js')
 
 const IGNORED_CONFIGURATION_NAMES = new Set([
   'tracePropagationStyle',
@@ -76,6 +81,7 @@ function createInspectionResult (overrides) {
 function getSupportedConfigurationInfo (filePath) {
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
   const supportedConfigurations = parsed?.supportedConfigurations
+  applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
 
   const names = new Set()
   const primaryEnvTargets = new Map()
@@ -114,7 +120,11 @@ function getSupportedConfigurationInfo (filePath) {
 
       for (const name of entry.configurationNames ?? []) {
         if (typeof name === 'string' && !IGNORED_CONFIGURATION_NAMES.has(name)) {
-          names.add(name)
+          // Deprecated entries opt out of the cross-check against `index.d.ts` so a
+          // major-version drop of the public type does not strand the env var here.
+          if (!entry.deprecated) {
+            names.add(name)
+          }
           targets.add(name)
         }
       }

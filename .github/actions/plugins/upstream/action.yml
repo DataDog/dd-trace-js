@@ -10,7 +10,6 @@ runs:
   steps:
     - uses: ./.github/actions/dd-sts-api-key
       id: dd-sts
-    - uses: ./.github/actions/testagent/start
     - if: ${{ inputs.node-floor == 'oldest-maintenance-lts' }}
       uses: ./.github/actions/node/oldest-maintenance-lts
     - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
@@ -21,14 +20,9 @@ runs:
     - uses: ./.github/actions/node/latest
     - run: yarn test:plugins:upstream
       shell: bash
-    - uses: ./.github/actions/coverage
-      with:
-        flags: plugins-upstream-${{ github.job }}
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-    - if: always()
-      uses: ./.github/actions/testagent/logs
-      with:
-        suffix: upstream-${{ github.job }}
+    # `test:plugins:upstream` runs each plugin's upstream test suite (e.g., axios's own tests)
+    # against the unit-test harness, which intentionally does not produce NYC coverage for
+    # dd-trace. Skip the coverage/upload step entirely here.
     - uses: ./.github/actions/push_to_test_optimization
       if: "!cancelled()"
       with:

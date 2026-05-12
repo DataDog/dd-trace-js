@@ -15,6 +15,7 @@ require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
+const NoopTracer = require('../../src/noop/tracer')
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
 
@@ -71,6 +72,30 @@ describe('OTel Tracer', () => {
 
     const ddSpanContext = span._ddSpan.context()
     assert.strictEqual(ddSpanContext._tags.foo, 'bar')
+  })
+
+  it('returns a non-recording span when the inner tracer is the noop', () => {
+    const originalTracer = tracer._tracer
+    const originalInitialized = tracer._tracingInitialized
+    tracer._tracer = new NoopTracer()
+    tracer._tracingInitialized = false
+    try {
+      const otelTracer = new Tracer({}, {}, new TracerProvider())
+      const span = otelTracer.startSpan('name', { attributes: { foo: 'bar' } })
+
+      assert.strictEqual(span instanceof Span, false)
+      assert.strictEqual(span.isRecording(), false)
+      assert.ok(api.trace.isSpanContextValid(span.spanContext()))
+
+      span.setAttribute('after', 'create')
+      span.setAttributes({ baz: 'qux' })
+      span.addEvent('event')
+      span.recordException(new Error('oops'))
+      span.end()
+    } finally {
+      tracer._tracer = originalTracer
+      tracer._tracingInitialized = originalInitialized
+    }
   })
 
   it('should pass through span kind', () => {

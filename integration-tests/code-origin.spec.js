@@ -20,6 +20,8 @@ describe('Code Origin for Spans', function () {
     proc = await spawnProc(appFile, {
       cwd,
       env: {
+        // Opt out: NYC's transform breaks --enable-source-maps resolution to the .ts source.
+        _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
         NODE_OPTIONS: '--enable-source-maps',
         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
       },
