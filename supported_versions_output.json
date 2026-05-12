@@ -24,7 +24,7 @@
     "dependency": "@aws/durable-execution-sdk-js",
     "integration": "aws-durable-execution-sdk-js",
     "minimum_tracer_supported": "1.1.0",
-    "max_tracer_supported": "1.1.0",
+    "max_tracer_supported": "1.1.2",
     "auto-instrumented": "True"
   },
   {

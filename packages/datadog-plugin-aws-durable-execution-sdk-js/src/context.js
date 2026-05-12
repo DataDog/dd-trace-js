@@ -95,9 +95,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
       // Pass the active store through unchanged so any nested spans
       // remain parented to the surrounding map/parallel span
       ctx._ddSuppressed = true
-      const store = storage('legacy').getStore()
-      ctx.currentStore = store
-      return store
+      return storage('legacy').getStore()
     }
     return super.bindStart(ctx)
   }
