@@ -12,7 +12,8 @@ const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
@@ -30,6 +31,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getEfdRetryCount,
+  getTestCoverageLinesPercentage,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -83,6 +85,7 @@ const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
+let skippableSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
 let isCodeCoverageEnabledBecauseOfUs = false
@@ -1292,9 +1295,16 @@ function getCliWrapper (isNewJestVersion) {
         skippableSuitesCh.publish({ onDone })
 
         try {
-          const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
-          if (!err) {
+          const {
+            err,
+            skippableSuites: receivedSkippableSuites,
+            skippableSuitesCoverage: receivedSkippableSuitesCoverage,
+          } = await skippableSuitesPromise
+          if (err) {
+            skippableSuitesCoverage = {}
+          } else {
             skippableSuites = receivedSkippableSuites
+            skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
           }
         } catch (err) {
           log.error('Jest test-suite skippable error', err)
@@ -1362,11 +1372,20 @@ function getCliWrapper (isNewJestVersion) {
       const mustNotFlipSuccess = hasSuiteLevelFailures || hasRunLevelFailure
 
       let testCodeCoverageLinesTotal
+      let testSessionCoverageFiles
 
       if (isUserCodeCoverageEnabled) {
         try {
-          const { pct, total } = coverageMap.getCoverageSummary().lines
-          testCodeCoverageLinesTotal = total === 0 ? 0 : pct
+          const rootDir = result.globalConfig?.rootDir || process.cwd()
+          testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+            coverageMap,
+            skippableSuitesCoverage,
+            rootDir
+          )
+          testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
+            filename: getTestSuitePath(filename, rootDir),
+            bitmap,
+          }))
         } catch {
           // ignore errors
         }
@@ -1551,6 +1570,7 @@ function getCliWrapper (isNewJestVersion) {
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
         testCodeCoverageLinesTotal,
+        testSessionCoverageFiles,
         numSkippedSuites,
         hasUnskippableSuites,
         hasForcedToRunSuites,
@@ -1583,28 +1603,6 @@ function getCliWrapper (isNewJestVersion) {
       replaceGetter: true,
     })
   }
-}
-
-function coverageReporterWrapper (coverageReporter) {
-  const CoverageReporter = coverageReporter.default ?? coverageReporter
-
-  /**
-   * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
-   * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
-   * in which case we'll leave it.
-   */
-  // `_addUntestedFiles` is an async function
-  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
-    if (DD_TEST_TIA_KEEP_COV_CONFIG) {
-      return addUntestedFiles.apply(this, args)
-    }
-    if (isCodeCoverageEnabledBecauseOfUs) {
-      return Promise.resolve()
-    }
-    return addUntestedFiles.apply(this, args)
-  })
-
-  return coverageReporter
 }
 
 function shouldWaitForTestSuiteFinish (environment) {
@@ -1685,27 +1683,6 @@ addHook({
   return sequencerPackage
 })
 
-if (DD_MAJOR < 6) {
-  addHook({
-    name: '@jest/reporters',
-    file: 'build/coverage_reporter.js',
-    versions: ['>=24.8.0 <26.6.2'],
-  }, coverageReporterWrapper)
-}
-
-addHook({
-  name: '@jest/reporters',
-  file: 'build/CoverageReporter.js',
-  versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
-}, coverageReporterWrapper)
-
-addHook({
-  name: '@jest/reporters',
-  versions: ['>=30.0.0'],
-}, (reporters) => {
-  return shimmer.wrap(reporters, 'CoverageReporter', coverageReporterWrapper, { replaceGetter: true })
-})
-
 addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
@@ -1749,9 +1726,17 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
 
-        const getFilesWithPath = (files) => files.map(file => getTestSuitePath(file, root))
+        const getFilesWithPath = (files) => files.map(file => {
+          if (typeof file === 'string') {
+            return getTestSuitePath(file, root)
+          }
+          return {
+            ...file,
+            filename: getTestSuitePath(file.filename, root),
+          }
+        })
 
-        const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
+        const coverageFiles = getFilesWithPath(getCoveredFilesFromCoverage(environment.global.__coverage__))
         const mockedFiles = getFilesWithPath(getMockedFiles(environment.testSuiteAbsolutePath))
 
         testSuiteCodeCoverageCh.publish({

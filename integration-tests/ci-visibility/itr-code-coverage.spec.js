@@ -55,6 +55,17 @@ const FRAMEWORKS = [
       NYC_INCLUDE: JSON.stringify([`${FIXTURE_ROOT}/src/**`]),
     }),
   },
+  {
+    name: 'jest',
+    skippedSuite: SKIPPED_SUITE,
+    command: 'node ./ci-visibility/run-jest.js',
+    getEnv: () => ({
+      TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+      COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
+      ENABLE_CODE_COVERAGE: '1',
+      COVERAGE_REPORTERS: 'text-summary',
+    }),
+  },
 ]
 
 describe('ITR code coverage', function () {
@@ -63,7 +74,7 @@ describe('ITR code coverage', function () {
 
   this.timeout(180_000)
 
-  useSandbox(['mocha', 'nyc'], true)
+  useSandbox(['mocha', 'nyc', 'jest'], true)
 
   before(() => {
     cwd = sandboxCwd()
