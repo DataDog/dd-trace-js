@@ -1,0 +1,3 @@
+[submodule "packages/dd-trace/test/openfeature/ffe-system-test-data"]
+	path = packages/dd-trace/test/openfeature/ffe-system-test-data
+	url = https://github.com/DataDog/ffe-system-test-data.git
