@@ -7,6 +7,7 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../constants')
 const DatadogSpanContext = require('../opentracing/span_context')
 const TraceState = require('../opentracing/propagation/tracestate')
+const { DD_MAJOR } = require('../../../../version')
 
 const id = require('../id')
 
@@ -176,8 +177,8 @@ function setOtelAttributes (ddSpan, attributes) {
 function addOtelLink (ddSpan, link, attrs) {
   if (!isWritable(ddSpan) || !link) return
 
-  // TODO: Drop the (context, attrs) form in v6.0.0.
-  const { context, attributes } = isOtelLink(link)
+  // v5 still accepts the legacy `addLink(context, attrs)` shape; v6 only takes `addLink(otel.Link)`.
+  const { context, attributes } = isOtelLink(link) || DD_MAJOR >= 6
     ? link
     : { context: link, attributes: attrs ?? {} }
 

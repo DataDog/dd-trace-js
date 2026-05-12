@@ -17,7 +17,7 @@ const exec = require('./helpers/exec')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
-// Can remove couchbase after removing support for couchbase <= 3.2.0
+// Can remove couchbase after removing support for couchbase < 3.2.2
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
@@ -304,7 +304,7 @@ async function assertWorkspaces () {
 }
 
 /**
- * @param {boolean} [retry=true]
+ * @param {boolean} [retry]
  */
 function install (retry = true) {
   try {

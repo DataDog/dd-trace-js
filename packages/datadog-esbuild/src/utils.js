@@ -83,9 +83,9 @@ function getSource (url, { format }) {
  *
  * @param {object} moduleData
  * @param {string} moduleData.path
- * @param {boolean} [moduleData.internal = false]
+ * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
- * @param {boolean} [moduleData.excludeDefault = false]
+ * @param {boolean} [moduleData.excludeDefault]
  * @returns {Promise<Map>}
  */
 async function processModule ({ path, internal = false, context, excludeDefault = false }) {

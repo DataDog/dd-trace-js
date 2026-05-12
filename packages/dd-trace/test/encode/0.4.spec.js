@@ -68,8 +68,8 @@ describe('encode', () => {
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assert.strictEqual(trace[0].start, 123n)
-      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz' })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
@@ -182,8 +182,8 @@ describe('encode', () => {
           type: 'foo',
           error: 0,
         })
-        assert.strictEqual(decodedData.start, 123n)
-        assert.strictEqual(decodedData.duration, 456n)
+        assert.strictEqual(decodedData.start, 123)
+        assert.strictEqual(decodedData.duration, 456)
         assert.deepStrictEqual(decodedData.meta, {
           bar: 'baz',
         })
@@ -302,8 +302,8 @@ describe('encode', () => {
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assert.strictEqual(trace[0].start, 123n)
-      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
@@ -324,8 +324,8 @@ describe('encode', () => {
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assert.strictEqual(trace[0].start, 123n)
-      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
@@ -712,6 +712,37 @@ describe('encode', () => {
       assert.match(logger.debug.getCall(0).args[0], /unsupported_key1/)
       assert.match(logger.debug.getCall(1).args[0], /unsupported_key2/)
       assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
+    })
+
+    it('should skip events whose name is not a string without throwing', () => {
+      // `addEvent` and the OTel bridge do not type-check `name`. The native
+      // path used to hand `name` straight to `_encodeString`, which throws
+      // for `Symbol` / `null` / non-coercible values via `Buffer.byteLength`
+      // and would have aborted the entire trace. Bad entries are dropped
+      // silently; the rest of the trace must still encode.
+      const topLevelEvents = [
+        { name: null, time_unix_nano: 1000000, attributes: { ok: true } },
+        { name: 42, time_unix_nano: 2000000 },
+        { name: Symbol('event'), time_unix_nano: 3000000 },
+        { name: undefined, time_unix_nano: 4000000 },
+        { name: 'kept', time_unix_nano: 5000000, attributes: { mood: 'happy' } },
+      ]
+
+      data[0].span_events = topLevelEvents
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const trace = decoded[0]
+
+      assert.deepStrictEqual(trace[0].span_events, [
+        {
+          name: 'kept',
+          time_unix_nano: 5000000,
+          attributes: { mood: { type: 0, string_value: 'happy' } },
+        },
+      ])
     })
   })
 })

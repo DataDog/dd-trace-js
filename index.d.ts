@@ -353,17 +353,6 @@ declare namespace tracer {
     context (): SpanContext;
 
     /**
-     * Causally links another span to the current span
-     *
-     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
-     * This will be removed in the next major version.
-     * @param {SpanContext} context The context of the span to link to.
-     * @param {Object} attributes An optional key value pair of arbitrary values.
-     * @returns {void}
-     */
-    addLink (context: SpanContext, attributes?: Object): void;
-
-    /**
      * Adds a single link to the span.
      *
      * Links added after the creation will not affect the sampling decision.
@@ -700,28 +689,6 @@ declare namespace tracer {
     protocolVersion?: string
 
     /**
-     * Deprecated in favor of the global versions of the variables provided under this option
-     *
-     * @deprecated
-     * @hidden
-     */
-    ingestion?: {
-      /**
-       * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-       * @env DD_TRACE_SAMPLE_RATE
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      sampleRate?: number
-
-      /**
-       * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
-       * @env DD_TRACE_RATE_LIMIT
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      rateLimit?: number
-    };
-
-    /**
      * Whether to enable inferred proxy services.
      * @default false
      * @env DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED
@@ -744,13 +711,6 @@ declare namespace tracer {
     experimental?: {
 
       /**
-       * @default false
-       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      b3?: boolean
-
-      /**
        * Whether to write traces to log output or agentless, rather than send to an agent
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
@@ -764,34 +724,6 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enableGetRumData?: boolean
-
-      /**
-       * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
-       * @deprecated Please use the non-experimental `iast` option instead.
-       */
-      iast?: boolean | IastOptions
-
-      /**
-       * Configuration of the AppSec. Can be a boolean as an alias to `appsec.enabled`.
-       * @deprecated Please use the non-experimental `appsec` option instead.
-       */
-      appsec?: boolean | {
-        /**
-         * Configuration of Standalone ASM mode
-         * Deprecated in favor of `apmTracingEnabled`.
-         *
-         * @deprecated Please use `apmTracingEnabled` instead.
-         */
-        standalone?: {
-          /**
-           * Whether to enable Standalone ASM.
-           * @default false
-           * @env DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
-           * Programmatic configuration takes precedence over the environment variables listed above.
-           */
-          enabled?: boolean
-        }
-      } | TracerOptions['appsec'],
 
       aiguard?: {
         /**
@@ -1070,15 +1002,6 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
-
-        /** Whether to enable request body collection on RASP event
-         * @default false
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_RASP_COLLECT_REQUEST_BODY
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        bodyCollection?: boolean
       },
       /**
        * Configuration for stack trace reporting
@@ -1105,39 +1028,6 @@ declare namespace tracer {
          */
         maxDepth?: number,
       },
-      /**
-       * Configuration for extended headers collection tied to security events
-       *
-       * @deprecated Use UI and Remote Configuration to enable extended data collection
-       */
-      extendedHeadersCollection?: {
-        /** Whether to enable extended headers collection
-         * @default false
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_COLLECT_ALL_HEADERS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        enabled: boolean,
-
-        /** Whether to redact collected headers
-         * @default true
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        redaction: boolean,
-
-        /** Specifies the maximum number of headers collected.
-         * @default 50
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_MAX_COLLECTED_HEADERS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        maxHeaders: number,
-      }
     }
 
     /**
@@ -1324,7 +1214,7 @@ declare namespace tracer {
 
     /**
      * Whether to use Datadog legacy baggage extraction and injection behavior.
-     * @default false
+     * @default true
      * @env DD_TRACE_LEGACY_BAGGAGE_ENABLED
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
@@ -2025,14 +1915,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
        * List of URLs/paths that should not be instrumented. Takes precedence over
        * allowlist if a URL matches an entry in both.
        *
@@ -2043,14 +1925,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a URL/path is allowed.
@@ -2708,14 +2582,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2723,14 +2589,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -2765,14 +2623,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2780,14 +2630,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Valkey command should be instrumented.
@@ -3064,28 +2906,12 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both.
        *
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -3399,16 +3225,6 @@ declare namespace tracer {
       recordException(exception: Exception, time?: TimeInput): void;
 
       /**
-       * Causally links another span to the current span
-       *
-       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
-       * @param {otel.SpanContext} context The context of the span to link to.
-       * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
-       * @returns {void}
-       */
-      addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
-
-      /**
        * Adds a single link to the span.
        *
        * Links added after the creation will not affect the sampling decision.
@@ -3567,16 +3383,6 @@ declare namespace tracer {
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
     redactionValuePattern?: string,
-
-    /**
-     * Allows to enable security controls. This option is not supported when
-     * using ESM.
-     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * environment variable instead. This option will be removed in the next major version.
-     * @env DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    securityControlsConfiguration?: string,
 
     /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'

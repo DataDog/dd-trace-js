@@ -46,15 +46,10 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
-  ingestion: {
-    sampleRate: 0.5,
-    rateLimit: 500
-  },
   experimental: {
-    iast: true,
-    b3: true,
     exporter: 'log'
   },
+  iast: true,
   hostname: 'agent',
   logger: {
     error (message: string | Error) {},
@@ -124,18 +119,12 @@ tracer.init({
       endpointCollectionMessageLimit: 300
     },
     rasp: {
-      enabled: true,
-      bodyCollection: true
+      enabled: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
-    },
-    extendedHeadersCollection: {
-      enabled: true,
-      redaction: false,
-      maxHeaders: 42
     }
   },
   iast: {
@@ -156,24 +145,17 @@ tracer.init({
 });
 
 tracer.init({
-  experimental: {
-    iast: {
-      enabled: true,
-      requestSampling: 50,
-      maxConcurrentRequests: 4,
-      maxContextOperations: 30,
-      dbRowsToTaint: 6,
-      deduplicationEnabled: true,
-      redactionEnabled: true,
-      redactionNamePattern: 'password',
-      redactionValuePattern: 'bearer',
-      telemetryVerbosity: 'OFF'
-    },
-    appsec: {
-      standalone: {
-        enabled: true
-      }
-    }
+  iast: {
+    enabled: true,
+    requestSampling: 50,
+    maxConcurrentRequests: 4,
+    maxContextOperations: 30,
+    dbRowsToTaint: 6,
+    deduplicationEnabled: true,
+    redactionEnabled: true,
+    redactionNamePattern: 'password',
+    redactionValuePattern: 'bearer',
+    telemetryVerbosity: 'OFF'
   }
 })
 
@@ -607,8 +589,6 @@ const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 otelSpan.addLink({ context: spanContext })
 otelSpan.addLink({ context: spanContext, attributes: { foo: 'bar' } })
 otelSpan.addLinks([{ context: spanContext }, { context: spanContext, attributes: { foo: 'bar' } }])
-otelSpan.addLink(spanContext)
-otelSpan.addLink(spanContext, { foo: 'bar' })
 
 // -- LLM Observability --
 const llmobsEnableOptions = {

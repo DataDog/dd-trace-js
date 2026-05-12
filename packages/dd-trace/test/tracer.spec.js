@@ -294,7 +294,7 @@ describe('Tracer', () => {
       tracer.trace('getRumData', {}, () => {
         const data = tracer.getRumData()
         const time = Date.now()
-        const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
+        const re = /<meta name="dd-trace-id" content="(\w+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
         const [, traceId, traceTime] = re.exec(data)
         const span = tracer.scope().active().context()
         assert.strictEqual(traceId, span.toTraceId())

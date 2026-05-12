@@ -20,7 +20,7 @@ const wrappedModels = new WeakSet()
  */
 function publishToAIGuard (messages) {
   return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, resolve, reject })
+    aiguardChannel.publish({ messages, integration: 'ai', resolve, reject })
   })
 }
 
@@ -119,17 +119,17 @@ function wrapTracer (tracer) {
   tracers.add(tracer)
 
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
-    return function () {
-      const name = arguments[0]
-      const options = arguments.length > 2 ? (arguments[1] ?? {}) : {} // startActiveSpan(name, fn)
-      const cb = arguments[arguments.length - 1]
+    return function (...args) {
+      const name = args[0]
+      const options = args.length > 2 ? (args[1] ?? {}) : {} // startActiveSpan(name, fn)
+      const cb = args[args.length - 1]
 
       const ctx = {
         name,
         attributes: options.attributes ?? {},
       }
 
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
+      args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
           // the below is necessary in the case that the span is vercel ai's noopSpan.
           // while we don't want to patch the noopSpan more than once, we do want to treat each as a
@@ -138,9 +138,9 @@ function wrapTracer (tracer) {
           const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
 
           shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function () {
+            return function (...args) {
               vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, arguments)
+              return spanEnd.apply(this, args)
             }
           })
 
@@ -164,7 +164,7 @@ function wrapTracer (tracer) {
       })
 
       return vercelAiTracingChannel.start.runStores(ctx, () => {
-        const result = startActiveSpan.apply(this, arguments)
+        const result = startActiveSpan.apply(this, args)
         vercelAiTracingChannel.end.publish(ctx)
         return result
       })

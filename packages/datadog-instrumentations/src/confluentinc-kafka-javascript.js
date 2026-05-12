@@ -7,6 +7,7 @@ const {
   addHook,
   channel,
 } = require('./helpers/instrument')
+const { cloneMessages } = require('./helpers/kafka')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
@@ -47,8 +48,8 @@ function instrumentBaseModule (module) {
   // Helper function to wrap producer classes
   function wrapProducerClass (ProducerClass, className) {
     return shimmer.wrap(module, className, function wrapProducer (Original) {
-      return function wrappedProducer () {
-        const producer = new Original(...arguments)
+      return function wrappedProducer (...args) {
+        const producer = new Original(...args)
 
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
@@ -94,9 +95,9 @@ function instrumentBaseModule (module) {
   // Helper function to wrap consumer classes
   function wrapConsumerClass (ConsumerClass, className) {
     return shimmer.wrap(module, className, function wrapConsumer (Original) {
-      return function wrappedConsumer () {
-        const consumer = new Original(...arguments)
-        const groupId = this.groupId || (arguments[0]?.['group.id'])
+      return function wrappedConsumer (...args) {
+        const consumer = new Original(...args)
+        const groupId = this.groupId || (args[0]?.['group.id'])
 
         // Wrap the consume method
         if (typeof consumer?.consume === 'function') {
@@ -196,11 +197,11 @@ function instrumentKafkaJS (kafkaJS) {
         // Wrap the producer method if it exists
         if (typeof kafka?.producer === 'function') {
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
-            return function wrappedProducerMethod () {
-              const producer = producerMethod.apply(this, arguments)
+            return function wrappedProducerMethod (...args) {
+              const producer = producerMethod.apply(this, args)
 
-              if (!brokers && arguments?.[0]?.['bootstrap.servers']) {
-                kafka._ddBrokers = arguments[0]['bootstrap.servers']
+              if (!brokers && args?.[0]?.['bootstrap.servers']) {
+                kafka._ddBrokers = args[0]['bootstrap.servers']
               }
 
               // Wrap the send method of the producer
@@ -211,46 +212,62 @@ function instrumentKafkaJS (kafkaJS) {
                       return send.apply(this, arguments)
                     }
 
+                    const disableHeaderInjection = disabledHeaderWeakSet.has(producer)
+
+                    // Hand the underlying client a shallow clone so neither
+                    // injection nor the client's auto-fields (it sets
+                    // `headers: null` on messages without headers) ever
+                    // touch caller-owned objects. With injection disabled the
+                    // clone must not seed `headers: {}` either: brokers that
+                    // reject any header field cannot recover otherwise.
+                    let outgoingPayload = payload
+                    if (payload && Array.isArray(payload.messages)) {
+                      outgoingPayload = {
+                        ...payload,
+                        messages: cloneMessages(payload.messages, !disableHeaderInjection),
+                      }
+                    }
+
                     const ctx = {
-                      topic: payload?.topic,
-                      messages: payload?.messages || [],
+                      topic: outgoingPayload?.topic,
+                      messages: outgoingPayload?.messages || [],
                       bootstrapServers: kafka._ddBrokers,
-                      disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+                      disableHeaderInjection,
                     }
 
                     return channels.producerStart.runStores(ctx, () => {
                       try {
-                        const result = send.apply(this, arguments)
+                        const result = send.call(this, outgoingPayload)
 
                         result.then((res) => {
                           ctx.result = res
                           channels.producerCommit.publish(ctx)
                           channels.producerFinish.publish(ctx)
-                        }, (err) => {
-                          if (err) {
-                            // Fixes bug where we would inject message headers for kafka brokers
-                            // that don't support headers (version <0.11). On the error, we disable
-                            // header injection. Tnfortunately the error name / type is not more specific.
-                            // This approach is implemented by other tracers as well.
-                            if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
+                        }, (error) => {
+                          if (error) {
+                            // KafkaJS-compat reports `ERR_UNKNOWN` for brokers
+                            // <0.11 that cannot parse headers. Stop injecting
+                            // for this producer; subsequent sends to the same
+                            // broker succeed.
+                            if (error.name === 'KafkaJSError' && error.type === 'ERR_UNKNOWN') {
                               disabledHeaderWeakSet.add(producer)
                               log.error(
                                 // eslint-disable-next-line @stylistic/max-len
                                 'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
                               )
                             }
-                            ctx.error = err
+                            ctx.error = error
                             channels.producerError.publish(ctx)
                           }
                           channels.producerFinish.publish(ctx)
                         })
 
                         return result
-                      } catch (e) {
-                        ctx.error = e
+                      } catch (error) {
+                        ctx.error = error
                         channels.producerError.publish(ctx)
                         channels.producerFinish.publish(ctx)
-                        throw e
+                        throw error
                       }
                     })
                   }

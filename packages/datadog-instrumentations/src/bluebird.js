@@ -6,8 +6,8 @@ const { wrapThen } = require('./helpers/promise')
 
 function createGetNewLibraryCopyWrap (originalLib) {
   return function wrapGetNewLibraryCopy (getNewLibraryCopy) {
-    return function getNewLibraryCopyWithTrace () {
-      const libraryCopy = getNewLibraryCopy.apply(this, arguments)
+    return function getNewLibraryCopyWithTrace (...args) {
+      const libraryCopy = getNewLibraryCopy.apply(this, args)
       shimmer.wrap(libraryCopy.prototype, '_then', wrapThen)
       shimmer.wrap(libraryCopy, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(originalLib))
       return libraryCopy

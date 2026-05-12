@@ -71,12 +71,12 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
     return search.apply(this, arguments)
   })
 
-  shimmer.wrap(ldapjs.Client.prototype, '_send', _send => function () {
-    const callbackIndex = getCallbackArgIndex(arguments)
+  shimmer.wrap(ldapjs.Client.prototype, '_send', _send => function (...args) {
+    const callbackIndex = getCallbackArgIndex(args)
     if (callbackIndex > -1) {
-      const callback = arguments[callbackIndex]
+      const callback = args[callbackIndex]
       // eslint-disable-next-line n/handle-callback-err
-      arguments[callbackIndex] = shimmer.wrapFunction(callback, callback => function (err, corkedEmitter) {
+      args[callbackIndex] = shimmer.wrapFunction(callback, callback => function (err, corkedEmitter) {
         if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
           wrapEmitter(corkedEmitter)
         }
@@ -84,7 +84,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       })
     }
 
-    return _send.apply(this, arguments)
+    return _send.apply(this, args)
   })
 
   shimmer.wrap(ldapjs.Client.prototype, 'bind', bind => function (dn, password, controls, callback) {
