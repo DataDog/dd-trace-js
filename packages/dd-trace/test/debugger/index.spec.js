@@ -60,7 +60,7 @@ describe('debugger/index', () => {
     })
 
     config = {
-      debug: false,
+      DD_TRACE_DEBUG: false,
       dynamicInstrumentation: {
         enabled: true,
       },

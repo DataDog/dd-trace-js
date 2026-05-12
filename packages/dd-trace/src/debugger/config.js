@@ -6,7 +6,7 @@ module.exports = function getDebuggerConfig (config, inputPath) {
   const { commitSHA, repositoryUrl } = getGitMetadata(config)
   return {
     commitSHA,
-    debug: config.debug,
+    debug: config.DD_TRACE_DEBUG,
     dynamicInstrumentation: config.dynamicInstrumentation,
     env: config.env,
     hostname: config.hostname,

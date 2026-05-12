@@ -26,7 +26,7 @@ class DatadogTracer {
     this._version = config.version
     this._env = config.env
     this._logInjection = config.logInjection
-    this._debug = config.debug
+    this._debug = config.DD_TRACE_DEBUG
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
 
     // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization

@@ -22,6 +22,7 @@ const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const ConfigBase = require('./config-base')
 const {
+  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -174,22 +175,6 @@ class Config extends ConfigBase {
     this.stableConfig = {
       fleetEntries: configEnvSources.fleetStableConfig ?? {},
       localEntries: configEnvSources.localStableConfig ?? {},
-      warnings: configEnvSources.stableConfigWarnings,
-    }
-
-    // Configure the logger first so it can be used to warn about other configs
-    // TODO: Implement auto buffering of inside of log module before first
-    // configure call. That way the logger is always available and the
-    // application doesn't need to configure it first and the configuration
-    // happens inside of config instead of inside of log module. If the logger
-    // is not deactivated, the buffered logs would be discarded. That way stable
-    // config warnings can also be logged directly and do not need special
-    // handling.
-    this.debug = log.configure(options)
-
-    // Process stable config warnings, if any
-    for (const warning of this.stableConfig?.warnings ?? []) {
-      log.warn(warning)
     }
 
     this.#applyDefaults()
@@ -617,6 +602,15 @@ class Config extends ConfigBase {
 
     // Single tags update is tracked as a calculated value.
     setAndTrack(this, 'tags', this.tags)
+
+    if (!trackedConfigOrigins.has('DD_TRACE_DEBUG') &&
+        this.logLevel === 'debug' &&
+        // eslint-disable-next-line eslint-rules/eslint-env-aliases
+        getConfiguredEnvName('DD_TRACE_LOG_LEVEL') === 'OTEL_LOG_LEVEL') {
+      setAndTrack(this, 'DD_TRACE_DEBUG', true)
+    }
+
+    log.configure(this)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
   }

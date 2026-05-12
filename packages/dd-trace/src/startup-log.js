@@ -98,7 +98,7 @@ function configInfo () {
     enabled: config.enabled,
     service: config.service,
     agent_url: url,
-    debug: !!config.debug,
+    debug: !!config.DD_TRACE_DEBUG,
     sample_rate: config.sampler.sampleRate,
     sampling_rules: samplingRules,
     tags: config.tags,
