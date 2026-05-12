@@ -72,6 +72,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MATRIX_LANGUAGE: ${{ matrix.language }}
         run: |
+          set -x
           SARIF_FILE=$(find "$RUNNER_TEMP/sarif-results" -name "*.sarif" | head -1)
           [ -n "$SARIF_FILE" ] || { echo "No SARIF file found"; exit 1; }
 
