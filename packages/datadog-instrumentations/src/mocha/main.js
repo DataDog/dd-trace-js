@@ -469,6 +469,10 @@ addHook({
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+    // Root-level tests (direct children of root, no describe wrapper) keyed by file.
+    // Populated during the root 'suite' event so the normal finish path can include them
+    // in mixed-file status calculation.
+    const rootTestsByFile = new Map()
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
@@ -499,6 +503,7 @@ addHook({
         if (suite.root && suite.tests.length > 0) {
           const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
           for (const file of files) {
+            rootTestsByFile.set(file, suite.tests.filter(t => t.file === file))
             if (testFileToSuiteCtx.get(file)) continue
             const isUnskippable = unskippableSuites.includes(file)
             isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(file, process.cwd()))
@@ -578,8 +583,9 @@ addHook({
         return
       }
 
+      const rootTests = rootTestsByFile.get(suite.file) || []
       let status = 'pass'
-      if (suitesInTestFile.every(suite => suite.pending)) {
+      if (suitesInTestFile.every(suite => suite.pending) && rootTests.every(test => test.isPending())) {
         status = 'skip'
       } else {
         // has to check every test in the test file
@@ -591,6 +597,11 @@ addHook({
             }
           })
         })
+        for (const test of rootTests) {
+          if (test.state === 'failed' || test.timedOut) {
+            status = 'fail'
+          }
+        }
       }
 
       if (global.__coverage__) {

@@ -1244,6 +1244,25 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
+
+        it('reports fail status when a top-level test fails alongside passing nested tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed-failing.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
       })
     })
   })
