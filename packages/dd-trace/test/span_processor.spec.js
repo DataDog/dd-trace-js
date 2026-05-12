@@ -124,6 +124,9 @@ describe('SpanProcessor', () => {
   })
 
   it('should export a partial trace with span count above configured threshold', () => {
+    // The default processor has `_nativeSpans === null` (the JS-fallback
+    // path used when libdatadog is unavailable). In that case spans are
+    // formatted via spanFormat before reaching the exporter.
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan, finishedSpan]
     processor.process(finishedSpan)
@@ -228,5 +231,50 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+  })
+
+  describe('native sampling sync', () => {
+    it('should mirror sampling priority and mechanism to native storage', () => {
+      // With native spans always on, SpanProcessor requires the native OpCode
+      // enum (top-level require). Provide a stub OpCode and a fake
+      // `nativeSpans.queueOp` to verify `_syncSamplingToNative` mirrors the
+      // JS-side sampling decision into native storage.
+      const fakeOpCode = {
+        SetTraceMetricsAttr: 11,
+        SetTraceMetaAttr: 10,
+      }
+      const NativeSpansSpec = proxyquire('../src/span_processor', {
+        './span_format': spanFormat,
+        './span_sampler': SpanSampler,
+        './native': { OpCode: fakeOpCode },
+      })
+
+      const fakeNative = {
+        queueOp: sinon.stub(),
+      }
+      const proc = new NativeSpansSpec(exporter, prioritySampler, config, fakeNative)
+      const ctx = {
+        _trace: { tags: {} },
+        _sampling: { priority: 1, mechanism: 4 },
+      }
+
+      proc._syncSamplingToNative(ctx, 0)
+
+      sinon.assert.calledTwice(fakeNative.queueOp)
+      sinon.assert.calledWith(
+        fakeNative.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        0,
+        '_sampling_priority_v1',
+        ['f64', 1]
+      )
+      sinon.assert.calledWith(
+        fakeNative.queueOp,
+        fakeOpCode.SetTraceMetaAttr,
+        0,
+        '_dd.p.dm',
+        '-4'
+      )
+    })
   })
 })
