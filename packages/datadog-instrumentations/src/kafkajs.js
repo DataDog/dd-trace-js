@@ -7,6 +7,7 @@ const {
   channel,
   addHook,
 } = require('./helpers/instrument')
+const { cloneMessages } = require('./helpers/kafka')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')
@@ -43,20 +44,27 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     producer.send = function (...args) {
       const wrappedSend = (clusterId) => {
-        const { topic, messages = [] } = args[0]
+        const arg0 = args[0]
+        const topic = arg0?.topic
+        const inputMessages = Array.isArray(arg0?.messages) ? arg0.messages : []
+        const disableHeaderInjection = disabledHeaderWeakSet.has(producer)
+
+        // Hand kafkajs and the plugin a shallow clone so injection writes to
+        // tracer-owned objects instead of the caller's. With injection
+        // disabled the clone must not seed `headers: {}` either: brokers that
+        // reject any header field cannot recover otherwise.
+        let messages = inputMessages
+        if (inputMessages.length > 0) {
+          messages = cloneMessages(inputMessages, !disableHeaderInjection)
+          args[0] = { ...arg0, messages }
+        }
 
         const ctx = {
           bootstrapServers,
           clusterId,
-          disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+          disableHeaderInjection,
           messages,
           topic,
-        }
-
-        for (const message of messages) {
-          if (message !== null && typeof message === 'object' && !ctx.disableHeaderInjection) {
-            message.headers = message.headers || {}
-          }
         }
 
         return producerStartCh.runStores(ctx, () => {
