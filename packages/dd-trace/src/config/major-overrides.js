@@ -68,7 +68,9 @@ function dropAlias (entries, dropPredicate) {
     ? (alias) => alias === dropPredicate
     : dropPredicate
   entry.aliases = entry.aliases.filter((alias) => !matches(alias))
-  if (entry.aliases.length === 0) delete entry.aliases
+  if (entry.aliases.length === 0) {
+    delete entry.aliases
+  }
 }
 
 module.exports = applyMajorOverrides

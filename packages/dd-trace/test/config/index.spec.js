@@ -210,14 +210,16 @@ describe('Config', () => {
       const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
       const supported = fresh.supportedConfigurations
       assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
+      supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
       applyMajorOverrides(supported, 6)
       assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
       const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
       assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
+      assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
       const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
-      assert.ok(!runtimeIdEntry.aliases?.includes('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'))
+      assert.strictEqual(runtimeIdEntry.aliases, undefined)
 
       const beforeKeyCount = Object.keys(supported).length
       applyMajorOverrides(supported, 6)
