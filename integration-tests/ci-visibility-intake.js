@@ -43,6 +43,53 @@ const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-n
 const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
+function mergeCoverageBitmap (targetBitmap, bitmap) {
+  if (!targetBitmap) return bitmap
+
+  const targetBuffer = Buffer.from(targetBitmap, 'base64')
+  const bitmapBuffer = Buffer.from(bitmap, 'base64')
+  const mergedBuffer = Buffer.alloc(Math.max(targetBuffer.length, bitmapBuffer.length))
+
+  targetBuffer.copy(mergedBuffer)
+  for (let i = 0; i < bitmapBuffer.length; i++) {
+    mergedBuffer[i] |= bitmapBuffer[i]
+  }
+
+  return mergedBuffer.toString('base64')
+}
+
+function mergeCoverage (targetCoverage, coverage) {
+  if (!coverage || typeof coverage !== 'object') return
+
+  for (const [filename, bitmap] of Object.entries(coverage)) {
+    if (typeof bitmap !== 'string') continue
+    targetCoverage[filename] = mergeCoverageBitmap(targetCoverage[filename], bitmap)
+  }
+}
+
+function getSkippableResponse () {
+  const coverage = {}
+  const data = suitesToSkip.map(item => {
+    const suiteCoverage = item.attributes?.coverage
+    mergeCoverage(coverage, suiteCoverage)
+
+    if (!suiteCoverage) return item
+
+    const { coverage: _coverage, ...attributes } = item.attributes
+    return {
+      ...item,
+      attributes,
+    }
+  })
+
+  const meta = { correlation_id: correlationId }
+  if (Object.keys(coverage).length) {
+    meta.coverage = coverage
+  }
+
+  return { data, meta }
+}
+
 let settings = DEFAULT_SETTINGS
 let settingsResponseStatusCode = 200
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
@@ -239,12 +286,7 @@ class FakeCiVisIntake extends FakeAgent {
         res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({ errors: ['error'] }))
         return
       }
-      res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({
-        data: suitesToSkip,
-        meta: {
-          correlation_id: correlationId,
-        },
-      }))
+      res.status(skippableSuitesResponseStatusCode).send(JSON.stringify(getSkippableResponse()))
       this.emit('message', {
         headers: req.headers,
         url: req.url,

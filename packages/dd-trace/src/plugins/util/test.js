@@ -1,5 +1,6 @@
 'use strict'
 
+const { createHash } = require('node:crypto')
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
@@ -337,6 +338,13 @@ module.exports = {
   ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getLineCoverageBitmap,
+  getRelativeCoverageFiles,
+  getTestCoverageLinesPercentage,
+  hashCoverageFilePath,
+  mergeCoverageBitmaps,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
@@ -948,15 +956,190 @@ function addIntelligentTestRunnerSpanTags (
 }
 
 function getCoveredFilenamesFromCoverage (coverage) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
+  return getCoveredFilesFromCoverage(coverage).map(({ filename }) => filename)
+}
 
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      return Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-    })
+function getCoverageMap (coverage) {
+  if (coverage?.files && coverage?.fileCoverageFor) {
+    return coverage
+  }
+  return istanbul.createCoverageMap(coverage)
+}
+
+function getCoveredFilesFromCoverage (coverage) {
+  const coverageMap = getCoverageMap(coverage)
+  const coverageFiles = []
+
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const bitmap = getLineCoverageBitmap(fileCoverage.getLineCoverage(), true)
+    if (bitmap) {
+      coverageFiles.push({ filename, bitmap })
+    }
+  }
+
+  return coverageFiles
+}
+
+function getExecutableFilesFromCoverage (coverage) {
+  const coverageMap = getCoverageMap(coverage)
+  const coverageFiles = []
+
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const bitmap = getLineCoverageBitmap(fileCoverage.getLineCoverage())
+    if (bitmap) {
+      coverageFiles.push({ filename, bitmap })
+    }
+  }
+
+  return coverageFiles
+}
+
+function getRelativeCoverageFiles (files, rootDir) {
+  return files.map(file => {
+    if (typeof file === 'string') {
+      return getTestSuitePath(file, rootDir)
+    }
+    return {
+      ...file,
+      filename: getTestSuitePath(file.filename, rootDir),
+    }
+  })
+}
+
+function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
+  let maxLine = 0
+  const lines = []
+
+  for (const [line, hits] of Object.entries(lineCoverage)) {
+    if (onlyCoveredLines && !hits) continue
+
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    lines.push(lineNumber)
+    if (lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+
+  if (maxLine === 0) return
+
+  const bitmap = Buffer.alloc(Math.ceil((maxLine + 1) / 8))
+  for (const lineNumber of lines) {
+    bitmap[lineNumber >> 3] |= 1 << (lineNumber % 8)
+  }
+
+  return bitmap
+}
+
+function mergeCoverageBitmaps (targetBitmap, bitmap) {
+  if (!targetBitmap) {
+    return Buffer.from(bitmap)
+  }
+
+  if (targetBitmap.length < bitmap.length) {
+    const biggerBitmap = Buffer.alloc(bitmap.length)
+    targetBitmap.copy(biggerBitmap)
+    targetBitmap = biggerBitmap
+  }
+
+  for (let i = 0; i < bitmap.length; i++) {
+    targetBitmap[i] |= bitmap[i]
+  }
+
+  return targetBitmap
+}
+
+function countBitmapBits (bitmap) {
+  let count = 0
+
+  for (const byte of bitmap) {
+    let value = byte
+    while (value) {
+      value &= value - 1
+      count++
+    }
+  }
+
+  return count
+}
+
+function countCoveredExecutableBits (coveredBitmap, executableBitmap) {
+  if (!coveredBitmap) return 0
+
+  let count = 0
+  const length = Math.min(coveredBitmap.length, executableBitmap.length)
+
+  for (let i = 0; i < length; i++) {
+    let value = coveredBitmap[i] & executableBitmap[i]
+    while (value) {
+      value &= value - 1
+      count++
+    }
+  }
+
+  return count
+}
+
+const SHA256_HASH_RE = /^[a-f0-9]{64}$/i
+
+function hashCoverageFilePath (filename) {
+  return createHash('sha256').update(filename).digest('hex')
+}
+
+function getCoverageFileBitmap (bitmap) {
+  if (!bitmap) return
+  if (Buffer.isBuffer(bitmap)) return bitmap
+  if (ArrayBuffer.isView(bitmap)) {
+    return Buffer.from(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength)
+  }
+  if (typeof bitmap === 'string') {
+    return Buffer.from(bitmap, 'base64')
+  }
+}
+
+function addCoverageFilesToMap (files, targetMap, rootDir) {
+  for (const file of files) {
+    const bitmap = getCoverageFileBitmap(file.bitmap)
+    if (!bitmap) continue
+
+    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
+    const hash = hashCoverageFilePath(filename)
+    targetMap.set(hash, mergeCoverageBitmaps(targetMap.get(hash), bitmap))
+  }
+}
+
+function addSkippedCoverageToMap (skippedCoverage, targetMap) {
+  if (!skippedCoverage) return
+
+  for (const [filenameOrHash, bitmap] of Object.entries(skippedCoverage)) {
+    const coverageBitmap = getCoverageFileBitmap(bitmap)
+    if (!coverageBitmap) continue
+    const filename = filenameOrHash.startsWith('/') ? filenameOrHash.slice(1) : filenameOrHash
+    const hash = SHA256_HASH_RE.test(filename) ? filename : hashCoverageFilePath(filename)
+    targetMap.set(hash, mergeCoverageBitmaps(targetMap.get(hash), coverageBitmap))
+  }
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  const executableLinesByFile = new Map()
+  const coveredLinesByFile = new Map()
+
+  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
+  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
+  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
+
+  let totalExecutableLines = 0
+  let totalCoveredLines = 0
+
+  for (const [hash, executableLines] of executableLinesByFile) {
+    totalExecutableLines += countBitmapBits(executableLines)
+    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(hash), executableLines)
+  }
+
+  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
 }
 
 function resetCoverage (coverage) {
