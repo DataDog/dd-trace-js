@@ -86,18 +86,22 @@ jobs:
           fi
 
           # Create code scanning check run (mirrors official action behaviour).
-          CHECK_RUN_ID=$(jq -n \
+          CHECK_RUN_RESPONSE=$(jq -n \
             --arg head_sha "$UPLOAD_SHA" \
             --arg started_at "$CODEQL_STARTED_AT" \
             '{name:"Code scanning results / CodeQL",head_sha:$head_sha,
               status:"in_progress",started_at:$started_at}' \
-          | curl -sf -X POST \
+          | curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/json" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/check-runs" \
-            --data-binary @- | jq -r '.id')
+            --data-binary @-)
+          CHECK_RUN_ID=$(echo "$CHECK_RUN_RESPONSE" | jq -r '.id // empty')
+          if [ -z "$CHECK_RUN_ID" ]; then
+            echo "Warning: failed to create check run: $CHECK_RUN_RESPONSE"
+          fi
 
           # environment matches the format the official action sends.
           ENVIRONMENT=$(jq -cn \
@@ -146,19 +150,34 @@ jobs:
             sleep 10
           done
 
-          # Update check run to reflect final status.
-          jq -n \
-            --arg conclusion "$CONCLUSION" \
-            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg summary "$ERRORS" \
-            '{status:"completed",conclusion:$conclusion,completed_at:$completed_at,
-              output:{title:"CodeQL analysis results",summary:$summary}}' \
-          | curl -sf -X PATCH \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/check-runs/$CHECK_RUN_ID" \
-            --data-binary @-
+          # Fetch alert count from the processed analysis.
+          ALERT_COUNT=0
+          if [ "$CONCLUSION" = "success" ]; then
+            ALERT_COUNT=$(curl -sf \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/analyses?ref=$UPLOAD_REF&sarif_id=$SARIF_ID" \
+              | jq -r '.[0].results_count // 0')
+            echo "Alerts found: $ALERT_COUNT"
+          fi
+
+          # Update check run to reflect final status (only if creation succeeded).
+          if [ -n "$CHECK_RUN_ID" ]; then
+            jq -n \
+              --arg conclusion "$CONCLUSION" \
+              --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg summary "$ERRORS" \
+              --argjson count "$ALERT_COUNT" \
+              '{status:"completed",conclusion:$conclusion,completed_at:$completed_at,
+                output:{title:("\($count) code scanning alert(s) found"),summary:$summary}}' \
+            | curl -sf -X PATCH \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/check-runs/$CHECK_RUN_ID" \
+              --data-binary @-
+          fi
 
           [ "$CONCLUSION" = "success" ] || exit 1
