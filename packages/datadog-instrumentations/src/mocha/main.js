@@ -489,6 +489,29 @@ addHook({
 
     this.on('suite', function (suite) {
       if (suite.root || !suite.tests.length) {
+        // This branch can be triggered when we have top level it(...) inside test files.
+        // In that case, they all (even if they are from different files) are going to be
+        // children of the root suite.
+        // Note: We could have suites that contain top level it(...) and also it(...) nested
+        // inside describe(...) ("mixed case"). Duplication is avoided by the context guard
+        // below. Since 'suite' fires for root first, in the mixed case the ctx is created
+        // here and the describe-based handler finds it already set.
+        if (suite.root && suite.tests.length > 0) {
+          const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
+          for (const file of files) {
+            if (testFileToSuiteCtx.get(file)) continue
+            const isUnskippable = unskippableSuites.includes(file)
+            isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(file, process.cwd()))
+            const ctx = {
+              testSuiteAbsolutePath: file,
+              isUnskippable,
+              isForcedToRun,
+              itrCorrelationId,
+            }
+            testFileToSuiteCtx.set(file, ctx)
+            testSuiteStartCh.runStores(ctx, () => {})
+          }
+        }
         return
       }
       let ctx = testFileToSuiteCtx.get(suite.file)
@@ -508,6 +531,44 @@ addHook({
 
     this.on('suite end', function (suite) {
       if (suite.root) {
+        // Symmetric to the suite start fix
+        const fileToTests = new Map()
+        for (const test of suite.tests) {
+          if (!test.file) continue
+          if (!fileToTests.has(test.file)) fileToTests.set(test.file, [])
+          fileToTests.get(test.file).push(test)
+        }
+        for (const [file, tests] of fileToTests) {
+          // Mixed case: if a file appears in suitesByTestFile (pre-populated before the run),
+          // its numSuitesByTestFile counter hits zero when its last describe-based suite ends
+          // and the normal path below fires testSuiteFinishCh. Since root is last when
+          // 'suite end' fires, any such file has already been handled — skipping it here
+          // avoids duplication.
+          if (suitesByTestFile[file]) continue
+          let status = 'pass'
+          if (tests.every(test => test.isPending())) {
+            status = 'skip'
+          } else {
+            for (const test of tests) {
+              if (test.state === 'failed' || test.timedOut) {
+                status = 'fail'
+                break
+              }
+            }
+          }
+          if (global.__coverage__) {
+            const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+            testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+            mergeCoverage(global.__coverage__, originalCoverageMap)
+            resetCoverage(global.__coverage__)
+          }
+          const ctx = testFileToSuiteCtx.get(file)
+          if (ctx) {
+            testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+          } else {
+            log.warn('No ctx found for suite', file)
+          }
+        }
         return
       }
       const suitesInTestFile = suitesByTestFile[suite.file]

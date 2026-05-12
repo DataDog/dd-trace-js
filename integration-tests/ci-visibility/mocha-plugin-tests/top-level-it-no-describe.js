@@ -8,5 +8,4 @@
 // non-root suites at all, no suite context is ever created and
 // no test_suite_end event is emitted.
 it('top-level passing test', () => {})
-
 it('top-level passing test two', () => {})
