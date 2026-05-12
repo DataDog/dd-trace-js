@@ -113,7 +113,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     {
       span: 'aws.durable.wait_for_condition',
       operationName: 'test-condition',
-      run: ctx => ctx.waitForCondition('test-condition', async () => {}, {
+      run: ctx => ctx.waitForCondition('test-condition', async () => 'done', {
+        initialState: 'pending',
         waitStrategy: () => ({ shouldContinue: false }),
       }),
     },
@@ -147,6 +148,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
           meta: { ...defaultMeta, 'aws.durable.operation_name': operationName },
         })
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+        assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
       })
       await invokeHandler(async (event, ctx) => run(ctx), opts)
       return trace
