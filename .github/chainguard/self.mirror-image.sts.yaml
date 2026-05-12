@@ -1,0 +1,11 @@
+issuer: https://token.actions.githubusercontent.com
+
+subject_pattern: "repo:DataDog/dd-trace-js:ref:refs/heads/.+"
+
+claim_pattern:
+  event_name: workflow_dispatch
+  repository: DataDog/dd-trace-js
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/mirror-image\.yml@refs/heads/.+
+
+permissions:
+  packages: write
