@@ -68,6 +68,7 @@ describe('Config', () => {
       './supported-configurations.json': supportedConfigurations,
       '../log': log,
       './parsers': parsers,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })
     const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
@@ -840,6 +841,7 @@ describe('Config', () => {
       { name: 'DD_SITE', value: 'datadoghq.com', origin: 'default' },
       { name: 'DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', value: 'v0', origin: 'default' },
       { name: 'DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_STARTUP_LOGS', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH', value: 512, origin: 'default' },
       { name: 'DD_TELEMETRY_DEBUG', value: false, origin: 'default' },
@@ -1524,22 +1526,22 @@ describe('Config', () => {
         },
         exporter: 'log',
         enableGetRumData: true,
-        iast: {
-          dbRowsToTaint: 2,
-          deduplicationEnabled: false,
-          enabled: true,
-          maxConcurrentRequests: 4,
-          maxContextOperations: 5,
-          redactionEnabled: false,
-          redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-          requestSampling: 50,
-          securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
-          stackTrace: {
-            enabled: false,
-          },
-          telemetryVerbosity: 'DEBUG',
+      },
+      iast: {
+        dbRowsToTaint: 2,
+        deduplicationEnabled: false,
+        enabled: true,
+        maxConcurrentRequests: 4,
+        maxContextOperations: 5,
+        redactionEnabled: false,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        requestSampling: 50,
+        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        stackTrace: {
+          enabled: false,
         },
+        telemetryVerbosity: 'DEBUG',
       },
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -1721,7 +1723,7 @@ describe('Config', () => {
       sinon.assert.calledWithExactly(
         log.warn,
         'Unknown option %s with value %o',
-        'experimental.iast.securityControlsConfiguration',
+        'iast.securityControlsConfiguration',
         'SANITIZER:CODE_INJECTION:sanitizer.js:method',
       )
     }
@@ -2759,13 +2761,41 @@ describe('Config', () => {
 
   it('should ignore invalid iast.requestSampling', () => {
     const config = getConfig({
-      experimental: {
-        iast: {
-          requestSampling: 105,
-        },
+      iast: {
+        requestSampling: 105,
       },
     })
     assert.strictEqual(config.iast.requestSampling, 30)
+  })
+
+  describe('experimental.iast alias gate', () => {
+    // v5 keeps the `experimental.iast.*` aliases for backports; v6 strips both
+    // bare and nested forms so user-supplied objects do not leak into
+    // `iast.enabled` via the bare alias.
+    for (const { name, iast, v5Field, v5Value } of [
+      { name: 'bare alias as boolean', iast: true, v5Field: 'enabled', v5Value: true },
+      { name: '.enabled nested key', iast: { enabled: false }, v5Field: 'enabled', v5Value: false },
+      { name: '.requestSampling nested key', iast: { requestSampling: 50 }, v5Field: 'requestSampling', v5Value: 50 },
+    ]) {
+      it(`v5 keeps experimental.iast (${name})`, () => {
+        const config = getConfig({ experimental: { iast } }, { ddMajor: 5 })
+        assert.strictEqual(config.iast[v5Field], v5Value)
+        sinon.assert.notCalled(log.warn)
+      })
+
+      it(`v6 rejects experimental.iast (${name}) as Unknown option`, () => {
+        const config = getConfig({ experimental: { iast } }, { ddMajor: 6 })
+        assert.strictEqual(config.iast.enabled, false)
+        assert.strictEqual(config.iast.requestSampling, 30)
+        sinon.assert.calledOnce(log.warn)
+        sinon.assert.calledWithExactly(
+          log.warn,
+          'Unknown option %s with value %o',
+          'experimental.iast',
+          iast,
+        )
+      })
+    }
   })
 
   it('should load span sampling rules from json file', () => {

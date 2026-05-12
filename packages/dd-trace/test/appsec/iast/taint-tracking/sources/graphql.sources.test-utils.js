@@ -71,11 +71,9 @@ function graphqlCommonTests (config) {
   describe('Graphql sources tests', () => {
     beforeEach(() => {
       iast.enable(getConfigFresh({
-        experimental: {
-          iast: {
-            enabled: true,
-            requestSampling: 100,
-          },
+        iast: {
+          enabled: true,
+          requestSampling: 100,
         },
       }))
       vulnerabilityReporter.clearCache()
