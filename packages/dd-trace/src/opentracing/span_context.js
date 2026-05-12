@@ -71,6 +71,61 @@ class DatadogSpanContext {
     const version = (this._traceparent && this._traceparent.version) || '00'
     return `${version}-${traceId}-${spanId}-${flags}`
   }
+
+  /**
+   * Set a tag value.
+   * @param {string} key - Tag key
+   * @param {unknown} value - Tag value
+   */
+  setTag (key, value) {
+    this._tags[key] = value
+  }
+
+  /**
+   * Get a tag value.
+   * @param {string} key - Tag key
+   * @returns {unknown} Tag value or undefined
+   */
+  getTag (key) {
+    return this._tags[key]
+  }
+
+  /**
+   * Check if a tag exists.
+   * @param {string} key - Tag key
+   * @returns {boolean}
+   */
+  hasTag (key) {
+    return Object.hasOwn(this._tags, key)
+  }
+
+  /**
+   * Delete a tag.
+   * @param {string} key - Tag key
+   */
+  deleteTag (key) {
+    delete this._tags[key]
+  }
+
+  /**
+   * Get the live internal tags map. The returned reference is mutable;
+   * callers may assign or delete keys directly (e.g.
+   * `Object.assign(getTags(), tags)` in span.js). Subclasses may have
+   * additional sync side effects on the individual `setTag` / `deleteTag`
+   * setters; mutating the returned map bypasses those.
+   *
+   * @returns {object}
+   */
+  getTags () {
+    return this._tags
+  }
+
+  /**
+   * Clear all tags.
+   */
+  clearTags () {
+    this._tags = Object.create(null)
+  }
 }
 
 module.exports = DatadogSpanContext

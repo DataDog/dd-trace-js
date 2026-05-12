@@ -128,7 +128,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const suiteTags = {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
+    [TEST_COMMAND]: testSuiteSpanContext.getTag(TEST_COMMAND),
     [TEST_MODULE]: testFramework,
   }
 
@@ -255,7 +255,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      const testCommand = this.testSessionSpan.context().getTag(TEST_COMMAND)
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
@@ -615,7 +615,7 @@ module.exports = class CiPlugin extends Plugin {
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-        [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+        [TEST_COMMAND]: testSuiteSpan.context().getTag(TEST_COMMAND),
         [TEST_MODULE]: this.constructor.id,
         ...getSessionRequestErrorTags(this.testSessionSpan),
       }
@@ -808,18 +808,18 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   getTestTelemetryTags (testSpan) {
-    const activeSpanTags = testSpan.context()._tags
+    const spanContext = testSpan.context()
     return {
-      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
-      isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,
-      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true' || undefined,
-      browserDriver: activeSpanTags[TEST_BROWSER_DRIVER],
-      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
-      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
-      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
-      isRetry: activeSpanTags[TEST_IS_RETRY] === 'true' || undefined,
-      retryReason: activeSpanTags[TEST_RETRY_REASON],
-      isFailedTestReplayEnabled: activeSpanTags[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true' || undefined,
+      hasCodeOwners: !!spanContext.getTag(TEST_CODE_OWNERS) || undefined,
+      isNew: spanContext.getTag(TEST_IS_NEW) === 'true' || undefined,
+      isRum: spanContext.getTag(TEST_IS_RUM_ACTIVE) === 'true' || undefined,
+      browserDriver: spanContext.getTag(TEST_BROWSER_DRIVER),
+      isQuarantined: spanContext.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true' || undefined,
+      isDisabled: spanContext.getTag(TEST_MANAGEMENT_IS_DISABLED) === 'true' || undefined,
+      isModified: spanContext.getTag(TEST_IS_MODIFIED) === 'true' || undefined,
+      isRetry: spanContext.getTag(TEST_IS_RETRY) === 'true' || undefined,
+      retryReason: spanContext.getTag(TEST_RETRY_REASON),
+      isFailedTestReplayEnabled: spanContext.getTag(DI_ERROR_DEBUG_INFO_CAPTURED) === 'true' || undefined,
     }
   }
 }

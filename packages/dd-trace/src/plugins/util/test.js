@@ -229,11 +229,11 @@ const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trun
 
 /**
  * Returns request error tags from a test session span for propagation to child events.
- * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @param {{ context: () => { getTag?: (key: string) => string } } | undefined} sessionSpan
  * @returns {Record<string, string>}
  */
 function getSessionRequestErrorTags (sessionSpan) {
-  const tags = sessionSpan?.context()._tags
+  const tags = sessionSpan?.context()?.getTags?.()
   const sessionRequestErrorTags = {}
   if (!tags || typeof tags !== 'object') return {}
   if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] === 'true') {
@@ -253,11 +253,11 @@ function getSessionRequestErrorTags (sessionSpan) {
 
 /**
  * Returns ITR skipping-enabled tags from a test session span for propagation to child events.
- * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @param {{ context: () => { getTags?: () => Record<string, string> } } | undefined} sessionSpan
  * @returns {Record<string, string>}
  */
 function getSessionItrSkippingEnabledTags (sessionSpan) {
-  const tags = sessionSpan?.context()._tags
+  const tags = sessionSpan?.context()?.getTags?.()
   if (!tags || typeof tags !== 'object') return {}
   if (tags[TEST_ITR_SKIPPING_ENABLED] !== undefined) {
     return {

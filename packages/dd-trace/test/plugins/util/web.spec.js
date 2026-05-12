@@ -6,12 +6,12 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
-const tags = require('../../../../../ext/tags')
+const tagsExt = require('../../../../../ext/tags')
 
-const ERROR = tags.ERROR
-const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
-const HTTP_ROUTE = tags.HTTP_ROUTE
-const RESOURCE_NAME = tags.RESOURCE_NAME
+const ERROR = tagsExt.ERROR
+const HTTP_ENDPOINT = tagsExt.HTTP_ENDPOINT
+const HTTP_ROUTE = tagsExt.HTTP_ROUTE
+const RESOURCE_NAME = tagsExt.RESOURCE_NAME
 
 describe('plugins/util/web', () => {
   let web
@@ -139,7 +139,7 @@ describe('plugins/util/web', () => {
   describe('addError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -172,7 +172,7 @@ describe('plugins/util/web', () => {
   describe('addStatusError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -268,7 +268,7 @@ describe('plugins/util/web', () => {
   describe('http.endpoint tagging', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
@@ -290,6 +290,9 @@ describe('plugins/util/web', () => {
 
       web.finishAll(context)
 
+      // `tags` was captured from span.context().getTags() before finishAll;
+      // the underlying tags object is still the original (clearTags() rebinds,
+      // but doesn't mutate the captured reference).
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
       assert.strictEqual(tags[HTTP_ENDPOINT], '/api/orders/{param:int}/items')
     })
