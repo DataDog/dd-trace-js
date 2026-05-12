@@ -254,7 +254,7 @@ const awsSdkOptions: plugins.aws_sdk = {
 
 const bullmqOptions: plugins.bullmq = {
   service: 'test',
-  filter: (jobName, data, opts) => jobName !== 'skip',
+  filter: ({ name, queueName }) => name !== 'skip' && queueName !== 'dead-letter',
 };
 
 const redisOptions: plugins.redis = {

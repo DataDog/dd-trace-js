@@ -2300,12 +2300,13 @@ declare namespace tracer {
       /**
        * Custom filter function used to decide whether a BullMQ producer operation should be instrumented.
        *
-       * @param jobName - The BullMQ job name.
-       * @param data - The BullMQ job data.
-       * @param opts - The BullMQ job options.
+       * @param job.name - The BullMQ job name.
+       * @param job.data - The BullMQ job data.
+       * @param job.opts - The BullMQ job options.
+       * @param job.queueName - The name of the queue the job is being added to.
        * @returns true to instrument the producer operation, false to skip it.
        */
-      filter?: (jobName?: string, data?: unknown, opts?: unknown) => boolean;
+      filter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
     }
 
     interface bunyan extends Integration {}
