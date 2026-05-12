@@ -37,8 +37,7 @@ class FakeAPIPromise {
 // yields the transformed body; users await this inner promise, not the outer one.
 class FakeUnwrappableAPIPromise extends FakeAPIPromise {
   _thenUnwrap (cb) {
-    const inner = new FakeAPIPromise(cb(this._body))
-    return inner
+    return new FakeAPIPromise(cb(this._body))
   }
 }
 

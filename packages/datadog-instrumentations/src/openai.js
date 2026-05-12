@@ -322,7 +322,7 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function (...args) {
-          if (!ch.start.hasSubscribers) {
+          if (!ch.start.hasSubscribers && !evaluateCh.hasSubscribers) {
             return methodFn.apply(this, args)
           }
           // The OpenAI library lets you set `stream: true` on the options arg to any method
@@ -337,7 +337,7 @@ for (const extension of extensions) {
             evaluateCh.hasSubscribers
 
           if (!ch.start.hasSubscribers && !aiguardApplicable) {
-            return methodFn.apply(this, arguments)
+            return methodFn.apply(this, args)
           }
 
           const client = this._client || this.client
@@ -350,7 +350,7 @@ for (const extension of extensions) {
 
           // Compute AI Guard input messages before we start the LLM call so Before Model
           // evaluation can run in parallel with it once the caller awaits the APIPromise.
-          const aiguardInputMessages = aiguardApplicable ? getInputMessages(baseResource, arguments[0]) : undefined
+          const aiguardInputMessages = aiguardApplicable ? getInputMessages(baseResource, args[0]) : undefined
 
           return ch.start.runStores(ctx, () => {
             const apiProm = methodFn.apply(this, args)
