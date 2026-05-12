@@ -2,11 +2,13 @@
 
 /**
  * Returns the value as a string, JSON-stringifying it when it is not already a string.
+ * Returns the value unchanged when it is `null` or `undefined`.
  *
  * @param {unknown} value
- * @returns {string}
+ * @returns {string|undefined|null}
  */
 function stringifyIfNeeded (value) {
+  if (value == null) return value
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
@@ -234,7 +236,8 @@ function openAIResponseItemToMessage (item, defaultRole) {
 /**
  * Converts OpenAI Responses API content to OpenAI chat-style message content.
  *
- * @param {string|Array<string|{type?: string, text?: string, image_url?: string|{url?: string}}>|undefined} content
+ * @param {string|Array<string|{type?: string, text?: string, refusal?: string,
+ *   image_url?: string|{url?: string}}>|undefined} content
  * @returns {string|Array<{type: string, text?: string, image_url?: {url: string}}>|undefined}
  */
 function openAIResponseContentToMessageContent (content) {
@@ -251,6 +254,8 @@ function openAIResponseContentToMessageContent (content) {
     } else if ((part.type === 'input_text' || part.type === 'output_text' || part.type === 'text') &&
       typeof part.text === 'string') {
       parts.push({ type: 'text', text: part.text })
+    } else if (part.type === 'refusal' && typeof part.refusal === 'string') {
+      parts.push({ type: 'text', text: part.refusal })
     } else if (part.type === 'input_image' || part.type === 'image_url') {
       const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url ?? part.url
       if (url) {

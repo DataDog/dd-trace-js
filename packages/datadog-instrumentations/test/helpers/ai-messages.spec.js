@@ -690,13 +690,17 @@ describe('ai-messages', () => {
       ])
     })
 
-    it('should return undefined for content with only refusal-like parts (documents v1 limitation)', () => {
-      // v1 of the converter does not lift `refusal` parts into AI Guard content.
-      // This is acceptable for chat.completions because refusal is at the message
-      // level (handled by getOutputMessages); for responses, refusal-only output
-      // items currently surface no AI Guard input.
+    it('should lift refusal parts into text content', () => {
       const content = [{ type: 'refusal', refusal: 'I cannot help with that' }]
-      assert.strictEqual(openAIResponseContentToMessageContent(content), undefined)
+      assert.strictEqual(openAIResponseContentToMessageContent(content), 'I cannot help with that')
+    })
+
+    it('should join refusal parts together with text parts', () => {
+      const content = [
+        { type: 'output_text', text: 'Some text' },
+        { type: 'refusal', refusal: 'I cannot help with that' },
+      ]
+      assert.strictEqual(openAIResponseContentToMessageContent(content), 'Some text\nI cannot help with that')
     })
 
     it('should drop null entries in the content array without throwing', () => {
