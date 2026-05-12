@@ -65,10 +65,19 @@ jobs:
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
+          SARIF_FILE=$(find "$RUNNER_TEMP/sarif-results" -name "*.sarif" | head -1)
+          echo "SARIF files in output directory:"
+          find "$RUNNER_TEMP/sarif-results" -type f
+          if [ -z "$SARIF_FILE" ]; then
+            echo "No SARIF file found"
+            exit 1
+          fi
+          echo "Uploading: $SARIF_FILE"
+
           RESPONSE=$(jq -n \
             --arg commit_sha "$GITHUB_SHA" \
             --arg ref "$GITHUB_REF" \
-            --arg sarif "$(gzip -c "$RUNNER_TEMP/sarif-results/${{ matrix.language }}.sarif" | base64 -w0)" \
+            --arg sarif "$(gzip -c "$SARIF_FILE" | base64 -w0)" \
             '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif}' \
           | curl -sf -X POST \
             -H "Authorization: Bearer $TOKEN" \
