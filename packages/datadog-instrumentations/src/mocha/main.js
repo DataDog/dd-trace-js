@@ -12,7 +12,9 @@ const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getTestCoverageLinesPercentage,
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
@@ -50,6 +52,7 @@ let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
 let suitesToSkip = []
+let skippableSuitesCoverage = {}
 let isSuitesSkipped = false
 let skippedSuites = []
 let itrCorrelationId = ''
@@ -194,12 +197,18 @@ function getOnEndHandler (isParallel) {
     testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
+    let testSessionCoverageFiles
     if (global.__coverage__) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
-        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+          originalCoverageMap,
+          skippableSuitesCoverage,
+          process.cwd()
+        )
+        testSessionCoverageFiles = getExecutableFilesFromCoverage(originalCoverageMap)
       } catch {
         // ignore errors
       }
@@ -211,6 +220,7 @@ function getOnEndHandler (isParallel) {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites: skippedSuites.length,
       hasForcedToRunSuites: isForcedToRun,
       hasUnskippableSuites: !!unskippableSuites.length,
@@ -232,12 +242,19 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     frameworkVersion,
   }
 
-  const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
+  const onReceivedSkippableSuites = ({
+    err,
+    skippableSuites,
+    itrCorrelationId: responseItrCorrelationId,
+    skippableSuitesCoverage: responseSkippableSuitesCoverage,
+  }) => {
     if (err) {
       suitesToSkip = []
+      skippableSuitesCoverage = {}
     } else {
       suitesToSkip = skippableSuites
       itrCorrelationId = responseItrCorrelationId
+      skippableSuitesCoverage = responseSkippableSuitesCoverage || {}
     }
     // We remove the suites that we skip through ITR
     const filteredSuites = getFilteredSuites(runner.suite.suites)
@@ -533,7 +550,7 @@ addHook({
       }
 
       if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
