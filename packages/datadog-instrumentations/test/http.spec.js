@@ -311,6 +311,7 @@ describe('client', () => {
           const chunks = []
           http.get(url, (res) => {
             res.setEncoding('utf8')
+            // eslint-disable-next-line sonarjs/no-identical-functions -- per-test chunks buffer
             const consume = () => {
               let chunk
               while ((chunk = res.read()) !== null) {

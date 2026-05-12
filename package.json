@@ -8,6 +8,7 @@
     "env": "bash ./plugin-env",
     "prepare": "cd vendor && npm ci --include=dev",
     "preinstall": "node scripts/preinstall.js",
+    "prepack": "node scripts/release/swap-v5-types.js",
     "bench": "node benchmark/index.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
     "dependencies:dedupe": "yarn-deduplicate yarn.lock",
@@ -158,7 +159,7 @@
     "version.js"
   ],
   "dependencies": {
-    "dc-polyfill": "^0.1.10",
+    "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.0.1"
   },
   "optionalDependencies": {
@@ -212,7 +213,7 @@
     "mocha-junit-reporter": "^2.2.1",
     "mocha-multi-reporters": "^1.5.1",
     "multer": "^2.1.1",
-    "nock": "^13.5.6",
+    "nock": "^14.0.14",
     "node-preload": "^0.2.1",
     "nyc": "^18.0.0",
     "octokit": "^5.0.3",
