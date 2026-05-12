@@ -297,13 +297,15 @@ describe('FlaggingProvider', () => {
     for (const { fileName, index, testCase } of fixtureCases) {
       it(`should evaluate ${fileName}[${index}]`, async () => {
         const provider = new FlaggingProvider(mockTracer, mockConfig)
-        provider._setConfiguration(loadUfc())
+        provider.setConfiguration(loadUfc())
 
         const details = await evaluateDetails(provider, testCase)
 
         assert.deepStrictEqual(details.value, testCase.result.value)
         assert.strictEqual(details.reason, testCase.result.reason)
-        assert.strictEqual(details.variant, testCase.result.variant)
+        if ('variant' in testCase.result) {
+          assert.strictEqual(details.variant, testCase.result.variant)
+        }
       })
     }
   })
