@@ -12,14 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # We shell out to the CodeQL CLI directly rather than using github/codeql-action.
-  # The official action wraps the CLI but also makes GitHub API calls (bundle version
-  # checks, check-run updates) using whatever token is provided. Those calls reach
-  # github/codeql-action — a repo outside the DataDog org — which a dd-octo-sts
-  # installation token scoped to DataDog/dd-trace-js cannot access, causing 404s
-  # that the action surfaces as a misleading permissions error. By invoking the CLI
-  # directly we keep GitHub API usage to checkout (dd-octo-sts token) and the single
-  # SARIF upload + status-poll (dd-octo-sts token), with no cross-org calls.
+  # We use codeql-action/init and codeql-action/analyze but skip the built-in
+  # SARIF upload (upload: never) and handle it ourselves with a dd-octo-sts token.
+  # The official analyze action's upload step was failing: it uses whatever token
+  # is provided for the SARIF API call, and our dd-octo-sts token (scoped to
+  # DataDog/dd-trace-js) was getting 404s from GitHub's code scanning endpoint.
+  # Separating analysis from upload lets the actions handle CLI management while
+  # keeping the SARIF upload + status-poll under our explicit token control.
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
@@ -55,22 +54,12 @@ jobs:
           # Prefix the list here with "+" to use these queries and those in the config file.
           # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
-      - name: Create CodeQL database
-        run: |
-          "${{ steps.init-codeql.outputs.codeql-path }}" database create "$RUNNER_TEMP/codeql-db" \
-            --language=${{ matrix.language }} \
-            --source-root=. \
-            --codescanning-config=.github/codeql_config.yml \
-            --overwrite
-
-      - name: Run CodeQL analysis
-        run: |
-          "${{ steps.init-codeql.outputs.codeql-path }}" database analyze "$RUNNER_TEMP/codeql-db" \
-            'codeql/javascript-queries:codeql-suites/javascript-code-scanning.qls' \
-            --format=sarif-latest \
-            --output="$RUNNER_TEMP/results.sarif" \
-            --sarif-category=${{ matrix.language }} \
-            --threads=0
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+          upload: never
+          output: ${{ runner.temp }}/sarif-results
 
       - name: Upload SARIF results
         env:
@@ -79,7 +68,7 @@ jobs:
           RESPONSE=$(jq -n \
             --arg commit_sha "$GITHUB_SHA" \
             --arg ref "$GITHUB_REF" \
-            --arg sarif "$(gzip -c "$RUNNER_TEMP/results.sarif" | base64 -w0)" \
+            --arg sarif "$(gzip -c "$RUNNER_TEMP/sarif-results/${{ matrix.language }}.sarif" | base64 -w0)" \
             '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif}' \
           | curl -sf -X POST \
             -H "Authorization: Bearer $TOKEN" \
