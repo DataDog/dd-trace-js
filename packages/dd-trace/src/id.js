@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { getValueFromEnvSources } = require('./config/helper')
 
 const UINT_MAX = 4_294_967_296
 
@@ -13,7 +14,7 @@ let batch = 0
 // randomFillSync on a fresh 8-byte buffer per ID. The batch buffer is heap state
 // that may be duplicated across process copies; per-call kernel reads have no
 // buffered state and guarantee ID uniqueness regardless of process origin.
-const _secureRandom = process.env.DD_TRACE_SECURE_RANDOM === 'true'
+const _secureRandom = getValueFromEnvSources('DD_TRACE_SECURE_RANDOM') === 'true'
 const _secureBuf = _secureRandom ? new Uint8Array(8) : null
 
 // Internal representation of a trace or span ID.
