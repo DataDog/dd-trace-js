@@ -46,10 +46,6 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
-  ingestion: {
-    sampleRate: 0.5,
-    rateLimit: 500
-  },
   experimental: {
     exporter: 'log'
   },
@@ -149,13 +145,6 @@ tracer.init({
 });
 
 tracer.init({
-  experimental: {
-    appsec: {
-      standalone: {
-        enabled: true
-      }
-    }
-  },
   iast: {
     enabled: true,
     requestSampling: 50,

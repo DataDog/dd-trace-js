@@ -205,23 +205,24 @@ describe('Config', () => {
       )
     })
 
-    itV6Filter('applyMajorVersionAliasFilters is idempotent on the same supportedConfigurations object', () => {
+    itV6Filter('applyMajorOverrides is idempotent on the same supportedConfigurations object', () => {
       const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-      const { applyMajorVersionAliasFilters } =
-        proxyquire.noPreserveCache()('../../src/config/major-version-filters', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
       const supported = fresh.supportedConfigurations
       assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
-      applyMajorVersionAliasFilters(supported, 6)
+      supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
+      applyMajorOverrides(supported, 6)
       assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
       const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
       assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
+      assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
       const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
-      assert.ok(!runtimeIdEntry.aliases?.includes('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'))
+      assert.strictEqual(runtimeIdEntry.aliases, undefined)
 
       const beforeKeyCount = Object.keys(supported).length
-      applyMajorVersionAliasFilters(supported, 6)
+      applyMajorOverrides(supported, 6)
       assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
     })
 
@@ -2369,7 +2370,7 @@ describe('Config', () => {
     assert.strictEqual(config.url.toString(), 'https://agent2:6218/')
   })
 
-  it('should give priority to non-experimental options', () => {
+  ;(DD_MAJOR < 6 ? it : it.skip)('should give priority to non-experimental options', () => {
     const config = getConfig({
       appsec: {
         apiSecurity: {
@@ -2517,6 +2518,61 @@ describe('Config', () => {
       },
       telemetryVerbosity: 'DEBUG',
     })
+  })
+
+  ;(DD_MAJOR < 6 ? it.skip : it)(
+    'should drop the experimental.appsec programmatic shape in v6 (bare and nested)',
+    () => {
+      const config = getConfig({
+        experimental: {
+          appsec: {
+            enabled: true,
+            rateLimit: 42,
+            rules: 'some-rules.json',
+            standalone: { enabled: true },
+          },
+        },
+      })
+
+      assert.strictEqual(config.appsec.enabled, undefined)
+      assert.strictEqual(config.appsec.rateLimit, 100)
+      assert.strictEqual(config.appsec.rules, undefined)
+      assert.strictEqual(config.apmTracingEnabled, true)
+
+      sinon.assert.calledWith(
+        log.warn,
+        'Unknown option %s with value %o',
+        'experimental.appsec',
+        sinon.match({ enabled: true, rateLimit: 42 })
+      )
+    }
+  )
+
+  ;(DD_MAJOR < 6 ? it.skip : it)('should drop the bare experimental.appsec boolean alias in v6', () => {
+    const config = getConfig({
+      experimental: { appsec: true },
+    })
+
+    assert.strictEqual(config.appsec.enabled, undefined)
+    sinon.assert.calledWith(log.warn, 'Unknown option %s with value %o', 'experimental.appsec', true)
+  })
+
+  ;(DD_MAJOR < 6 ? it.skip : it)('should drop the ingestion programmatic shape in v6', () => {
+    const config = getConfig({
+      ingestion: {
+        sampleRate: 0.5,
+        rateLimit: 500,
+      },
+    })
+
+    assert.strictEqual(config.sampleRate, undefined)
+    assert.strictEqual(config.rateLimit, 100)
+    sinon.assert.calledWith(
+      log.warn,
+      'Unknown option %s with value %o',
+      'ingestion',
+      sinon.match({ sampleRate: 0.5, rateLimit: 500 })
+    )
   })
 
   it('should give priority to the options especially url', () => {
@@ -3442,11 +3498,33 @@ describe('Config', () => {
   })
 
   context('standalone', () => {
-    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+    const itLegacyStandalone = DD_MAJOR < 6 ? it : it.skip
+    const itV6Standalone = DD_MAJOR < 6 ? it.skip : it
+
+    itLegacyStandalone('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
       const config = getConfig()
       assert.strictEqual(config.apmTracingEnabled, false)
+    })
+
+    itLegacyStandalone('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
+
+      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      assert.strictEqual(config.apmTracingEnabled, false)
+    })
+
+    itV6Standalone('should ignore legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED in v6', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+
+      const config = getConfig()
+      assert.strictEqual(config.apmTracingEnabled, true)
+    })
+
+    itV6Standalone('should ignore legacy experimental.appsec.standalone.enabled programmatic option in v6', () => {
+      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      assert.strictEqual(config.apmTracingEnabled, true)
     })
 
     it('should win DD_APM_TRACING_ENABLED', () => {
@@ -3457,19 +3535,12 @@ describe('Config', () => {
       assert.strictEqual(config.apmTracingEnabled, true)
     })
 
-    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
-
-      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
-      assert.strictEqual(config.apmTracingEnabled, false)
-    })
-
     it('should win apmTracingEnabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = getConfig({
         apmTracingEnabled: false,
-        experimental: { appsec: { standalone: { enabled: true } } },
+        ...DD_MAJOR < 6 && { experimental: { appsec: { standalone: { enabled: true } } } },
       })
       assert.strictEqual(config.apmTracingEnabled, false)
     })
