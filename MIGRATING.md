@@ -6,6 +6,12 @@ open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
 ## 5.0 to 6.0 (unreleased)
 
+### IAST security controls is env-only
+
+`iast.securityControlsConfiguration` (and the legacy alias
+`experimental.iast.securityControlsConfiguration`) is no longer accepted as a
+programmatic option. Set `DD_IAST_SECURITY_CONTROLS_CONFIGURATION` instead.
+
 ### Plugin `whitelist` and `blacklist` options removed from types
 
 The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`,
