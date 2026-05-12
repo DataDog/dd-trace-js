@@ -46,7 +46,7 @@ function getCallSites (constructorOpt) {
  * Get stack trace of user-land frames.
  *
  * @param {string} stack - The stack trace to parse
- * @param {number} [limit=Infinity] - The maximum number of frames to return
+ * @param {number} [limit] - The maximum number of frames to return
  * @returns {StackFrame[]} - A list of stack frames from user-land code
  */
 function parseUserLandFrames (stack, limit = Infinity) {
