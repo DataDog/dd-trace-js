@@ -79,15 +79,15 @@ class ExposuresWriter extends BaseFFEWriter {
 
     /** @type {ExposureContext} */
     const context = {
-      service: this._config.service || 'unknown',
+      service: config.service,
     }
 
-    if (this._config.version !== undefined) {
-      context.version = this._config.version
+    if (config.version !== undefined) {
+      context.version = config.version
     }
 
-    if (this._config.env !== undefined) {
-      context.env = this._config.env
+    if (config.env !== undefined) {
+      context.env = config.env
     }
 
     this.#context = context
