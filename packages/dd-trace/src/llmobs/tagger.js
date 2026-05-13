@@ -43,6 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { writeBridgeTags } = require('./util')
 const { validateCostTags } = require('./util')
 
 // global registry of LLMObs spans
@@ -96,6 +97,15 @@ class LLMObsTagger {
     }
 
     this._register(span)
+
+    // Single bridge-tag hook for the dd-go LLMObs trace-indexer. Mirrors
+    // dd-trace-py's `_activate_llmobs_span` (in `_llmobs.py`), which is wired
+    // as a global span-start hook gated on `SpanTypes.LLM`. JS has no
+    // span_type=LLM marker — LLMObs membership is established here via the
+    // tagMap registration — so calling `writeBridgeTags` from this single
+    // chokepoint covers every caller (SDK, default plugin path, and
+    // bespoke plugin registrations like `bedrockruntime.setLLMObsTags`).
+    writeBridgeTags(span)
 
     this._setTag(span, ML_APP, spanMlApp)
 

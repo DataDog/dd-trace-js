@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert')
+
 const { describe, it, before } = require('mocha')
 
 const { assertLlmObsSpanEvent, useLlmObs } = require('../../util')
@@ -326,6 +328,30 @@ describe('Plugin', () => {
             },
             tags: { ml_app: 'test', integration: 'bedrock' },
           })
+        })
+
+        // MLOS-591 regression: `bedrockruntime` registers its LLMObs span from
+        // `setLLMObsTags` rather than the inherited `LLMObsPlugin.start`. The
+        // dd-go LLMObs trace-indexer needs `llmobs_trace_id` /
+        // `llmobs_parent_id` on the local trace tags so OTel `gen_ai.*` spans
+        // share an LLMObs trace with this bedrock span. The first model is
+        // enough — bridge-tag plumbing is not per-model.
+        it('writes otel bridge tags onto the apm span meta', async () => {
+          const model = models[0]
+          const command = new AWS.InvokeModelCommand({
+            body: JSON.stringify(model.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: model.modelId,
+          })
+
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans } = await getEvents()
+          const apmMeta = apmSpans[0].meta
+          assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+          assert.ok(apmMeta.llmobs_parent_id)
+          assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
         })
       })
     })

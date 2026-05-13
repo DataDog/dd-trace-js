@@ -6,6 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
+const { writeBridgeTags } = require('../../src/llmobs/util')
 
 function unserializableObject () {
   const obj = {}
@@ -25,6 +26,8 @@ describe('tagger', () => {
     spanContext = {
       _tags: {},
       _trace: { tags: {} },
+      toTraceId () { return '00000000000000001111111111111111' },
+      toSpanId () { return '2222222222222222' },
     }
 
     span = {
@@ -34,8 +37,12 @@ describe('tagger', () => {
       },
     }
 
+    // Pass `writeBridgeTags` through to the real helper so the bridge-tag
+    // hook in `registerLLMObsSpan` is exercised end-to-end. Unit coverage
+    // for the helper itself lives in `util.spec.js`.
     util = {
       generateTraceId: sinon.stub().returns('0123'),
+      writeBridgeTags,
     }
 
     logger = {
@@ -196,6 +203,47 @@ describe('tagger', () => {
 
           const tags = Tagger.tagMap.get(span)
           assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-service')
+        })
+      })
+
+      describe('bridge tags for otel correlation', () => {
+        it('writes llmobs_trace_id and llmobs_parent_id to _trace.tags after a successful register', () => {
+          tagger.registerLLMObsSpan(span, { kind: 'workflow' })
+
+          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, '00000000000000001111111111111111')
+          assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, '2222222222222222')
+        })
+
+        it('does not overwrite bridge tags when a second llmobs span registers on the same trace', () => {
+          tagger.registerLLMObsSpan(span, { kind: 'workflow' })
+
+          const secondSpanContext = {
+            _tags: {},
+            _trace: spanContext._trace, // sibling shares the local trace
+            toTraceId () { return 'ffffffffffffffffffffffffffffffff' },
+            toSpanId () { return '9999999999999999' },
+          }
+          const secondSpan = { context () { return secondSpanContext } }
+
+          tagger.registerLLMObsSpan(secondSpan, { kind: 'task' })
+
+          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, '00000000000000001111111111111111')
+          assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, '2222222222222222')
+        })
+
+        it('does not write bridge tags when llmobs is disabled', () => {
+          tagger = new Tagger({ llmobs: { enabled: false } })
+          tagger.registerLLMObsSpan(span, { kind: 'workflow' })
+
+          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, undefined)
+          assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, undefined)
+        })
+
+        it('does not write bridge tags when no span kind is provided', () => {
+          tagger.registerLLMObsSpan(span, {})
+
+          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, undefined)
+          assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, undefined)
         })
       })
     })
