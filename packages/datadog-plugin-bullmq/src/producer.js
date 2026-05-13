@@ -3,8 +3,8 @@
 const log = require('../../dd-trace/src/log')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const { getFilter } = require('./filter')
 
-const defaultFilter = () => true
 const filteredJobs = Symbol('bullmq.filteredJobs')
 
 // Customer-controlled metadata may be malformed JSON. Returning a fresh `{}`
@@ -34,14 +34,14 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
   }
 
   bindStart (ctx) {
-    let enabled = true
+    let instrument = true
     try {
-      enabled = this.isEnabled(ctx)
+      instrument = this.shouldInstrument(ctx)
     } catch (error) {
-      log.error('bullmq: filter function threw, filtering is disabled: %s', error.message)
+      log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
     }
 
-    if (!enabled) {
+    if (!instrument) {
       return { noop: true }
     }
 
@@ -66,19 +66,11 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     if (typeof config === 'boolean') {
       return super.configure(config)
     }
-
-    if (config?.filter !== undefined && typeof config.filter !== 'function') {
-      log.error('Expected `filter` to be a function. Overriding filter property to default.')
-    }
-
-    return super.configure({
-      ...config,
-      filter: typeof config?.filter === 'function' ? config.filter : defaultFilter,
-    })
+    return super.configure({ ...config, producerFilter: getFilter(config) })
   }
 
-  isEnabled (ctx) {
-    throw new Error('isEnabled must be implemented by subclass')
+  shouldInstrument (ctx) {
+    throw new Error('shouldInstrument must be implemented by subclass')
   }
 
   getSpanData (ctx) {
@@ -120,8 +112,8 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 class QueueAddPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:Queue_add'
 
-  isEnabled (ctx) {
-    return this.config.filter({
+  shouldInstrument (ctx) {
+    return this.config.producerFilter({
       name: ctx.arguments?.[0],
       data: ctx.arguments?.[1],
       opts: ctx.arguments?.[2],
@@ -170,7 +162,7 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
 class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:Queue_addBulk'
 
-  isEnabled (ctx) {
+  shouldInstrument (ctx) {
     const jobs = this.#getFilteredJobs(ctx)
     return jobs === undefined || jobs.length > 0
   }
@@ -181,16 +173,17 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
 
+    const queueName = ctx.self?.name
     let allowedJobs
     try {
       allowedJobs = []
       for (const job of jobs) {
-        if (job && this.config.filter({ name: job.name, data: job.data, opts: job.opts, queueName: ctx.self?.name })) {
+        if (job && this.config.producerFilter({ name: job.name, data: job.data, opts: job.opts, queueName })) {
           allowedJobs.push(job)
         }
       }
     } catch (error) {
-      log.error('bullmq: filter function threw, filtering is disabled: %s', error.message)
+      log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
       allowedJobs = jobs.filter(Boolean)
     }
 
@@ -249,9 +242,14 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:FlowProducer_add'
 
-  isEnabled (ctx) {
+  shouldInstrument (ctx) {
     const flow = ctx.arguments?.[0]
-    return this.config.filter({ name: flow?.name, data: flow?.data, opts: flow?.opts, queueName: flow?.queueName })
+    return this.config.producerFilter({
+      name: flow?.name,
+      data: flow?.data,
+      opts: flow?.opts,
+      queueName: flow?.queueName,
+    })
   }
 
   getSpanData (ctx) {
