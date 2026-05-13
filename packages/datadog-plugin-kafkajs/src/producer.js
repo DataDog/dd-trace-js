@@ -94,17 +94,19 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   finish (ctx) {
     const span = ctx?.currentStore?.span
     const result = ctx?.result
-    if (span && Array.isArray(result) && result.length === 1) {
-      // Only tag when the broker returned metadata for a single (topic, partition)
-      // tuple. Multi-partition batches share one producer span; a single
-      // partition/offset would be misleading.
-      const { partition, offset, baseOffset } = result[0]
-      const offsetAsLong = offset || baseOffset
-      if (partition !== undefined) {
-        span.setTag('kafka.partition', partition)
+    if (span && Array.isArray(result) && result.length > 0) {
+      // The broker response is one entry per (topic, partition). Each entry
+      // carries a `baseOffset` — the offset assigned to the first record sent
+      // to that partition. We don't know per-partition record counts from the
+      // response, only the starting offset.
+      const offsets = []
+      for (const entry of result) {
+        const offsetAsLong = entry.offset || entry.baseOffset
+        if (entry.partition === undefined || offsetAsLong === undefined) continue
+        offsets.push({ partition: entry.partition, start_offset: Number(offsetAsLong) })
       }
-      if (offsetAsLong !== undefined) {
-        span.setTag('kafka.message.offset', Number(offsetAsLong))
+      if (offsets.length > 0) {
+        span.setTag('kafka.messages.offsets', JSON.stringify(offsets))
       }
     }
     super.finish(ctx)
