@@ -74,6 +74,8 @@ describe('Plugin', () => {
               },
               metrics: {
                 'kafka.batch_size': messages.length,
+                'kafka.partition': 0,
+                'kafka.message.offset': 0,
               },
               resource: testTopic,
               error: 0,

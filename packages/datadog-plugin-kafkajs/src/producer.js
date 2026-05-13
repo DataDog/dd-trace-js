@@ -91,6 +91,25 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
+  finish (ctx) {
+    const span = ctx?.currentStore?.span
+    const result = ctx?.result
+    if (span && Array.isArray(result) && result.length === 1) {
+      // Only tag when the broker returned metadata for a single (topic, partition)
+      // tuple. Multi-partition batches share one producer span; a single
+      // partition/offset would be misleading.
+      const { partition, offset, baseOffset } = result[0]
+      const offsetAsLong = offset || baseOffset
+      if (partition !== undefined) {
+        span.setTag('kafka.partition', partition)
+      }
+      if (offsetAsLong !== undefined) {
+        span.setTag('kafka.message.offset', Number(offsetAsLong))
+      }
+    }
+    super.finish(ctx)
+  }
+
   bindStart (ctx) {
     const { topic, messages, bootstrapServers, clusterId, disableHeaderInjection } = ctx
     const span = this.startSpan({
