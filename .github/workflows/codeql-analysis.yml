@@ -25,6 +25,7 @@ jobs:
     permissions:
       id-token: write
       checks: write
+      security-events: write
 
     strategy:
       fail-fast: false
@@ -111,7 +112,7 @@ jobs:
             '{commit_sha:$commit_sha,ref:$ref,sarif:$sarif,
               checkout_uri:$checkout_uri,started_at:$started_at}' \
           | curl -s -w "\n%{http_code}" -X POST \
-            -H "Authorization: Bearer $TOKEN" \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/json" \
@@ -130,7 +131,7 @@ jobs:
           ERRORS=""
           for i in $(seq 1 30); do
             RESULT=$(curl -sf \
-              -H "Authorization: Bearer $TOKEN" \
+              -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs/$SARIF_ID")
