@@ -22,11 +22,17 @@ function getDeltaTemporality () {
 /**
  * Transforms span stats bucket data into an OTLP ExportMetricsServiceRequest.
  *
- * Emits 4 metrics (all delta temporality):
- *   - dd.trace.span.hits            (Sum, monotonic)
- *   - dd.trace.span.errors          (Sum, monotonic)
- *   - dd.trace.span.top_level_hits  (Sum, monotonic)
- *   - dd.trace.span.duration        (Histogram, split by error=true/false)
+ * Emits a single histogram metric (delta temporality):
+ *   - dd.trace.span.duration (Histogram, split by dd.top_level and error=true)
+ *
+ * Each aggregation key emits up to 4 data points covering the (ok/error) × (not-top-level/top-level) matrix:
+ *   { dd.top_level: false }                      — ok, not top-level
+ *   { dd.top_level: true  }                      — ok, top-level
+ *   { error: true, dd.top_level: false }          — error, not top-level
+ *   { error: true, dd.top_level: true  }          — error, top-level
+ *
+ * The `error` attribute is only added when error=true; ok data points carry no error attribute.
+ * Data points with count=0 are omitted.
  *
  * @class OtlpStatsTransformer
  * @augments OtlpTransformerBase
@@ -92,9 +98,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @returns {object}
    */
   #buildScopeMetrics (drained, bucketSizeNs, isJson) {
-    const hitsPoints = []
-    const errorsPoints = []
-    const topLevelHitsPoints = []
     const durationPoints = []
 
     const temporality = isJson ? 'AGGREGATION_TEMPORALITY_DELTA' : getDeltaTemporality()
@@ -105,52 +108,72 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       const endNano = isJson ? String(endTimeNs) : endTimeNs
 
       for (const aggStats of bucket.values()) {
-        const { aggKey, hits, errors, topLevelHits, duration, errorDuration } = aggStats
+        const { aggKey, hits, errors, topLevelHits, topLevelErrors, duration, errorDuration,
+          topLevelDuration, topLevelErrorDuration } = aggStats
         const baseAttrs = this.#buildAttributes(aggKey, isJson)
 
-        hitsPoints.push({
-          attributes: baseAttrs,
-          startTimeUnixNano: startNano,
-          timeUnixNano: endNano,
-          asInt: hits,
-        })
+        // Derive the 4 cells of the (ok/error) × (not-top-level/top-level) matrix.
+        const okNotTopLevel = hits - errors - (topLevelHits - topLevelErrors)
+        const okTopLevel = topLevelHits - topLevelErrors
+        const errNotTopLevel = errors - topLevelErrors
+        const errTopLevel = topLevelErrors
 
-        errorsPoints.push({
-          attributes: baseAttrs,
-          startTimeUnixNano: startNano,
-          timeUnixNano: endNano,
-          asInt: errors,
-        })
+        const okNotTopLevelDur = (duration - errorDuration) - (topLevelDuration - topLevelErrorDuration)
+        const okTopLevelDur = topLevelDuration - topLevelErrorDuration
+        const errNotTopLevelDur = errorDuration - topLevelErrorDuration
+        const errTopLevelDur = topLevelErrorDuration
 
-        topLevelHitsPoints.push({
-          attributes: baseAttrs,
-          startTimeUnixNano: startNano,
-          timeUnixNano: endNano,
-          asInt: topLevelHits,
-        })
-
-        const okCount = hits - errors
-        const okDuration = duration - errorDuration
-
-        if (okCount > 0) {
+        if (okNotTopLevel > 0) {
           durationPoints.push({
-            attributes: [...baseAttrs, this.#boolAttr('error', false, isJson)],
+            attributes: [...baseAttrs, this.#boolAttr('dd.top_level', false, isJson)],
             startTimeUnixNano: startNano,
             timeUnixNano: endNano,
-            count: okCount,
-            sum: okDuration / NS_PER_S,
+            count: okNotTopLevel,
+            sum: okNotTopLevelDur / NS_PER_S,
             bucketCounts: [],
             explicitBounds: [],
           })
         }
 
-        if (errors > 0) {
+        if (okTopLevel > 0) {
           durationPoints.push({
-            attributes: [...baseAttrs, this.#boolAttr('error', true, isJson)],
+            attributes: [...baseAttrs, this.#boolAttr('dd.top_level', true, isJson)],
             startTimeUnixNano: startNano,
             timeUnixNano: endNano,
-            count: errors,
-            sum: errorDuration / NS_PER_S,
+            count: okTopLevel,
+            sum: okTopLevelDur / NS_PER_S,
+            bucketCounts: [],
+            explicitBounds: [],
+          })
+        }
+
+        if (errNotTopLevel > 0) {
+          durationPoints.push({
+            attributes: [
+              ...baseAttrs,
+              this.#boolAttr('error', true, isJson),
+              this.#boolAttr('dd.top_level', false, isJson),
+            ],
+            startTimeUnixNano: startNano,
+            timeUnixNano: endNano,
+            count: errNotTopLevel,
+            sum: errNotTopLevelDur / NS_PER_S,
+            bucketCounts: [],
+            explicitBounds: [],
+          })
+        }
+
+        if (errTopLevel > 0) {
+          durationPoints.push({
+            attributes: [
+              ...baseAttrs,
+              this.#boolAttr('error', true, isJson),
+              this.#boolAttr('dd.top_level', true, isJson),
+            ],
+            startTimeUnixNano: startNano,
+            timeUnixNano: endNano,
+            count: errTopLevel,
+            sum: errTopLevelDur / NS_PER_S,
             bucketCounts: [],
             explicitBounds: [],
           })
@@ -162,24 +185,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       scope: SCOPE,
       schemaUrl: '',
       metrics: [
-        {
-          name: 'dd.trace.span.hits',
-          description: '',
-          unit: '{span}',
-          sum: { dataPoints: hitsPoints, aggregationTemporality: temporality, isMonotonic: true },
-        },
-        {
-          name: 'dd.trace.span.errors',
-          description: '',
-          unit: '{span}',
-          sum: { dataPoints: errorsPoints, aggregationTemporality: temporality, isMonotonic: true },
-        },
-        {
-          name: 'dd.trace.span.top_level_hits',
-          description: '',
-          unit: '{span}',
-          sum: { dataPoints: topLevelHitsPoints, aggregationTemporality: temporality, isMonotonic: true },
-        },
         {
           name: 'dd.trace.span.duration',
           description: '',
@@ -199,8 +204,8 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    */
   #buildAttributes (aggKey, isJson) {
     const raw = {
-      'span.name': aggKey.name,
-      'dd.resource': aggKey.resource,
+      'span.name': aggKey.resource,
+      'dd.operation.name': aggKey.name,
       'dd.span.type': aggKey.type,
       'dd.synthetics': aggKey.synthetics,
     }
