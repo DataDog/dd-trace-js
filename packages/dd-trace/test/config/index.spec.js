@@ -915,6 +915,7 @@ describe('Config', () => {
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
       { name: 'DD_PROFILING_ENABLED', value: 'false', origin: 'default' },
+      { name: 'DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_PROFILING_EXPORTERS', value: 'agent', origin: 'default' },
       { name: 'DD_PROFILING_SOURCE_MAP', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'default' },

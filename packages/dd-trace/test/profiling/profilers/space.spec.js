@@ -45,7 +45,15 @@ describe('profilers/native/space', () => {
     profiler.start()
 
     sinon.assert.calledOnce(pprof.heap.start)
-    sinon.assert.calledWith(pprof.heap.start, heapSamplingInterval, 64)
+    sinon.assert.calledWith(pprof.heap.start, heapSamplingInterval, 64, false)
+  })
+
+  it('should enable allocation profiling when configured', () => {
+    const profiler = new NativeSpaceProfiler({ allocationProfilingEnabled: true })
+
+    profiler.start()
+
+    sinon.assert.calledOnceWithExactly(pprof.heap.start, 512 * 1024, 64, true)
   })
 
   it('should stop the internal space profiler', () => {

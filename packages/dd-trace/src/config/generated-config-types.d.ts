@@ -130,6 +130,7 @@ export interface GeneratedConfig {
   DD_MINI_AGENT_PATH: string | undefined;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
+  DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED: boolean;
   DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: boolean;
   DD_PROFILING_CODEHOTSPOTS_ENABLED: boolean;
   DD_PROFILING_CPU_ENABLED: boolean;
