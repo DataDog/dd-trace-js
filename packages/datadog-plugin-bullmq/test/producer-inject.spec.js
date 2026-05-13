@@ -192,4 +192,25 @@ describe('bullmq producer telemetry metadata injection', () => {
     sinon.assert.calledTwice(producerFilter)
     assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 1)
   })
+
+  it('skips Queue.addBulk when producerFilter rejects every job in a non-empty batch', () => {
+    const [, QueueAddBulkPlugin] = plugins
+    const tracer = {
+      inject: sinon.stub(),
+    }
+    const instance = new QueueAddBulkPlugin(tracer, {})
+    const firstJob = { name: 'skip-1', data: { id: 1 }, opts: {} }
+    const secondJob = { name: 'skip-2', data: { id: 2 }, opts: {} }
+    const producerFilter = sinon.stub().returns(false)
+    const ctx = {
+      self: { name: 'test-queue' },
+      arguments: [[firstJob, secondJob]],
+    }
+
+    instance.config = { producerFilter }
+
+    assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
+    sinon.assert.calledTwice(producerFilter)
+    sinon.assert.notCalled(tracer.inject)
+  })
 })
