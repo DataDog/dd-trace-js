@@ -57,8 +57,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
       // prevents doubled read spans for createIfNotExists calls
       if (pluginOn === 'request' && ((operationType !== 'read' && operationType !== 'query') ||
         (operationType === 'read' && resourceType !== 'docs'))) {
-        ctx.currentStore = { ...storage('legacy').getStore() }
-        return ctx.currentStore
+        return storage('legacy').getStore()
       }
 
       // separately, skip tracing read requests without a path, these don't
