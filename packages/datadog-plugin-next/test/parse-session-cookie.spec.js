@@ -43,4 +43,27 @@ describe('parseRumSessionId', () => {
   it('should not match a non-_dd_s cookie whose name ends with _dd_s', () => {
     assert.equal(parseRumSessionId('not_dd_s=id=should-not-match'), undefined)
   })
+
+  it('should extract id from the current _dd_s_v2 cookie', () => {
+    assert.equal(parseRumSessionId('_dd_s_v2=id=v2-id&created=1234&rum=1'), 'v2-id')
+    assert.equal(parseRumSessionId('foo=bar; _dd_s_v2=id=v2-mid; baz=qux'), 'v2-mid')
+  })
+
+  it('should prefer _dd_s_v2 over legacy _dd_s when both are present', () => {
+    assert.equal(
+      parseRumSessionId('_dd_s=id=legacy-stale&rum=1; _dd_s_v2=id=current-v2&rum=1'),
+      'current-v2'
+    )
+    assert.equal(
+      parseRumSessionId('_dd_s_v2=id=current-v2&rum=1; _dd_s=id=legacy-stale&rum=1'),
+      'current-v2'
+    )
+  })
+
+  it('should fall back to legacy _dd_s when _dd_s_v2 has no id entry', () => {
+    assert.equal(
+      parseRumSessionId('_dd_s_v2=created=1234&rum=1; _dd_s=id=legacy-id&rum=1'),
+      'legacy-id'
+    )
+  })
 })
