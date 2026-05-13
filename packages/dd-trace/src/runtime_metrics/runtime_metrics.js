@@ -103,7 +103,7 @@ module.exports = {
       }, flushIntervalMs)
     }
 
-    interval.unref()
+    interval.unref?.()
   },
 
   stop () {
