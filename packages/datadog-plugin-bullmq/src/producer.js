@@ -34,7 +34,14 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
   }
 
   bindStart (ctx) {
-    if (!this.isEnabled(ctx)) {
+    let enabled = true
+    try {
+      enabled = this.isEnabled(ctx)
+    } catch (error) {
+      log.error('bullmq: filter function threw, filtering is disabled: %s', error.message)
+    }
+
+    if (!enabled) {
       return { noop: true }
     }
 
@@ -174,11 +181,17 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
 
-    const allowedJobs = []
-    for (const job of jobs) {
-      if (job && this.config.filter({ name: job.name, data: job.data, opts: job.opts, queueName: ctx.self?.name })) {
-        allowedJobs.push(job)
+    let allowedJobs
+    try {
+      allowedJobs = []
+      for (const job of jobs) {
+        if (job && this.config.filter({ name: job.name, data: job.data, opts: job.opts, queueName: ctx.self?.name })) {
+          allowedJobs.push(job)
+        }
       }
+    } catch (error) {
+      log.error('bullmq: filter function threw, filtering is disabled: %s', error.message)
+      allowedJobs = jobs.filter(Boolean)
     }
 
     ctx[filteredJobs] = allowedJobs
@@ -205,22 +218,13 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = this.#getFilteredJobs(ctx)
     if (!jobs) return
 
-    for (const job of jobs) {
+    const cache = []
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
       job.opts = job.opts || {}
-      this._injectIntoOpts(span, job.opts)
+      cache[i] = this._injectIntoOpts(span, job.opts)
     }
-  }
-
-  getDsmData (ctx) {
-    const jobs = this.#getFilteredJobs(ctx) || []
-    const payloadSize = jobs.reduce((total, job) => {
-      return total + (job?.data ? getMessageSize(job.data) : 0)
-    }, 0)
-    return {
-      queueName: ctx.self?.name || 'bullmq',
-      payloadSize,
-      optsTarget: jobs[0]?.opts,
-    }
+    ctx._ddMetadata = cache
   }
 
   setProducerCheckpoint (span, ctx) {
