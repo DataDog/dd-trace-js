@@ -344,6 +344,16 @@ describe('Plugin', () => {
               })
             })
 
+            it('should rethrow synchronous errors from the wrapped client method', async () => {
+              const client = await buildClient({
+                getUnary: (_, callback) => callback(),
+              })
+
+              assert.throws(() => {
+                client.getUnary({ first: 'foobar' }, new grpc.Metadata(), 'not-an-options-object', () => {})
+              }, Error)
+            })
+
             it('should handle `bidi` calls with (metadata, options)', async () => {
               const client = await buildClient({
                 getBidi: stream => stream.end(),
