@@ -32,6 +32,7 @@
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/azure_metadata.spec.js @DataDog/apm-serverless
+/packages/dd-trace/test/serverless.spec.js @DataDog/apm-serverless
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
