@@ -502,9 +502,11 @@ describe('Plugin', () => {
                 'messaging.destination.name': testTopic,
                 'messaging.system': 'kafka',
                 'kafka.cluster_id': testKafkaClusterId,
+                'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: 0 }]),
               },
               metrics: {
                 'messaging.batch.message_count': batchMessages.length,
+                'kafka.partition': 0,
               },
               resource: testTopic,
               error: 0,
@@ -515,6 +517,27 @@ describe('Plugin', () => {
               eachBatch: () => {},
             })
             return Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
+          })
+
+          it('should tag flat kafka.message.offset only for single-message batches', async () => {
+            const singleBatch = [{ key: 'k', value: 'v' }]
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              assertObjectContains(span, {
+                name: expectedSchema.receive.opName,
+                meta: {
+                  'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: 0 }]),
+                },
+                metrics: {
+                  'messaging.batch.message_count': 1,
+                  'kafka.partition': 0,
+                  'kafka.message.offset': 0,
+                },
+              })
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            return Promise.all([sendMessages(kafka, testTopic, singleBatch), expectedSpanPromise])
           })
 
           it('should run the consumer in the context of the consumer span', done => {
