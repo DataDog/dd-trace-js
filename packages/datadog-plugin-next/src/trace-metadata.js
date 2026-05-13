@@ -42,9 +42,7 @@ function getDatadogTraceMetadata () {
   // For these requests the browser already has the trace context — emitting meta tags
   // would overwrite the document's original trace data during client-side navigation.
   const origin = context._trace && context._trace.origin
-  if (origin === 'rum') {
-    return {}
-  }
+  if (origin === 'rum') return {}
 
   // Return cached metadata if already computed for this trace, avoiding
   // repeated re-parenting when generateMetadata is called multiple times

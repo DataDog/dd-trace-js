@@ -14,7 +14,7 @@ describe('datadogOnRequestError', () => {
   const request = {
     path: '/api/users',
     method: 'GET',
-    headers: { cookie: '_dd_s=id%3Dabc123%26created%3D1234' },
+    headers: { cookie: '_dd_s=id=abc123&created=1234' },
   }
 
   const context = {
@@ -126,6 +126,18 @@ describe('datadogOnRequestError', () => {
     datadogOnRequestError(new Error('test'), req, context)
 
     sinon.assert.calledWith(span.setTag, 'rum.session_id', 'sess-123')
+  })
+
+  it('should extract RUM session ID from an array-valued cookie header', () => {
+    const req = {
+      ...request,
+      headers: { cookie: ['_dd_s=id=sess-arr&rum=1'] },
+    }
+
+    datadogOnRequestError(new Error('test'), req, context)
+
+    sinon.assert.calledWith(span.setTag, 'rum.session_id', 'sess-arr')
+    sinon.assert.calledOnce(span.finish)
   })
 
   it('should not set rum.session_id when no cookie header', () => {

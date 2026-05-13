@@ -53,16 +53,8 @@ function datadogOnRequestError (error, request, context) {
   }
 
   // Extract RUM session ID from _dd_s cookie for client<>server correlation
-  const cookieHeader = request.headers?.cookie
-  if (cookieHeader) {
-    const ddsCookieMatch = cookieHeader.match(/(?:^|;\s*)_dd_s=([^;]*)/)
-    if (ddsCookieMatch) {
-      const sessionId = parseRumSessionId(ddsCookieMatch[1])
-      if (sessionId) {
-        span.setTag('rum.session_id', sessionId)
-      }
-    }
-  }
+  const sessionId = parseRumSessionId(request.headers?.cookie)
+  if (sessionId) span.setTag('rum.session_id', sessionId)
 
   span.finish()
 }
