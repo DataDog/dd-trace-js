@@ -15,6 +15,6 @@ runs:
 
     - shell: bash
       run: |
-        yarn install --no-lockfile
+        yarn install --no-lockfile || (sleep 30 && yarn install --no-lockfile)
         echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
       working-directory: ${{ github.action_path }}
