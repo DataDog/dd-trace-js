@@ -30,6 +30,9 @@ class SpanAggStats {
     this.errors = 0
     this.duration = 0
     this.errorDuration = 0
+    this.topLevelErrors = 0
+    this.topLevelDuration = 0
+    this.topLevelErrorDuration = 0
     this.okDistribution = new LogCollapsingLowestDenseDDSketch()
     this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
   }
@@ -39,13 +42,19 @@ class SpanAggStats {
     this.hits++
     this.duration += durationNs
 
-    if (span.metrics[TOP_LEVEL_KEY]) {
+    const isTopLevel = !!span.metrics[TOP_LEVEL_KEY]
+    if (isTopLevel) {
       this.topLevelHits++
+      this.topLevelDuration += durationNs
     }
 
     if (span.error) {
       this.errors++
       this.errorDuration += durationNs
+      if (isTopLevel) {
+        this.topLevelErrors++
+        this.topLevelErrorDuration += durationNs
+      }
       this.errorDistribution.accept(durationNs)
     } else {
       this.okDistribution.accept(durationNs)
@@ -182,7 +191,9 @@ class SpanStatsProcessor {
   onInterval () {
     const drained = this._drainBuckets()
 
-    if (this.enabled) {
+    // XOR: OTLP stats export and DD-native stats export are mutually exclusive.
+    // When the OTLP exporter is active, suppress the /v0.6/stats path to avoid double-counting.
+    if (this.enabled && !this.otlpExporter) {
       this.exporter.export({
         Hostname: this.hostname,
         Env: this.env,

@@ -80,15 +80,14 @@ describe('OtlpStatsExporter', () => {
     assert.strictEqual(options.path, '/v1/metrics')
   })
 
-  it('sends a JSON payload containing the 4 metrics', () => {
+  it('sends a JSON payload containing the single duration histogram metric', () => {
     const drained = makeDrained([makeSpan()])
     exporter.export(drained, BUCKET_SIZE_NS)
 
     const payload = JSON.parse(mockReq.write.firstCall.args[0].toString())
     const { metrics } = payload.resourceMetrics[0].scopeMetrics[0]
-    assert.strictEqual(metrics.length, 4)
-    assert.strictEqual(metrics[0].name, 'dd.trace.span.hits')
-    assert.strictEqual(metrics[3].name, 'dd.trace.span.duration')
+    assert.strictEqual(metrics.length, 1)
+    assert.strictEqual(metrics[0].name, 'dd.trace.span.duration')
   })
 
   it('returns early when drained is empty', () => {
