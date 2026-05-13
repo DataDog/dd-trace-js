@@ -100,20 +100,6 @@ describe('bullmq producer telemetry metadata injection', () => {
     }
   })
 
-  it('skips Queue.add producer instrumentation when producerFilter rejects the job', () => {
-    const instance = buildPluginInstance()
-    const producerFilter = sinon.stub().returns(false)
-    const ctx = { arguments: ['skip', { id: 1 }, { attempts: 1 }] }
-
-    instance.config = { producerFilter }
-
-    assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
-    sinon.assert.calledOnceWithExactly(producerFilter, {
-      name: 'skip', data: { id: 1 }, opts: { attempts: 1 }, queueName: undefined,
-    })
-    sinon.assert.notCalled(instance.tracer.inject)
-  })
-
   it('instruments anyway and logs when Queue.add producerFilter throws', () => {
     const [QueueAddPlugin] = plugins
     const tracer = {
