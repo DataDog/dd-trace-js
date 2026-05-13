@@ -70,9 +70,7 @@ jobs:
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
           GH_TOKEN: ${{ github.token }}
-          MATRIX_LANGUAGE: ${{ matrix.language }}
         run: |
-          set -x
           SARIF_FILE=$(find "$RUNNER_TEMP/sarif-results" -name "*.sarif" | head -1)
           [ -n "$SARIF_FILE" ] || { echo "No SARIF file found"; exit 1; }
 
@@ -104,22 +102,14 @@ jobs:
             echo "Warning: failed to create check run: $CHECK_RUN_RESPONSE"
           fi
 
-          # environment matches the format the official action sends.
-          ENVIRONMENT=$(jq -cn \
-            --arg lang "$MATRIX_LANGUAGE" \
-            '{"build-mode":"none","language":$lang,
-              "category":("/language:"+$lang),"runner":"[\"ubuntu-latest\"]"}')
-
           HTTP_STATUS=$(jq -n \
             --arg commit_sha "$UPLOAD_SHA" \
             --arg ref "$UPLOAD_REF" \
             --arg sarif "$(gzip -c "$SARIF_FILE" | base64 -w0)" \
             --arg checkout_uri "file://$GITHUB_WORKSPACE/" \
             --arg started_at "$CODEQL_STARTED_AT" \
-            --arg environment "$ENVIRONMENT" \
             '{commit_sha:$commit_sha,ref:$ref,sarif:$sarif,
-              checkout_uri:$checkout_uri,started_at:$started_at,
-              environment:$environment}' \
+              checkout_uri:$checkout_uri,started_at:$started_at}' \
           | curl -s -w "\n%{http_code}" -X POST \
             -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.github+json" \
