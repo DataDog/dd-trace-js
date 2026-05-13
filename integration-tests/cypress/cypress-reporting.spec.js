@@ -18,7 +18,7 @@ const {
   warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const coverageFixture = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 const {
   TEST_STATUS,
@@ -150,7 +150,7 @@ moduleTypes.forEach(({
     }
 
     this.timeout(80_000)
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
@@ -159,25 +159,23 @@ moduleTypes.forEach(({
     before(async function () {
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
+
+      const webApp = await startWebAppServer()
+      webAppBaseUrl = webApp.baseUrl
+      webAppServer = webApp.server
     })
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-
-      // Create a fresh web server for each test to avoid state issues
-      webAppServer = createWebAppServer()
-      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-        webAppServer.once('error', reject)
-        webAppServer.listen(0, 'localhost', () => {
-          webAppPort = webAppServer.address().port
-          webAppServer.removeListener('error', reject)
-          resolve()
-        })
-      }))
     })
 
     afterEach(async () => {
-      await stopCiVisTestEnv({ childProcess, webAppServer, receiver })
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
+    })
+
+    after(async () => {
+      await stopWebAppServer(webAppServer)
     })
 
     it('instruments tests with the APM protocol (old agents)', async () => {
@@ -257,7 +255,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: specToRun,
           },
         }
@@ -283,7 +281,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
             },
           }
         )
@@ -342,7 +340,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -415,7 +413,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-*.js',
           },
         }
@@ -455,7 +453,7 @@ moduleTypes.forEach(({
           env: {
             ...envVars,
             NODE_OPTIONS: '-r dd-trace/ci/init',
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -502,7 +500,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -548,7 +546,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
             },
           }
@@ -595,7 +593,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
             },
           }
@@ -647,7 +645,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
               },
             }
@@ -698,7 +696,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -818,7 +816,7 @@ moduleTypes.forEach(({
             cwd: subprojectDir,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
             },
           }
         )
@@ -875,7 +873,7 @@ moduleTypes.forEach(({
             // a separate OTEL collector. The Test Optimization exporter
             // must win inside isCiVisibility mode.
             OTEL_TRACES_EXPORTER: 'otlp',
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -928,7 +926,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         })
@@ -1018,7 +1016,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -1060,7 +1058,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
             CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
             CYPRESS_ENABLE_MANUAL_PLUGIN: '1',
@@ -1114,7 +1112,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -1168,7 +1166,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
             CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
@@ -1244,7 +1242,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line.cy.js',
           },
         })
@@ -1357,7 +1355,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-fallback.cy.js',
           },
         })
@@ -1405,7 +1403,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-no-match.cy.js',
           },
         })
@@ -1448,7 +1446,7 @@ moduleTypes.forEach(({
         cwd,
         env: {
           ...envVars,
-          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          CYPRESS_BASE_URL: webAppBaseUrl,
           SPEC_PATTERN: 'cypress/e2e/spec-source-line-invocation.cy.js',
         },
       })
@@ -1522,7 +1520,7 @@ moduleTypes.forEach(({
         cwd,
         env: {
           ...envVars,
-          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          CYPRESS_BASE_URL: webAppBaseUrl,
           SPEC_PATTERN: 'cypress/e2e/spec-source-line.cy.ts',
         },
       })
@@ -1570,7 +1568,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
               },
             }
@@ -1611,7 +1609,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
               },
             }
@@ -1653,7 +1651,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
               },
             }
@@ -1701,7 +1699,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
               },
             }
@@ -1731,7 +1729,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             DD_SITE: '= invalid = url',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
@@ -1920,7 +1918,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
             DD_TEST_SESSION_NAME: 'my-test-session',
             DD_SERVICE: undefined,
@@ -1964,7 +1962,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
         }
