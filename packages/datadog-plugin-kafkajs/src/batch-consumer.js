@@ -14,7 +14,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
     // kafkajs's eachBatch hands the user one batch per (topic, partition),
     // so all messages share the same partition. start_offset is the offset of
     // the first record in the batch.
-    const startOffset = messages[0]?.offset !== undefined ? Number(messages[0].offset) : undefined
+    const startOffset = messages[0]?.offset === undefined ? undefined : Number(messages[0].offset)
     const meta = {
       component: this.constructor.id,
       'kafka.topic': topic,
