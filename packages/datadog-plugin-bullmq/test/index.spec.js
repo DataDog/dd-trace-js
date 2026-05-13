@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const sinon = require('sinon')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
@@ -266,6 +267,41 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
       await testSetup.workerProcessJobBulk()
 
       return traceAssertion
+    })
+  })
+
+  describe('producerFilter via tracer.use()', () => {
+    it('invokes producerFilter with the job shape and emits a span when accepted', async () => {
+      const producerFilter = sinon.stub().returns(true)
+      require('../../dd-trace').use('bullmq', { producerFilter })
+
+      const traceAssertion = agent.assertFirstTraceSpan({
+        name: 'bullmq.add',
+        resource: 'test-queue',
+      })
+
+      await testSetup.queueAdd()
+      await traceAssertion
+
+      sinon.assert.calledOnce(producerFilter)
+      const job = producerFilter.firstCall.args[0]
+      assert.strictEqual(job.name, 'test-job')
+      assert.strictEqual(job.queueName, 'test-queue')
+      assert.strictEqual(job.data.message, 'Hello from BullMQ')
+    })
+
+    it('invokes producerFilter for every job passed to Queue.addBulk', async () => {
+      const producerFilter = sinon.stub().returns(true)
+      require('../../dd-trace').use('bullmq', { producerFilter })
+
+      const traceAssertion = agent.assertFirstTraceSpan({ name: 'bullmq.addBulk' })
+
+      await testSetup.queueAddBulk()
+      await traceAssertion
+
+      sinon.assert.calledThrice(producerFilter)
+      const names = producerFilter.getCalls().map(c => c.args[0].name)
+      assert.deepStrictEqual(names, ['bulk-job-1', 'bulk-job-2', 'bulk-job-3'])
     })
   })
 })
