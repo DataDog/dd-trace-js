@@ -268,11 +268,11 @@ describe('Plugin', () => {
               assert.ok(call, 'expected ClientWritableStream, got falsy value')
               assert.strictEqual(typeof call.write, 'function')
 
-              return agent.assertSomeTraces(traces => {
-                assertObjectContains(traces[0][0].meta, {
+              return agent.assertFirstTraceSpan({
+                meta: {
                   'grpc.method.name': 'getClientStream',
                   'grpc.method.kind': 'client_streaming',
-                })
+                },
               })
             })
 
@@ -289,11 +289,11 @@ describe('Plugin', () => {
               assert.ok(call, 'expected ClientWritableStream, got falsy value')
               assert.strictEqual(typeof call.write, 'function')
 
-              return agent.assertSomeTraces(traces => {
-                assertObjectContains(traces[0][0].meta, {
+              return agent.assertFirstTraceSpan({
+                meta: {
                   'grpc.method.name': 'getClientStream',
                   'grpc.method.kind': 'client_streaming',
-                })
+                },
               })
             })
 
@@ -336,11 +336,11 @@ describe('Plugin', () => {
               assert.strictEqual(typeof call.on, 'function')
               call.on('data', () => {})
 
-              return agent.assertSomeTraces(traces => {
-                assertObjectContains(traces[0][0].meta, {
+              return agent.assertFirstTraceSpan({
+                meta: {
                   'grpc.method.name': 'getBidi',
                   'grpc.method.kind': 'bidi_streaming',
-                })
+                },
               })
             })
 
@@ -357,11 +357,11 @@ describe('Plugin', () => {
               assert.strictEqual(typeof call.on, 'function')
               call.on('data', () => {})
 
-              return agent.assertSomeTraces(traces => {
-                assertObjectContains(traces[0][0].meta, {
+              return agent.assertFirstTraceSpan({
+                meta: {
                   'grpc.method.name': 'getBidi',
                   'grpc.method.kind': 'bidi_streaming',
-                })
+                },
               })
             })
 
