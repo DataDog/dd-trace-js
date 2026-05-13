@@ -39,7 +39,8 @@ class BufferingExporter {
       this[timerKey] = setTimeout(() => {
         writer.flush()
         this[timerKey] = undefined
-      }, flushInterval).unref()
+      }, flushInterval)
+      this[timerKey].unref?.()
     }
   }
 
