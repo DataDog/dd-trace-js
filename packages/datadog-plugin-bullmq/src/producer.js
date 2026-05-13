@@ -164,7 +164,8 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 
   shouldInstrument (ctx) {
     const jobs = this.#getFilteredJobs(ctx)
-    return jobs === undefined || jobs.length > 0
+    // Empty bulk calls are publish attempts and should keep producing a span.
+    return jobs === undefined || jobs.length > 0 || ctx.arguments?.[0].length === 0
   }
 
   #getFilteredJobs (ctx) {
