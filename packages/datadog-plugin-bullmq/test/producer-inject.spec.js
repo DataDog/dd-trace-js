@@ -90,6 +90,61 @@ describe('bullmq producer telemetry metadata injection', () => {
     }
   })
 
+  it('instruments anyway and logs when Queue.add filter throws', () => {
+    const [QueueAddPlugin] = plugins
+    const tracer = {
+      inject: sinon.stub().callsFake((span, format, carrier) => {
+        carrier['x-datadog-trace-id'] = '1'
+      }),
+    }
+    const instance = new QueueAddPlugin(tracer, {})
+    const filter = sinon.stub().throws(new Error('bad filter'))
+    const ctx = { arguments: ['job', { id: 1 }] }
+
+    instance.config = { filter }
+    instance.startSpan = sinon.stub().callsFake((options, ctx) => {
+      ctx.currentStore = { span: {} }
+      return ctx.currentStore.span
+    })
+
+    assert.deepStrictEqual(instance.bindStart(ctx), ctx.currentStore)
+    sinon.assert.calledOnce(log.error)
+    assert.match(log.error.firstCall.args[0], /filtering is disabled/)
+    sinon.assert.calledOnce(instance.startSpan)
+  })
+
+  it('instruments all jobs and logs when Queue.addBulk filter throws', () => {
+    const [, QueueAddBulkPlugin] = plugins
+    const tracer = {
+      inject: sinon.stub().callsFake((span, format, carrier) => {
+        carrier['x-datadog-trace-id'] = '1'
+      }),
+    }
+    const instance = new QueueAddBulkPlugin(tracer, {})
+    const filter = sinon.stub().throws(new Error('boom'))
+    const job1 = { name: 'a', data: { id: 1 }, opts: {} }
+    const job2 = { name: 'b', data: { id: 2 }, opts: {} }
+    const ctx = {
+      self: { name: 'q' },
+      arguments: [[job1, job2]],
+    }
+
+    instance.config = { filter }
+    instance.startSpan = sinon.stub().callsFake((options, ctx) => {
+      ctx.currentStore = { span: {} }
+      return ctx.currentStore.span
+    })
+
+    assert.deepStrictEqual(instance.bindStart(ctx), ctx.currentStore)
+    sinon.assert.calledOnce(log.error)
+    assert.match(log.error.firstCall.args[0], /filtering is disabled/)
+    sinon.assert.calledOnce(instance.startSpan)
+    // Both jobs are instrumented since filter is broken
+    assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 2)
+    assert.ok(job1.opts.telemetry)
+    assert.ok(job2.opts.telemetry)
+  })
+
   it('only handles Queue.addBulk jobs allowed by the filter', () => {
     const [, QueueAddBulkPlugin] = plugins
     const tracer = {
