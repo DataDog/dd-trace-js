@@ -11,8 +11,6 @@ const applyMajorOverrides = require('../packages/dd-trace/src/config/major-overr
 const IGNORED_CONFIGURATION_NAMES = new Set([
   // v6 drops `experimental.b3` from `index.d.ts`; v5 still consumes the env var.
   'experimental.b3',
-  // v6-only config not yet exposed in `index.d.ts`.
-  'iast.securityControlsConfiguration',
   'tracePropagationStyle',
   'tracing',
 ])
@@ -556,8 +554,10 @@ export default {
     schema: [{
       type: 'object',
       properties: {
-        indexDtsPath: {
-          type: 'string',
+        indexDtsPaths: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
         },
         supportedConfigurationsPath: {
           type: 'string',
@@ -576,7 +576,8 @@ export default {
   },
   create (context) {
     const options = context.options[0] || {}
-    const indexDtsPath = path.resolve(context.cwd, options.indexDtsPath || 'index.d.ts')
+    const indexDtsPaths = (options.indexDtsPaths ?? ['index.d.ts'])
+      .map(p => path.resolve(context.cwd, p))
     const supportedConfigurationsPath = path.resolve(
       context.cwd,
       options.supportedConfigurationsPath || 'packages/dd-trace/src/config/supported-configurations.json'
@@ -589,7 +590,12 @@ export default {
 
         try {
           supportedConfigurationInfo = getSupportedConfigurationInfo(supportedConfigurationsPath)
-          indexDtsNames = getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)
+          indexDtsNames = new Set()
+          for (const indexDtsPath of indexDtsPaths) {
+            for (const name of getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)) {
+              indexDtsNames.add(name)
+            }
+          }
         } catch (error) {
           context.report({
             node,

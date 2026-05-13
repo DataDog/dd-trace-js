@@ -576,7 +576,9 @@ export default [
       'eslint.config.mjs',
     ],
     rules: {
-      'eslint-rules/eslint-config-names-sync': 'error',
+      'eslint-rules/eslint-config-names-sync': ['error', {
+        indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
+      }],
     },
   },
   {
