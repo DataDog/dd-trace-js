@@ -588,14 +588,22 @@ export default {
         let indexDtsNames
         let supportedConfigurationInfo
 
+        let primaryIndexDtsNames
         try {
           supportedConfigurationInfo = getSupportedConfigurationInfo(supportedConfigurationsPath)
+
+          // Union names from all type files: a config is covered if it appears in any version.
           indexDtsNames = new Set()
           for (const indexDtsPath of indexDtsPaths) {
-            for (const name of getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)) {
+            const names = getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)
+            for (const name of names) {
               indexDtsNames.add(name)
             }
           }
+
+          // Use only the primary (v6) file for the reverse check: v5-only configs are not
+          // required to exist in supported-configurations.json.
+          primaryIndexDtsNames = getIndexDtsConfigurationNames(indexDtsPaths[0], supportedConfigurationInfo)
         } catch (error) {
           context.report({
             node,
@@ -617,7 +625,7 @@ export default {
         reportMissingConfigurations(
           context,
           node,
-          indexDtsNames,
+          primaryIndexDtsNames,
           supportedConfigurationInfo.names,
           'configurationMissingInSupportedConfigurations'
         )
