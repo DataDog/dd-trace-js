@@ -85,6 +85,20 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
       return traceAssertion
     })
 
+    it('should generate span for empty batches', async () => {
+      const traceAssertion = agent.assertFirstTraceSpan({
+        name: 'bullmq.addBulk',
+        resource: 'test-queue',
+        metrics: {
+          'messaging.batch.message_count': 0,
+        },
+      })
+
+      await testSetup.queueAddBulkEmpty()
+
+      return traceAssertion
+    })
+
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
         name: 'bullmq.addBulk',
