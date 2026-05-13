@@ -599,13 +599,17 @@ export default {
           return
         }
 
-        reportMissingConfigurations(
-          context,
-          node,
-          supportedConfigurationInfo.names,
-          indexDtsNames,
-          'configurationMissingInIndexDts'
-        )
+        // TODO: Re-enable once supported-configurations.json supports major-version-specific
+        // entries. Right now index.d.ts and index.d.v5.ts define different surfaces per major
+        // version, but supported-configurations.json has no such distinction, causing false
+        // positives when a config exists only in one version's type file.
+        // reportMissingConfigurations(
+        //   context,
+        //   node,
+        //   supportedConfigurationInfo.names,
+        //   indexDtsNames,
+        //   'configurationMissingInIndexDts'
+        // )
         reportMissingConfigurations(
           context,
           node,
