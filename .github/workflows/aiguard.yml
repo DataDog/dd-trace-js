@@ -16,10 +16,14 @@ env:
 
 jobs:
   macos:
-    name: ${{ github.workflow }} / macos
+    name: ${{ github.workflow }} / macos / ${{ matrix.shard }}
     runs-on: macos-latest
     permissions:
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
@@ -29,7 +33,7 @@ jobs:
       - run: yarn test:aiguard:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: aiguard-macos
+          flags: aiguard-macos-${{ matrix.shard }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
