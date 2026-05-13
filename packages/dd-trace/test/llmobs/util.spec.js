@@ -12,6 +12,7 @@ const {
   safeJsonParse,
   validateKind,
   spanHasError,
+  writeBridgeTags,
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -234,6 +235,43 @@ describe('util', () => {
       span.setTag('error.stack', err.stack)
 
       assert.strictEqual(spanHasError(span), true)
+    })
+  })
+
+  describe('writeBridgeTags', () => {
+    function makeSpan (traceTags = {}) {
+      return {
+        context () {
+          return {
+            _trace: { tags: traceTags },
+            toTraceId () { return '00000000000000001111111111111111' },
+            toSpanId () { return '2222222222222222' },
+          }
+        },
+      }
+    }
+
+    it('writes llmobs_trace_id and llmobs_parent_id to _trace.tags', () => {
+      const traceTags = {}
+      writeBridgeTags(makeSpan(traceTags))
+      assert.strictEqual(traceTags.llmobs_trace_id, '00000000000000001111111111111111')
+      assert.strictEqual(traceTags.llmobs_parent_id, '2222222222222222')
+    })
+
+    it('does not overwrite bridge tags when already set', () => {
+      const traceTags = { llmobs_trace_id: 'preexisting', llmobs_parent_id: 'preexisting' }
+      writeBridgeTags(makeSpan(traceTags))
+      assert.strictEqual(traceTags.llmobs_trace_id, 'preexisting')
+      assert.strictEqual(traceTags.llmobs_parent_id, 'preexisting')
+    })
+
+    it('is a no-op when _trace.tags is absent', () => {
+      const span = { context () { return { _trace: undefined } } }
+      writeBridgeTags(span)
+    })
+
+    it('is a no-op when span is undefined', () => {
+      writeBridgeTags(undefined)
     })
   })
 })

@@ -1,7 +1,11 @@
 'use strict'
 
 const log = require('../log')
-const { SPAN_KINDS } = require('./constants/tags')
+const {
+  LLMOBS_PARENT_ID_BRIDGE_KEY,
+  LLMOBS_TRACE_ID_BRIDGE_KEY,
+  SPAN_KINDS,
+} = require('./constants/tags')
 
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
 // looking for the first non-ASCII char; if there is none, hand the input
@@ -248,6 +252,22 @@ function safeJsonParse (value, fallback) {
   }
 }
 
+// Bridge tags read by the dd-go LLMObs trace-indexer to correlate OTel
+// gen_ai.* spans with LLMObs spans (SDK-created or auto-instrumented). Written
+// once per local trace, on the first successful LLMObs span registration. The
+// shared _trace.tags bag is serialized to the first span in every flushed
+// chunk's meta, so partial flush is covered automatically. The mirrored Python
+// implementation is `_activate_llmobs_span` in dd-trace-py's _llmobs.py, which
+// fires from a global span-start hook gated on SpanTypes.LLM — JS has two
+// registration sites (SDK and plugin base) so this helper is invoked from both
+// to achieve the same single-hook semantics.
+function writeBridgeTags (span) {
+  const traceTags = span?.context?.()._trace?.tags
+  if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
+  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+  traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+}
+
 module.exports = {
   encodeUnicode,
   validateCostTags,
@@ -255,4 +275,5 @@ module.exports = {
   getFunctionArguments,
   safeJsonParse,
   spanHasError,
+  writeBridgeTags,
 }

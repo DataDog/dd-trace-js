@@ -3,6 +3,7 @@
 const log = require('../../log')
 const { storage: llmobsStorage } = require('../storage')
 const telemetry = require('../telemetry')
+const { writeBridgeTags } = require('../util')
 
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
@@ -48,6 +49,8 @@ class LLMObsPlugin extends TracingPlugin {
         integration: this.constructor.integration,
         ...registerOptions,
       })
+
+      writeBridgeTags(span)
     }
   }
 
