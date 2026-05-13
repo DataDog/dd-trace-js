@@ -52,13 +52,15 @@ describe('Plugin', () => {
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
+          await createTopicWithRetry(admin, {
+            waitForLeaders: true,
             topics: [{
               topic: testTopic,
               numPartitions: 1,
               replicationFactor: 1,
             }],
           })
+          await admin.disconnect()
           clusterIdAvailable = semver.intersects(version, '>=1.13')
         })
 
@@ -545,4 +547,22 @@ async function sendMessages (kafka, topic, messages) {
     messages,
   })
   await producer.disconnect()
+}
+
+// KafkaJS's retryOnLeaderNotAvailable only retries on LEADER_NOT_AVAILABLE. Right after
+// topic creation, Kafka can transiently return UNKNOWN_TOPIC_OR_PARTITION in the metadata
+// response before the new topic has fully propagated, which KafkaJS re-throws immediately.
+async function createTopicWithRetry (admin, topicConfig, maxRetries = 5) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await admin.createTopics(topicConfig)
+      return
+    } catch (err) {
+      if (attempt < maxRetries && err.type === 'UNKNOWN_TOPIC_OR_PARTITION') {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        continue
+      }
+      throw err
+    }
+  }
 }
