@@ -12,8 +12,13 @@ describe('bullmq producer telemetry metadata injection', () => {
 
   beforeEach(() => {
     log = { warn: sinon.stub(), error: sinon.stub() }
+    // Chain proxyquire so log.error calls from filter.js are also captured.
+    const filterModule = proxyquire('../src/filter', {
+      '../../dd-trace/src/log': log,
+    })
     plugins = proxyquire('../src/producer', {
       '../../dd-trace/src/log': log,
+      './filter': filterModule,
     })
   })
 
@@ -56,41 +61,60 @@ describe('bullmq producer telemetry metadata injection', () => {
     sinon.assert.notCalled(log.warn)
   })
 
-  it('skips Queue.add producer instrumentation when the filter rejects the job', () => {
-    const instance = buildPluginInstance()
-    const filter = sinon.stub().returns(false)
-    const ctx = { arguments: ['skip', { id: 1 }, { attempts: 1 }] }
-
-    instance.config = { filter }
-
-    assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
-    sinon.assert.calledOnceWithExactly(filter, {
-      name: 'skip', data: { id: 1 }, opts: { attempts: 1 }, queueName: undefined,
-    })
-    sinon.assert.notCalled(instance.tracer.inject)
-  })
-
-  it('logs an error and uses the default filter when filter is not a function', () => {
+  it('passes a user-supplied producerFilter through configure()', () => {
     const [QueueAddPlugin] = plugins
-    const baseBullmqProto = Object.getPrototypeOf(QueueAddPlugin.prototype)
-    const parentProto = Object.getPrototypeOf(baseBullmqProto)
+    const baseProto = Object.getPrototypeOf(QueueAddPlugin.prototype)
+    const parentProto = Object.getPrototypeOf(baseProto)
     const superConfigure = sinon.stub(parentProto, 'configure')
 
     try {
+      const userFilter = () => false
       const instance = Object.create(QueueAddPlugin.prototype)
-      instance.configure({ filter: 'not-a-function' })
+      instance.configure({ producerFilter: userFilter })
 
-      sinon.assert.calledOnce(log.error)
-      assert.match(log.error.firstCall.args[0], /Expected `filter` to be a function/)
-      const passedConfig = superConfigure.firstCall.args[0]
-      assert.strictEqual(typeof passedConfig.filter, 'function')
-      assert.strictEqual(passedConfig.filter(), true)
+      const passed = superConfigure.firstCall.args[0]
+      assert.strictEqual(passed.producerFilter, userFilter)
+      sinon.assert.notCalled(log.error)
     } finally {
       superConfigure.restore()
     }
   })
 
-  it('instruments anyway and logs when Queue.add filter throws', () => {
+  it('logs an error and uses the default filter when producerFilter is not a function', () => {
+    const [QueueAddPlugin] = plugins
+    const baseProto = Object.getPrototypeOf(QueueAddPlugin.prototype)
+    const parentProto = Object.getPrototypeOf(baseProto)
+    const superConfigure = sinon.stub(parentProto, 'configure')
+
+    try {
+      const instance = Object.create(QueueAddPlugin.prototype)
+      instance.configure({ producerFilter: 'not-a-function' })
+
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[0], /Expected `producerFilter` to be a function/)
+      const passed = superConfigure.firstCall.args[0]
+      assert.strictEqual(typeof passed.producerFilter, 'function')
+      assert.strictEqual(passed.producerFilter(), true)
+    } finally {
+      superConfigure.restore()
+    }
+  })
+
+  it('skips Queue.add producer instrumentation when producerFilter rejects the job', () => {
+    const instance = buildPluginInstance()
+    const producerFilter = sinon.stub().returns(false)
+    const ctx = { arguments: ['skip', { id: 1 }, { attempts: 1 }] }
+
+    instance.config = { producerFilter }
+
+    assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
+    sinon.assert.calledOnceWithExactly(producerFilter, {
+      name: 'skip', data: { id: 1 }, opts: { attempts: 1 }, queueName: undefined,
+    })
+    sinon.assert.notCalled(instance.tracer.inject)
+  })
+
+  it('instruments anyway and logs when Queue.add producerFilter throws', () => {
     const [QueueAddPlugin] = plugins
     const tracer = {
       inject: sinon.stub().callsFake((span, format, carrier) => {
@@ -98,10 +122,10 @@ describe('bullmq producer telemetry metadata injection', () => {
       }),
     }
     const instance = new QueueAddPlugin(tracer, {})
-    const filter = sinon.stub().throws(new Error('bad filter'))
+    const producerFilter = sinon.stub().throws(new Error('bad filter'))
     const ctx = { arguments: ['job', { id: 1 }] }
 
-    instance.config = { filter }
+    instance.config = { producerFilter }
     instance.startSpan = sinon.stub().callsFake((options, ctx) => {
       ctx.currentStore = { span: {} }
       return ctx.currentStore.span
@@ -113,7 +137,7 @@ describe('bullmq producer telemetry metadata injection', () => {
     sinon.assert.calledOnce(instance.startSpan)
   })
 
-  it('instruments all jobs and logs when Queue.addBulk filter throws', () => {
+  it('instruments all jobs and logs when Queue.addBulk producerFilter throws', () => {
     const [, QueueAddBulkPlugin] = plugins
     const tracer = {
       inject: sinon.stub().callsFake((span, format, carrier) => {
@@ -121,7 +145,7 @@ describe('bullmq producer telemetry metadata injection', () => {
       }),
     }
     const instance = new QueueAddBulkPlugin(tracer, {})
-    const filter = sinon.stub().throws(new Error('boom'))
+    const producerFilter = sinon.stub().throws(new Error('boom'))
     const job1 = { name: 'a', data: { id: 1 }, opts: {} }
     const job2 = { name: 'b', data: { id: 2 }, opts: {} }
     const ctx = {
@@ -129,7 +153,7 @@ describe('bullmq producer telemetry metadata injection', () => {
       arguments: [[job1, job2]],
     }
 
-    instance.config = { filter }
+    instance.config = { producerFilter }
     instance.startSpan = sinon.stub().callsFake((options, ctx) => {
       ctx.currentStore = { span: {} }
       return ctx.currentStore.span
@@ -145,7 +169,7 @@ describe('bullmq producer telemetry metadata injection', () => {
     assert.ok(job2.opts.telemetry)
   })
 
-  it('only handles Queue.addBulk jobs allowed by the filter', () => {
+  it('only handles Queue.addBulk jobs allowed by producerFilter', () => {
     const [, QueueAddBulkPlugin] = plugins
     const tracer = {
       inject: sinon.stub().callsFake((span, format, carrier) => {
@@ -155,13 +179,13 @@ describe('bullmq producer telemetry metadata injection', () => {
     const instance = new QueueAddBulkPlugin(tracer, {})
     const firstJob = { name: 'skip', data: { id: 1 }, opts: {} }
     const secondJob = { name: 'keep', data: { id: 2 }, opts: {} }
-    const filter = sinon.stub().callsFake(({ name }) => name !== 'skip')
+    const producerFilter = sinon.stub().callsFake(({ name }) => name !== 'skip')
     const ctx = {
       self: { name: 'test-queue' },
       arguments: [[firstJob, secondJob]],
     }
 
-    instance.config = { filter }
+    instance.config = { producerFilter }
     instance.startSpan = sinon.stub().callsFake((options, ctx) => {
       ctx.currentStore = { span: {} }
       return ctx.currentStore.span
@@ -173,13 +197,13 @@ describe('bullmq producer telemetry metadata injection', () => {
     assert.deepStrictEqual(JSON.parse(secondJob.opts.telemetry.metadata), {
       _datadog: { 'x-datadog-trace-id': '1' },
     })
-    sinon.assert.calledWithExactly(filter.firstCall, {
+    sinon.assert.calledWithExactly(producerFilter.firstCall, {
       name: 'skip', data: { id: 1 }, opts: firstJob.opts, queueName: 'test-queue',
     })
-    sinon.assert.calledWithExactly(filter.secondCall, {
+    sinon.assert.calledWithExactly(producerFilter.secondCall, {
       name: 'keep', data: { id: 2 }, opts: secondJob.opts, queueName: 'test-queue',
     })
-    sinon.assert.calledTwice(filter)
+    sinon.assert.calledTwice(producerFilter)
     assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 1)
   })
 })

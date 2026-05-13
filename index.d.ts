@@ -2298,7 +2298,10 @@ declare namespace tracer {
      */
     interface bullmq extends Instrumentation {
       /**
-       * Custom filter function used to decide whether a BullMQ producer operation should be instrumented.
+       * Filter applied to BullMQ producer operations (`Queue.add`, `Queue.addBulk`,
+       * `FlowProducer.add`). Return `false` to skip span creation, trace context
+       * injection, and DSM checkpoint handling for the matching job. Consumer-side
+       * (`Worker`) instrumentation is unaffected.
        *
        * @param job.name - The BullMQ job name.
        * @param job.data - The BullMQ job data.
@@ -2306,7 +2309,7 @@ declare namespace tracer {
        * @param job.queueName - The name of the queue the job is being added to.
        * @returns true to instrument the producer operation, false to skip it.
        */
-      filter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
+      producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
     }
 
     interface bunyan extends Integration {}
