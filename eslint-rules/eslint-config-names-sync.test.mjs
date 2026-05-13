@@ -56,28 +56,32 @@ ruleTester.run('eslint-config-names-sync', rule, {
       code: '',
       options: [getFixtureOptions('iast-experimental-alias-exception')],
     },
+    {
+      filename: path.join(fixturesDirectory, 'iast-canonical-still-checked', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('iast-canonical-still-checked')],
+    },
   ],
   invalid: [
-    // TODO: Re-enable once configurationMissingInIndexDts check is re-enabled.
-    // {
-    //   filename: path.join(fixturesDirectory, 'missing-in-index-dts', 'lint-anchor.js'),
-    //   code: '',
-    //   options: [getFixtureOptions('missing-in-index-dts')],
-    //   errors: [
-    //     {
-    //       messageId: 'configurationMissingInIndexDts',
-    //       data: {
-    //         configurationName: 'missingFromTypes',
-    //       },
-    //     },
-    //     {
-    //       messageId: 'configurationMissingInIndexDts',
-    //       data: {
-    //         configurationName: 'telemetry',
-    //       },
-    //     },
-    //   ],
-    // },
+    {
+      filename: path.join(fixturesDirectory, 'missing-in-index-dts', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('missing-in-index-dts')],
+      errors: [
+        {
+          messageId: 'configurationMissingInIndexDts',
+          data: {
+            configurationName: 'missingFromTypes',
+          },
+        },
+        {
+          messageId: 'configurationMissingInIndexDts',
+          data: {
+            configurationName: 'telemetry',
+          },
+        },
+      ],
+    },
     {
       filename: path.join(fixturesDirectory, 'missing-in-supported-configurations', 'lint-anchor.js'),
       code: '',
@@ -100,17 +104,5 @@ ruleTester.run('eslint-config-names-sync', rule, {
         },
       }],
     },
-    // TODO: Re-enable once configurationMissingInIndexDts check is re-enabled.
-    // {
-    //   filename: path.join(fixturesDirectory, 'iast-canonical-still-checked', 'lint-anchor.js'),
-    //   code: '',
-    //   options: [getFixtureOptions('iast-canonical-still-checked')],
-    //   errors: [{
-    //     messageId: 'configurationMissingInIndexDts',
-    //     data: {
-    //       configurationName: 'iast.securityControlsConfiguration',
-    //     },
-    //   }],
-    // },
   ],
 })

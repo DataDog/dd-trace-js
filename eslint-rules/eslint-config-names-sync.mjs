@@ -11,6 +11,8 @@ const applyMajorOverrides = require('../packages/dd-trace/src/config/major-overr
 const IGNORED_CONFIGURATION_NAMES = new Set([
   // v6 drops `experimental.b3` from `index.d.ts`; v5 still consumes the env var.
   'experimental.b3',
+  // v6-only config not yet exposed in `index.d.ts`.
+  'iast.securityControlsConfiguration',
   'tracePropagationStyle',
   'tracing',
 ])
@@ -599,17 +601,13 @@ export default {
           return
         }
 
-        // TODO: Re-enable once supported-configurations.json supports major-version-specific
-        // entries. Right now index.d.ts and index.d.v5.ts define different surfaces per major
-        // version, but supported-configurations.json has no such distinction, causing false
-        // positives when a config exists only in one version's type file.
-        // reportMissingConfigurations(
-        //   context,
-        //   node,
-        //   supportedConfigurationInfo.names,
-        //   indexDtsNames,
-        //   'configurationMissingInIndexDts'
-        // )
+        reportMissingConfigurations(
+          context,
+          node,
+          supportedConfigurationInfo.names,
+          indexDtsNames,
+          'configurationMissingInIndexDts'
+        )
         reportMissingConfigurations(
           context,
           node,
