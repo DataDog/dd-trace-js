@@ -271,6 +271,12 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
   })
 
   describe('producerFilter via tracer.use()', () => {
+    function assertTraceDoesNotInclude (traces, rootName, filteredSpanName) {
+      const spans = traces.flat()
+      assert.ok(spans.some(span => span.name === rootName))
+      assert.ok(!spans.some(span => span.name === filteredSpanName))
+    }
+
     it('invokes producerFilter with the job shape and emits a span when accepted', async () => {
       const producerFilter = sinon.stub().returns(true)
       require('../../dd-trace').use('bullmq', { producerFilter })
@@ -288,6 +294,25 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
       assert.strictEqual(job.name, 'test-job')
       assert.strictEqual(job.queueName, 'test-queue')
       assert.strictEqual(job.data.message, 'Hello from BullMQ')
+    })
+
+    it('does not emit a Queue.add span when producerFilter rejects the job', async () => {
+      const producerFilter = sinon.stub().returns(false)
+      require('../../dd-trace').use('bullmq', { producerFilter })
+
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        assertTraceDoesNotInclude(traces, 'filtered-bullmq-add', 'bullmq.add')
+      }, {
+        rejectFirst: true,
+        spanResourceMatch: /^filtered-bullmq-add$/,
+      })
+
+      await meta.tracer.trace('filtered-bullmq-add', async () => {
+        await testSetup.queueAdd()
+      })
+      await traceAssertion
+
+      sinon.assert.calledOnce(producerFilter)
     })
 
     it('invokes producerFilter for every job passed to Queue.addBulk', async () => {
