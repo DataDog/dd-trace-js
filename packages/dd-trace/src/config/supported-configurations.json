@@ -3305,7 +3305,7 @@
         "default": "false"
       }
     ],
-    "DD_TRACE_OTEL_METRICS_ENABLED": [
+    "DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
