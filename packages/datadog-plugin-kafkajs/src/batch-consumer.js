@@ -11,32 +11,20 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   bindStart (ctx) {
     const { topic, partition, messages, groupId, clusterId } = ctx.extractedArgs || ctx
 
-    // kafkajs's eachBatch hands the user one batch per (topic, partition),
-    // so all messages share the same partition. start_offset is the offset of
-    // the first record in the batch.
-    const startOffset = messages[0]?.offset === undefined ? undefined : Number(messages[0].offset)
-    const meta = {
-      component: this.constructor.id,
-      'kafka.topic': topic,
-      'kafka.cluster_id': clusterId,
-      'messaging.destination.name': topic,
-      'messaging.system': 'kafka',
-    }
-    if (startOffset !== undefined) {
-      meta['kafka.messages.offsets'] = JSON.stringify([{ partition, start_offset: startOffset }])
-    }
-    const metrics = {
-      'kafka.partition': partition,
-      'messaging.batch.message_count': messages.length,
-    }
-    if (messages.length === 1 && startOffset !== undefined) {
-      metrics['kafka.message.offset'] = startOffset
-    }
     const span = this.startSpan({
       resource: topic,
       type: 'worker',
-      meta,
-      metrics,
+      meta: {
+        component: this.constructor.id,
+        'kafka.topic': topic,
+        'kafka.cluster_id': clusterId,
+        'messaging.destination.name': topic,
+        'messaging.system': 'kafka',
+      },
+      metrics: {
+        'kafka.partition': partition,
+        'messaging.batch.message_count': messages.length,
+      },
     }, ctx)
 
     for (const message of messages) {
