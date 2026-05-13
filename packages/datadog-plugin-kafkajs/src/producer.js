@@ -108,6 +108,12 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       if (offsets.length > 0) {
         span.setTag('kafka.messages.offsets', JSON.stringify(offsets))
       }
+      // Single-message send: the one entry's partition/offset describes the
+      // exact record. Also expose them as flat tags for easy filtering.
+      if (offsets.length === 1 && ctx.messages?.length === 1) {
+        span.setTag('kafka.partition', offsets[0].partition)
+        span.setTag('kafka.message.offset', offsets[0].start_offset)
+      }
     }
     super.finish(ctx)
   }
