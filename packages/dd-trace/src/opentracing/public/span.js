@@ -29,7 +29,7 @@ class PublicSpan {
   }
 
   tracer () {
-    return this.#span.tracer.apply(this.#span, arguments)
+    return global._ddtrace
   }
 
   setOperationName () {
