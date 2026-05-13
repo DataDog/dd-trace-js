@@ -56,6 +56,7 @@ jobs:
           # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
       - name: Perform CodeQL Analysis
+        id: analyze
         uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
         with:
           token: ${{ github.token }}
@@ -64,25 +65,23 @@ jobs:
       - name: Wait for SARIF processing
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
+          SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
         run: |
-          HEAD_SHA=$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH")
-          REF="${GITHUB_REF/\/merge/\/head}"
-          [ -n "$HEAD_SHA" ] || { HEAD_SHA="$GITHUB_SHA"; REF="$GITHUB_REF"; }
-
           # Poll every 10s (30x = 5 min total), matching the official action's
           # timeout but halving the API calls vs its default 5s interval.
           for i in $(seq 1 30); do
-            COUNT=$(curl -sf \
+            RESULT=$(curl -sf \
               -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/analyses?ref=$REF&per_page=5" \
-              | jq --arg sha "$HEAD_SHA" '[.[] | select(.commit_sha == $sha)] | length')
-            if [ "$COUNT" -gt 0 ]; then
-              echo "SARIF processing complete"
-              exit 0
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs/$SARIF_ID")
+            STATUS=$(echo "$RESULT" | jq -r '.processing_status')
+            echo "Processing status: $STATUS"
+            if [ "$STATUS" = "complete" ]; then exit 0; fi
+            if [ "$STATUS" = "failed" ]; then
+              echo "$RESULT" | jq -r '.errors // empty'
+              exit 1
             fi
-            echo "Waiting for processing... ($i/30)"
             sleep 10
           done
           echo "SARIF processing did not complete within 5 minutes"
