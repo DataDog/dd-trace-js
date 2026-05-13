@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
+const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -245,7 +246,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      span.addLink(span2.context())
+      span.addLink({ context: span2.context() })
       assert.ok(Object.hasOwn(span, '_links'))
       assert.strictEqual(span._links.length, 1)
     })
@@ -258,7 +259,7 @@ describe('Span', () => {
         foo: 'bar',
         baz: 'qux',
       }
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, attributes)
     })
 
@@ -273,7 +274,7 @@ describe('Span', () => {
         qux: [1, 2, 3],
       }
 
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, {
         foo: 'true',
         bar: 'hi',
@@ -293,10 +294,20 @@ describe('Span', () => {
         baz: 'valid',
       }
 
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, {
         baz: 'valid',
       })
+    })
+
+    const legacyAddLinkTest = DD_MAJOR < 6 ? it : it.skip
+    legacyAddLinkTest('still accepts the deprecated (spanContext, attributes) form on v5', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addLink(span2.context(), { foo: 'bar' })
+      assert.strictEqual(span._links.length, 1)
+      assert.deepStrictEqual(span._links[0].attributes, { foo: 'bar' })
     })
 
     it('seeds links from constructor fields.links and sanitizes their attributes', () => {
