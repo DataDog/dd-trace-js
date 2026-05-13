@@ -19,10 +19,12 @@ const IGNORED_CONFIGURATION_NAMES = new Set([
 // v6. Keep these out of the `index.d.ts` ↔ JSON parity check.
 const IGNORED_CONFIGURATION_NAME_PREFIXES = [
   'experimental.appsec.',
+  'experimental.iast.',
   'ingestion.',
 ]
 const IGNORED_CONFIGURATION_LEAVES = new Set([
   'experimental.appsec',
+  'experimental.iast',
 ])
 const UNSUPPORTED_CONFIGURATION_ROOTS = new Set([
   'isCiVisibility',
@@ -87,6 +89,16 @@ function createInspectionResult (overrides) {
 }
 
 /**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isIgnoredConfigurationName (name) {
+  return IGNORED_CONFIGURATION_NAMES.has(name) ||
+    IGNORED_CONFIGURATION_LEAVES.has(name) ||
+    IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))
+}
+
+/**
  * @param {string} filePath
  * @returns {SupportedConfigurationInfo}
  */
@@ -131,19 +143,19 @@ function getSupportedConfigurationInfo (filePath) {
       }
 
       for (const name of entry.configurationNames ?? []) {
-        if (typeof name !== 'string' || IGNORED_CONFIGURATION_NAMES.has(name)) {
+        if (typeof name !== 'string') {
           continue
         }
-        if (IGNORED_CONFIGURATION_LEAVES.has(name)) {
+
+        targets.add(name)
+
+        if (isIgnoredConfigurationName(name)) {
           continue
         }
-        if (IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
-          continue
-        }
+
         if (!entry.deprecated) {
           names.add(name)
         }
-        targets.add(name)
       }
     }
 
@@ -497,14 +509,8 @@ function getIndexDtsConfigurationNames (filePath, supportedConfigurationInfo) {
 
   inspectMembers(tracerOptions.node.members, tracerOptions.namespaceKey, '')
 
-  for (const ignoredConfigurationName of IGNORED_CONFIGURATION_NAMES) {
-    names.delete(ignoredConfigurationName)
-  }
-  for (const leaf of IGNORED_CONFIGURATION_LEAVES) {
-    names.delete(leaf)
-  }
   for (const name of names) {
-    if (IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+    if (isIgnoredConfigurationName(name)) {
       names.delete(name)
     }
   }

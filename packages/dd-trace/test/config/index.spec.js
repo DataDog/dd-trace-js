@@ -226,6 +226,30 @@ describe('Config', () => {
       assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
     })
 
+    it('applyMajorOverrides is idempotent for v5 security controls', () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const supported = fresh.supportedConfigurations
+      const iastEntry = supported.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
+
+      applyMajorOverrides(supported, 5)
+      applyMajorOverrides(supported, 5)
+
+      assert.deepStrictEqual(iastEntry.configurationNames, [
+        'iast.securityControlsConfiguration',
+        'experimental.iast.securityControlsConfiguration',
+      ])
+      assert.strictEqual(iastEntry.internalPropertyName, undefined)
+    })
+
+    it('loads v5 config repeatedly after security controls are restored', () => {
+      const firstConfig = getConfig(undefined, { ddMajor: 5 })
+      const secondConfig = getConfig(undefined, { ddMajor: 5 })
+
+      assert.strictEqual(firstConfig.iast.securityControlsConfiguration, undefined)
+      assert.strictEqual(secondConfig.iast.securityControlsConfiguration, undefined)
+    })
+
     it('should pass through random envs', async () => {
       process.env.FOOBAR = 'true'
       const { FOOBAR } = getEnvironmentVariables()
