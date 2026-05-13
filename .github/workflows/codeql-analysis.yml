@@ -59,7 +59,6 @@ jobs:
         uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
         with:
           token: ${{ github.token }}
-          category: /language:${{ matrix.language }}
           wait-for-processing: false
 
       - name: Wait for SARIF processing
