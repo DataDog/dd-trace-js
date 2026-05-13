@@ -125,13 +125,14 @@ jobs:
           SARIF_ID=$(echo "$RESPONSE" | jq -r '.id')
           echo "SARIF upload accepted (id: $SARIF_ID)"
 
-          # Poll every 10s (30x = 5 min total), matching the official action's timeout
-          # but halving the API calls vs the official action's 5s interval.
+          # Poll with dd-octo-sts token (not GH_TOKEN) to avoid rate-limit impact.
+          # GH_TOKEN is only used for the single upload call above to get the
+          # correct analysis_key; subsequent reads use the bot token instead.
           CONCLUSION="failure"
           ERRORS=""
           for i in $(seq 1 30); do
             RESULT=$(curl -sf \
-              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs/$SARIF_ID")
@@ -150,7 +151,7 @@ jobs:
           ALERT_COUNT=0
           if [ "$CONCLUSION" = "success" ]; then
             ALERT_COUNT=$(curl -sf \
-              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/analyses?ref=$UPLOAD_REF&sarif_id=$SARIF_ID" \
