@@ -258,9 +258,11 @@ function safeJsonParse (value, fallback) {
 // shared _trace.tags bag is serialized to the first span in every flushed
 // chunk's meta, so partial flush is covered automatically. The mirrored Python
 // implementation is `_activate_llmobs_span` in dd-trace-py's _llmobs.py, which
-// fires from a global span-start hook gated on SpanTypes.LLM — JS has two
-// registration sites (SDK and plugin base) so this helper is invoked from both
-// to achieve the same single-hook semantics.
+// fires from a global span-start hook gated on SpanTypes.LLM. JS has no
+// SpanTypes.LLM marker, so this helper is invoked from the single
+// `LLMObsTagger.registerLLMObsSpan` chokepoint, which every registration path
+// (SDK, default plugin start, and bespoke plugin registrations like
+// `bedrockruntime.setLLMObsTags`) flows through.
 function writeBridgeTags (span) {
   const traceTags = span?.context?.()._trace?.tags
   if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
