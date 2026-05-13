@@ -3,10 +3,13 @@
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
+const { readFileSync } = require('node:fs')
+const { builtinModules } = require('node:module')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   getCoveredFilenamesFromCoverage,
@@ -74,6 +77,7 @@ const CHILD_MESSAGE_CALL = 1
 
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10_000
+const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
@@ -101,6 +105,8 @@ let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
+let activeTestSuiteAbsolutePath
+let isConsoleErrorWrapped = false
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -124,7 +130,12 @@ const efdNewTestCandidates = new Set()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
+const testSuiteFastCheckUsage = new Map()
 const testSuiteJestObjects = new Map()
+const wrappedJestGlobals = new WeakSet()
+const wrappedJestObjects = new WeakSet()
+const wrappedWorkerInitializers = new WeakSet()
+const publishedRuntimeReferenceErrors = new WeakMap()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
@@ -303,6 +314,26 @@ function getAttemptToFixExecutionsFromJestResults (result) {
   return executions
 }
 
+function wrapConsoleErrorForJestReferenceErrors () {
+  if (isConsoleErrorWrapped) return
+
+  isConsoleErrorWrapped = true
+  // eslint-disable-next-line no-console
+  const originalConsoleError = console.error
+  // eslint-disable-next-line no-console
+  console.error = function () {
+    const [message] = arguments
+    if (
+      typeof message === 'string' &&
+      message.includes('Jest environment has been torn down') &&
+      activeTestSuiteAbsolutePath
+    ) {
+      publishRuntimeReferenceError({ _testPath: activeTestSuiteAbsolutePath }, message)
+    }
+    return originalConsoleError.apply(this, arguments)
+  }
+}
+
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -314,6 +345,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.global._ddtrace = global._ddtrace
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
+      activeTestSuiteAbsolutePath = this.testSuiteAbsolutePath
+      wrapConsoleErrorForJestReferenceErrors()
+      this.globalConfig = config.globalConfig
 
       this.displayName = config.projectConfig?.displayName?.name || config.displayName
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
@@ -423,6 +457,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     resetMockState () {
       try {
+        if (this.moduleMocker?.clearAllMocks) {
+          this.moduleMocker.clearAllMocks()
+          return
+        }
         const jestObject = testSuiteJestObjects.get(this.testSuiteAbsolutePath)
         if (jestObject?.clearAllMocks) {
           jestObject.clearAllMocks()
@@ -504,7 +542,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     getShouldStripSeedFromTestName () {
-      return testSuiteAbsolutePathsWithFastCheck.has(this.testSuiteAbsolutePath)
+      return doesTestSuiteUseFastCheck(this.testSuiteAbsolutePath)
     }
 
     // At the `add_test` event we don't have the test object yet, so we can't use it
@@ -843,8 +881,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
-        // For quarantined tests, suppress errors so Jest doesn't count them as failures.
-        // This prevents --bail from stopping the test run on quarantined test failures.
+        // For quarantined tests, track failures so the session can be marked as passing later,
+        // and suppress errors so Jest does not mark the test suite as failing.
         // The actual status ('fail') is already captured above for dd-trace reporting.
         // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
         if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
@@ -1055,7 +1093,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
       }
-      return super.teardown()
+      const clearActiveTestSuite = () => {
+        realSetTimeout(() => {
+          if (activeTestSuiteAbsolutePath === this.testSuiteAbsolutePath) {
+            activeTestSuiteAbsolutePath = undefined
+          }
+        }, 0)
+      }
+      const result = super.teardown()
+      if (result?.then) {
+        return result.finally(clearActiveTestSuite)
+      }
+      clearActiveTestSuite()
+      return result
     }
   }
 }
@@ -1557,6 +1607,33 @@ function coverageReporterWrapper (coverageReporter) {
   return coverageReporter
 }
 
+function shouldWaitForTestSuiteFinish (environment) {
+  return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
+}
+
+function publishTestSuiteFinish (payload, waitForFinish) {
+  if (!testSuiteFinishCh.hasSubscribers) return
+
+  if (!waitForFinish) {
+    testSuiteFinishCh.publish(payload)
+    return
+  }
+
+  return new Promise(resolve => {
+    testSuiteFinishCh.publish({
+      ...payload,
+      waitForFinish,
+      onDone: resolve,
+    })
+  })
+}
+
+function cleanupTestSuiteState (testSuiteAbsolutePath) {
+  testSuiteMockedFiles.delete(testSuiteAbsolutePath)
+  testSuiteFastCheckUsage.delete(testSuiteAbsolutePath)
+  testSuiteJestObjects.delete(testSuiteAbsolutePath)
+}
+
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
@@ -1675,7 +1752,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         const getFilesWithPath = (files) => files.map(file => getTestSuitePath(file, root))
 
         const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
-        const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuiteAbsolutePath) || [])
+        const mockedFiles = getFilesWithPath(getMockedFiles(environment.testSuiteAbsolutePath))
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
@@ -1684,19 +1761,51 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
           testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
         })
       }
-      testSuiteFinishCh.publish({ status, errorMessage, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
+      const waitForFinish = shouldWaitForTestSuiteFinish(environment)
+      const finishPayload = {
+        status,
+        errorMessage,
+        testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
+      }
+      if (waitForFinish) {
+        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+        if (finishPromise) {
+          return finishPromise.then(() => {
+            // Cleanup per-suite state to avoid memory leaks
+            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+
+            return suiteResults
+          })
+        }
+      }
+      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
-      testSuiteMockedFiles.delete(environment.testSuiteAbsolutePath)
-      testSuiteJestObjects.delete(environment.testSuiteAbsolutePath)
+      cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
       return suiteResults
     }).catch(error => {
-      testSuiteFinishCh.publish({ status: 'fail', error, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
+      const waitForFinish = shouldWaitForTestSuiteFinish(environment)
+      const finishPayload = {
+        status: 'fail',
+        error,
+        testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
+      }
+      if (waitForFinish) {
+        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+        if (finishPromise) {
+          return finishPromise.then(() => {
+            // Cleanup per-suite state to avoid memory leaks
+            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+
+            throw error
+          })
+        }
+      }
+      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
-      testSuiteMockedFiles.delete(environment.testSuiteAbsolutePath)
-      testSuiteJestObjects.delete(environment.testSuiteAbsolutePath)
+      cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
       throw error
     })
@@ -1794,6 +1903,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddRepositoryRoot',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddItrSkippingEnabledTags',
   '_ddIsDiEnabled',
   '_ddIsKnownTestsEnabled',
   '_ddIsTestManagementTestsEnabled',
@@ -1904,39 +2014,195 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'winston',
 ])
 
+function recordMockedFile (suiteFilePath, moduleName) {
+  if (!suiteFilePath || typeof moduleName !== 'string') return
+
+  const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
+  const suiteDir = path.dirname(suiteFilePath)
+  const mockPath = path.resolve(suiteDir, moduleName)
+  existingMockedFiles.push(mockPath)
+  testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
+}
+
+const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+
+function getStaticMockedFiles (suiteFilePath) {
+  if (!suiteFilePath) return []
+
+  const mockedFiles = []
+  try {
+    const source = readFileSync(suiteFilePath, 'utf8')
+    let match
+    JEST_STATIC_MOCK_CALL_RE.lastIndex = 0
+    while ((match = JEST_STATIC_MOCK_CALL_RE.exec(source)) !== null) {
+      mockedFiles.push(path.resolve(path.dirname(suiteFilePath), match[2]))
+    }
+  } catch {
+    // ignore errors
+  }
+
+  return mockedFiles
+}
+
+function getMockedFiles (suiteFilePath) {
+  const mockedFiles = testSuiteMockedFiles.get(suiteFilePath)
+  if (mockedFiles?.length) {
+    return mockedFiles
+  }
+  return getStaticMockedFiles(suiteFilePath)
+}
+
+function wrapJestObject (jestObject, suiteFilePath) {
+  if (!jestObject || !suiteFilePath || wrappedJestObjects.has(jestObject)) return
+
+  testSuiteJestObjects.set(suiteFilePath, jestObject)
+  wrappedJestObjects.add(jestObject)
+
+  shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
+    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
+    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
+    }
+    recordMockedFile(suiteFilePath, moduleName)
+    return mock.apply(this, arguments)
+  })
+}
+
+function wrapJestGlobalsForRuntime (runtime) {
+  const jestGlobals = runtime?.jestGlobals
+  if (!jestGlobals || wrappedJestGlobals.has(jestGlobals) || typeof jestGlobals.jestObjectFor !== 'function') {
+    return
+  }
+
+  wrappedJestGlobals.add(jestGlobals)
+  shimmer.wrap(jestGlobals, 'jestObjectFor', jestObjectFor => function (from) {
+    const jestObject = jestObjectFor.apply(this, arguments)
+    wrapJestObject(jestObject, from)
+    return jestObject
+  })
+}
+
+function recordFastCheckUsage (runtime, from, moduleName) {
+  if (moduleName !== '@fast-check/jest') return
+
+  if (from) {
+    testSuiteAbsolutePathsWithFastCheck.add(from)
+    testSuiteFastCheckUsage.set(from, true)
+  }
+  if (runtime?._testPath) {
+    testSuiteAbsolutePathsWithFastCheck.add(runtime._testPath)
+    testSuiteFastCheckUsage.set(runtime._testPath, true)
+  }
+}
+
+function doesTestSuiteUseFastCheck (testSuiteAbsolutePath) {
+  if (!testSuiteAbsolutePath) return false
+  if (testSuiteFastCheckUsage.has(testSuiteAbsolutePath)) {
+    return testSuiteFastCheckUsage.get(testSuiteAbsolutePath)
+  }
+
+  try {
+    const usesFastCheck = readFileSync(testSuiteAbsolutePath, 'utf8').includes('@fast-check/jest')
+    testSuiteFastCheckUsage.set(testSuiteAbsolutePath, usesFastCheck)
+    if (usesFastCheck) {
+      testSuiteAbsolutePathsWithFastCheck.add(testSuiteAbsolutePath)
+    }
+    return usesFastCheck
+  } catch {
+    testSuiteFastCheckUsage.set(testSuiteAbsolutePath, false)
+    return false
+  }
+}
+
+function getLastLoggedReferenceError (runtime) {
+  const loggedReferenceErrors = runtime?.loggedReferenceErrors
+  if (!loggedReferenceErrors?.size) return
+  return [...loggedReferenceErrors].pop()
+}
+
+function publishRuntimeReferenceError (runtime, errorMessage) {
+  if (!errorMessage || !runtime?._testPath) return
+
+  let publishedErrors = publishedRuntimeReferenceErrors.get(runtime)
+  if (!publishedErrors) {
+    publishedErrors = new Set()
+    publishedRuntimeReferenceErrors.set(runtime, publishedErrors)
+  }
+  if (publishedErrors.has(errorMessage)) return
+
+  publishedErrors.add(errorMessage)
+  testSuiteErrorCh.publish({
+    errorMessage,
+    testSuiteAbsolutePath: runtime._testPath,
+  })
+}
+
+function isBetweenTestsReferenceError (error) {
+  return error?.name === 'ReferenceError' &&
+    typeof error.message === 'string' &&
+    error.message.includes('outside of the scope of the test code')
+}
+
+function reportBetweenTestsReferenceError (runtime, moduleName, originalErrorMessage) {
+  if (typeof moduleName !== 'string') return false
+
+  const fallbackErrorMessage = moduleName.startsWith('node:') || builtinModules.includes(moduleName)
+    ? 'You are trying to access a Node.js module outside of the scope of the test code.'
+    : 'You are trying to `require` a file after the Jest environment has been torn down.'
+  const errorMessage = originalErrorMessage || fallbackErrorMessage
+
+  if (typeof runtime._logFormattedReferenceError === 'function') {
+    runtime._logFormattedReferenceError(errorMessage)
+  }
+  publishRuntimeReferenceError(runtime, getLastLoggedReferenceError(runtime) || errorMessage)
+  process.exitCode = 1
+  return true
+}
+
+function requireOutsideJestRequireEngine (runtime, moduleName) {
+  if (typeof runtime._requireCoreModule === 'function') {
+    return runtime._requireCoreModule(moduleName)
+  }
+  return require(moduleName)
+}
+
+function formatDefaultStackTrace (error, structuredStackTrace) {
+  const errorString = Error.prototype.toString.call(error)
+  if (structuredStackTrace.length === 0) return errorString
+
+  return `${errorString}\n    at ${structuredStackTrace.join('\n    at ')}`
+}
+
 addHook({
   name: 'jest-runtime',
   versions: [MINIMUM_JEST_VERSION],
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
 
-  shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
-    const result = _createJestObjectFor.apply(this, arguments)
-    const suiteFilePath = this._testPath || from
+  if (typeof Runtime.prototype._createJestObjectFor === 'function') {
+    shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
+      const result = _createJestObjectFor.apply(this, arguments)
+      const suiteFilePath = this._testPath || from
 
-    // Store the jest object so we can access it later for resetting mock state
-    if (suiteFilePath) {
-      testSuiteJestObjects.set(suiteFilePath, result)
-    }
-
-    shimmer.wrap(result, 'mock', mock => function (moduleName) {
-      // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-      }
-      if (suiteFilePath) {
-        const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-        const suiteDir = path.dirname(suiteFilePath)
-        const mockPath = path.resolve(suiteDir, moduleName)
-        existingMockedFiles.push(mockPath)
-        testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
-      }
-      return mock.apply(this, arguments)
+      wrapJestObject(result, suiteFilePath)
+      return result
     })
-    return result
+  }
+
+  shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
+    wrapJestGlobalsForRuntime(this)
+    try {
+      return requireModule.apply(this, arguments)
+    } catch (error) {
+      if (isBetweenTestsReferenceError(error)) {
+        reportBetweenTestsReferenceError(this, moduleName, error.message)
+      }
+      throw error
+    }
   })
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
+    wrapJestGlobalsForRuntime(this)
     // `requireModuleOrMock` may log errors to the console. If we don't remove ourselves
     // from the stack trace, the user might see a useless stack trace rather than the error
     // that `jest` tries to show.
@@ -1945,32 +2211,33 @@ addHook({
       const filteredStackTrace = structuredStackTrace
         .filter(callSite => !callSite.getFileName()?.includes('datadog-instrumentations/src/jest.js'))
 
-      return originalPrepareStackTrace(error, filteredStackTrace)
+      if (typeof originalPrepareStackTrace === 'function') {
+        return originalPrepareStackTrace(error, filteredStackTrace)
+      }
+      return formatDefaultStackTrace(error, filteredStackTrace)
     }
     try {
       // TODO: do this for every library that we instrument
       if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
         // To bypass jest's own require engine
-        return this._requireCoreModule(moduleName)
+        return requireOutsideJestRequireEngine(this, moduleName)
       }
       // This means that `@fast-check/jest` is used in the test file.
-      if (moduleName === '@fast-check/jest') {
-        testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
-      }
-      const returnedValue = requireModuleOrMock.apply(this, arguments)
-      if (process.exitCode === 1) {
-        if (this.loggedReferenceErrors?.size > 0) {
-          const errorMessage = [...this.loggedReferenceErrors][0]
-          testSuiteErrorCh.publish({
-            errorMessage,
-            testSuiteAbsolutePath: this._testPath,
-          })
-        } else {
-          testSuiteErrorCh.publish({
-            errorMessage: 'An error occurred while importing a module',
-            testSuiteAbsolutePath: this._testPath,
-          })
+      recordFastCheckUsage(this, from, moduleName)
+      let returnedValue
+      try {
+        returnedValue = requireModuleOrMock.apply(this, arguments)
+      } catch (error) {
+        if (isBetweenTestsReferenceError(error)) {
+          reportBetweenTestsReferenceError(this, moduleName, error.message)
         }
+        throw error
+      }
+      if (process.exitCode === 1) {
+        publishRuntimeReferenceError(
+          this,
+          getLastLoggedReferenceError(this) || 'An error occurred while importing a module'
+        )
       }
       return returnedValue
     } finally {
@@ -1978,6 +2245,27 @@ addHook({
       Error.prepareStackTrace = originalPrepareStackTrace
     }
   })
+
+  if (Runtime.prototype._logFormattedReferenceError) {
+    shimmer.wrap(Runtime.prototype, '_logFormattedReferenceError', logFormattedReferenceError => function () {
+      // eslint-disable-next-line no-console
+      const originalConsoleError = console.error
+      let loggedReferenceError
+      // eslint-disable-next-line no-console
+      console.error = function () {
+        loggedReferenceError = arguments[0]
+        return originalConsoleError.apply(this, arguments)
+      }
+      try {
+        const result = logFormattedReferenceError.apply(this, arguments)
+        publishRuntimeReferenceError(this, getLastLoggedReferenceError(this) || loggedReferenceError)
+        return result
+      } finally {
+        // eslint-disable-next-line no-console
+        console.error = originalConsoleError
+      }
+    })
+  }
 
   return runtimePackage
 })
@@ -2065,11 +2353,23 @@ function wrapWorkerChannel (worker) {
   shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
 }
 
+function wrapWorkerInitializer (worker) {
+  if (wrappedWorkerInitializers.has(worker) || typeof worker.initialize !== 'function') return
+
+  wrappedWorkerInitializers.add(worker)
+  shimmer.wrap(worker, 'initialize', initialize => function () {
+    const result = initialize.apply(this, arguments)
+    wrapWorkerChannel(this)
+    return result
+  })
+}
+
 function wrapWorker (worker) {
   // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
   const workerChannel = worker._child || worker._worker
   if (!workerChannel) return
 
+  wrapWorkerInitializer(worker)
   wrapWorkerChannel(worker)
   shimmer.wrap(worker, '_onMessage', onMessageWrapper)
   workerChannel.removeAllListeners('message')

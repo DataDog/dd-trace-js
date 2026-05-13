@@ -3,10 +3,8 @@
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
-const {
-  getEnvironmentVariable,
-  getValueFromEnvSources,
-} = require('./config/helper')
+const getConfig = require('./config')
+const { getEnvironmentVariable } = require('./config/helper')
 const { getIsAzureFunction } = require('./serverless')
 
 function extractSubscriptionID (ownerName) {
@@ -19,7 +17,20 @@ function extractSubscriptionID (ownerName) {
 }
 
 function extractResourceGroup (ownerName) {
-  return /.+\+(.+)-.+webspace(-Linux)?/.exec(ownerName)?.[1]
+  // WEBSITE_OWNER_NAME format: `<sub-id>+<rg>-<region>webspace[-Linux]`. Region
+  // names have no `-`; resource groups can. Plain string ops read more directly
+  // than `/.+\+(.+)-.+webspace(-Linux)?/` and avoid the engine backtracking
+  // through three `.+` quantifiers to land on the right `-`.
+  if (typeof ownerName !== 'string') return
+  const plusIdx = ownerName.indexOf('+')
+  if (plusIdx === -1) return
+  let rest = ownerName.slice(plusIdx + 1)
+  if (rest.endsWith('-Linux')) rest = rest.slice(0, -'-Linux'.length)
+  if (!rest.endsWith('webspace')) return
+  rest = rest.slice(0, -'webspace'.length)
+  const lastDash = rest.lastIndexOf('-')
+  if (lastDash === -1) return
+  return rest.slice(0, lastDash)
 }
 
 function buildResourceID (subscriptionID, siteName, resourceGroup) {
@@ -56,7 +67,7 @@ function buildMetadata () {
   const WEBSITE_SITE_NAME = getEnvironmentVariable('WEBSITE_SITE_NAME')
   const WEBSITE_SKU = getEnvironmentVariable('WEBSITE_SKU')
 
-  const DD_AZURE_RESOURCE_GROUP = getValueFromEnvSources('DD_AZURE_RESOURCE_GROUP')
+  const { DD_AZURE_RESOURCE_GROUP } = getConfig()
   const isAzureFunction = FUNCTIONS_EXTENSION_VERSION !== undefined && FUNCTIONS_WORKER_RUNTIME !== undefined
   const isFlexConsumptionAzureFunction = isAzureFunction && WEBSITE_SKU === 'FlexConsumption'
 

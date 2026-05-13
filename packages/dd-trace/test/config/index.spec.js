@@ -68,6 +68,7 @@ describe('Config', () => {
       './supported-configurations.json': supportedConfigurations,
       '../log': log,
       './parsers': parsers,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })
     const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
@@ -130,7 +131,10 @@ describe('Config', () => {
       delete process.env.DATADOG_API_KEY
     })
 
-    it('should log deprecation warning for deprecated configurations', async () => {
+    const itLegacyAlias = DD_MAJOR < 6 ? it : it.skip
+    const itV6Filter = DD_MAJOR >= 6 ? it : it.skip
+
+    itLegacyAlias('should log deprecation warning for deprecated configurations', async () => {
       process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
       getEnvironmentVariables()
       const [warning] = await once(process, 'warning')
@@ -142,20 +146,108 @@ describe('Config', () => {
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
     })
 
-    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', async () => {
-      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
-      assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
-      const config = getConfig()
-      assert.strictEqual(config.runtimeMetricsRuntimeId, true)
-      assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
-      delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+    itLegacyAlias(
+      'should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED',
+      async () => {
+        process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+        assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+        const config = getConfig()
+        assert.strictEqual(config.runtimeMetricsRuntimeId, true)
+        assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
+        delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
 
-      const [warning] = await once(process, 'warning')
-      assert.strictEqual(warning.name, 'DeprecationWarning')
-      assert.match(
-        warning.message,
-        /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+        const [warning] = await once(process, 'warning')
+        assert.strictEqual(warning.name, 'DeprecationWarning')
+        assert.match(
+          warning.message,
+          /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+        )
+      })
+
+    // Load `helper.js` in isolation so a missing alias filter in helper.js cannot be masked by
+    // the same overrides applied from `defaults.js` against a shared module cache.
+    const loadFreshHelper = () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      return proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': fresh,
+      })
+    }
+
+    itV6Filter('drops the deprecated DD_PROFILING_EXPERIMENTAL_* aliases without rewriting them', () => {
+      const helper = loadFreshHelper()
+      const envs = helper.getEnvironmentVariables({
+        DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 'true',
+      })
+      for (const canonical of [
+        'DD_PROFILING_CODEHOTSPOTS_ENABLED',
+        'DD_PROFILING_CPU_ENABLED',
+        'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED',
+        'DD_PROFILING_TIMELINE_ENABLED',
+      ]) {
+        assert.strictEqual(envs[canonical], undefined, `${canonical} should not be populated from a dropped alias`)
+      }
+    })
+
+    itV6Filter('drops the deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED alias', () => {
+      const helper = loadFreshHelper()
+      const envs = helper.getEnvironmentVariables({ DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED: 'true' })
+      assert.strictEqual(envs.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+    })
+
+    itV6Filter('rejects access to the dropped DD_PROFILING_EXPERIMENTAL_CPU_ENABLED key', () => {
+      const helper = loadFreshHelper()
+      assert.throws(
+        () => helper.getEnvironmentVariable('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'),
+        /Missing DD_PROFILING_EXPERIMENTAL_CPU_ENABLED env\/configuration in "supported-configurations.json" file./
       )
+    })
+
+    itV6Filter('applyMajorOverrides is idempotent on the same supportedConfigurations object', () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const supported = fresh.supportedConfigurations
+      assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
+      supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
+      applyMajorOverrides(supported, 6)
+      assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
+      const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
+      assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
+      assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
+      const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
+      assert.strictEqual(runtimeIdEntry.aliases, undefined)
+
+      const beforeKeyCount = Object.keys(supported).length
+      applyMajorOverrides(supported, 6)
+      assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
+    })
+
+    it('applyMajorOverrides is idempotent for v5 security controls', () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const supported = fresh.supportedConfigurations
+      const iastEntry = supported.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
+
+      applyMajorOverrides(supported, 5)
+      applyMajorOverrides(supported, 5)
+
+      assert.deepStrictEqual(iastEntry.configurationNames, [
+        'iast.securityControlsConfiguration',
+        'experimental.iast.securityControlsConfiguration',
+      ])
+      assert.strictEqual(iastEntry.internalPropertyName, undefined)
+    })
+
+    it('loads v5 config repeatedly after security controls are restored', () => {
+      const firstConfig = getConfig(undefined, { ddMajor: 5 })
+      const secondConfig = getConfig(undefined, { ddMajor: 5 })
+
+      assert.strictEqual(firstConfig.iast.securityControlsConfiguration, undefined)
+      assert.strictEqual(secondConfig.iast.securityControlsConfiguration, undefined)
     })
 
     it('should pass through random envs', async () => {
@@ -536,6 +628,20 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
+  it('should not disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is unset', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    delete process.env.DD_TRACE_AGENT_PROTOCOL_VERSION
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+  })
+
+  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+  })
+
   it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
     const config = getConfig()
@@ -826,6 +932,7 @@ describe('Config', () => {
       { name: 'DD_SITE', value: 'datadoghq.com', origin: 'default' },
       { name: 'DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', value: 'v0', origin: 'default' },
       { name: 'DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_STARTUP_LOGS', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH', value: 512, origin: 'default' },
       { name: 'DD_TELEMETRY_DEBUG', value: false, origin: 'default' },
@@ -1510,22 +1617,22 @@ describe('Config', () => {
         },
         exporter: 'log',
         enableGetRumData: true,
-        iast: {
-          dbRowsToTaint: 2,
-          deduplicationEnabled: false,
-          enabled: true,
-          maxConcurrentRequests: 4,
-          maxContextOperations: 5,
-          redactionEnabled: false,
-          redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-          requestSampling: 50,
-          securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
-          stackTrace: {
-            enabled: false,
-          },
-          telemetryVerbosity: 'DEBUG',
+      },
+      iast: {
+        dbRowsToTaint: 2,
+        deduplicationEnabled: false,
+        enabled: true,
+        maxConcurrentRequests: 4,
+        maxContextOperations: 5,
+        redactionEnabled: false,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        requestSampling: 50,
+        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        stackTrace: {
+          enabled: false,
         },
+        telemetryVerbosity: 'DEBUG',
       },
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -1697,19 +1804,23 @@ describe('Config', () => {
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
-
     if (DD_MAJOR < 6) {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
       sinon.assert.calledOnce(log.warn)
     } else {
-      sinon.assert.calledTwice(log.warn)
+      // In v6 `experimental.b3` is no longer parsed, so the calculated push doesn't fire and the
+      // propagation styles stay at the explicit input (`tracePropagationStyle: { inject: ['datadog'], ... }`).
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
+      sinon.assert.calledThrice(log.warn)
       sinon.assert.calledWithExactly(
         log.warn,
         'Unknown option %s with value %o',
-        'experimental.iast.securityControlsConfiguration',
+        'iast.securityControlsConfiguration',
         'SANITIZER:CODE_INJECTION:sanitizer.js:method',
       )
+      sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'experimental.b3', true)
     }
     sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'enabled', false)
 
@@ -1835,6 +1946,20 @@ describe('Config', () => {
       flushMinSpans: 500,
       plugins: false,
     })
+  })
+
+  it('should accept legacy "b3 single header" propagation style', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'B3 single header'
+
+    const config = getConfig()
+
+    if (DD_MAJOR < 6) {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
+    } else {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+    }
   })
 
   it('should prioritize specific propagation style over shared propagation style env vars', () => {
@@ -2269,7 +2394,7 @@ describe('Config', () => {
     assert.strictEqual(config.url.toString(), 'https://agent2:6218/')
   })
 
-  it('should give priority to non-experimental options', () => {
+  ;(DD_MAJOR < 6 ? it : it.skip)('should give priority to non-experimental options', () => {
     const config = getConfig({
       appsec: {
         apiSecurity: {
@@ -2417,6 +2542,61 @@ describe('Config', () => {
       },
       telemetryVerbosity: 'DEBUG',
     })
+  })
+
+  ;(DD_MAJOR < 6 ? it.skip : it)(
+    'should drop the experimental.appsec programmatic shape in v6 (bare and nested)',
+    () => {
+      const config = getConfig({
+        experimental: {
+          appsec: {
+            enabled: true,
+            rateLimit: 42,
+            rules: 'some-rules.json',
+            standalone: { enabled: true },
+          },
+        },
+      })
+
+      assert.strictEqual(config.appsec.enabled, undefined)
+      assert.strictEqual(config.appsec.rateLimit, 100)
+      assert.strictEqual(config.appsec.rules, undefined)
+      assert.strictEqual(config.apmTracingEnabled, true)
+
+      sinon.assert.calledWith(
+        log.warn,
+        'Unknown option %s with value %o',
+        'experimental.appsec',
+        sinon.match({ enabled: true, rateLimit: 42 })
+      )
+    }
+  )
+
+  ;(DD_MAJOR < 6 ? it.skip : it)('should drop the bare experimental.appsec boolean alias in v6', () => {
+    const config = getConfig({
+      experimental: { appsec: true },
+    })
+
+    assert.strictEqual(config.appsec.enabled, undefined)
+    sinon.assert.calledWith(log.warn, 'Unknown option %s with value %o', 'experimental.appsec', true)
+  })
+
+  ;(DD_MAJOR < 6 ? it.skip : it)('should drop the ingestion programmatic shape in v6', () => {
+    const config = getConfig({
+      ingestion: {
+        sampleRate: 0.5,
+        rateLimit: 500,
+      },
+    })
+
+    assert.strictEqual(config.sampleRate, undefined)
+    assert.strictEqual(config.rateLimit, 100)
+    sinon.assert.calledWith(
+      log.warn,
+      'Unknown option %s with value %o',
+      'ingestion',
+      sinon.match({ sampleRate: 0.5, rateLimit: 500 })
+    )
   })
 
   it('should give priority to the options especially url', () => {
@@ -2745,13 +2925,41 @@ describe('Config', () => {
 
   it('should ignore invalid iast.requestSampling', () => {
     const config = getConfig({
-      experimental: {
-        iast: {
-          requestSampling: 105,
-        },
+      iast: {
+        requestSampling: 105,
       },
     })
     assert.strictEqual(config.iast.requestSampling, 30)
+  })
+
+  describe('experimental.iast alias gate', () => {
+    // v5 keeps the `experimental.iast.*` aliases for backports; v6 strips both
+    // bare and nested forms so user-supplied objects do not leak into
+    // `iast.enabled` via the bare alias.
+    for (const { name, iast, v5Field, v5Value } of [
+      { name: 'bare alias as boolean', iast: true, v5Field: 'enabled', v5Value: true },
+      { name: '.enabled nested key', iast: { enabled: false }, v5Field: 'enabled', v5Value: false },
+      { name: '.requestSampling nested key', iast: { requestSampling: 50 }, v5Field: 'requestSampling', v5Value: 50 },
+    ]) {
+      it(`v5 keeps experimental.iast (${name})`, () => {
+        const config = getConfig({ experimental: { iast } }, { ddMajor: 5 })
+        assert.strictEqual(config.iast[v5Field], v5Value)
+        sinon.assert.notCalled(log.warn)
+      })
+
+      it(`v6 rejects experimental.iast (${name}) as Unknown option`, () => {
+        const config = getConfig({ experimental: { iast } }, { ddMajor: 6 })
+        assert.strictEqual(config.iast.enabled, false)
+        assert.strictEqual(config.iast.requestSampling, 30)
+        sinon.assert.calledOnce(log.warn)
+        sinon.assert.calledWithExactly(
+          log.warn,
+          'Unknown option %s with value %o',
+          'experimental.iast',
+          iast,
+        )
+      })
+    }
   })
 
   it('should load span sampling rules from json file', () => {
@@ -3314,11 +3522,33 @@ describe('Config', () => {
   })
 
   context('standalone', () => {
-    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+    const itLegacyStandalone = DD_MAJOR < 6 ? it : it.skip
+    const itV6Standalone = DD_MAJOR < 6 ? it.skip : it
+
+    itLegacyStandalone('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
       const config = getConfig()
       assert.strictEqual(config.apmTracingEnabled, false)
+    })
+
+    itLegacyStandalone('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
+
+      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      assert.strictEqual(config.apmTracingEnabled, false)
+    })
+
+    itV6Standalone('should ignore legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED in v6', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+
+      const config = getConfig()
+      assert.strictEqual(config.apmTracingEnabled, true)
+    })
+
+    itV6Standalone('should ignore legacy experimental.appsec.standalone.enabled programmatic option in v6', () => {
+      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      assert.strictEqual(config.apmTracingEnabled, true)
     })
 
     it('should win DD_APM_TRACING_ENABLED', () => {
@@ -3329,19 +3559,12 @@ describe('Config', () => {
       assert.strictEqual(config.apmTracingEnabled, true)
     })
 
-    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
-
-      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
-      assert.strictEqual(config.apmTracingEnabled, false)
-    })
-
     it('should win apmTracingEnabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = getConfig({
         apmTracingEnabled: false,
-        experimental: { appsec: { standalone: { enabled: true } } },
+        ...DD_MAJOR < 6 && { experimental: { appsec: { standalone: { enabled: true } } } },
       })
       assert.strictEqual(config.apmTracingEnabled, false)
     })

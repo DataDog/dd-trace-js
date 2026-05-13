@@ -5,28 +5,17 @@ const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
 const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
 let log
 let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
-
-if (DD_MAJOR >= 6) {
-  // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is not supported
-  // in newer major versions. This is special handled here until a better solution is found.
-  // TODO: Remove the programmatic configuration from supported-configurations.json once v5 is not supported anymore.
-  supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName =
-    supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames?.[0]
-  delete supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames
-} else {
-  // Default value for DD_TRACE_STARTUP_LOGS is 'false' in older major versions.
-  // This is special handled here until a better solution is found.
-  // TODO: Remove this here once v5 is not supported anymore.
-  supportedConfigurations.DD_TRACE_STARTUP_LOGS[0].default = 'false'
-}
 
 /**
  * Warns about an invalid value for an option and adds the error to the last telemetry entry if it is not already set.

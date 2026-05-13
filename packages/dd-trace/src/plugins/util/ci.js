@@ -2,7 +2,8 @@
 
 const { readFileSync, readdirSync, existsSync } = require('fs')
 const path = require('path')
-const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
+const getConfig = require('../../config')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -217,7 +218,7 @@ const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C
 const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
-  const runnerTemp = getValueFromEnvSources('RUNNER_TEMP')
+  const runnerTemp = getEnvironmentVariable('RUNNER_TEMP')
   if (!runnerTemp || !existsSync(runnerTemp)) { return null }
 
   const isWin = process.platform === 'win32'
@@ -298,7 +299,7 @@ module.exports = {
         CHANGE_ID,
         CHANGE_TARGET,
       } = env
-      const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
+      const { DD_CUSTOM_TRACE_ID, DD_CUSTOM_PARENT_ID } = getConfig()
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -308,7 +309,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID, DD_CUSTOM_PARENT_ID }),
         [CI_NODE_NAME]: NODE_NAME,
         [PR_NUMBER]: CHANGE_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET,
@@ -738,11 +739,11 @@ module.exports = {
         }),
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
-        [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
         [CI_JOB_ID]: BUILDKITE_JOB_ID,
       }
 
-      if (BUILDKITE_PULL_REQUEST) {
+      if (BUILDKITE_PULL_REQUEST && BUILDKITE_PULL_REQUEST !== 'false') {
+        tags[PR_NUMBER] = BUILDKITE_PULL_REQUEST
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = BUILDKITE_PULL_REQUEST_BASE_BRANCH
       }
     }
@@ -868,8 +869,7 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
-      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
+      const { DD_ACTION_EXECUTION_ID, DD_PIPELINE_EXECUTION_ID } = getConfig()
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,

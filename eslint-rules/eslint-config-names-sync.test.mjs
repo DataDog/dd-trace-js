@@ -46,6 +46,16 @@ ruleTester.run('eslint-config-names-sync', rule, {
       code: '',
       options: [getFixtureOptions('internal-env-and-ignored-names')],
     },
+    {
+      filename: path.join(fixturesDirectory, 'deprecated-skips-cross-check', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('deprecated-skips-cross-check')],
+    },
+    {
+      filename: path.join(fixturesDirectory, 'iast-experimental-alias-exception', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('iast-experimental-alias-exception')],
+    },
   ],
   invalid: [
     {
@@ -86,6 +96,17 @@ ruleTester.run('eslint-config-names-sync', rule, {
         messageId: 'configurationMissingInSupportedConfigurations',
         data: {
           configurationName: 'llmobs.agentlessEnabledasd',
+        },
+      }],
+    },
+    {
+      filename: path.join(fixturesDirectory, 'iast-canonical-still-checked', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('iast-canonical-still-checked')],
+      errors: [{
+        messageId: 'configurationMissingInIndexDts',
+        data: {
+          configurationName: 'iast.securityControlsConfiguration',
         },
       }],
     },

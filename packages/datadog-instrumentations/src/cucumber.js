@@ -653,7 +653,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       const skippableResponse = await getChannelPromise(skippableSuitesCh)
 
       errorSkippableRequest = skippableResponse.err
-      skippableSuites = skippableResponse.skippableSuites
+      skippableSuites = skippableResponse.skippableSuites ?? []
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator
