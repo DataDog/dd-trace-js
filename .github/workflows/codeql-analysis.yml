@@ -2,7 +2,7 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [master, mq-working-branch-master-*, rochdev/*]
+    branches: [master, mq-working-branch-master-*]
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [master]
