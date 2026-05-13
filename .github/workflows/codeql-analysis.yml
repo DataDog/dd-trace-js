@@ -12,13 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # We use codeql-action/init and codeql-action/analyze but skip the built-in
-  # SARIF upload (upload: never) and handle it ourselves with a dd-octo-sts token.
-  # The official analyze action's upload step was failing: it uses whatever token
-  # is provided for the SARIF API call, and our dd-octo-sts token (scoped to
-  # DataDog/dd-trace-js) was getting 404s from GitHub's code scanning endpoint.
-  # Separating analysis from upload lets the actions handle CLI management while
-  # keeping the SARIF upload + status-poll under our explicit token control.
+  # dd-octo-sts is used for checkout and init to reduce GITHUB_TOKEN rate-limit
+  # consumption. The official analyze action uploads SARIF with github.token
+  # (security-events: write) so GitHub derives the correct analysis_key from the
+  # workflow context — raw API uploads always get "(default)" which the PR
+  # Security tab does not recognise. wait-for-processing is disabled on the
+  # action to avoid spending github.token budget on status polls; processing
+  # completion is checked in a separate step using the dd-octo-sts token.
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
@@ -62,10 +62,6 @@ jobs:
           category: /language:${{ matrix.language }}
           wait-for-processing: false
 
-      # The analyze step uploads SARIF with github.token so GitHub derives the
-      # correct analysis_key from the workflow context. Processing is async, so
-      # we poll here with the dd-octo-sts token to avoid consuming the
-      # github.token rate-limit budget on up to 30 status checks.
       - name: Wait for SARIF processing
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
@@ -74,6 +70,8 @@ jobs:
           REF="${GITHUB_REF/\/merge/\/head}"
           [ -n "$HEAD_SHA" ] || { HEAD_SHA="$GITHUB_SHA"; REF="$GITHUB_REF"; }
 
+          # Poll every 10s (30x = 5 min total), matching the official action's
+          # timeout but halving the API calls vs its default 5s interval.
           for i in $(seq 1 30); do
             COUNT=$(curl -sf \
               -H "Authorization: Bearer $TOKEN" \
