@@ -74,6 +74,16 @@ jobs:
           SARIF_FILE=$(find "$RUNNER_TEMP/sarif-results" -name "*.sarif" | head -1)
           [ -n "$SARIF_FILE" ] || { echo "No SARIF file found"; exit 1; }
 
+          # Patch automationDetails.id so GitHub derives the correct analysis_key
+          # (.github/workflows/codeql-analysis.yml:analyze) instead of "(default)".
+          # The analyze action only embeds the category when upload:never; the full
+          # workflow path is added only via the action's own upload mechanism.
+          AUTOMATION_ID="${CODEQL_ACTION_ANALYSIS_KEY}/language:javascript/"
+          jq --arg id "$AUTOMATION_ID" \
+            '.runs[0].automationDetails.id = $id' \
+            "$SARIF_FILE" > "${SARIF_FILE}.patched"
+          mv "${SARIF_FILE}.patched" "$SARIF_FILE"
+
           # For PRs use the head ref/SHA; for pushes GITHUB_REF/SHA are correct.
           HEAD_SHA=$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH")
           if [ -n "$HEAD_SHA" ]; then
