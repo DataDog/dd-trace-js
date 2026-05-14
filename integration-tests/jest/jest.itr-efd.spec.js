@@ -283,6 +283,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
+          coverage: {
+            [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
+          },
         },
       }])
 
@@ -343,18 +346,25 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('marks the test session as skipped if every suite is skipped', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip(
         [
           {
             type: 'suite',
             attributes: {
               suite: 'ci-visibility/test/ci-visibility-test.js',
+              coverage: {
+                [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: coveredSkippedLines,
+              },
             },
           },
           {
             type: 'suite',
             attributes: {
               suite: 'ci-visibility/test/ci-visibility-test-2.js',
+              coverage: {
+                [hashCoverageFilePath('ci-visibility/test/ci-visibility-test-2.js')]: coveredSkippedLines,
+              },
             },
           },
         ]
@@ -464,17 +474,24 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('does not skip suites if suite is marked as unskippable', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-to-skip.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-unskippable.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/unskippable-test/test-unskippable.js')]: coveredSkippedLines,
+            },
           },
         },
       ])
@@ -535,11 +552,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-to-skip.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+            },
           },
         },
       ])
@@ -670,6 +691,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
+          coverage: {
+            [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
+          },
         },
       }])
 
@@ -706,7 +730,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('keeps user coverage reporters when DD_TEST_TIA_KEEP_COV_CONFIG is true', async () => {
+    it('keeps user coverage reporters when code coverage is enabled because of us', async () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -730,48 +754,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             COVERAGE_REPORTERS: 'lcov',
-            DD_TEST_TIA_KEEP_COV_CONFIG: 'true',
           },
         }
       )
       try {
         await once(childProcess, 'exit')
         assert.strictEqual(fs.existsSync(lcovPath), true)
-      } finally {
-        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
-      }
-    })
-
-    it('overrides user coverage reporters when code coverage is enabled because of us', async () => {
-      receiver.setSettings({
-        itr_enabled: true,
-        code_coverage: true,
-        tests_skipping: true,
-      })
-
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js',
-        },
-      }])
-
-      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
-      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
-
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            COVERAGE_REPORTERS: 'lcov',
-          },
-        }
-      )
-      try {
-        await once(childProcess, 'exit')
-        assert.strictEqual(fs.existsSync(lcovPath), false)
       } finally {
         fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
       }
