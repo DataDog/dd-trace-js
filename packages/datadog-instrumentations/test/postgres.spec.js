@@ -26,9 +26,7 @@ function createPostgres (queryImpl, unsafeImpl) {
     }
 
     sql.options = options
-    sql.unsafe = function (query) {
-      return unsafeImpl(query)
-    }
+    sql.unsafe = unsafeImpl
 
     return sql
   }
@@ -111,5 +109,34 @@ describe('postgres instrumentation', () => {
 
     assert.strictEqual(errorCtx.error, expectedError)
     assert.strictEqual(errorCtx.originalText, 'SELECT $1')
+  })
+
+  it('binds unsafe calls to each client instance', async () => {
+    const seenDatabases = []
+    const unsafeQueries = []
+
+    subscribe(startCh, ctx => {
+      seenDatabases.push(ctx.params.database)
+      ctx.injected = `/*db=${ctx.params.database}*/ ${ctx.originalText}`
+    })
+
+    const unsafe = function (query) {
+      unsafeQueries.push(query)
+      return Promise.resolve(query)
+    }
+
+    const postgres = createPostgres(
+      () => Promise.resolve('ok'),
+      unsafe
+    )
+    const wrappedPostgres = wrapPostgres(postgres)
+    const sqlA = wrappedPostgres({ database: 'db-a' })
+    const sqlB = wrappedPostgres({ database: 'db-b' })
+
+    await sqlA.unsafe('SELECT 1')
+    await sqlB.unsafe('SELECT 2')
+
+    assert.deepStrictEqual(seenDatabases, ['db-a', 'db-b'])
+    assert.deepStrictEqual(unsafeQueries, ['/*db=db-a*/ SELECT 1', '/*db=db-b*/ SELECT 2'])
   })
 })

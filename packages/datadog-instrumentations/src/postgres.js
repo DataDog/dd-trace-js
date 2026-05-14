@@ -7,7 +7,6 @@ const finishCh = channel('apm:pg:query:finish')
 const errorCh = channel('apm:pg:query:error')
 
 const wrappedClients = new WeakMap()
-const wrappedUnsafe = new WeakMap()
 
 addHook({ name: 'postgres', versions: ['>=3.0.0'] }, wrapPostgres)
 
@@ -26,6 +25,8 @@ function wrapClient (sql, params) {
   const cached = wrappedClients.get(sql)
   if (cached) return cached
 
+  const wrappedMethods = new WeakMap()
+
   const wrappedSql = new Proxy(sql, {
     apply (target, thisArg, args) {
       return traceQuery(target, thisArg, args, params, false)
@@ -37,14 +38,14 @@ function wrapClient (sql, params) {
         return value
       }
 
-      const cachedUnsafe = wrappedUnsafe.get(value)
+      const cachedUnsafe = wrappedMethods.get(value)
       if (cachedUnsafe) return cachedUnsafe
 
       const wrappedUnsafeMethod = function (...args) {
         return traceQuery(value, target, args, params, true)
       }
 
-      wrappedUnsafe.set(value, wrappedUnsafeMethod)
+      wrappedMethods.set(value, wrappedUnsafeMethod)
       return wrappedUnsafeMethod
     },
   })
