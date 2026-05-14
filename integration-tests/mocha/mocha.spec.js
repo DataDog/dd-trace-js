@@ -1263,6 +1263,147 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
+
+        context('suite span timing', () => {
+          it('suite spans for top-level-only files are bounded to their own file execution', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-no-describe2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.notStrictEqual(suiteA.start, suiteB.start,
+              'Suite spans for different files must not start simultaneously')
+
+            // Files run fully sequentially: suite A must finish before suite B starts
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+              'Suite A must end before suite B starts'
+            )
+          })
+
+          it('suite spans for files with afterEach hooks are bounded to their own file execution', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-with-hooks.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-with-hooks2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.notStrictEqual(suiteA.start, suiteB.start,
+              'Suite spans for different files must not start simultaneously')
+
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+              'Suite A must end before suite B starts'
+            )
+          })
+
+          // Mixed files have an inherent overlap: root tests from all files run before any
+          // describes, so suite B starts while suite A is still open. What we can assert:
+          // start times are ordered (a's root test runs before b's root test) and end times
+          // are ordered (a's describe finishes before b's describe).
+          it('suite spans for mixed files have ordered start and end times', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-mixed2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.ok(suiteA.start < suiteB.start, 'Suite A must start before suite B')
+
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) < suiteB.start + BigInt(suiteB.duration),
+              'Suite A must end before suite B ends'
+            )
+          })
+        })
       })
     })
   })

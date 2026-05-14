@@ -473,19 +473,83 @@ addHook({
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
     const rootTestsByFile = new Map()
+    // Counts how many original tests per pure-root file still need their final attempt.
+    // Hits zero when the last test's lifecycle completes, triggering the suite finish.
+    const rootPendingCountByFile = new Map()
+
+    function finishRootSuiteForFile (file) {
+      const remaining = rootPendingCountByFile.get(file) - 1
+      if (remaining > 0) {
+        rootPendingCountByFile.set(file, remaining)
+        return
+      }
+      rootPendingCountByFile.delete(file)
+
+      const ctx = testFileToSuiteCtx.get(file)
+      if (!ctx) {
+        log.warn('No ctx found for suite', file)
+        return
+      }
+
+      const rootTests = rootTestsByFile.get(file) || []
+      let status = 'pass'
+      if (rootTests.every(t => t.isPending())) {
+        status = 'skip'
+      } else {
+        for (const test of rootTests) {
+          if (test.state === 'failed' || test.timedOut) {
+            status = 'fail'
+          }
+        }
+      }
+
+      if (global.__coverage__) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+        mergeCoverage(global.__coverage__, originalCoverageMap)
+        resetCoverage(global.__coverage__)
+      }
+
+      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+    }
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
     this.once('end', getOnEndHandler(false))
 
+    // The job of this listener is to
+    // initialize the suite span tag in correct order
+    // (that is suiteA -> testA ... -> suiteB -> testB
+    // instead of suiteA -> suiteB -> testA -> ... -> testB)
+    // when the suite has tests that are in the top level
+    // (no describe(...))
+    this.on('test', function (test) {
+      const ctx = testFileToSuiteCtx.get(test.file)
+      if (ctx?._pendingRootStart) {
+        ctx._pendingRootStart = false
+        testSuiteStartCh.runStores(ctx, () => {})
+      }
+    })
+
     this.on('test', getOnTestHandler(true))
 
     this.on('test end', getOnTestEndHandler(config))
+
+    this.on('test end', function (test) {
+      if (!test._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+      finishRootSuiteForFile(test.file)
+    })
 
     this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler(config))
+
+    this.on('hook end', function (hook) {
+      const test = hook.ctx?.currentTest
+      if (!test?._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+      finishRootSuiteForFile(test.file)
+    })
 
     this.on('fail', getOnFailHandler(true, config))
 
@@ -503,7 +567,13 @@ addHook({
         if (suite.root && suite.tests.length > 0) {
           const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
           for (const file of files) {
-            rootTestsByFile.set(file, suite.tests.filter(t => t.file === file))
+            const testsForFile = suite.tests.filter(t => t.file === file)
+            rootTestsByFile.set(file, testsForFile)
+            // Only track the countdown for pure root-level files.
+            // Mixed files are finished by the normal 'suite end' path.
+            if (!suitesByTestFile[file]) {
+              rootPendingCountByFile.set(file, testsForFile.length)
+            }
             if (testFileToSuiteCtx.get(file)) continue
             const isUnskippable = unskippableSuites.includes(file)
             isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(file, process.cwd()))
@@ -512,9 +582,9 @@ addHook({
               isUnskippable,
               isForcedToRun,
               itrCorrelationId,
+              _pendingRootStart: true, // Now the suite start fires lazily on the first test event for this file
             }
             testFileToSuiteCtx.set(file, ctx)
-            testSuiteStartCh.runStores(ctx, () => {})
           }
         }
         return
@@ -536,43 +606,18 @@ addHook({
 
     this.on('suite end', function (suite) {
       if (suite.root) {
-        // Symmetric to the suite start fix
-        const fileToTests = new Map()
+        // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
+        // listeners via finishRootSuiteForFile. The only case left here is files where
+        // all tests were pending: no 'test' event fired, so _pendingRootStart was never
+        // cleared and the suite was never started. Start and finish it now with 'skip'.
         for (const test of suite.tests) {
           if (!test.file) continue
-          if (!fileToTests.has(test.file)) fileToTests.set(test.file, [])
-          fileToTests.get(test.file).push(test)
-        }
-        for (const [file, tests] of fileToTests) {
-          // Mixed case: if a file appears in suitesByTestFile (pre-populated before the run),
-          // its numSuitesByTestFile counter hits zero when its last describe-based suite ends
-          // and the normal path below fires testSuiteFinishCh. Since root is last when
-          // 'suite end' fires, any such file has already been handled — skipping it here
-          // avoids duplication.
-          if (suitesByTestFile[file]) continue
-          let status = 'pass'
-          if (tests.every(test => test.isPending())) {
-            status = 'skip'
-          } else {
-            for (const test of tests) {
-              if (test.state === 'failed' || test.timedOut) {
-                status = 'fail'
-                break
-              }
-            }
-          }
-          if (global.__coverage__) {
-            const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
-            testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
-            mergeCoverage(global.__coverage__, originalCoverageMap)
-            resetCoverage(global.__coverage__)
-          }
-          const ctx = testFileToSuiteCtx.get(file)
-          if (ctx) {
-            testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
-          } else {
-            log.warn('No ctx found for suite', file)
-          }
+          if (suitesByTestFile[test.file]) continue // mixed: handled by normal path
+          const ctx = testFileToSuiteCtx.get(test.file)
+          if (!ctx?._pendingRootStart) continue
+          ctx._pendingRootStart = false
+          testSuiteStartCh.runStores(ctx, () => {})
+          testSuiteFinishCh.publish({ status: 'skip', ...ctx.currentStore }, () => {})
         }
         return
       }
