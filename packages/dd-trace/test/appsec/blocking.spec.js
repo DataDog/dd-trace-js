@@ -91,8 +91,8 @@ describe('blocking', () => {
       assert.strictEqual(blocked, true)
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Length': 12,
+        'content-type': 'text/html; charset=utf-8',
+        'content-length': 12,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'htmlBodyéé')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -105,8 +105,8 @@ describe('blocking', () => {
       assert.strictEqual(blocked, true)
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
-        'Content-Type': 'application/json',
-        'Content-Length': 8,
+        'content-type': 'application/json',
+        'content-length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -118,8 +118,8 @@ describe('blocking', () => {
       assert.strictEqual(blocked, true)
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
-        'Content-Type': 'application/json',
-        'Content-Length': 8,
+        'content-type': 'application/json',
+        'content-length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -132,8 +132,8 @@ describe('blocking', () => {
       assert.strictEqual(blocked, true)
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
-        'Content-Type': 'application/json',
-        'Content-Length': 8,
+        'content-type': 'application/json',
+        'content-length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       assert.strictEqual(abortController.signal.aborted, true)
@@ -151,8 +151,8 @@ describe('blocking', () => {
       sinon.assert.calledWithExactly(res.removeHeader.firstCall, 'header1')
       sinon.assert.calledWithExactly(res.removeHeader.secondCall, 'header2')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
-        'Content-Type': 'application/json',
-        'Content-Length': 8,
+        'content-type': 'application/json',
+        'content-length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -177,8 +177,8 @@ describe('blocking', () => {
       assert.strictEqual(blocked, true)
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
-        'Content-Type': 'application/json',
-        'Content-Length': 8,
+        'content-type': 'application/json',
+        'content-length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       assert.strictEqual(abortController.signal.aborted, true)
@@ -308,35 +308,35 @@ describe('blocking', () => {
 
     it('should block with default json template and custom status ' +
       'when type is forced to json and accept is html', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'json',
-      }
-      req.headers.accept = 'text/html'
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'json',
+        }
+        req.headers.accept = 'text/html'
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
+      })
 
     it('should block with default html template and custom status ' +
       'when type is forced to html and accept is html', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'html',
-      }
-      req.headers.accept = 'text/html'
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'html',
+        }
+        req.headers.accept = 'text/html'
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
+      })
 
     it('should block with default json template and custom status', () => {
       const actionParameters = {
@@ -354,33 +354,33 @@ describe('blocking', () => {
 
     it('should block with default json template and custom status ' +
       'when type is forced to json and accept is not defined', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'json',
-      }
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'json',
+        }
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
+      })
 
     it('should block with default html template and custom status ' +
       'when type is forced to html and accept is not defined', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'html',
-      }
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'html',
+        }
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
+      })
 
     it('should block with custom redirect', () => {
       const actionParameters = {
@@ -415,7 +415,7 @@ describe('blocking', () => {
 
     beforeEach(() => {
       webStub = {
-        getContext (req) {
+        getContext(req) {
           return req._paths ? { paths: req._paths } : undefined
         },
       }
@@ -447,7 +447,7 @@ describe('blocking', () => {
       const data = getBlockingData(req, null)
 
       assert.strictEqual(data.body, 'graphqlBody')
-      assert.strictEqual(data.headers['Content-Type'], 'application/json')
+      assert.strictEqual(data.headers['content-type'], 'application/json')
     })
 
     it('shares a cache entry across requests with the same route but different query strings', () => {
