@@ -1,6 +1,9 @@
 'use strict'
 
-const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const {
+  DsmPathwayCodec,
+  getHeadersSize,
+} = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { isEmpty } = require('../util')
@@ -16,7 +19,9 @@ class EventBridge extends BaseAwsSdkPlugin {
     if (!params?.source) return
     const rulename = params.Name ?? ''
     return {
-      'resource.name': operation ? `${operation} ${params.source}` : params.source,
+      'resource.name': operation
+        ? `${operation} ${params.source}`
+        : params.source,
       'aws.eventbridge.source': `${params.source}`,
       'messaging.system': 'aws_eventbridge',
       rulename: `${rulename}`,
@@ -38,7 +43,11 @@ class EventBridge extends BaseAwsSdkPlugin {
     if (operation !== 'putEvents' || !params?.Entries?.length) return
 
     for (let i = 0; i < params.Entries.length; i++) {
-      this.injectToEntry(span, params.Entries[i], i === 0 || this.config.batchPropagationEnabled)
+      this.injectToEntry(
+        span,
+        params.Entries[i],
+        i === 0 || this.config.batchPropagationEnabled,
+      )
     }
   }
 
@@ -94,7 +103,11 @@ class EventBridge extends BaseAwsSdkPlugin {
   injectDetail (detail, ddInfo) {
     let finalData
     try {
-      finalData = BaseAwsSdkPlugin.injectFieldIntoJsonObject(detail, '_datadog', ddInfo)
+      finalData = BaseAwsSdkPlugin.injectFieldIntoJsonObject(
+        detail,
+        '_datadog',
+        ddInfo,
+      )
     } catch (error) {
       log.error('EventBridge error injecting request', error)
       return
@@ -118,7 +131,11 @@ class EventBridge extends BaseAwsSdkPlugin {
   setDSMCheckpoint (span, entry) {
     const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS
     const payloadSize = getHeadersSize(entry)
-    return this.tracer.setCheckpoint(['direction:out', `topic:${eventBus}`, 'type:eventbridge'], span, payloadSize)
+    return this.tracer.setCheckpoint(
+      ['direction:out', `eventbridge:${eventBus}`, 'type:eventbridge'],
+      span,
+      payloadSize,
+    )
   }
 }
 module.exports = EventBridge
