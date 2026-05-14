@@ -42,12 +42,13 @@ class EventBridge extends BaseAwsSdkPlugin {
   requestInject (span, request) {
     const { operation, params } = request
     if (operation !== 'putEvents' || !params?.Entries?.length) return
+    const batchPropagationEnabled = this.config?.batchPropagationEnabled === true
 
     for (let i = 0; i < params.Entries.length; i++) {
       this.injectToEntry(
         span,
         params.Entries[i],
-        i === 0 || this.config.batchPropagationEnabled,
+        i === 0 || batchPropagationEnabled,
       )
     }
   }
@@ -62,7 +63,8 @@ class EventBridge extends BaseAwsSdkPlugin {
    */
   injectToEntry (span, entry, injectTraceContext) {
     if (!entry?.Detail) return
-    if (!injectTraceContext && !this.config.dsmEnabled) return
+    const dsmEnabled = this.config?.dsmEnabled === true
+    if (!injectTraceContext && !dsmEnabled) return
 
     const originalDetail = entry.Detail
     const ddInfo = {}
@@ -73,7 +75,7 @@ class EventBridge extends BaseAwsSdkPlugin {
     let finalData = this.injectDetail(originalDetail, ddInfo)
     if (!finalData) return
 
-    if (this.config.dsmEnabled) {
+    if (dsmEnabled) {
       entry.Detail = finalData
       const dataStreamsContext = this.setDSMCheckpoint(span, entry)
       if (dataStreamsContext) {

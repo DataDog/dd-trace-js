@@ -101,6 +101,29 @@ describe('EventBridge plugin requestInject', () => {
     assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
   })
 
+  it('defaults to trace-only first-entry propagation when config is unset', () => {
+    const plugin = Object.create(EventBridge.prototype)
+    plugin._tracer = {
+      inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
+      setCheckpoint: () => null,
+    }
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [
+          { Detail: '{"id":1}' },
+          { Detail: '{"id":2}' },
+        ],
+      },
+    }
+
+    plugin.requestInject(null, request)
+    assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, {
+      'x-datadog-trace-id': '123',
+    })
+    assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
+  })
+
   it('skips rewriting non-propagated batch entries by default', () => {
     const plugin = buildPlugin({
       inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
