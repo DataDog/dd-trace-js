@@ -783,10 +783,14 @@ describe(`cucumber@${version} commonJS`, () => {
 
         it('can skip suites received by the intelligent test runner API and still reports code coverage',
           (done) => {
+            const coveredSkippedLines = getLinesBitmapBase64(1, 20)
             receiver.setSuitesToSkip([{
               type: 'suite',
               attributes: {
                 suite: `${featuresPath}farewell.feature`,
+                coverage: {
+                  [hashCoverageFilePath(`${featuresPath}farewell.feature`)]: coveredSkippedLines,
+                },
               },
             }])
 
@@ -950,12 +954,18 @@ describe(`cucumber@${version} commonJS`, () => {
               type: 'suite',
               attributes: {
                 suite: `${featuresPath}farewell.feature`,
+                coverage: {
+                  [hashCoverageFilePath(`${featuresPath}farewell.feature`)]: getLinesBitmapBase64(1, 20),
+                },
               },
             },
             {
               type: 'suite',
               attributes: {
                 suite: `${featuresPath}greetings.feature`,
+                coverage: {
+                  [hashCoverageFilePath(`${featuresPath}greetings.feature`)]: getLinesBitmapBase64(1, 20),
+                },
               },
             },
           ])
@@ -1018,6 +1028,9 @@ describe(`cucumber@${version} commonJS`, () => {
               type: 'suite',
               attributes: {
                 suite: `${featuresPath}farewell.feature`,
+                coverage: {
+                  [hashCoverageFilePath(`${featuresPath}farewell.feature`)]: getLinesBitmapBase64(1, 20),
+                },
               },
             },
           ])
@@ -1218,10 +1231,14 @@ describe(`cucumber@${version} commonJS`, () => {
         })
 
         onlyLatestIt('can skip suites in parallel mode', async () => {
+          const coveredSkippedLines = getLinesBitmapBase64(1, 20)
           receiver.setSuitesToSkip([{
             type: 'suite',
             attributes: {
               suite: `${featuresPath}farewell.feature`,
+              coverage: {
+                [hashCoverageFilePath(`${featuresPath}farewell.feature`)]: coveredSkippedLines,
+              },
             },
           }])
 
@@ -2551,7 +2568,7 @@ describe(`cucumber@${version} commonJS`, () => {
       tests_skipping: true,
     })
 
-    const runCucumber = async (suitesToSkip) => {
+    const runCucumber = async (suitesToSkip, expectedItrSkipped) => {
       let codeCoverageLinesPct
 
       receiver.setSuitesToSkip(suitesToSkip)
@@ -2561,7 +2578,7 @@ describe(`cucumber@${version} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
 
-          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], expectedItrSkipped)
           codeCoverageLinesPct = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
         })
 
@@ -2589,7 +2606,7 @@ describe(`cucumber@${version} commonJS`, () => {
       attributes: {
         suite: `${featureRoot}/test-skipped.feature`,
       },
-    }])
+    }], 'false')
     const coverageWithSkippedSuiteCoverage = await runCucumber([{
       type: 'suite',
       attributes: {
@@ -2600,9 +2617,9 @@ describe(`cucumber@${version} commonJS`, () => {
           [hashCoverageFilePath(`${featureRoot}/support/steps.js`)]: coveredSkippedLines,
         },
       },
-    }])
+    }], 'true')
 
-    assert.ok(coverageWithoutSkippedSuiteCoverage < 100)
+    assert.strictEqual(coverageWithoutSkippedSuiteCoverage, 100)
     assert.strictEqual(coverageWithSkippedSuiteCoverage, 100)
   })
 
