@@ -24,7 +24,7 @@ class OracledbPlugin extends DatabasePlugin {
       dbInstance ??= dbInfo.dbInstance
     }
 
-    this.startSpan(this.operationName(), {
+    const span = this.startSpan(this.operationName(), {
       service,
       resource: query,
       type: 'sql',
@@ -32,10 +32,14 @@ class OracledbPlugin extends DatabasePlugin {
       meta: {
         'db.user': this.config.user,
         'db.instance': dbInstance,
+        'db.name': dbInstance,
         'db.hostname': hostname,
+        'out.host': hostname,
         [CLIENT_PORT_KEY]: port,
       },
     }, ctx)
+
+    ctx.injected = this.injectDbmQuery(span, query, service.name)
 
     return ctx.currentStore
   }
