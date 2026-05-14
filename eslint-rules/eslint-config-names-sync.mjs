@@ -19,10 +19,12 @@ const IGNORED_CONFIGURATION_NAMES = new Set([
 // v6. Keep these out of the `index.d.ts` ↔ JSON parity check.
 const IGNORED_CONFIGURATION_NAME_PREFIXES = [
   'experimental.appsec.',
+  'experimental.iast.',
   'ingestion.',
 ]
 const IGNORED_CONFIGURATION_LEAVES = new Set([
   'experimental.appsec',
+  'experimental.iast',
 ])
 const UNSUPPORTED_CONFIGURATION_ROOTS = new Set([
   'isCiVisibility',
@@ -87,6 +89,16 @@ function createInspectionResult (overrides) {
 }
 
 /**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isIgnoredConfigurationName (name) {
+  return IGNORED_CONFIGURATION_NAMES.has(name) ||
+    IGNORED_CONFIGURATION_LEAVES.has(name) ||
+    IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))
+}
+
+/**
  * @param {string} filePath
  * @returns {SupportedConfigurationInfo}
  */
@@ -131,19 +143,19 @@ function getSupportedConfigurationInfo (filePath) {
       }
 
       for (const name of entry.configurationNames ?? []) {
-        if (typeof name !== 'string' || IGNORED_CONFIGURATION_NAMES.has(name)) {
+        if (typeof name !== 'string') {
           continue
         }
-        if (IGNORED_CONFIGURATION_LEAVES.has(name)) {
+
+        targets.add(name)
+
+        if (isIgnoredConfigurationName(name)) {
           continue
         }
-        if (IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
-          continue
-        }
+
         if (!entry.deprecated) {
           names.add(name)
         }
-        targets.add(name)
       }
     }
 
@@ -497,14 +509,8 @@ function getIndexDtsConfigurationNames (filePath, supportedConfigurationInfo) {
 
   inspectMembers(tracerOptions.node.members, tracerOptions.namespaceKey, '')
 
-  for (const ignoredConfigurationName of IGNORED_CONFIGURATION_NAMES) {
-    names.delete(ignoredConfigurationName)
-  }
-  for (const leaf of IGNORED_CONFIGURATION_LEAVES) {
-    names.delete(leaf)
-  }
   for (const name of names) {
-    if (IGNORED_CONFIGURATION_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+    if (isIgnoredConfigurationName(name)) {
       names.delete(name)
     }
   }
@@ -548,8 +554,10 @@ export default {
     schema: [{
       type: 'object',
       properties: {
-        indexDtsPath: {
-          type: 'string',
+        indexDtsPaths: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
         },
         supportedConfigurationsPath: {
           type: 'string',
@@ -568,7 +576,8 @@ export default {
   },
   create (context) {
     const options = context.options[0] || {}
-    const indexDtsPath = path.resolve(context.cwd, options.indexDtsPath || 'index.d.ts')
+    const indexDtsPaths = (options.indexDtsPaths ?? ['index.d.ts'])
+      .map(p => path.resolve(context.cwd, p))
     const supportedConfigurationsPath = path.resolve(
       context.cwd,
       options.supportedConfigurationsPath || 'packages/dd-trace/src/config/supported-configurations.json'
@@ -579,9 +588,22 @@ export default {
         let indexDtsNames
         let supportedConfigurationInfo
 
+        let primaryIndexDtsNames
         try {
           supportedConfigurationInfo = getSupportedConfigurationInfo(supportedConfigurationsPath)
-          indexDtsNames = getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)
+
+          // Union names from all type files: a config is covered if it appears in any version.
+          indexDtsNames = new Set()
+          for (const indexDtsPath of indexDtsPaths) {
+            const names = getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)
+            for (const name of names) {
+              indexDtsNames.add(name)
+            }
+          }
+
+          // Use only the primary (v6) file for the reverse check: v5-only configs are not
+          // required to exist in supported-configurations.json.
+          primaryIndexDtsNames = getIndexDtsConfigurationNames(indexDtsPaths[0], supportedConfigurationInfo)
         } catch (error) {
           context.report({
             node,
@@ -603,7 +625,7 @@ export default {
         reportMissingConfigurations(
           context,
           node,
-          indexDtsNames,
+          primaryIndexDtsNames,
           supportedConfigurationInfo.names,
           'configurationMissingInSupportedConfigurations'
         )

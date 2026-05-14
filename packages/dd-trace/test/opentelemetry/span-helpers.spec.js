@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 
+const { DD_MAJOR } = require('../../../../version')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const {
   addOtelEvent,
@@ -130,7 +131,8 @@ describe('OTel bridge helpers', () => {
       assert.deepStrictEqual(ddSpan.links[0].attributes, { foo: 'bar' })
     })
 
-    it('accepts the deprecated (context, attrs) form', () => {
+    const legacyAddLinkTest = DD_MAJOR < 6 ? it : it.skip
+    legacyAddLinkTest('accepts the deprecated (context, attrs) form', () => {
       const ddSpan = createMockDdSpan()
       addOtelLink(
         ddSpan,

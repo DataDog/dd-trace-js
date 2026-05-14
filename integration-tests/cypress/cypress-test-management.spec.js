@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
-const http = require('node:http')
 
 const semver = require('semver')
 const {
@@ -11,10 +10,11 @@ const {
   useSandbox,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  stopCiVisTestEnv,
   warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
@@ -34,7 +34,6 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
-const RECEIVER_STOP_TIMEOUT = 20000
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
@@ -99,7 +98,7 @@ moduleTypes.forEach(({
     }
 
     this.timeout(80_000)
-    let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
+    let cwd, receiver, childProcess, webAppBaseUrl, webAppServer, secondWebAppBaseUrl, secondWebAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
@@ -108,73 +107,35 @@ moduleTypes.forEach(({
     before(async function () {
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
+
+      const webApp = await startWebAppServer()
+      webAppBaseUrl = webApp.baseUrl
+      webAppServer = webApp.server
+
+      if (version === 'latest') {
+        const secondWebApp = await startWebAppServer({
+          body: '<div class="hella-world">Hella World</div>',
+          includeCoverage: false,
+          includeRum: false,
+          title: 'Hella World',
+        })
+        secondWebAppBaseUrl = secondWebApp.baseUrl
+        secondWebAppServer = secondWebApp.server
+      }
     })
 
     after(async () => {
-      // Cleanup second web app server if it exists
-      if (secondWebAppServer) {
-        await new Promise(resolve => secondWebAppServer.close(resolve))
-      }
+      await stopWebAppServer(secondWebAppServer)
+      await stopWebAppServer(webAppServer)
     })
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-
-      // Create a fresh web server for each test to avoid state issues
-      webAppServer = createWebAppServer()
-      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-        webAppServer.once('error', reject)
-        webAppServer.listen(0, 'localhost', () => {
-          webAppPort = webAppServer.address().port
-          webAppServer.removeListener('error', reject)
-          resolve()
-        })
-      }))
     })
 
-    // Cypress child processes can sometimes hang or take longer to
-    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
-    // because there are pending connections.
     afterEach(async () => {
-      if (childProcess && childProcess.pid) {
-        try {
-          childProcess.kill('SIGKILL')
-        } catch (error) {
-          // Process might already be dead - this is fine, ignore error
-        }
-
-        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
-        // The OS will clean up zombies, and fresh server per test prevents port conflicts
-      }
-
-      // Close web server before stopping receiver
-      if (webAppServer) {
-        await /** @type {Promise<void>} */ (new Promise((resolve) => {
-          webAppServer.close((err) => {
-            if (err) {
-              // eslint-disable-next-line no-console
-              console.error('Web server close error:', err)
-            }
-            resolve()
-          })
-        }))
-      }
-
-      // Add timeout to prevent hanging
-      const stopPromise = receiver.stop()
-      const timeoutPromise = new Promise((resolve, reject) =>
-        setTimeout(() => reject(new Error('Receiver stop timeout')), RECEIVER_STOP_TIMEOUT)
-      )
-
-      try {
-        await Promise.race([stopPromise, timeoutPromise])
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn('Receiver stop timed out:', error.message)
-      }
-
-      // Small delay to allow OS to release ports
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
     })
 
     context('known tests without early flake detection', () => {
@@ -201,7 +162,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
@@ -235,21 +196,6 @@ moduleTypes.forEach(({
       it('does not crash for multi origin tests', async () => {
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        secondWebAppServer = http.createServer((req, res) => {
-          res.setHeader('Content-Type', 'text/html')
-          res.writeHead(200)
-          res.end(`
-            <!DOCTYPE html>
-            <html>
-              <div class="hella-world">Hella World</div>
-            </html>
-          `)
-        })
-
-        const secondWebAppPort = await new Promise(resolve => {
-          secondWebAppServer.listen(0, 'localhost', () => resolve(secondWebAppServer.address().port))
-        })
-
         const specToRun = 'cypress/e2e/multi-origin.js'
 
         childProcess = exec(
@@ -258,8 +204,8 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_BASE_URL_SECOND: secondWebAppBaseUrl,
               SPEC_PATTERN: specToRun,
               DD_TRACE_DEBUG: 'true',
             },
@@ -299,7 +245,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             DD_SERVICE: 'my-service',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
@@ -450,7 +396,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
                 ...(shouldAlwaysPass ? { CYPRESS_SHOULD_ALWAYS_PASS: '1' } : {}),
@@ -560,7 +506,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: specToRun,
               },
             }
@@ -627,7 +573,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: specToRun,
                 CYPRESS_SHOULD_ALWAYS_PASS: '1',
               },
@@ -753,7 +699,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
               },
@@ -848,7 +794,7 @@ moduleTypes.forEach(({
               cwd,
               env: {
                 ...envVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
               },
@@ -900,7 +846,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               DD_TRACE_DEBUG: '1',
             },
@@ -954,7 +900,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               CYPRESS_SHOULD_ALWAYS_PASS: '1',
               CYPRESS_TEST_ISOLATION: 'false',
@@ -1027,7 +973,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
             },
           }

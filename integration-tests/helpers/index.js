@@ -308,6 +308,27 @@ async function stopProc (proc, options = {}) {
 }
 
 /**
+ * Tear down a Test Optimization integration fixture between tests.
+ *
+ * Awaits each step so the next test starts from a clean slate — letting the
+ * previous child outlive `afterEach` leaks sockets and file descriptors that
+ * the next Cypress / Playwright run then races against.
+ *
+ * @param {object} env
+ * @param {childProcess.ChildProcess} [env.childProcess] - Test child to stop.
+ * @param {import('http').Server} [env.webAppServer] - Web fixture server to close.
+ * @param {FakeAgent} [env.receiver] - Fake agent / intake to stop.
+ * @returns {Promise<void>}
+ */
+async function stopCiVisTestEnv ({ childProcess, webAppServer, receiver }) {
+  await stopProc(childProcess)
+  if (webAppServer?.listening) {
+    await /** @type {Promise<void>} */ (new Promise((resolve) => webAppServer.close(() => resolve())))
+  }
+  await receiver?.stop()
+}
+
+/**
  * Wait for a process to exit for up to `timeoutMs`.
  *
  * @param {childProcess.ChildProcess} proc - Process to wait for.
@@ -1144,6 +1165,7 @@ module.exports = {
   assertUUID,
   deepFreeze,
   stopProc,
+  stopCiVisTestEnv,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,

@@ -440,6 +440,31 @@ jobs:
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
+  electron:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: electron
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      # Ubuntu 24.04 tightened AppArmor defaults and now blocks unprivileged user
+      # namespaces, which Electron's Chromium sandbox requires to run. Setting
+      # this to 0 re-enables them for the duration of the job.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: |
+          sudo apt-get update
+          # Xvfb provides a virtual X display so Electron (a GUI app) can start
+          # on the headless CI runner without a physical screen.
+          sudo apt-get install -y xvfb
+          # Launch the virtual display on screen :99 with a 24-bit 1024×768
+          # framebuffer. Output is discarded; the & backgrounds it so the step
+          # does not block.
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+      # Point Electron at the virtual display started above.
+      - run: DISPLAY=:99 yarn test:plugins:ci
+
   express:
     runs-on: ubuntu-latest
     env:
