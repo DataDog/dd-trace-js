@@ -1,8 +1,8 @@
 'use strict'
 
 const assert = require('node:assert')
-const dc = require('node:diagnostics_channel')
 
+const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const ddpv = require('mocha/package.json').version
