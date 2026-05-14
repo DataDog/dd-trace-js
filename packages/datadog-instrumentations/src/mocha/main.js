@@ -497,7 +497,7 @@ addHook({
         status = 'skip'
       } else {
         for (const test of rootTests) {
-          if (test.state === 'failed' || test.timedOut) {
+          if (test.state === 'failed' || test.timedOut || test._ddHookFailed) {
             status = 'fail'
           }
         }
@@ -553,6 +553,13 @@ addHook({
 
     this.on('fail', getOnFailHandler(true, config))
 
+    this.on('fail', function (testOrHook) {
+      if (testOrHook.type !== 'hook') return
+      const test = testOrHook.ctx?.currentTest
+      if (!test?._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+      finishRootSuiteForFile(test.file)
+    })
+
     this.on('pending', getOnPendingHandler())
 
     this.on('suite', function (suite) {
@@ -607,17 +614,31 @@ addHook({
     this.on('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
-        // listeners via finishRootSuiteForFile. The only case left here is files where
-        // all tests were pending: no 'test' event fired, so _pendingRootStart was never
-        // cleared and the suite was never started. Start and finish it now with 'skip'.
+        // listeners via finishRootSuiteForFile. Two edge cases remain here:
+        //
+        // 1. All-pending: no 'test' event fired, _pendingRootStart is still true.
+        //    Start and immediately finish with 'skip'.
+        //
+        // 2. Aborted mid-run (e.g. a beforeEach hook failure): Mocha skips remaining
+        //    tests and jumps straight to 'suite end'. rootPendingCountByFile still has
+        //    a nonzero count for the file because the last tests never ran. Finish it
+        //    now — testSuiteErrorCh has already tagged the span with 'fail' if a hook
+        //    failed, so we just need to call testSuiteFinishCh to close the span.
+        const processedFiles = new Set()
         for (const test of suite.tests) {
-          if (!test.file) continue
+          if (!test.file || processedFiles.has(test.file)) continue
+          processedFiles.add(test.file)
           if (suitesByTestFile[test.file]) continue // mixed: handled by normal path
           const ctx = testFileToSuiteCtx.get(test.file)
-          if (!ctx?._pendingRootStart) continue
-          ctx._pendingRootStart = false
-          testSuiteStartCh.runStores(ctx, () => {})
-          testSuiteFinishCh.publish({ status: 'skip', ...ctx.currentStore }, () => {})
+          if (!ctx) continue
+          if (ctx._pendingRootStart) {
+            ctx._pendingRootStart = false
+            testSuiteStartCh.runStores(ctx, () => {})
+            testSuiteFinishCh.publish({ status: 'skip', ...ctx.currentStore }, () => {})
+          } else if (rootPendingCountByFile.has(test.file)) {
+            rootPendingCountByFile.delete(test.file)
+            testSuiteFinishCh.publish({ status: 'fail', ...ctx.currentStore }, () => {})
+          }
         }
         return
       }

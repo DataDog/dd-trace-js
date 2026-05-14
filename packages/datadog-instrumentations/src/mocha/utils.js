@@ -593,6 +593,20 @@ function getOnFailHandler (isMain, config) {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
         const testFinishInfo = getTestFinishInfo(test, 'fail', config, err)
+        // ATR never retries hook failures: this.retries(N) is set in runnableWrapper
+        // which only runs when the test function executes — hooks bypass that path,
+        // so _retries stays at -1 and getIsLastRetry returns false, leaving finalStatus
+        // undefined. We must also mark the attempt final when no clone-based retry
+        // mechanism (EFD original, EFD clone, ATF) has queued further attempts.
+        const noCloneRetries = !test._ddIsEfdRetry &&
+          !((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled) &&
+          !test._ddIsAttemptToFix
+        if (testFinishInfo.finalStatus !== undefined || noCloneRetries) {
+          test._ddIsFinalAttempt = true
+        }
+        // test.state is never set to 'failed' for hook failures (Mocha marks the hook,
+        // not the test). Flag it so finishRootSuiteForFile can compute the correct status.
+        test._ddHookFailed = true
         testFinishCh.publish({
           status: 'fail',
           hasBeenRetried: isMochaRetry(test),

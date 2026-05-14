@@ -1264,6 +1264,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
+        it.only('reports a suite event when a beforeEach hook fails on top-level tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-with-failing-hook.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+              // beforeEach failure aborts after the first test starts — only 1 test span is emitted
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
         context('suite span timing', () => {
           it('suite spans for top-level-only files are bounded to their own file execution', async () => {
             const suiteFiles = [
