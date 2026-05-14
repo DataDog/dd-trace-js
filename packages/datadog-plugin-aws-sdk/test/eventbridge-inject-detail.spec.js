@@ -101,6 +101,31 @@ describe('EventBridge plugin requestInject', () => {
     assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
   })
 
+  it('skips rewriting non-propagated batch entries by default', () => {
+    const plugin = buildPlugin({
+      inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
+    })
+    let injectDetailCalls = 0
+    plugin.injectDetail = (...args) => {
+      injectDetailCalls++
+      return EventBridge.prototype.injectDetail.apply(plugin, args)
+    }
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [
+          { Detail: '{"id":1}' },
+          { Detail: '{ "id": 2 }' },
+        ],
+      },
+    }
+
+    plugin.requestInject(null, request)
+
+    assert.strictEqual(injectDetailCalls, 1)
+    assert.strictEqual(request.params.Entries[1].Detail, '{ "id": 2 }')
+  })
+
   it('injects DSM context into every batch entry by default', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,

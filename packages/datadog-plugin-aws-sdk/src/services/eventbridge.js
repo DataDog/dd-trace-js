@@ -62,6 +62,7 @@ class EventBridge extends BaseAwsSdkPlugin {
    */
   injectToEntry (span, entry, injectTraceContext) {
     if (!entry?.Detail) return
+    if (!injectTraceContext && !this.config.dsmEnabled) return
 
     const originalDetail = entry.Detail
     const ddInfo = {}
