@@ -101,6 +101,7 @@ const plugins = {
   get oracledb () { return require('../../../datadog-plugin-oracledb/src') },
   get openai () { return require('../../../datadog-plugin-openai/src') },
   get pg () { return require('../../../datadog-plugin-pg/src') },
+  get postgres () { return require('../../../datadog-plugin-pg/src') },
   get pino () { return require('../../../datadog-plugin-pino/src') },
   get 'pino-pretty' () { return require('../../../datadog-plugin-pino/src') },
   get playwright () { return require('../../../datadog-plugin-playwright/src') },

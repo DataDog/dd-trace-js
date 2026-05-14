@@ -121,6 +121,7 @@ module.exports = {
   'passport-local': () => require('../passport-local'),
   'path-to-regexp': () => require('../path-to-regexp'),
   pg: () => require('../pg'),
+  postgres: () => require('../postgres'),
   pino: () => require('../pino'),
   'pino-pretty': () => require('../pino'),
   playwright: () => require('../playwright'),
