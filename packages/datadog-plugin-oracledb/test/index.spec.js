@@ -446,6 +446,9 @@ describe('Plugin', () => {
         })
       })
 
+      // oracledb has no stable JS-side queue across v5 thick / v6 thin, so the DBM tests below capture
+      // the plugin-produced SQL via `apm:oracledb:query:start` instead of reading a driver-internal queue
+      // (the pattern pg / mysql / mysql2 tests use).
       describe('with DBM propagation disabled (default)', () => {
         let injected
         const onStart = (ctx) => { injected = ctx.injected }
