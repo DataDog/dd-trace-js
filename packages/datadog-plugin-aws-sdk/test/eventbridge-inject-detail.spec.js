@@ -6,6 +6,7 @@ const { Buffer } = require('node:buffer')
 const { describe, it } = require('mocha')
 
 const { getHeadersSize } = require('../../dd-trace/src/datastreams')
+const log = require('../../dd-trace/src/log')
 const EventBridge = require('../src/services/eventbridge')
 
 /**
@@ -35,6 +36,28 @@ function buildPlugin ({
   }
   return plugin
 }
+
+describe('EventBridge plugin generateTags', () => {
+  it('returns undefined when the source is missing', () => {
+    const plugin = Object.create(EventBridge.prototype)
+
+    assert.strictEqual(plugin.generateTags({}, 'putEvents'), undefined)
+  })
+
+  it('generates tags when the source is present', () => {
+    const plugin = Object.create(EventBridge.prototype)
+
+    assert.deepStrictEqual(plugin.generateTags({
+      source: 'checkout',
+      Name: 'rule-a',
+    }), {
+      'resource.name': 'checkout',
+      'aws.eventbridge.source': 'checkout',
+      'messaging.system': 'aws_eventbridge',
+      rulename: 'rule-a',
+    })
+  })
+})
 
 describe('EventBridge plugin requestInject', () => {
   it('attaches `_datadog` before setDSMCheckpoint reads payload size', () => {
@@ -77,6 +100,29 @@ describe('EventBridge plugin requestInject', () => {
 
     const injected = JSON.parse(entry.Detail)._datadog
     assert.ok(typeof injected['dd-pathway-ctx-base64'] === 'string' && injected['dd-pathway-ctx-base64'].length > 0)
+  })
+
+  it('restores the original detail when DSM reinjection fails', () => {
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      dataStreamsContext: {
+        hash: Buffer.alloc(8),
+        pathwayStartNs: 0,
+        edgeStartNs: 0,
+      },
+    })
+    const entry = { Detail: '{"hello":"world"}' }
+    let injectDetailCalls = 0
+    plugin.injectDetail = () => {
+      injectDetailCalls++
+      return injectDetailCalls === 1
+        ? '{"hello":"world","_datadog":{}}'
+        : undefined
+    }
+
+    plugin.injectToEntry(null, entry, false)
+
+    assert.strictEqual(entry.Detail, '{"hello":"world"}')
   })
 
   it('injects only the first batch entry by default', () => {
@@ -221,5 +267,57 @@ describe('EventBridge plugin requestInject', () => {
       null,
       getHeadersSize(entry),
     ]])
+  })
+
+  it('uses the default event bus and detail type in the DSM checkpoint tags', () => {
+    const calls = []
+    const plugin = buildPlugin()
+    plugin._tracer.setCheckpoint = (...args) => {
+      calls.push(args)
+      return null
+    }
+    const entry = { Detail: '{"id":1}' }
+
+    EventBridge.prototype.setDSMCheckpoint.call(plugin, null, entry)
+
+    assert.deepStrictEqual(calls, [[
+      ['direction:out', 'type:eventbridge:default', 'topic:unknown'],
+      null,
+      getHeadersSize(entry),
+    ]])
+  })
+})
+
+describe('EventBridge plugin injectDetail', () => {
+  it('logs and returns undefined when the detail is invalid JSON', () => {
+    const plugin = buildPlugin()
+    const originalError = log.error
+    const calls = []
+    log.error = (...args) => calls.push(args)
+
+    try {
+      assert.strictEqual(plugin.injectDetail('not-json', {}), undefined)
+    } finally {
+      log.error = originalError
+    }
+
+    assert.strictEqual(calls.length, 1)
+  })
+
+  it('logs and returns undefined when the payload is too large', () => {
+    const plugin = buildPlugin()
+    const originalInfo = log.info
+    const calls = []
+    log.info = (...args) => calls.push(args)
+
+    try {
+      assert.strictEqual(plugin.injectDetail(JSON.stringify({
+        data: 'a'.repeat(1024 * 256),
+      }), {}), undefined)
+    } finally {
+      log.info = originalInfo
+    }
+
+    assert.strictEqual(calls.length, 1)
   })
 })
