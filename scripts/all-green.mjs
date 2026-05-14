@@ -11,6 +11,7 @@ const {
   GITHUB_TOKEN,
   POLLING_INTERVAL,
   RETRIES,
+  RUN_ATTEMPT,
 } = process.env
 
 const octokit = new Octokit({
@@ -142,15 +143,17 @@ async function rerunFailedWorkflows (workflowRuns) {
   )
 }
 
-async function retryCancelledOnStartup () {
+async function rerunOnStartup () {
+  if (RUN_ATTEMPT <= 1) return
   const runs = await getRuns()
-  const cancelled = runs.filter(r =>
+  const toRerun = runs.filter(r =>
     r.status === 'completed' &&
-    r.conclusion === 'cancelled'
+    failureConclusions.has(r.conclusion)
   )
-  if (cancelled.length > 0) {
-    await rerunFailedWorkflows(cancelled)
-    for (const run of cancelled) retriedRunIds.add(run.id)
+  if (toRerun.length > 0) {
+    console.log(`Rerunning ${toRerun.length} failed workflow(s) before polling.`)
+    await rerunFailedWorkflows(toRerun)
+    for (const run of toRerun) retriedRunIds.add(run.id)
     runsCache = undefined
     console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
@@ -158,7 +161,7 @@ async function retryCancelledOnStartup () {
 }
 
 async function checkAllGreen () {
-  await retryCancelledOnStartup()
+  await rerunOnStartup()
 
   const { runs, done } = await pollUntilDone()
 
