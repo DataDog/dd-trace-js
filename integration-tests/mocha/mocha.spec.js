@@ -1193,6 +1193,34 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
+        it('starts each suite event when its first top-level test runs', async () => {
+          const fastSuiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-fast.js'
+          const slowSuiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-slow.js'
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+              const fastSuite = suiteEvents.find(event => event.meta[TEST_SUITE] === fastSuiteFile)
+              const slowSuite = suiteEvents.find(event => event.meta[TEST_SUITE] === slowSuiteFile)
+
+              assert.ok(fastSuite, `Expected suite event for ${fastSuiteFile}`)
+              assert.ok(slowSuite, `Expected suite event for ${slowSuiteFile}`)
+              assert.ok(
+                fastSuite.duration * 2 < slowSuite.duration,
+                `Expected ${fastSuiteFile} duration to be much shorter than ${slowSuiteFile}`
+              )
+            })
+
+          childProcess = exec(
+            'node node_modules/mocha/bin/mocha' +
+            ` ./${fastSuiteFile} ./${slowSuiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
         it('reports a suite event for a file with mixed top-level and nested tests', async () => {
           const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
           const eventsPromise = receiver
@@ -1819,6 +1847,58 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.match(testOutput, /Lines {7}/)
         done()
       })
+    })
+
+    it('reports per-file code coverage for suites with only top-level tests', async () => {
+      const suiteFiles = [
+        'ci-visibility/mocha-plugin-tests/coverage-top-level-a.js',
+        'ci-visibility/mocha-plugin-tests/coverage-top-level-b.js',
+      ]
+      const expectedCoverageBySuite = {
+        [suiteFiles[0]]: 'ci-visibility/mocha-plugin-tests/coverage-top-level-dep-a.js',
+        [suiteFiles[1]]: 'ci-visibility/mocha-plugin-tests/coverage-top-level-dep-b.js',
+      }
+
+      const coverageRequestPromise = receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcov', 5000)
+      const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
+
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary node node_modules/mocha/bin/mocha' +
+        ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      const [coverageRequests, eventsRequest] = await Promise.all([
+        coverageRequestPromise,
+        eventsRequestPromise,
+        once(childProcess, 'exit'),
+      ])
+
+      const suiteEventsByName = eventsRequest.payload.events
+        .filter(event => event.type === 'test_suite_end')
+        .reduce((acc, event) => {
+          acc[event.content.meta[TEST_SUITE]] = event.content
+          return acc
+        }, {})
+      const coverageFileGroups = coverageRequests
+        .flatMap(({ payload }) => payload)
+        .flatMap(coverage => coverage.content.coverages)
+        .map(coverage => coverage.files.map(file => file.filename))
+
+      for (const [suiteFile, expectedCoverageFile] of Object.entries(expectedCoverageBySuite)) {
+        const unexpectedCoverageFiles = Object.values(expectedCoverageBySuite)
+          .filter(coverageFile => coverageFile !== expectedCoverageFile)
+        const matchingCoverageGroup = coverageFileGroups.find(coverageFiles =>
+          coverageFiles.includes(expectedCoverageFile) &&
+          unexpectedCoverageFiles.every(unexpectedCoverageFile => !coverageFiles.includes(unexpectedCoverageFile))
+        )
+
+        assert.ok(suiteEventsByName[suiteFile], `Expected suite event for ${suiteFile}`)
+        assert.ok(matchingCoverageGroup, `Expected isolated coverage for ${suiteFile}`)
+      }
     })
 
     it('does not report code coverage if disabled by the API', (done) => {

@@ -450,6 +450,56 @@ addHook({
   return run
 })
 
+function ensureSuiteContext (file) {
+  let ctx = testFileToSuiteCtx.get(file)
+  if (ctx) return ctx
+
+  const isUnskippable = unskippableSuites.includes(file)
+  isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(file, process.cwd()))
+  ctx = {
+    testSuiteAbsolutePath: file,
+    isUnskippable,
+    isForcedToRun,
+    itrCorrelationId,
+  }
+  testFileToSuiteCtx.set(file, ctx)
+  testSuiteStartCh.runStores(ctx, () => {})
+  return ctx
+}
+
+function publishSuiteCoverage (file) {
+  if (!global.__coverage__) return
+
+  const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+  testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+  mergeCoverage(global.__coverage__, originalCoverageMap)
+  resetCoverage(global.__coverage__)
+}
+
+function getRootSuiteStatus (tests) {
+  if (tests.every(test => test.isPending())) {
+    return 'skip'
+  }
+  for (const test of tests) {
+    if (test.state === 'failed' || test.timedOut) {
+      return 'fail'
+    }
+  }
+  return 'pass'
+}
+
+function finishRootOnlySuite (file, suitesByTestFile, rootTestsByFile, finishedRootTestFiles) {
+  if (finishedRootTestFiles.has(file) || suitesByTestFile[file]) return
+
+  const tests = rootTestsByFile.get(file) || []
+  const ctx = testFileToSuiteCtx.get(file) || ensureSuiteContext(file)
+  const status = getRootSuiteStatus(tests)
+
+  publishSuiteCoverage(file)
+  testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+  finishedRootTestFiles.add(file)
+}
+
 // Only used in serial mode (no --parallel flag is passed)
 // This hook is used to generate session, module, suite and test events
 addHook({
@@ -473,10 +523,22 @@ addHook({
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
     const rootTestsByFile = new Map()
+    const finishedRootTestFiles = new Set()
+    let activeRootTestFile
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
     this.once('end', getOnEndHandler(false))
+
+    this.on('test', function (test) {
+      if (test.parent?.root && test.file) {
+        if (activeRootTestFile && activeRootTestFile !== test.file) {
+          finishRootOnlySuite(activeRootTestFile, suitesByTestFile, rootTestsByFile, finishedRootTestFiles)
+        }
+        ensureSuiteContext(test.file)
+        activeRootTestFile = test.file
+      }
+    })
 
     this.on('test', getOnTestHandler(true))
 
@@ -497,82 +559,34 @@ addHook({
         // In that case, they all (even if they are from different files) are going to be
         // children of the root suite.
         // Note: We could have suites that contain top level it(...) and also it(...) nested
-        // inside describe(...) ("mixed case"). Duplication is avoided by the context guard
-        // below. Since 'suite' fires for root first, in the mixed case the ctx is created
-        // here and the describe-based handler finds it already set.
+        // inside describe(...) ("mixed case"). Duplication is avoided because the root-only
+        // finish path skips files that also have describe-based suites.
         if (suite.root && suite.tests.length > 0) {
-          const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
-          for (const file of files) {
-            rootTestsByFile.set(file, suite.tests.filter(t => t.file === file))
-            if (testFileToSuiteCtx.get(file)) continue
-            const isUnskippable = unskippableSuites.includes(file)
-            isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(file, process.cwd()))
-            const ctx = {
-              testSuiteAbsolutePath: file,
-              isUnskippable,
-              isForcedToRun,
-              itrCorrelationId,
+          for (const test of suite.tests) {
+            if (!test.file) continue
+            let rootTests = rootTestsByFile.get(test.file)
+            if (!rootTests) {
+              rootTests = []
+              rootTestsByFile.set(test.file, rootTests)
             }
-            testFileToSuiteCtx.set(file, ctx)
-            testSuiteStartCh.runStores(ctx, () => {})
+            rootTests.push(test)
           }
         }
         return
       }
-      let ctx = testFileToSuiteCtx.get(suite.file)
-      if (!ctx) {
-        const isUnskippable = unskippableSuites.includes(suite.file)
-        isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-        ctx = {
-          testSuiteAbsolutePath: suite.file,
-          isUnskippable,
-          isForcedToRun,
-          itrCorrelationId,
-        }
-        testFileToSuiteCtx.set(suite.file, ctx)
-        testSuiteStartCh.runStores(ctx, () => {})
-      }
+      ensureSuiteContext(suite.file)
     })
 
     this.on('suite end', function (suite) {
       if (suite.root) {
         // Symmetric to the suite start fix
-        const fileToTests = new Map()
-        for (const test of suite.tests) {
-          if (!test.file) continue
-          if (!fileToTests.has(test.file)) fileToTests.set(test.file, [])
-          fileToTests.get(test.file).push(test)
-        }
-        for (const [file, tests] of fileToTests) {
+        for (const file of rootTestsByFile.keys()) {
           // Mixed case: if a file appears in suitesByTestFile (pre-populated before the run),
           // its numSuitesByTestFile counter hits zero when its last describe-based suite ends
           // and the normal path below fires testSuiteFinishCh. Since root is last when
           // 'suite end' fires, any such file has already been handled — skipping it here
           // avoids duplication.
-          if (suitesByTestFile[file]) continue
-          let status = 'pass'
-          if (tests.every(test => test.isPending())) {
-            status = 'skip'
-          } else {
-            for (const test of tests) {
-              if (test.state === 'failed' || test.timedOut) {
-                status = 'fail'
-                break
-              }
-            }
-          }
-          if (global.__coverage__) {
-            const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
-            testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
-            mergeCoverage(global.__coverage__, originalCoverageMap)
-            resetCoverage(global.__coverage__)
-          }
-          const ctx = testFileToSuiteCtx.get(file)
-          if (ctx) {
-            testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
-          } else {
-            log.warn('No ctx found for suite', file)
-          }
+          finishRootOnlySuite(file, suitesByTestFile, rootTestsByFile, finishedRootTestFiles)
         }
         return
       }
@@ -604,18 +618,7 @@ addHook({
         }
       }
 
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
-
-        testSuiteCodeCoverageCh.publish({
-          coverageFiles,
-          suiteFile: suite.file,
-        })
-        // We need to reset coverage to get a code coverage per suite
-        // Before that, we preserve the original coverage
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
-      }
+      publishSuiteCoverage(suite.file)
 
       const ctx = testFileToSuiteCtx.get(suite.file)
       if (ctx) {
