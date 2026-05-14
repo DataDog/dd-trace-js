@@ -162,7 +162,6 @@ export interface GeneratedConfig {
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_SESSION_NAME: string | undefined;
-  DD_TEST_TIA_KEEP_COV_CONFIG: boolean;
   DD_TRACE_AEROSPIKE_ENABLED: boolean;
   DD_TRACE_AI_ENABLED: boolean;
   DD_TRACE_AMQP10_ENABLED: boolean;

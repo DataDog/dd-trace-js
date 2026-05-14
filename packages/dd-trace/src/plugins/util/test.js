@@ -342,6 +342,9 @@ module.exports = {
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
   getRelativeCoverageFiles,
+  applySkippedCoverageToCoverage,
+  getSafeSkippableSuites,
+  getSkippedSuitesCoverage,
   getTestCoverageLinesPercentage,
   hashCoverageFilePath,
   mergeCoverageBitmaps,
@@ -1123,6 +1126,66 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   }
 }
 
+function hasSkippedCoverage (skippedCoverage) {
+  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
+}
+
+function getLocalSuiteSet (localSuites) {
+  const localSuiteSet = new Set()
+  for (const suite of localSuites) {
+    if (suite) localSuiteSet.add(suite)
+  }
+  return localSuiteSet
+}
+
+function hasSkippableSuitesOutsideRun (skippableSuites, localSuites) {
+  const localSuiteSet = getLocalSuiteSet(localSuites)
+  for (const suite of skippableSuites || []) {
+    if (!localSuiteSet.has(suite)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Returns skippable suites that are safe to skip for the current local run.
+ * @param {object} params
+ * @param {string[]} params.skippableSuites
+ * @param {object} params.skippedCoverage
+ * @param {string[]} params.localSuites
+ * @param {boolean} params.isCodeCoverageEnabled
+ * @returns {string[]}
+ */
+function getSafeSkippableSuites ({
+  skippableSuites,
+  skippedCoverage,
+  localSuites,
+  isCodeCoverageEnabled,
+}) {
+  if (!isCodeCoverageEnabled) return skippableSuites || []
+  if (!hasSkippedCoverage(skippedCoverage)) return []
+  if (hasSkippableSuitesOutsideRun(skippableSuites, localSuites)) return []
+  return skippableSuites || []
+}
+
+/**
+ * Returns backend coverage only when there are suites actually skipped in this run.
+ * @param {object} params
+ * @param {string[]} params.skippedSuites
+ * @param {object} params.skippedCoverage
+ * @param {boolean} params.isCodeCoverageEnabled
+ * @returns {object}
+ */
+function getSkippedSuitesCoverage ({
+  skippedSuites,
+  skippedCoverage,
+  isCodeCoverageEnabled,
+}) {
+  if (!isCodeCoverageEnabled || !skippedSuites?.length || !hasSkippedCoverage(skippedCoverage)) return {}
+  return skippedCoverage
+}
+
 function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
   const executableLinesByFile = new Map()
   const coveredLinesByFile = new Map()
@@ -1140,6 +1203,58 @@ function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
   }
 
   return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+}
+
+function isLineCoveredByBitmap (bitmap, line) {
+  if (!Number.isSafeInteger(line) || line <= 0) return false
+
+  const byteIndex = line >> 3
+  return byteIndex < bitmap.length && !!(bitmap[byteIndex] & (1 << (line % 8)))
+}
+
+function getSkippedCoverageByHash (skippedCoverage) {
+  const skippedCoverageByHash = new Map()
+  addSkippedCoverageToMap(skippedCoverage, skippedCoverageByHash)
+  return skippedCoverageByHash
+}
+
+function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
+  let updated = false
+  for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
+    const startLine = statementLocation?.start?.line
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
+    if (fileCoverage.data.s[statementId] > 0) continue
+
+    fileCoverage.data.s[statementId] = 1
+    updated = true
+  }
+  return updated
+}
+
+/**
+ * Applies backend skipped-suite coverage to an Istanbul coverage map.
+ * @param {object} coverage
+ * @param {object} skippedCoverage
+ * @param {string} [rootDir]
+ * @returns {boolean}
+ */
+function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
+  if (!hasSkippedCoverage(skippedCoverage)) return false
+
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByHash = getSkippedCoverageByHash(skippedCoverage)
+  let updated = false
+
+  for (const filename of coverageMap.files()) {
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const skippedBitmap = skippedCoverageByHash.get(hashCoverageFilePath(relativeFilename))
+    if (!skippedBitmap) continue
+
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    updated = applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap) || updated
+  }
+
+  return updated
 }
 
 function resetCoverage (coverage) {

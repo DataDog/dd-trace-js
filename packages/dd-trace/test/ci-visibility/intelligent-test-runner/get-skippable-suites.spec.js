@@ -68,6 +68,27 @@ const SKIPPABLE_RESPONSE_WITH_COVERAGE = {
   },
 }
 
+const SKIPPABLE_RESPONSE_WITH_SUITE_COVERAGE = {
+  data: [
+    {
+      type: 'suite',
+      attributes: {
+        suite: 'suite1.spec.js',
+        coverage: {
+          hash1: 'gA==',
+        },
+      },
+    },
+    {
+      type: 'suite',
+      attributes: {
+        suite: 'suite2.spec.js',
+      },
+    },
+  ],
+  meta: { correlation_id: 'corr-123' },
+}
+
 const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
   data: [
     {
@@ -85,7 +106,12 @@ const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
       },
     },
   ],
-  meta: { correlation_id: 'corr-123' },
+  meta: {
+    correlation_id: 'corr-123',
+    coverage: {
+      hash1: 'gA==',
+    },
+  },
 }
 
 function cacheKeyForParams (params) {
@@ -152,6 +178,23 @@ describe('get-skippable-suites', () => {
     })
   })
 
+  it('should skip suites with suite coverage when code coverage is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCodeCoverageEnabled: true }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_SUITE_COVERAGE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId, coverage) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      assert.deepStrictEqual(coverage, {
+        hash1: 'gA==',
+      })
+      done()
+    })
+  })
+
   it('should not skip suites with missing line coverage when code coverage is enabled', (done) => {
     const params = { ...DEFAULT_PARAMS, isCodeCoverageEnabled: true }
     nock(BASE_URL)
@@ -161,6 +204,20 @@ describe('get-skippable-suites', () => {
     getSkippableSuites(params, (err, skippableSuites, correlationId) => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should not skip suites without coverage when code coverage is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCodeCoverageEnabled: true }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, [])
       assert.strictEqual(correlationId, 'corr-123')
       done()
     })

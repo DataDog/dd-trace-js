@@ -180,14 +180,13 @@ describe('ITR code coverage', function () {
         }],
       })
 
-      assert.strictEqual(skippedWithoutCoverage.isItrSkipped, 'true')
-      assert.strictEqual(skippedWithoutCoverage.skippedSuites.length, 1)
-      assert.strictEqual(skippedWithoutCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(skippedWithoutCoverage.isItrSkipped, 'false')
+      assert.strictEqual(skippedWithoutCoverage.skippedSuites.length, 0)
       assert.strictEqual(
         skippedWithoutCoverage.codeCoverageLinesPct,
         skippedWithoutCoverage.stdoutCodeCoverageLinesPct
       )
-      assert.ok(skippedWithoutCoverage.codeCoverageLinesPct < baseline.codeCoverageLinesPct)
+      assert.strictEqual(skippedWithoutCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
 
       const skippedWithCoverage = await runFramework({
         framework,
@@ -207,7 +206,7 @@ describe('ITR code coverage', function () {
       assert.strictEqual(skippedWithCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
       assert.strictEqual(
         skippedWithCoverage.stdoutCodeCoverageLinesPct,
-        skippedWithoutCoverage.stdoutCodeCoverageLinesPct
+        baseline.stdoutCodeCoverageLinesPct
       )
       assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     })

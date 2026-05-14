@@ -1745,10 +1745,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
+          coverage: {
+            [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: coveredSkippedLines,
+          },
         },
       }])
 
@@ -1900,18 +1904,25 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('marks the test session as skipped if every suite is skipped', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip(
         [
           {
             type: 'suite',
             attributes: {
               suite: 'ci-visibility/test/ci-visibility-test.js',
+              coverage: {
+                [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: coveredSkippedLines,
+              },
             },
           },
           {
             type: 'suite',
             attributes: {
               suite: 'ci-visibility/test/ci-visibility-test-2.js',
+              coverage: {
+                [hashCoverageFilePath('ci-visibility/test/ci-visibility-test-2.js')]: coveredSkippedLines,
+              },
             },
           },
         ]
@@ -2021,17 +2032,24 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('does not skip suites if suite is marked as unskippable', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-to-skip.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-unskippable.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/unskippable-test/test-unskippable.js')]: coveredSkippedLines,
+            },
           },
         },
       ])
@@ -2096,11 +2114,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-to-skip.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+            },
           },
         },
       ])
@@ -2263,10 +2285,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     onlyLatestIt('can skip suites in parallel mode', async () => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
+          coverage: {
+            [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: coveredSkippedLines,
+          },
         },
       }])
 

@@ -8,6 +8,7 @@ const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
@@ -15,6 +16,9 @@ const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  getSafeSkippableSuites,
+  getSkippedSuitesCoverage,
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
@@ -53,6 +57,7 @@ let hasWarnedDeprecatedMochaVersion = false
 const unskippableSuites = []
 let suitesToSkip = []
 let skippableSuitesCoverage = {}
+let skippedSuitesCoverage = {}
 let isSuitesSkipped = false
 let skippedSuites = []
 let itrCorrelationId = ''
@@ -113,9 +118,16 @@ function isTestFailed (test) {
 }
 
 function getFilteredSuites (originalSuites) {
+  const localSuites = originalSuites.map(suite => getTestSuitePath(suite.file, process.cwd()))
+  const safeSuitesToSkip = getSafeSkippableSuites({
+    skippableSuites: suitesToSkip,
+    skippedCoverage: skippableSuitesCoverage,
+    localSuites,
+    isCodeCoverageEnabled: config.isCodeCoverageEnabled,
+  })
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
-    const shouldSkip = suitesToSkip.includes(testPath)
+    const shouldSkip = safeSuitesToSkip.includes(testPath)
     const isUnskippable = unskippableSuites.includes(suite.file)
     if (shouldSkip && !isUnskippable) {
       acc.skippedSuites.add(testPath)
@@ -203,9 +215,14 @@ function getOnEndHandler (isParallel) {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
+        applySkippedCoverageToCoverage(
+          originalCoverageMap,
+          skippedSuitesCoverage,
+          process.cwd()
+        )
         testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
           originalCoverageMap,
-          skippableSuitesCoverage,
+          undefined,
           process.cwd()
         )
         testSessionCoverageFiles = getExecutableFilesFromCoverage(originalCoverageMap)
@@ -251,6 +268,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     if (err) {
       suitesToSkip = []
       skippableSuitesCoverage = {}
+      skippedSuitesCoverage = {}
     } else {
       suitesToSkip = skippableSuites
       itrCorrelationId = responseItrCorrelationId
@@ -267,6 +285,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     runner.suite.suites = suitesToRun
 
     skippedSuites = [...filteredSuites.skippedSuites]
+    skippedSuitesCoverage = getSkippedSuitesCoverage({
+      skippedSuites,
+      skippedCoverage: skippableSuitesCoverage,
+      isCodeCoverageEnabled: config.isCodeCoverageEnabled,
+    })
+    writeCoverageBackfillToCache(skippedSuitesCoverage)
 
     mochaGlobalRunCh.runStores(ctx, () => {
       onFinishRequest()
@@ -350,6 +374,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
     config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+    config.isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
@@ -689,9 +714,16 @@ addHook({
       if (config.isSuitesSkippingEnabled && suitesToSkip.length) {
         const filteredFiles = []
         const skippedFiles = []
+        const localSuites = files.map(file => getTestSuitePath(file, process.cwd()))
+        const safeSuitesToSkip = getSafeSkippableSuites({
+          skippableSuites: suitesToSkip,
+          skippedCoverage: skippableSuitesCoverage,
+          localSuites,
+          isCodeCoverageEnabled: config.isCodeCoverageEnabled,
+        })
         for (const file of files) {
           const testPath = getTestSuitePath(file, process.cwd())
-          const shouldSkip = suitesToSkip.includes(testPath)
+          const shouldSkip = safeSuitesToSkip.includes(testPath)
           const isUnskippable = unskippableSuites.includes(file)
           if (shouldSkip && !isUnskippable) {
             skippedFiles.push(testPath)
@@ -701,6 +733,12 @@ addHook({
         }
         isSuitesSkipped = skippedFiles.length > 0
         skippedSuites = skippedFiles
+        skippedSuitesCoverage = getSkippedSuitesCoverage({
+          skippedSuites,
+          skippedCoverage: skippableSuitesCoverage,
+          isCodeCoverageEnabled: config.isCodeCoverageEnabled,
+        })
+        writeCoverageBackfillToCache(skippedSuitesCoverage)
         run.apply(this, [cb, { files: filteredFiles }])
       } else {
         run.apply(this, arguments)

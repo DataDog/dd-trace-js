@@ -196,6 +196,7 @@ function fetchFromApi ({
           .data
           .filter(({ type }) => type === testLevel)
         const skippableSuites = []
+        const hasCoverage = Object.keys(coverage).length > 0
         for (const {
           attributes: {
             suite,
@@ -204,8 +205,10 @@ function fetchFromApi ({
             _missing_line_code_coverage: missingLineCodeCoverage,
           },
         } of skippableItems) {
+          const hasSuiteCoverage = !!suiteCoverage && Object.keys(suiteCoverage).length > 0
           mergeCoverage(coverage, suiteCoverage)
 
+          if (isCodeCoverageEnabled && !hasCoverage && !hasSuiteCoverage) continue
           if (isCodeCoverageEnabled && missingLineCodeCoverage) continue
 
           skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })

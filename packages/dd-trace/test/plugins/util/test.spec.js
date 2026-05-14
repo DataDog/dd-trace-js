@@ -21,6 +21,7 @@ const {
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
   getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
   hashCoverageFilePath,
   mergeCoverage,
   resetCoverage,
@@ -853,6 +854,19 @@ describe('coverage utils', () => {
       }
 
       assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
+    })
+
+    it('applies skipped-suite coverage to an Istanbul coverage map', () => {
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        [hashCoverageFilePath('file.js')]: getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
     })
   })
 
