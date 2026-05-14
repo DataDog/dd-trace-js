@@ -9,6 +9,7 @@ const BaseAwsSdkPlugin = require('../base')
 const { isEmpty } = require('../util')
 
 const DEFAULT_EVENT_BUS = 'default'
+const DEFAULT_DETAIL_TYPE = 'unknown'
 const MAX_EVENT_SIZE = 1024 * 256
 
 class EventBridge extends BaseAwsSdkPlugin {
@@ -130,9 +131,10 @@ class EventBridge extends BaseAwsSdkPlugin {
    */
   setDSMCheckpoint (span, entry) {
     const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS
+    const detailType = entry.DetailType || DEFAULT_DETAIL_TYPE
     const payloadSize = getHeadersSize(entry)
     return this.tracer.setCheckpoint(
-      ['direction:out', `eventbridge:${eventBus}`, 'type:eventbridge'],
+      ['direction:out', `type:eventbridge:${eventBus}`, `topic:${detailType}`],
       span,
       payloadSize,
     )

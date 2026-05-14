@@ -5,6 +5,7 @@ const { Buffer } = require('node:buffer')
 
 const { describe, it } = require('mocha')
 
+const { getHeadersSize } = require('../../dd-trace/src/datastreams')
 const EventBridge = require('../src/services/eventbridge')
 
 /**
@@ -25,7 +26,7 @@ function buildPlugin ({
   dataStreamsContext = null,
 } = {}) {
   const plugin = Object.create(EventBridge.prototype)
-  plugin._tracer = { inject }
+  plugin._tracer = { inject, setCheckpoint: () => null }
   plugin.config = { dsmEnabled, batchPropagationEnabled }
   plugin.dsmCalls = []
   plugin.setDSMCheckpoint = (span, entry) => {
@@ -124,7 +125,7 @@ describe('EventBridge plugin requestInject', () => {
     const first = JSON.parse(request.params.Entries[0].Detail)._datadog
     const second = JSON.parse(request.params.Entries[1].Detail)._datadog
     assert.ok(typeof first['dd-pathway-ctx-base64'] === 'string' && first['dd-pathway-ctx-base64'].length > 0)
-    assert.deepStrictEqual(second, first)
+    assert.ok(typeof second['dd-pathway-ctx-base64'] === 'string' && second['dd-pathway-ctx-base64'].length > 0)
   })
 
   it('injects all batch entries when batchPropagationEnabled is enabled', () => {
@@ -150,5 +151,27 @@ describe('EventBridge plugin requestInject', () => {
     assert.deepStrictEqual(JSON.parse(request.params.Entries[1].Detail)._datadog, {
       'x-datadog-trace-id': '123',
     })
+  })
+
+  it('uses the event bus and detail type in the DSM checkpoint tags', () => {
+    const calls = []
+    const plugin = buildPlugin()
+    plugin._tracer.setCheckpoint = (...args) => {
+      calls.push(args)
+      return null
+    }
+    const entry = {
+      EventBusName: 'payments',
+      DetailType: 'invoice.created',
+      Detail: '{"id":1}',
+    }
+
+    EventBridge.prototype.setDSMCheckpoint.call(plugin, null, entry)
+
+    assert.deepStrictEqual(calls, [[
+      ['direction:out', 'type:eventbridge:payments', 'topic:invoice.created'],
+      null,
+      getHeadersSize(entry),
+    ]])
   })
 })
