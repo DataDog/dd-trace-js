@@ -880,10 +880,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('report code coverage with all mocked files', (done) => {
+    it('report code coverage with all mocked files', async () => {
       const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
 
-      codeCovRequestPromise.then((codeCovRequest) => {
+      const assertCodeCoverage = codeCovRequestPromise.then((codeCovRequest) => {
         const allCoverageFiles = codeCovRequest.payload
           .flatMap(coverage => coverage.content.coverages)
           .flatMap(file => file.files)
@@ -891,9 +891,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         assertObjectContains(allCoverageFiles, [
           'ci-visibility/test/sum.js',
+          'ci-visibility/test/static-mock.js',
           'ci-visibility/jest/mocked-test.js',
         ])
-      }).catch(done)
+      })
 
       childProcess = exec(
         runTestsCommand,
@@ -905,9 +906,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         }
       )
-      childProcess.on('exit', () => {
-        done()
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        assertCodeCoverage,
+      ])
     })
   })
 
