@@ -71,9 +71,12 @@ describe('Plugin', () => {
                 'messaging.destination.name': testTopic,
                 'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
                 'kafka.cluster_id': testKafkaClusterId,
+                'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                'kafka.message.offset': '0',
               },
               metrics: {
                 'kafka.batch_size': messages.length,
+                'kafka.partition': 0,
               },
               resource: testTopic,
               error: 0,
@@ -81,6 +84,34 @@ describe('Plugin', () => {
             })
 
             await sendMessages(kafka, testTopic, messages)
+
+            return expectedSpanPromise
+          })
+
+          it('should not emit flat partition/offset tags for multi-message batches', async () => {
+            const batch = [
+              { key: 'a', value: '1' },
+              { key: 'b', value: '2' },
+              { key: 'c', value: '3' },
+            ]
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              assertObjectContains(span, {
+                name: expectedSchema.send.opName,
+                meta: {
+                  'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                },
+                metrics: {
+                  'kafka.batch_size': batch.length,
+                },
+              })
+              assert.ok(!Object.hasOwn(span.metrics, 'kafka.partition'),
+                'kafka.partition must not be set for multi-message batches')
+              assert.ok(!Object.hasOwn(span.meta, 'kafka.message.offset'),
+                'kafka.message.offset must not be set for multi-message batches')
+            })
+
+            await sendMessages(kafka, testTopic, batch)
 
             return expectedSpanPromise
           })
