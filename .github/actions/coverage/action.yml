@@ -40,6 +40,7 @@ runs:
       uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
       with:
         flags: ${{ steps.codecov-flags.outputs.value }}
+        skip_validation: true
 
     - name: Install datadog-ci
       if: always()
