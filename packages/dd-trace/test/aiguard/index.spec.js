@@ -96,7 +96,7 @@ describe('AIGuard SDK', () => {
   afterEach(async () => {
     global.fetch = originalFetch
     sinon.restore()
-    await agent.close()
+    return agent.close()
   })
 
   const mockFetch = (options) => {

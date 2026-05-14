@@ -516,7 +516,7 @@ module.exports = {
 
     const promise = /** @type {Promise<import('../../..').default>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
-        const port = listener.address().port
+        const port = this.port = listener.address().port
 
         tracer.init({
           service: 'test',
@@ -718,6 +718,8 @@ module.exports = {
     return /** @type {Promise<void>} */ (new Promise(resolve => {
       this.server.on('close', () => {
         this.server = null
+        this.port = null
+
         resolve()
       })
     }))

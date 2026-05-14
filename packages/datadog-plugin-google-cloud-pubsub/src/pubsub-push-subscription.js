@@ -181,7 +181,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     if (linkContext) {
       if (span.addLink) {
-        span.addLink(linkContext, {})
+        span.addLink({ context: linkContext, attributes: {} })
       } else {
         span._links ??= []
         span._links.push({ context: linkContext, attributes: {} })

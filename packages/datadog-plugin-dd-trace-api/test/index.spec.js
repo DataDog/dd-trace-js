@@ -239,7 +239,7 @@ describe('Plugin', () => {
             fn: span.addLink,
             self: dummySpan,
             ret: dummySpan,
-            args: [dummySpanContext],
+            args: [{ context: dummySpanContext }],
           })
         })
       })

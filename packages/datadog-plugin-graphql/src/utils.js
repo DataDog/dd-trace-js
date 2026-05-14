@@ -44,6 +44,35 @@ function extractErrorIntoSpanEvent (config, span, exc) {
   span.addEvent('dd.graphql.query.error', attributes, Date.now())
 }
 
+let tools
+
+function getSignature (document, operationName, operationType, calculate) {
+  if (calculate !== false && tools !== false) {
+    try {
+      try {
+        tools ||= require('./tools')
+      } catch (e) {
+        tools = false
+        throw e
+      }
+
+      return tools.defaultEngineReportingSignature(document, operationName)
+    } catch {
+      // safety net
+    }
+  }
+
+  if (operationType) {
+    if (operationName) {
+      return `${operationType} ${operationName}`
+    }
+    return operationType
+  }
+
+  return operationName ?? ''
+}
+
 module.exports = {
   extractErrorIntoSpanEvent,
+  getSignature,
 }
