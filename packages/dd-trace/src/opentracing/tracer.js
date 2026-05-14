@@ -1,12 +1,14 @@
 'use strict'
 
 const os = require('os')
+const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
-const getExporter = require('../exporter')
+const NativeExporter = require('../exporters/native')
+const defaults = require('../config/defaults')
 const pkg = require('../../../../package.json')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
@@ -17,9 +19,9 @@ const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
 
-// Lazy-loaded so the libdatadog initialization cost is only paid the
-// first time the tracer is constructed (and so installs where libdatadog
-// is unavailable can still skip the load on the unavailable path).
+// Lazy-loaded so the libdatadog initialization cost is only paid the first
+// time the tracer is constructed. libdatadog is a required dependency, so
+// any load-time failure surfaces via `require('../native')` at module-load.
 let nativeModule
 function getNativeModule () {
   if (nativeModule === undefined) {
@@ -43,89 +45,48 @@ class DatadogTracer {
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
 
-    // Native spans are always on when libdatadog is available. The lazy
-    // `getNativeModule()` still gracefully handles platforms where libdatadog
-    // failed to load — see ../native for the load-time error.
-    this._nativeSpans = null
-    if (getNativeModule().available) {
-      try {
-        const NativeSpansInterface = getNativeModule().NativeSpansInterface
-        const NativeExporter = require('../exporters/native')
+    // Native spans are the only supported pipeline. libdatadog is a required
+    // dependency; if NativeSpansInterface construction fails, that's a hard
+    // error and we let it propagate to the caller.
+    const NativeSpansInterface = getNativeModule().NativeSpansInterface
 
-        // Get agent URL from config
-        const { URL, format } = require('url')
-        const defaults = require('../config/defaults')
-        const { url, hostname = defaults.hostname, port } = config
-        const agentUrl = url || new URL(format({
-          protocol: 'http:',
-          hostname,
-          port,
-        }))
+    const { url, hostname = defaults.hostname, port } = config
+    const agentUrl = url || new URL(format({
+      protocol: 'http:',
+      hostname,
+      port,
+    }))
 
-        this._nativeSpans = new NativeSpansInterface({
-          agentUrl: agentUrl.toString(),
-          tracerVersion: pkg.version,
-          lang: 'nodejs',
-          langVersion: process.version,
-          langInterpreter: process.jsEngine || 'v8',
-          pid: process.pid,
-          tracerService: config.service,
-          statsEnabled: config.stats?.enabled || false,
-          hostname: config.hostname || require('os').hostname(),
-          env: config.env || '',
-          appVersion: config.version || '',
-          runtimeId: config.tags?.['runtime-id'] || '',
-        })
+    this._nativeSpans = new NativeSpansInterface({
+      agentUrl: agentUrl.toString(),
+      tracerVersion: pkg.version,
+      lang: 'nodejs',
+      langVersion: process.version,
+      langInterpreter: process.jsEngine || 'v8',
+      pid: process.pid,
+      tracerService: config.service,
+      statsEnabled: config.stats?.enabled || false,
+      hostname: config.hostname || os.hostname(),
+      env: config.env || '',
+      appVersion: config.version || '',
+      runtimeId: config.tags?.['runtime-id'] || '',
+    })
 
-        this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
-        this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
-        this._url = agentUrl
+    this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
+    this._url = agentUrl
 
-        // DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED is consumed by the
-        // JS-side spanFormat() path; the native exporter does not yet emit
-        // process tags. Warn once at init so users don't silently lose tags
-        // they think are enabled.
-        if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
-          log.warn(
-            'DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED is not yet supported by the native span %s',
-            'pipeline; process tags will not be emitted.'
-          )
-        }
-
-        log.debug('Native spans mode enabled')
-      } catch (e) {
-        log.warn('Failed to initialize native spans, falling back to JS implementation:', e)
-        this._nativeSpans = null
-      }
-    } else {
-      // libdatadog is not available on this platform / install. Surface
-      // this so users don't silently lose the native-span pipeline that
-      // the tracer is normally built around.
+    // The native exporter does not yet emit process tags. Warn once at init
+    // so users with DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true don't
+    // silently lose tags they think are enabled.
+    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
       log.warn(
-        'Native span pipeline is unavailable (libdatadog not loaded); %s',
-        'falling back to the JS implementation.'
+        'DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED is not yet supported by the native span %s',
+        'pipeline; process tags will not be emitted.'
       )
     }
 
-    // If native init failed or libdatadog is unavailable, use the JS-side
-    // exporter and span processor.
-    if (!this._nativeSpans) {
-      // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
-      // exporter when the tracer is running in Test Optimization mode. Test spans
-      // (test_session/test_module/ test_suite/test) belong on the citestcycle
-      // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
-      // vars set in their environment (e.g. for a separate telemetry integration)
-      // silently lose all test spans.
-      if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
-        const { createOtlpTraceExporter } = require('../opentelemetry/trace')
-        this._exporter = createOtlpTraceExporter(config)
-      } else {
-        const Exporter = getExporter(config.experimental.exporter)
-        this._exporter = new Exporter(config, this._prioritySampler)
-      }
-      this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
-      this._url = this._exporter._url
-    }
+    log.debug('Native spans mode enabled')
 
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
@@ -166,23 +127,15 @@ class DatadogTracer {
       links: options.links,
     }
 
-    let span
-
-    if (this._nativeSpans) {
-      // Native mode: create NativeDatadogSpan
-      const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
-      span = new NativeDatadogSpan(
-        this,
-        this._processor,
-        this._prioritySampler,
-        fields,
-        this._debug,
-        this._nativeSpans
-      )
-    } else {
-      // Standard mode: create regular Span
-      span = new Span(this, this._processor, this._prioritySampler, fields, this._debug)
-    }
+    const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
+    const span = new NativeDatadogSpan(
+      this,
+      this._processor,
+      this._prioritySampler,
+      fields,
+      this._debug,
+      this._nativeSpans
+    )
 
     span.addTags(this._config.tags)
     span.addTags(options.tags)

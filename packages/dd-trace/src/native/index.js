@@ -3,62 +3,49 @@
 /**
  * Native spans module loader.
  *
- * Provides access to the `@datadog/libdatadog` pipeline crate for native span storage.
- * Falls back gracefully if the native module is unavailable.
+ * Provides access to the `@datadog/libdatadog` pipeline crate for native span
+ * storage. `@datadog/libdatadog` is a required dependency: any failure to load
+ * or initialize the pipeline propagates as a hard error so misconfigured
+ * installs surface immediately rather than silently dropping spans.
+ *
+ * Pipeline loading is deferred to first use (lazy) so that simply importing
+ * this module from a unit test (or from code that never actually instantiates
+ * a tracer) does not require a working pipeline binary. The first call into
+ * any of the lazy getters below will throw if libdatadog or the pipeline crate
+ * cannot be loaded.
  */
 
 const { storage } = require('../../../datadog-core')
-const log = require('../log')
-
-let pipeline = null
-let available = false
 
 // Cached module references to avoid repeated require() calls
 // which can cause infinite recursion if fs plugin is active during require
 let NativeSpansInterfaceModule = null
-let NativeSpanContextModule = null
 let NativeDatadogSpanModule = null
 
-// Lazily cached WASM constants — these never change after first access
+// Lazily cached on first call. `OpCode` is read on every span_processor
+// sampling sync; `WasmSpanState`/`wasmMemory` are only read once (at
+// native_spans.js module load) so they don't need separate caches.
 let cachedOpCode = null
-let cachedWasmMemory = null
 
 // Flag to track if we're currently loading a module to prevent recursion
 let isLoading = false
 
-// Loading split into two phases so we can distinguish "module not installed
-// (expected on some platforms)" from "module loaded but init failed (a real
-// problem the user should hear about)". MODULE_NOT_FOUND is silent; everything
-// else (corrupted install, EACCES on the .node binary, syntax error in the
-// package, etc.) gets a log.warn so the failure isn't invisible.
-let libdatadog = null
-try {
-  libdatadog = require('@datadog/libdatadog')
-} catch (err) {
-  if (err.code !== 'MODULE_NOT_FOUND') {
-    log.warn('Failed to load @datadog/libdatadog: %s', err.message)
-  }
-}
+let pipeline = null
 
-if (libdatadog) {
-  try {
-    // Use maybeLoad to avoid throwing if the pipeline crate is not available.
-    pipeline = libdatadog.maybeLoad('pipeline')
-    if (pipeline) {
-      pipeline.init()
-      const legacyStorage = storage('legacy')
-      // Provide libdatadog with a `run(callback)` hook that executes the
-      // callback in a noop async context, so internal HTTP/IO done by the
-      // native exporter doesn't get re-instrumented by our http/fs plugins.
-      pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
-    }
-    // Only mark as available if WasmSpanState is actually present.
-    available = pipeline?.WasmSpanState != null
-  } catch (err) {
-    log.error('Native spans pipeline failed to initialize: %s', err.message)
-    pipeline = null
-    available = false
+function getPipeline () {
+  if (pipeline) return pipeline
+  const libdatadog = require('@datadog/libdatadog')
+  pipeline = libdatadog.load('pipeline')
+  if (pipeline?.WasmSpanState == null) {
+    throw new Error('@datadog/libdatadog pipeline crate is missing WasmSpanState; install may be corrupt')
   }
+  pipeline.init()
+  const legacyStorage = storage('legacy')
+  // Provide libdatadog with a `run(callback)` hook that executes the callback
+  // in a noop async context, so internal HTTP/IO done by the native exporter
+  // doesn't get re-instrumented by our http/fs plugins.
+  pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
+  return pipeline
 }
 
 /**
@@ -85,37 +72,28 @@ function loadWithNoop (loader) {
 
 module.exports = {
   /**
-   * Whether the native pipeline module is available.
-   * @type {boolean}
-   */
-  get available () {
-    return available
-  },
-
-  /**
    * The WasmSpanState class from the pipeline crate.
-   * @type {typeof import('@datadog/libdatadog').WasmSpanState | null}
+   * @type {typeof import('@datadog/libdatadog').WasmSpanState}
    */
   get WasmSpanState () {
-    return pipeline?.WasmSpanState ?? null
+    return getPipeline().WasmSpanState
   },
 
   /**
    * The OpCode enum from the pipeline crate for change buffer operations.
-   * @type {object | null}
+   * @type {object}
    */
   get OpCode () {
-    if (!cachedOpCode && pipeline) cachedOpCode = pipeline.getOpCodes()
+    if (!cachedOpCode) cachedOpCode = getPipeline().getOpCodes()
     return cachedOpCode
   },
 
   /**
    * Get the WASM memory for direct buffer access.
-   * @type {WebAssembly.Memory | null}
+   * @type {WebAssembly.Memory}
    */
   get wasmMemory () {
-    if (!cachedWasmMemory && pipeline) cachedWasmMemory = pipeline.getWasmMemory()
-    return cachedWasmMemory
+    return getPipeline().getWasmMemory()
   },
 
   /**
@@ -127,17 +105,6 @@ module.exports = {
       NativeSpansInterfaceModule = loadWithNoop(() => require('./native_spans'))
     }
     return NativeSpansInterfaceModule
-  },
-
-  /**
-   * The NativeSpanContext class for native-backed span contexts.
-   * @type {typeof import('./span_context')}
-   */
-  get NativeSpanContext () {
-    if (!NativeSpanContextModule) {
-      NativeSpanContextModule = loadWithNoop(() => require('./span_context'))
-    }
-    return NativeSpanContextModule
   },
 
   /**

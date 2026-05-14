@@ -136,10 +136,11 @@ class NativeSpanContext extends DatadogSpanContext {
     const metaBatch = []
     const metricBatch = []
 
-    for (const key in tags) {
+    // `Object.keys` skips Symbol-keyed entries (which never have a native
+    // counterpart) and stays inside the project's no-`for-in` rule.
+    for (const key of Object.keys(tags)) {
       const value = tags[key]
       if (value === undefined || value === null) continue
-      if (typeof key === 'symbol') continue
 
       if (SPECIAL_KEYS.has(key)) {
         this.#syncTagToNative(key, value)

@@ -259,11 +259,12 @@ class NativeDatadogSpan extends DatadogSpan {
 
     // Fast path: plain object (the hot path from instrumentations).
     // `tagger.add` for object input is just `Object.assign(parsedTags, kv)`,
-    // so we skip the parsedTags allocation and walk kv directly.
+    // so we skip the parsedTags allocation and copy kv straight in.
+    // Use `Object.assign` (not `for-in`) so Symbol-keyed entries like
+    // `IGNORE_OTEL_ERROR` reach the JS cache; `syncToNativeOnly` filters
+    // symbol keys back out before they hit WASM.
     if (keyValuePairs && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
-      for (const key in keyValuePairs) {
-        tags[key] = keyValuePairs[key]
-      }
+      Object.assign(tags, keyValuePairs)
       this._spanContext.syncToNativeOnly(keyValuePairs)
       if (this._spanContext._sampling.priority === undefined) {
         this._prioritySampler.sample(this, false)
@@ -274,9 +275,7 @@ class NativeDatadogSpan extends DatadogSpan {
     // Slow path: string or array input.
     const parsedTags = {}
     tagger.add(parsedTags, keyValuePairs)
-    for (const key in parsedTags) {
-      tags[key] = parsedTags[key]
-    }
+    Object.assign(tags, parsedTags)
     this._spanContext.syncToNativeOnly(parsedTags)
 
     if (this._spanContext._sampling.priority === undefined) {

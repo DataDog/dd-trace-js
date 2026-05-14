@@ -1,11 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const proxyquire = require('proxyquire').noCallThru()
 
 require('./setup/core')
 
@@ -18,10 +17,11 @@ describe('SpanProcessor', () => {
   let trace
   let exporter
   let tracer
-  let spanFormat
   let config
   let SpanSampler
   let sample
+  let nativeSpans
+  let fakeOpCode
 
   before(() => {
     require('../src/process-tags').initialize()
@@ -32,6 +32,7 @@ describe('SpanProcessor', () => {
     trace = {
       started: [],
       finished: [],
+      tags: {},
     }
 
     let tags = {}
@@ -56,6 +57,8 @@ describe('SpanProcessor', () => {
     }
     prioritySampler = {
       sample: sinon.stub(),
+      _getPriorityFromTags: sinon.stub().returns(undefined),
+      validate: sinon.stub().returns(false),
     }
     config = {
       flushMinSpans: 3,
@@ -63,27 +66,41 @@ describe('SpanProcessor', () => {
         enabled: false,
       },
     }
-    spanFormat = sinon.stub().returns({ formatted: true })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
       sample,
     })
 
+    fakeOpCode = {
+      SetTraceMetricsAttr: 11,
+      SetTraceMetaAttr: 10,
+    }
+
+    nativeSpans = {
+      queueOp: sinon.stub(),
+    }
+
     SpanProcessor = proxyquire('../src/span_processor', {
-      './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './native': { OpCode: fakeOpCode },
     })
-    processor = new SpanProcessor(exporter, prioritySampler, config)
+    processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
   })
 
   it('should generate sampling priority', () => {
+    // Provide a root span on the trace so _sampleNative has work to do, and
+    // mark the trace as fully finished so process() advances past its early
+    // return (`started.length === finished.length`).
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
   it('should generate sampling priority when sampling manually', () => {
+    trace.started = [finishedSpan]
     processor.sample(finishedSpan)
 
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
@@ -124,18 +141,13 @@ describe('SpanProcessor', () => {
   })
 
   it('should export a partial trace with span count above configured threshold', () => {
-    // The default processor has `_nativeSpans === null` (the JS-fallback
-    // path used when libdatadog is unavailable). In that case spans are
-    // formatted via spanFormat before reaching the exporter.
+    // Spans are forwarded raw to the exporter; the WASM pipeline does the
+    // serialization on the native side.
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan, finishedSpan]
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(exporter.export, [
-      { formatted: true },
-      { formatted: true },
-      { formatted: true },
-    ])
+    sinon.assert.calledWith(exporter.export, [finishedSpan, finishedSpan, finishedSpan])
 
     assert.ok('started' in trace)
     assert.deepStrictEqual(trace.started, [activeSpan])
@@ -159,7 +171,7 @@ describe('SpanProcessor', () => {
       },
     }
 
-    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
     processor.process(finishedSpan)
 
     sinon.assert.calledWith(SpanSampler, config.sampler)
@@ -173,7 +185,7 @@ describe('SpanProcessor', () => {
       },
     }
 
-    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
     trace.started = [activeSpan]
     trace.finished = [finishedSpan]
 
@@ -187,89 +199,25 @@ describe('SpanProcessor', () => {
     sinon.assert.notCalled(exporter.export)
   })
 
-  it('should call spanFormat every time a partial flush is triggered', () => {
-    config.flushMinSpans = 1
-    const processor = new SpanProcessor(exporter, prioritySampler, config)
-    trace.started = [activeSpan, finishedSpan]
-    trace.finished = [finishedSpan]
-    processor.process(activeSpan)
-
-    assert.ok('started' in trace)
-    assert.deepStrictEqual(trace.started, [activeSpan])
-    assert.ok('finished' in trace)
-    assert.deepStrictEqual(trace.finished, [])
-    assert.strictEqual(spanFormat.callCount, 1)
-    sinon.assert.calledWith(spanFormat, finishedSpan, true)
-  })
-
-  it('should add span tags to first span in a chunk', () => {
-    config.flushMinSpans = 2
-    config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
-    const processor = new SpanProcessor(exporter, prioritySampler, config)
-    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan, finishedSpan]
-    trace.finished = [finishedSpan, finishedSpan, finishedSpan, finishedSpan]
-    processor.process(activeSpan)
-    const tags = processor._processTags
-
-    {
-      let foundATag = false
-      tags.split(',').forEach(tag => {
-        const [key, value] = tag.split(':')
-        if (key !== 'entrypoint.basedir') return
-        // The exact basedir varies depending on the test runner location
-        // (e.g. "test" in source tree vs "bin" when run via node_modules/.bin/mocha).
-        assert.ok(
-          typeof value === 'string' && value.length > 0,
-          `entrypoint.basedir value: ${inspect(value)}`
-        )
-        foundATag = true
-      })
-      assert.ok(foundATag)
-    }
-
-    sinon.assert.calledWith(spanFormat.getCall(0), finishedSpan, true, processor._processTags)
-    sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
-    sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
-    sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
-  })
-
   describe('native sampling sync', () => {
     it('should mirror sampling priority and mechanism to native storage', () => {
-      // With native spans always on, SpanProcessor requires the native OpCode
-      // enum (top-level require). Provide a stub OpCode and a fake
-      // `nativeSpans.queueOp` to verify `_syncSamplingToNative` mirrors the
-      // JS-side sampling decision into native storage.
-      const fakeOpCode = {
-        SetTraceMetricsAttr: 11,
-        SetTraceMetaAttr: 10,
-      }
-      const NativeSpansSpec = proxyquire('../src/span_processor', {
-        './span_format': spanFormat,
-        './span_sampler': SpanSampler,
-        './native': { OpCode: fakeOpCode },
-      })
-
-      const fakeNative = {
-        queueOp: sinon.stub(),
-      }
-      const proc = new NativeSpansSpec(exporter, prioritySampler, config, fakeNative)
       const ctx = {
         _trace: { tags: {} },
         _sampling: { priority: 1, mechanism: 4 },
       }
 
-      proc._syncSamplingToNative(ctx, 0)
+      processor._syncSamplingToNative(ctx, 0)
 
-      sinon.assert.calledTwice(fakeNative.queueOp)
+      sinon.assert.calledTwice(nativeSpans.queueOp)
       sinon.assert.calledWith(
-        fakeNative.queueOp,
+        nativeSpans.queueOp,
         fakeOpCode.SetTraceMetricsAttr,
         0,
         '_sampling_priority_v1',
         ['f64', 1]
       )
       sinon.assert.calledWith(
-        fakeNative.queueOp,
+        nativeSpans.queueOp,
         fakeOpCode.SetTraceMetaAttr,
         0,
         '_dd.p.dm',

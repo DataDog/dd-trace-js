@@ -8,7 +8,7 @@ const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
-const DatadogSpan = require('../opentracing/span')
+const native = require('../native')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
@@ -157,20 +157,10 @@ class Span extends BridgeSpanBase {
       links,
     }
 
-    // Native spans are always selected when libdatadog is available; the
-    // JS-only `DatadogSpan` path is kept solely for the graceful-degradation
-    // fallback where libdatadog could not load (and `_tracer._nativeSpans`
-    // is therefore null).
-    let ddSpan
-    if (_tracer._nativeSpans === null) {
-      ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, spanFields, _tracer._debug)
-    } else {
-      const NativeDatadogSpan = require('../native').NativeDatadogSpan
-      ddSpan = new NativeDatadogSpan(
-        _tracer, _tracer._processor, _tracer._prioritySampler,
-        spanFields, _tracer._debug, _tracer._nativeSpans
-      )
-    }
+    const ddSpan = new native.NativeDatadogSpan(
+      _tracer, _tracer._processor, _tracer._prioritySampler,
+      spanFields, _tracer._debug, _tracer._nativeSpans
+    )
 
     super(ddSpan)
 

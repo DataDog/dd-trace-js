@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const proxyquire = require('proxyquire').noCallThru()
 
 require('../setup/core')
 

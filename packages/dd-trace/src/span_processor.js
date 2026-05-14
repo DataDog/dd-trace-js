@@ -1,11 +1,9 @@
 'use strict'
 
 const log = require('./log')
-const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
-const processTags = require('./process-tags')
-const { OpCode } = require('./native')
+const native = require('./native')
 const {
   SAMPLING_MECHANISM_MANUAL,
   DECISION_MAKER_KEY,
@@ -15,39 +13,21 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, nativeSpans = null) {
+  constructor (exporter, prioritySampler, config, nativeSpans) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
     this._nativeSpans = nativeSpans
 
-    // In native mode with stats, the WASM concentrator handles stats aggregation
-    // (spans are fed to it during flush_chunk), so we skip the JS stats processor.
-    const isNativeStats = nativeSpans !== null && config.stats?.enabled
-
-    // TODO: This should already have been calculated in `config.js`.
-    if (config.stats?.enabled && !config.appsec?.standalone?.enabled && !isNativeStats) {
-      const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config)
-    }
-
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
-
-    this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
-      ? processTags.serialized
-      : false
   }
 
   sample (span) {
     const spanContext = span.context()
 
-    if (this._nativeSpans === null) {
-      this._prioritySampler.sample(spanContext)
-    } else {
-      this._sampleNative(span, spanContext)
-    }
+    this._sampleNative(span, spanContext)
 
     // Single span sampling always runs in JS
     this._spanSampler.sample(spanContext)
@@ -112,7 +92,7 @@ class SpanProcessor {
   _syncSamplingToNative (spanContext, slotIndex) {
     // Sync priority as trace metric
     this._nativeSpans.queueOp(
-      OpCode.SetTraceMetricsAttr,
+      native.OpCode.SetTraceMetricsAttr,
       slotIndex,
       '_sampling_priority_v1',
       ['f64', spanContext._sampling.priority]
@@ -121,7 +101,7 @@ class SpanProcessor {
     // Sync mechanism as trace meta if set
     if (spanContext._sampling.mechanism !== undefined) {
       this._nativeSpans.queueOp(
-        OpCode.SetTraceMetaAttr,
+        native.OpCode.SetTraceMetaAttr,
         slotIndex,
         '_dd.p.dm',
         `-${spanContext._sampling.mechanism}`
@@ -170,38 +150,16 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
-      // Native mode (the only intended mode): pass raw spans to the native
-      // exporter; the WASM pipeline does its own formatting. When native
-      // stats are enabled the concentrator handles stats aggregation during
-      // flush_chunk (no spanFormat call needed). When native stats are NOT
-      // enabled but JS stats are, we still need spanFormat for the JS stats
-      // processor.
-      //
-      // Fallback path: when libdatadog is unavailable, `_nativeSpans` is null
-      // and `_exporter` is the JS-side AgentExporter (or OTLP exporter).
-      // That exporter expects pre-formatted spans, so we run spanFormat on
-      // every finished span. This path keeps the tracer functional on
-      // platforms where libdatadog cannot load.
-      const useJsFormatter = this._nativeSpans === null
+      // Pass raw spans to the native exporter; the WASM pipeline serializes
+      // them. When native stats are enabled the concentrator handles stats
+      // aggregation during flush_chunk.
       const finishedSpansToExport = []
-      let isFirstSpanInChunk = true
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
-        } else if (useJsFormatter) {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
-          isFirstSpanInChunk = false
-          this._stats?.onSpanFinished(formattedSpan)
-          finishedSpansToExport.push(formattedSpan)
         } else {
           finishedSpansToExport.push(span)
-          // JS stats fallback (only when native stats are disabled)
-          if (this._stats) {
-            const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
-            isFirstSpanInChunk = false
-            this._stats.onSpanFinished(formattedSpan)
-          }
         }
       }
 

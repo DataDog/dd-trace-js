@@ -3,10 +3,9 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach } = require('mocha')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { getConfigFresh } = require('./helpers/config')
 require('./setup/core')
 
 describe('process-tags', () => {
@@ -252,69 +251,6 @@ describe('process-tags', () => {
     it('should preserve allowed characters in combination', () => {
       assert.strictEqual(sanitize('my_file-v1.0/test.js'), 'my_file-v1.0/test.js')
       assert.strictEqual(sanitize('package_name-2.4.6/lib/index.js'), 'package_name-2.4.6/lib/index.js')
-    })
-  })
-
-  describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED', () => {
-    let env
-    let SpanProcessor
-
-    beforeEach(() => {
-      env = process.env
-      process.env = {}
-    })
-
-    afterEach(() => {
-      process.env = env
-      delete require.cache[require.resolve('../src/span_processor')]
-      delete require.cache[require.resolve('../src/process-tags')]
-    })
-
-    it('should enable process tags propagation when set to true', () => {
-      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
-
-      const config = getConfigFresh()
-      const processTagsModule = require('../src/process-tags')
-      processTagsModule.initialize()
-
-      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
-
-      SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
-
-      assert.strictEqual(typeof processor._processTags, 'string')
-      assert.match(processor._processTags, /entrypoint/)
-    })
-
-    it('should disable process tags propagation when set to false', () => {
-      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'false'
-
-      const config = getConfigFresh()
-      const processTagsModule = require('../src/process-tags')
-      processTagsModule.initialize()
-
-      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, false)
-
-      SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
-
-      assert.strictEqual(processor._processTags, false)
-    })
-
-    it('should enable process tags propagation when not set', () => {
-      // Don't set the environment variable — default is enabled
-
-      const config = getConfigFresh()
-      const processTagsModule = require('../src/process-tags')
-      processTagsModule.initialize()
-
-      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
-
-      SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
-
-      assert.strictEqual(typeof processor._processTags, 'string')
-      assert.match(processor._processTags, /entrypoint/)
     })
   })
 })
