@@ -7,6 +7,7 @@ const {
   MANUAL,
   tagsHaveManualService,
 } = require('./service-source')
+const { getPublicTracer } = require('./tracer-ref')
 
 const sym = Symbol('dd.publicSpan')
 
@@ -29,7 +30,7 @@ class PublicSpan {
   }
 
   tracer () {
-    return global._ddtrace
+    return getPublicTracer(this.#span.tracer())
   }
 
   setOperationName () {

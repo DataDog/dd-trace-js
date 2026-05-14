@@ -32,6 +32,6 @@ module.exports = {
   SERVICE_KEY,
   SERVICE_NAME_KEY,
   MANUAL,
-  tagsHaveManualService,
   markManualService,
+  tagsHaveManualService,
 }

@@ -1,6 +1,7 @@
 'use strict'
 
 const NoopProxy = require('./noop/proxy')
+const { PublicTracer } = require('./opentracing/public/tracer')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
@@ -20,6 +21,18 @@ const {
   removeBaggageItem,
   removeAllBaggageItems,
 } = require('./baggage')
+
+// class MainClass {
+//   constructor() {
+//     this._tracer = something
+//   }
+// }
+
+// class SubClass extends MainClass {
+//   init() {
+//     this._tracer = somethingElse
+//   }
+// }
 
 class LazyModule {
   constructor (provider) {
@@ -279,6 +292,7 @@ class Tracer extends NoopProxy {
           ? require('./standalone').configure(config)
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
+        this._publicTracer = new PublicTracer(this._tracer)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)

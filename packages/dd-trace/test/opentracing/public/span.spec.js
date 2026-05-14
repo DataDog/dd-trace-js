@@ -2,17 +2,19 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
 const { SVC_SRC_KEY } = require('../../../src/constants')
 const { PublicSpan, unwrap } = require('../../../src/opentracing/public/span')
+const { PublicTracer } = require('../../../src/opentracing/public/tracer')
 
 const MANUAL = 'm'
 
-function createInnerSpan () {
+function createInnerSpan (tracer) {
   return {
+    tracer: sinon.stub().returns(tracer),
     context: sinon.stub().returns('inner-context'),
     setOperationName: sinon.stub().returns('inner-setOperationName'),
     setBaggageItem: sinon.stub().returns('inner-setBaggageItem'),
@@ -29,10 +31,12 @@ function createInnerSpan () {
 
 describe('PublicSpan', () => {
   let inner
+  let innerTracer
   let publicSpan
 
   beforeEach(() => {
-    inner = createInnerSpan()
+    innerTracer = {}
+    inner = createInnerSpan(innerTracer)
     publicSpan = new PublicSpan(inner)
   })
 
@@ -84,21 +88,11 @@ describe('PublicSpan', () => {
   })
 
   describe('tracer()', () => {
-    let originalDdtrace
+    it('returns the PublicTracer stamped on the inner span tracer', () => {
+      const publicTracer = new PublicTracer(innerTracer)
 
-    beforeEach(() => {
-      originalDdtrace = global._ddtrace
-    })
-
-    afterEach(() => {
-      global._ddtrace = originalDdtrace
-    })
-
-    it('returns the public tracer proxy (global._ddtrace), not the inner span\'s tracer', () => {
-      const fakeProxy = { startSpan: sinon.stub() }
-      global._ddtrace = fakeProxy
-
-      assert.strictEqual(publicSpan.tracer(), fakeProxy)
+      assert.strictEqual(publicSpan.tracer(), publicTracer)
+      sinon.assert.calledOnce(inner.tracer)
     })
   })
 

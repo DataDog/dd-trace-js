@@ -4,8 +4,7 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
-const { PublicSpan, unwrap } = require('../opentracing/public/span')
-const { markManualService } = require('../opentracing/public/service-source')
+const { PublicTracer } = require('../opentracing/public/tracer')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
 
@@ -15,6 +14,7 @@ const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 const noopOpenFeatureProvider = new NoopFlaggingProvider()
 const noopAIGuard = new NoopAIGuardSDK()
+const publicNoopTracer = new PublicTracer(noop)
 const noopProfiling = {
   setCustomLabelKeys () {},
   runWithLabels (labels, fn) { return fn() },
@@ -24,6 +24,7 @@ const noopProfiling = {
 class NoopProxy {
   constructor () {
     this._tracer = noop
+    this._publicTracer = publicNoopTracer
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
@@ -48,61 +49,37 @@ class NoopProxy {
     return Promise.resolve(false)
   }
 
-  trace (name, options, fn) {
-    if (!fn) {
-      fn = options
-      options = {}
-    }
-
-    if (typeof fn !== 'function') return
-
-    return this._tracer.trace(name, markManualService(options || {}), fn)
+  trace () {
+    return this._publicTracer.trace(...arguments)
   }
 
-  wrap (name, options, fn) {
-    if (!fn) {
-      fn = options
-      options = {}
-    }
-
-    if (typeof fn !== 'function') return fn
-
-    return this._tracer.wrap(name, markManualService(options || {}), fn)
+  wrap () {
+    return this._publicTracer.wrap(...arguments)
   }
 
   setUrl () {
-    this._tracer.setUrl.apply(this._tracer, arguments)
+    this._publicTracer.setUrl(...arguments)
     return this
   }
 
-  startSpan (name, options) {
-    options = markManualService(options)
-
-    const childOf = unwrap(options?.childOf)
-
-    if (childOf !== undefined) {
-      options = { ...options, childOf }
-    }
-
-    return new PublicSpan(this._tracer.startSpan(name, options))
+  startSpan () {
+    return this._publicTracer.startSpan(...arguments)
   }
 
-  inject (context, format, carrier) {
-    context = unwrap(context)
-
-    return this._tracer.inject(context, format, carrier)
+  inject () {
+    return this._publicTracer.inject(...arguments)
   }
 
   extract () {
-    return this._tracer.extract.apply(this._tracer, arguments)
+    return this._publicTracer.extract(...arguments)
   }
 
   scope () {
-    return this._tracer.scope.apply(this._tracer, arguments)
+    return this._publicTracer.scope(...arguments)
   }
 
   getRumData () {
-    return this._tracer.getRumData.apply(this._tracer, arguments)
+    return this._publicTracer.getRumData(...arguments)
   }
 
   setUser (user) {
