@@ -42,6 +42,7 @@ const conclusionEmojis = {
 }
 
 const failureConclusions = new Set(['failure', 'timed_out', 'cancelled'])
+const pollingRetryConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
 const retriedRunIds = new Set()
@@ -106,7 +107,7 @@ async function pollUntilDone () {
 
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
-    failureConclusions.has(r.conclusion) &&
+    pollingRetryConclusions.has(r.conclusion) &&
     !retriedRunIds.has(r.id)
   )
 
@@ -141,7 +142,24 @@ async function rerunFailedWorkflows (workflowRuns) {
   )
 }
 
+async function retryCancelledOnStartup () {
+  const runs = await getRuns()
+  const cancelled = runs.filter(r =>
+    r.status === 'completed' &&
+    r.conclusion === 'cancelled'
+  )
+  if (cancelled.length > 0) {
+    await rerunFailedWorkflows(cancelled)
+    for (const run of cancelled) retriedRunIds.add(run.id)
+    runsCache = undefined
+    console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling.`)
+    await setTimeout(POLLING_INTERVAL * 60_000)
+  }
+}
+
 async function checkAllGreen () {
+  await retryCancelledOnStartup()
+
   const { runs, done } = await pollUntilDone()
 
   await printSummary(runs)
