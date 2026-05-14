@@ -190,7 +190,8 @@ describe('Plugin', () => {
             const topicBIn = `topic-b-in-${randomUUID()}`
             const topicBOut = `topic-b-out-${randomUUID()}`
 
-            await createTopicWithRetry(admin, {
+            const localAdmin = kafka.admin()
+            await createTopicWithRetry(localAdmin, {
               waitForLeaders: true,
               topics: [topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
                 topic,
@@ -198,6 +199,7 @@ describe('Plugin', () => {
                 replicationFactor: 1,
               })),
             })
+            await localAdmin.disconnect()
 
             producer = kafka.producer()
             await producer.connect()
