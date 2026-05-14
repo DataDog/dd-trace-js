@@ -101,17 +101,22 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       // response, only the starting offset.
       const offsets = []
       for (const entry of result) {
-        const offsetAsLong = entry.offset || entry.baseOffset
+        const offsetAsLong = entry.offset ?? entry.baseOffset
         if (entry.partition === undefined || offsetAsLong === undefined) continue
-        offsets.push({ partition: entry.partition, start_offset: Number(offsetAsLong) })
+        // Kafka offsets are 64-bit; coercing to Number loses precision past
+        // 2^53. Keep them as strings so the tag matches the exact offset on
+        // long-lived/high-throughput topics.
+        offsets.push({ partition: entry.partition, start_offset: String(offsetAsLong) })
       }
       if (offsets.length > 0) {
+        offsets.sort((a, b) => a.partition - b.partition)
         span.setTag('kafka.messages.offsets', JSON.stringify(offsets))
       }
       // Single-message send: the one entry's partition/offset describes the
       // exact record. Also expose them as flat tags for easy filtering.
       if (offsets.length === 1 && ctx.messages?.length === 1) {
         span.setTag('kafka.partition', offsets[0].partition)
+        // Set as a string meta tag (not a metric) to preserve full 64-bit precision.
         span.setTag('kafka.message.offset', offsets[0].start_offset)
       }
     }

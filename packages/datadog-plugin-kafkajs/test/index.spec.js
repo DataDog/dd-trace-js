@@ -71,12 +71,12 @@ describe('Plugin', () => {
                 'messaging.destination.name': testTopic,
                 'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
                 'kafka.cluster_id': testKafkaClusterId,
-                'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: 0 }]),
+                'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                'kafka.message.offset': '0',
               },
               metrics: {
                 'kafka.batch_size': messages.length,
                 'kafka.partition': 0,
-                'kafka.message.offset': 0,
               },
               resource: testTopic,
               error: 0,
@@ -99,7 +99,7 @@ describe('Plugin', () => {
               assertObjectContains(span, {
                 name: expectedSchema.send.opName,
                 meta: {
-                  'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: 0 }]),
+                  'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
                 },
                 metrics: {
                   'kafka.batch_size': batch.length,
@@ -107,7 +107,7 @@ describe('Plugin', () => {
               })
               assert.ok(!Object.hasOwn(span.metrics, 'kafka.partition'),
                 'kafka.partition must not be set for multi-message batches')
-              assert.ok(!Object.hasOwn(span.metrics, 'kafka.message.offset'),
+              assert.ok(!Object.hasOwn(span.meta, 'kafka.message.offset'),
                 'kafka.message.offset must not be set for multi-message batches')
             })
 
