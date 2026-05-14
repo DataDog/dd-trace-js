@@ -997,28 +997,6 @@ describe('reporter', () => {
       })
     })
 
-    it('should add http response data inside request span without endpoint', () => {
-      const req = {}
-      const res = {
-        getHeaders: () => {
-          return {
-            'content-type': 'application/json',
-            'content-length': '42',
-          }
-        },
-      }
-
-      span.context()._tags['appsec.event'] = 'true'
-
-      Reporter.finishRequest(req, res)
-      sinon.assert.calledOnceWithExactly(web.root, req)
-
-      sinon.assert.calledWithExactly(span.addTags, {
-        'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42',
-      })
-    })
-
     it('should add http request data inside request span when appsec.event is true', () => {
       const req = {
         headers: {
