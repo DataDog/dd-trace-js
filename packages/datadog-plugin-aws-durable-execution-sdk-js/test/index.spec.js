@@ -50,7 +50,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 
   describe('withDurableExecution() - aws.durable.execute', () => {
     it('happy: emits invocation_status=succeeded, replayed=false', async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.execute',
         meta: {
           ...defaultMeta,
@@ -61,11 +61,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       const result = await invokeHandler(async () => {})
       assert.ok(result !== undefined, 'withDurableExecution should return a result')
 
-      return trace
+      return tracePromise
     })
 
     it('error: invocation_status=failed when handler throws', async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.execute',
         meta: { component: COMPONENT, 'aws.durable.invocation_status': 'failed' },
       }))
@@ -73,12 +73,12 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       // The SDK catches handler errors and returns FAILED without rethrowing.
       await invokeHandler(async () => { throw new Error('Intentional durable execution error') })
 
-      return trace
+      return tracePromise
     })
 
     // ctx.wait suspends invocation, reinvoked after waiting with replayed=true
     it('replay: replayed=true on resume after suspend', async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.execute',
         meta: { 'aws.durable.replayed': 'true' },
       }), { timeoutMs: 5000 })
@@ -90,7 +90,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       })
       assert.equal(invocations, 2, 'expected the handler to be invoked twice (initial + replay)')
 
-      return trace
+      return tracePromise
     })
   })
 
@@ -141,7 +141,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     },
   ]) {
     it(`${span} (happy path): emits span with expected tags`, async () => {
-      const trace = agent.assertSomeTraces(traces => {
+      const tracePromise = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
           name: span,
           resource: operationName,
@@ -151,12 +151,12 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
       })
       await invokeHandler(async (event, ctx) => run(ctx), opts)
-      return trace
+      return tracePromise
     })
   }
 
   it('aws.durable.step (un-named overload): omits operation_name when no name is passed', async () => {
-    const trace = agent.assertSomeTraces(traces => {
+    const tracePromise = agent.assertSomeTraces(traces => {
       const matched = assertSpanByName(traces, {
         name: 'aws.durable.step',
         resource: 'aws.durable.step',
@@ -167,7 +167,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
     })
     await invokeHandler(async (event, ctx) => ctx.step(async () => {}))
-    return trace
+    return tracePromise
   })
 
   for (const { span, errorMessage, run } of [
@@ -187,7 +187,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     },
   ]) {
     it(`${span} (error path): stamps error tags on span`, async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: span,
         meta: {
           component: COMPONENT,
@@ -200,7 +200,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       try {
         await invokeHandler(async (event, ctx) => run(ctx))
       } catch { /* expected */ }
-      return trace
+      return tracePromise
     })
   }
 
@@ -212,19 +212,19 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         mapCtx.step(`work-${item}`, async () => {})))
 
     it('suppresses internal child_context spans', async () => {
-      const trace = agent.assertSomeTraces(traces => {
+      const tracePromise = agent.assertSomeTraces(traces => {
         assert.equal(traces.flat().filter(s => s.name === 'aws.durable.child_context').length, 0)
       })
       await runMap()
-      return trace
+      return tracePromise
     })
 
     it('step children keep default resource and carry operation_name', async () => {
-      const trace = agent.assertSomeTraces(
+      const tracePromise = agent.assertSomeTraces(
         traces => assertStepChildren(traces, 'aws.durable.map', ['work-1', 'work-2'])
       )
       await runMap()
-      return trace
+      return tracePromise
     })
   })
 
@@ -236,23 +236,25 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       ]))
 
     it('suppresses internal child_context spans', async () => {
-      const trace = agent.assertSomeTraces(traces => {
+      const tracePromise = agent.assertSomeTraces(traces => {
         assert.equal(traces.flat().filter(s => s.name === 'aws.durable.child_context').length, 0)
       })
       await runParallel()
-      return trace
+      return tracePromise
     })
 
     it('step children keep default resource and carry operation_name', async () => {
-      const trace = agent.assertSomeTraces(traces => assertStepChildren(traces, 'aws.durable.parallel', ['a', 'b']))
+      const tracePromise = agent.assertSomeTraces(
+        traces => assertStepChildren(traces, 'aws.durable.parallel', ['a', 'b'])
+      )
       await runParallel()
-      return trace
+      return tracePromise
     })
   })
 
   describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
     it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
-      const trace = agent.assertSomeTraces(traces => {
+      const tracePromise = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
           name: 'aws.durable.invoke',
           resource: 'test-func',
@@ -273,11 +275,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       )
       assert.ok(result !== undefined, 'invoke should return a result')
 
-      return trace
+      return tracePromise
     })
 
     it('error: stamps error tags when invoke target fails', async () => {
-      const trace = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
         name: 'aws.durable.invoke',
         meta: {
           component: COMPONENT,
@@ -295,7 +297,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         )
       } catch { /* expected */ }
 
-      return trace
+      return tracePromise
     })
   })
 

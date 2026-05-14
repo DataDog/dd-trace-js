@@ -1,5 +1,8 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
+const { addHook, getHooks } = require('./helpers/instrument')
 
-addHook({ name: '@aws/durable-execution-sdk-js', versions: ['>=1.1.0'] }, exports => exports)
+for (const hook of getHooks('@aws/durable-execution-sdk-js')) {
+  hook.file = null
+  addHook(hook, exports => exports)
+}

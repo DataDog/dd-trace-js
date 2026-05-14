@@ -36,12 +36,11 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     const status = ctx?.result?.Status
     if (span && typeof status === 'string') {
       span.setTag('aws.durable.invocation_status', status.toLowerCase())
-      // When the workflow suspends (status=PENDING), the SDK intentionally leaves
-      // the suspended operations' DurablePromise pending — neither resolves nor
-      // rejects them. Operation spans' asyncEnd therefore never fire, so we
-      // finish them here so the trace processor can flush the trace.
-      if (status === 'PENDING') finishOpenChildSpans(span)
     }
+    // Operation child spans rely on user code awaiting the returned DurablePromise to settle;
+    // suspended (PENDING) ops never settle, and fire-and-forget ops on terminal handler exits
+    // are never awaited at all. Finish any still-open owned children so the trace can flush.
+    if (span) finishOpenChildSpans(span)
     super.finish(ctx)
   }
 }
