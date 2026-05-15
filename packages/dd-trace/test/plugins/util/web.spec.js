@@ -122,6 +122,21 @@ describe('plugins/util/web', () => {
         assert.strictEqual(config.queryStringObfuscation, true)
       })
     })
+
+    describe('clientIpEnabled', () => {
+      it('leaves extractIp undefined when clientIpEnabled is not set', () => {
+        const config = web.normalizeConfig({})
+
+        assert.strictEqual(config.extractIp, undefined)
+      })
+
+      it('resolves extractIp to the ip_extractor implementation when clientIpEnabled is true', () => {
+        const config = web.normalizeConfig({ clientIpEnabled: true })
+        const { extractIp } = require('../../../src/plugins/util/ip_extractor')
+
+        assert.strictEqual(config.extractIp, extractIp)
+      })
+    })
   })
 
   describe('root', () => {
