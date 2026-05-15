@@ -2052,5 +2052,65 @@ describe('TextMapPropagator', () => {
         })
       })
     })
+
+    describe('legacy baggage extractor cheap key scan', () => {
+      // Regression for the regex-per-carrier-key shape that previously ran
+      // `key.match(/^ot-baggage-(.+)$/)` against every header on every traced
+      // request. The cheap `startsWith` prefilter skips the regex (and the
+      // match-object alloc on hits) without changing observable extraction.
+      let baggageContext
+
+      beforeEach(() => {
+        baggageContext = createContext()
+      })
+
+      it('skips keys that do not start with ot-baggage-', () => {
+        propagator._extractLegacyBaggageItems({
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          'x-some-unrelated-header': 'value',
+        }, baggageContext)
+        assert.deepStrictEqual(baggageContext._baggageItems, {})
+      })
+
+      it('ignores uppercase prefixes (case-sensitive)', () => {
+        propagator._extractLegacyBaggageItems({
+          'OT-BAGGAGE-uppercase': 'ignored',
+          'Ot-Baggage-Mixed': 'ignored',
+        }, baggageContext)
+        assert.deepStrictEqual(baggageContext._baggageItems, {})
+      })
+
+      it('extracts every ot-baggage- prefixed key', () => {
+        propagator._extractLegacyBaggageItems({
+          'ot-baggage-foo': 'bar',
+          'ot-baggage-x': 'y',
+          'ot-baggage-multi-dash': 'still-works',
+        }, baggageContext)
+        assert.deepStrictEqual(baggageContext._baggageItems, {
+          foo: 'bar',
+          x: 'y',
+          'multi-dash': 'still-works',
+        })
+      })
+
+      it('skips the bare ot-baggage- prefix without a suffix', () => {
+        propagator._extractLegacyBaggageItems({
+          'ot-baggage-': 'ignored',
+          'ot-baggage': 'ignored',
+          'ot-baggage-foo': 'bar',
+        }, baggageContext)
+        assert.deepStrictEqual(baggageContext._baggageItems, { foo: 'bar' })
+      })
+
+      it('skips the entire scan when legacyBaggageEnabled is false', () => {
+        const disabledConfig = getConfigFresh({ legacyBaggageEnabled: false })
+        const disabledPropagator = new TextMapPropagator(disabledConfig)
+        disabledPropagator._extractLegacyBaggageItems({
+          'ot-baggage-foo': 'bar',
+        }, baggageContext)
+        assert.deepStrictEqual(baggageContext._baggageItems, {})
+      })
+    })
   })
 })

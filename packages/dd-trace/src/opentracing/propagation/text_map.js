@@ -35,7 +35,6 @@ const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
-const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 // W3C Baggage key grammar: key = token (RFC 7230).
 // Spec (up-to-date): "Propagation format for distributed context: Baggage" §3.3.1
 // https://www.w3.org/TR/baggage/#header-content
@@ -701,13 +700,12 @@ class TextMapPropagator {
   }
 
   _extractLegacyBaggageItems (carrier, spanContext) {
-    if (this._config.legacyBaggageEnabled) {
-      for (const key of Object.keys(carrier)) {
-        const match = key.match(baggageExpr)
-
-        if (match) {
-          spanContext._baggageItems[match[1]] = carrier[key]
-        }
+    if (!this._config.legacyBaggageEnabled) return
+    for (const key of Object.keys(carrier)) {
+      if (!key.startsWith(baggagePrefix)) continue
+      const baggageKey = key.slice(baggagePrefix.length)
+      if (baggageKey) {
+        spanContext._baggageItems[baggageKey] = carrier[key]
       }
     }
   }
