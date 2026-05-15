@@ -11,7 +11,6 @@ const {
   MAX_SUBJECTS,
   MAX_DEFAULTS,
   MAX_DEFAULT_VALUE_LENGTH,
-  CODED_DEFAULT_PREFIX,
 } = require('../../src/openfeature/span-enrichment')
 
 describe('SpanEnrichmentState', () => {
@@ -88,20 +87,19 @@ describe('SpanEnrichmentState', () => {
   })
 
   describe('addDefault()', () => {
-    it('should add defaults with coded-default prefix', () => {
+    it('should add defaults', () => {
       assert.strictEqual(state.addDefault('my-flag', 'my-value'), true)
       const tags = state.toSpanTags()
-      const defaults = JSON.parse(tags.ffe_defaults)
-      assert.strictEqual(defaults['my-flag'], 'coded-default:my-value')
+      const defaults = JSON.parse(tags.ffe_runtime_defaults)
+      assert.strictEqual(defaults['my-flag'], 'my-value')
     })
 
     it('should truncate values to MAX_DEFAULT_VALUE_LENGTH', () => {
       const longValue = 'x'.repeat(100)
       state.addDefault('my-flag', longValue)
       const tags = state.toSpanTags()
-      const defaults = JSON.parse(tags.ffe_defaults)
+      const defaults = JSON.parse(tags.ffe_runtime_defaults)
       assert.strictEqual(defaults['my-flag'].length, MAX_DEFAULT_VALUE_LENGTH)
-      assert.ok(defaults['my-flag'].startsWith(CODED_DEFAULT_PREFIX))
     })
 
     it('should enforce MAX_DEFAULTS limit', () => {
@@ -116,18 +114,18 @@ describe('SpanEnrichmentState', () => {
       state.addDefault('my-flag', 'value1')
       assert.strictEqual(state.addDefault('my-flag', 'value2'), true)
       const tags = state.toSpanTags()
-      const defaults = JSON.parse(tags.ffe_defaults)
+      const defaults = JSON.parse(tags.ffe_runtime_defaults)
       // Should still have first value
-      assert.strictEqual(defaults['my-flag'], 'coded-default:value1')
+      assert.strictEqual(defaults['my-flag'], 'value1')
     })
 
     it('should handle non-string default values', () => {
       state.addDefault('bool-flag', true)
       state.addDefault('num-flag', 42)
       const tags = state.toSpanTags()
-      const defaults = JSON.parse(tags.ffe_defaults)
-      assert.strictEqual(defaults['bool-flag'], 'coded-default:true')
-      assert.strictEqual(defaults['num-flag'], 'coded-default:42')
+      const defaults = JSON.parse(tags.ffe_runtime_defaults)
+      assert.strictEqual(defaults['bool-flag'], 'true')
+      assert.strictEqual(defaults['num-flag'], '42')
     })
   })
 
@@ -178,11 +176,11 @@ describe('SpanEnrichmentState', () => {
       assert.strictEqual(typeof parsed, 'object')
     })
 
-    it('should include ffe_defaults when defaults present', () => {
+    it('should include ffe_runtime_defaults when defaults present', () => {
       state.addDefault('flag', 'value')
       const tags = state.toSpanTags()
-      assert.ok(tags.ffe_defaults)
-      const parsed = JSON.parse(tags.ffe_defaults)
+      assert.ok(tags.ffe_runtime_defaults)
+      const parsed = JSON.parse(tags.ffe_runtime_defaults)
       assert.strictEqual(typeof parsed, 'object')
     })
 
@@ -193,7 +191,7 @@ describe('SpanEnrichmentState', () => {
       const tags = state.toSpanTags()
       assert.ok(tags.ffe_flags_enc)
       assert.ok(tags.ffe_subjects_enc)
-      assert.ok(tags.ffe_defaults)
+      assert.ok(tags.ffe_runtime_defaults)
     })
   })
 })
@@ -204,9 +202,5 @@ describe('constants', () => {
     assert.strictEqual(MAX_SUBJECTS, 10)
     assert.strictEqual(MAX_DEFAULTS, 5)
     assert.strictEqual(MAX_DEFAULT_VALUE_LENGTH, 64)
-  })
-
-  it('should have correct prefix', () => {
-    assert.strictEqual(CODED_DEFAULT_PREFIX, 'coded-default:')
   })
 })

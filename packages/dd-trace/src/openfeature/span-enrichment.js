@@ -8,7 +8,6 @@ const MAX_SERIAL_IDS = 128
 const MAX_SUBJECTS = 10
 const MAX_DEFAULTS = 5
 const MAX_DEFAULT_VALUE_LENGTH = 64
-const CODED_DEFAULT_PREFIX = 'coded-default:'
 
 /**
  * Manages feature flag enrichment state for a single root span.
@@ -84,15 +83,14 @@ class SpanEnrichmentState {
       return false
     }
 
-    // Format: "coded-default: <value>" truncated to 64 chars
-    const valueStr = String(defaultValue)
-    let codedValue = `${CODED_DEFAULT_PREFIX}${valueStr}`
+    // Store value as string, truncated to 64 chars
+    let valueStr = String(defaultValue)
 
-    if (codedValue.length > MAX_DEFAULT_VALUE_LENGTH) {
-      codedValue = codedValue.slice(0, MAX_DEFAULT_VALUE_LENGTH)
+    if (valueStr.length > MAX_DEFAULT_VALUE_LENGTH) {
+      valueStr = valueStr.slice(0, MAX_DEFAULT_VALUE_LENGTH)
     }
 
-    this._defaults.set(flagKey, codedValue)
+    this._defaults.set(flagKey, valueStr)
     return true
   }
 
@@ -127,13 +125,13 @@ class SpanEnrichmentState {
       tags.ffe_subjects_enc = JSON.stringify(subjectsObj)
     }
 
-    // Encode defaults
+    // Encode runtime defaults
     if (this._defaults.size > 0) {
       const defaultsObj = {}
-      for (const [flagKey, codedValue] of this._defaults) {
-        defaultsObj[flagKey] = codedValue
+      for (const [flagKey, value] of this._defaults) {
+        defaultsObj[flagKey] = value
       }
-      tags.ffe_defaults = JSON.stringify(defaultsObj)
+      tags.ffe_runtime_defaults = JSON.stringify(defaultsObj)
     }
 
     return tags
@@ -146,5 +144,4 @@ module.exports = {
   MAX_SUBJECTS,
   MAX_DEFAULTS,
   MAX_DEFAULT_VALUE_LENGTH,
-  CODED_DEFAULT_PREFIX,
 }

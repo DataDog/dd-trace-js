@@ -189,10 +189,10 @@ describe('SpanEnrichmentHook', () => {
 
       finishSubscriber(mockRootSpan)
 
-      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_defaults')
-      assert.ok(tagCall, 'ffe_defaults tag should be set')
+      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_runtime_defaults')
+      assert.ok(tagCall, 'ffe_runtime_defaults tag should be set')
       const defaults = JSON.parse(tagCall.args[1])
-      assert.strictEqual(defaults['missing-flag'], 'coded-default:fallback')
+      assert.strictEqual(defaults['missing-flag'], 'fallback')
     })
 
     it('should add default when reason is ERROR and no serialId', () => {
@@ -205,10 +205,10 @@ describe('SpanEnrichmentHook', () => {
 
       finishSubscriber(mockRootSpan)
 
-      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_defaults')
-      assert.ok(tagCall, 'ffe_defaults tag should be set')
+      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_runtime_defaults')
+      assert.ok(tagCall, 'ffe_runtime_defaults tag should be set')
       const defaults = JSON.parse(tagCall.args[1])
-      assert.strictEqual(defaults['error-flag'], 'coded-default:false')
+      assert.strictEqual(defaults['error-flag'], 'false')
     })
 
     it('should not add default when serialId is present', () => {
@@ -221,8 +221,8 @@ describe('SpanEnrichmentHook', () => {
 
       finishSubscriber(mockRootSpan)
 
-      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_defaults')
-      assert.strictEqual(tagCall, undefined, 'ffe_defaults should not be set when serialId present')
+      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_runtime_defaults')
+      assert.strictEqual(tagCall, undefined, 'ffe_runtime_defaults should not be set when serialId present')
     })
 
     it('should accumulate multiple flag evaluations on same span', () => {
@@ -371,7 +371,7 @@ describe('SpanEnrichmentHook', () => {
       const tagNames = mockSpan.setTag.getCalls().map(c => c.args[0])
       assert.ok(tagNames.includes('ffe_flags_enc'))
       assert.ok(tagNames.includes('ffe_subjects_enc'))
-      assert.ok(tagNames.includes('ffe_defaults'))
+      assert.ok(tagNames.includes('ffe_runtime_defaults'))
     })
 
     it('should clean up state after applying tags', () => {
@@ -419,7 +419,7 @@ describe('SpanEnrichmentHook', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
       const state = hook._getOrCreateState(mockSpan)
       // Mock toSpanTags to return an empty string value
-      state.toSpanTags = () => ({ ffe_flags_enc: '', ffe_defaults: null })
+      state.toSpanTags = () => ({ ffe_flags_enc: '', ffe_runtime_defaults: null })
 
       finishSubscriber(mockSpan)
 
