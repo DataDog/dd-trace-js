@@ -65,7 +65,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
       // not returning current store because we don't want the child http.request spans
       // to be created
       if (operationType === 'read' && requestContext.path === '') {
-        return
+        return { noop: true }
       }
     }
 
