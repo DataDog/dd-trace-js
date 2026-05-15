@@ -125,4 +125,34 @@ describe('id', () => {
       assert.strictEqual(spanId.toBigInt(), expected)
     }
   })
+
+  it('should return the same string across repeated toString calls for radix 16 and radix 10', () => {
+    const samples = [
+      id('abcd', 16),
+      id('12293a8527e70a7f27c8d624ace0f559', 16),
+      id('1234', 10),
+      id('0', 16),
+    ]
+
+    for (const spanId of samples) {
+      const hex = spanId.toString(16)
+      assert.strictEqual(spanId.toString(16), hex)
+      assert.strictEqual(spanId.toString(), hex)
+      assert.strictEqual(spanId.toJSON(), hex)
+
+      const decimal = spanId.toString(10)
+      assert.strictEqual(spanId.toString(10), decimal)
+    }
+  })
+
+  it('should still recompute toString for other radices and not pollute the hex/decimal caches', () => {
+    const spanId = id('abcd', 16)
+
+    assert.strictEqual(spanId.toString(8), '125715')
+    assert.strictEqual(spanId.toString(8), '125715')
+    assert.strictEqual(spanId.toString(2), '1010101111001101')
+
+    assert.strictEqual(spanId.toString(16), '000000000000abcd')
+    assert.strictEqual(spanId.toString(10), '43981')
+  })
 })
