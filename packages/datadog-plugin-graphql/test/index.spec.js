@@ -755,6 +755,39 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source }).catch(done)
         })
 
+        it('publishes resolver finish for every sibling of a collapsed list', async () => {
+          // Regression for first-wins finishTime: when a list collapses to one span,
+          // every sibling resolver must still publish on apm:graphql:resolve:updateField
+          // so the span's finishTime reflects the last sibling, not the first.
+          const updateCh = dc.channel('apm:graphql:resolve:updateField')
+          const counts = new Map()
+          const handler = (ctx) => {
+            counts.set(ctx.pathString, (counts.get(ctx.pathString) ?? 0) + 1)
+          }
+          updateCh.subscribe(handler)
+
+          try {
+            const source = '{ friends { name } }'
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const friendsName = spans.find(span => span.meta['graphql.field.path'] === 'friends.*.name')
+                assert.ok(friendsName, 'expected one collapsed friends.*.name span')
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.strictEqual(
+              counts.get('friends.*.name'),
+              2,
+              'expected one updateField publish per sibling of the 2-element friends list',
+            )
+          } finally {
+            updateCh.unsubscribe(handler)
+          }
+        })
+
         it('should instrument list field resolvers', done => {
           const source = `{
             friends {

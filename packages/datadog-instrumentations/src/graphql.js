@@ -295,14 +295,16 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
 
 /**
  * @typedef {{ prev: PathNode | undefined, key: string | number }} PathNode
+ *
+ * @typedef {{ error: unknown, ctx: object }} TrackedField
  */
 
 /**
  * @param {{
- *   fields: Map<object, { error: unknown, ctx: object }>,
+ *   fields: Map<object, TrackedField>,
  *   collapse: boolean,
  *   depth: number,
- *   collapsedFields?: Set<string>,
+ *   collapsedFields?: Map<string, TrackedField>,
  *   pathCache?: Map<PathNode, string>,
  * }} rootCtx
  * @param {import('graphql').GraphQLResolveInfo} info
@@ -335,10 +337,14 @@ function assertField (rootCtx, info, args) {
     : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
   cache.set(path, pathString)
 
+  let collapsedFields
   if (collapse) {
-    const collapsedFields = rootCtx.collapsedFields ??= new Set()
-    if (collapsedFields.has(pathString)) return
-    collapsedFields.add(pathString)
+    collapsedFields = rootCtx.collapsedFields ??= new Map()
+    const existing = collapsedFields.get(pathString)
+    // Subsequent siblings of a collapsed list share the first sibling's field
+    // so updateFieldCh fires for every call and the span's finishTime tracks
+    // the last sibling's completion, not the first.
+    if (existing !== undefined) return existing
   }
 
   const fieldCtx = {
@@ -354,6 +360,7 @@ function assertField (rootCtx, info, args) {
   startResolveCh.publish(fieldCtx)
   const field = { error: null, ctx: fieldCtx }
   rootCtx.fields.set(path, field)
+  if (collapsedFields !== undefined) collapsedFields.set(pathString, field)
   return field
 }
 
