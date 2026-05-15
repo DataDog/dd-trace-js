@@ -215,7 +215,32 @@ class DatadogSpan {
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    // Plugin callers only ever pass a plain object; skip the polymorphic
+    // `tagger.add` dispatch and write directly. The string branch is the
+    // `key:val,key:val` parser for `config.tags` / `options.tags` at init.
+    const tags = this._spanContext.getTags()
+    if (keyValueMap !== null && typeof keyValueMap === 'object') {
+      Object.assign(tags, keyValueMap)
+    } else if (typeof keyValueMap === 'string') {
+      tagger.add(tags, keyValueMap)
+    } else {
+      return this
+    }
+
+    if (
+      this._spanContext._sampling.priority === undefined &&
+      (typeof keyValueMap === 'string' ||
+        MANUAL_KEEP in keyValueMap ||
+        MANUAL_DROP in keyValueMap ||
+        SAMPLING_PRIORITY in keyValueMap)
+    ) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
@@ -415,16 +440,6 @@ class DatadogSpan {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
-  }
-
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext.getTags(), keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
-
-    if (tagsUpdateCh.hasSubscribers) {
-      tagsUpdateCh.publish(this)
-    }
   }
 }
 

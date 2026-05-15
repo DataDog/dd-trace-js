@@ -486,20 +486,50 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
     })
 
-    it('should add tags', () => {
-      const tags = { foo: 'bar' }
+    it('should add tags from an object without going through tagger.add', () => {
+      span.addTags({ foo: 'bar', baz: 'qux' })
 
-      span.addTags(tags)
-
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), tags)
+      assert.strictEqual(span.context().getTag('foo'), 'bar')
+      assert.strictEqual(span.context().getTag('baz'), 'qux')
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    it('should sample based on the tags', () => {
-      const tags = { foo: 'bar' }
+    it('should parse a key:value,key:value string via tagger', () => {
+      span.addTags('foo:bar,baz:qux')
 
-      span.addTags(tags)
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar,baz:qux')
+    })
 
+    it('should ignore unsupported argument types', () => {
+      const tagsBefore = { ...span.context().getTags() }
+      span.addTags(42)
+      span.addTags(null)
+      span.addTags(undefined)
+
+      assert.deepStrictEqual(span.context().getTags(), tagsBefore)
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    it('should sample based on manual sampling tags', () => {
+      span.addTags({ [MANUAL_KEEP]: true })
+
+      assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
       sinon.assert.calledWith(prioritySampler.sample, span, false)
+    })
+
+    it('should be published via dd-trace:span:tags:update channel', () => {
+      const onTagsUpdate = sinon.stub()
+      tagsUpdateCh.subscribe(onTagsUpdate)
+
+      try {
+        span.addTags({ foo: 'bar' })
+
+        sinon.assert.calledOnceWithExactly(onTagsUpdate, span, 'dd-trace:span:tags:update')
+      } finally {
+        tagsUpdateCh.unsubscribe(onTagsUpdate)
+      }
     })
   })
 
