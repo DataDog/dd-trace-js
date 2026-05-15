@@ -430,6 +430,14 @@ function applyRouteOrEndpointTag (context) {
   const { paths, span, config } = context
   if (!span) return
   const tags = span.context()._tags
+
+  // AppSec calls `web.setRouteOrEndpointTag` from a pre-finish hook so the
+  // route/endpoint tags are available for API Security sampling, and the
+  // normal finish-time path runs this again. Either tag being present
+  // means the work has already been done; paths are stable between the
+  // two calls, so the second pass has nothing to add.
+  if (tags[HTTP_ROUTE] || tags[HTTP_ENDPOINT]) return
+
   const route = paths.join('')
 
   if (route) {
@@ -438,9 +446,7 @@ function applyRouteOrEndpointTag (context) {
     return
   }
 
-  if (!config.resourceRenamingEnabled || tags[HTTP_ENDPOINT]) {
-    return
-  }
+  if (!config.resourceRenamingEnabled) return
 
   // Route is unavailable, compute http.endpoint once.
   const url = tags[HTTP_URL]
