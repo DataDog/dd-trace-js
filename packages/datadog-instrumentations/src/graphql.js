@@ -294,11 +294,16 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
 }
 
 /**
+ * @typedef {{ prev: PathNode | undefined, key: string | number }} PathNode
+ */
+
+/**
  * @param {{
  *   fields: Map<object, { error: unknown, ctx: object }>,
  *   collapse: boolean,
  *   depth: number,
  *   collapsedFields?: Set<string>,
+ *   pathCache?: Map<PathNode, string>,
  * }} rootCtx
  * @param {import('graphql').GraphQLResolveInfo} info
  * @param {Record<string, unknown>} args
@@ -308,21 +313,27 @@ function assertField (rootCtx, info, args) {
   const collapse = rootCtx.collapse
   const depth = rootCtx.depth
 
-  let length = 0
-  let stringSegments = 0
-  for (let curr = path; curr; curr = curr.prev) {
-    length += 1
-    if (typeof curr.key === 'string') stringSegments += 1
+  if (depth >= 0) {
+    let count = 0
+    if (collapse) {
+      for (let curr = path; curr; curr = curr.prev) count += 1
+    } else {
+      for (let curr = path; curr; curr = curr.prev) {
+        if (typeof curr.key === 'string') count += 1
+      }
+    }
+    if (depth < count) return
   }
 
-  if (depth >= 0 && depth < (collapse ? length : stringSegments)) return
+  const cache = rootCtx.pathCache ??= new Map()
+  const prev = path.prev
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
 
-  const segments = new Array(length)
-  let index = length - 1
-  for (let curr = path; curr; curr = curr.prev) {
-    segments[index--] = collapse && typeof curr.key === 'number' ? '*' : curr.key
-  }
-  const pathString = segments.join('.')
+  const pathString = prev === undefined
+    ? String(segment)
+    : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
+  cache.set(path, pathString)
 
   if (collapse) {
     const collapsedFields = rootCtx.collapsedFields ??= new Set()
@@ -344,6 +355,29 @@ function assertField (rootCtx, info, args) {
   const field = { error: null, ctx: fieldCtx }
   rootCtx.fields.set(path, field)
   return field
+}
+
+/**
+ * Cold path for assertField. graphql-js inserts a synthetic array-index
+ * node between a list field and its items, and that node never reaches a
+ * resolver — so assertField has no chance to cache it. The first child of
+ * the list item that hits the path cache lands here to walk and populate
+ * back to a cached ancestor.
+ *
+ * @param {PathNode} path
+ * @param {Map<PathNode, string>} cache
+ * @param {boolean} collapse
+ */
+function buildCachedPathString (path, cache, collapse) {
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
+  const prev = path.prev
+
+  const pathString = prev === undefined
+    ? String(segment)
+    : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
+  cache.set(path, pathString)
+  return pathString
 }
 
 function wrapFields (type) {

@@ -825,6 +825,31 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source }).catch(done)
         })
 
+        it('caches path strings across nested list-of-lists items', async () => {
+          // `[[Cell]]` puts two synthetic array-index nodes back-to-back; the
+          // `friends { pets { name } }` sibling has a `pets` field between.
+          const matrixSchema = graphql.buildSchema(`
+            type Cell { value: Int }
+            type Query { matrix: [[Cell]] }
+          `)
+          const rootValue = { matrix: () => [[{ value: 42 }]] }
+          const source = '{ matrix { value } }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const paths = sort(traces[0])
+                .filter(span => span.name === 'graphql.resolve')
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
+              assert.deepStrictEqual(paths, ['matrix', 'matrix.*.*.value'])
+            }),
+            graphql.graphql({ schema: matrixSchema, source, rootValue }),
+          ])
+
+          assert.ok(!result.errors || result.errors.length === 0)
+          assert.strictEqual(result.data?.matrix?.[0]?.[0]?.value, 42)
+        })
+
         it('should instrument mutations', done => {
           const source = 'mutation { human { name } }'
 
