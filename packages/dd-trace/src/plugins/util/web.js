@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
+const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
@@ -125,7 +126,6 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
-    context.store = storage('legacy').getStore()
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
@@ -203,7 +203,7 @@ const web = {
   startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
     let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
