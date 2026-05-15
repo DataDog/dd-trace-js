@@ -30,8 +30,7 @@ class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
-      const store = legacyStorage.getStore()
-      if (!store || !store.noop) {
+      if (!legacyStorage.getHandle()?.noop) {
         handler(message, name)
       }
     }
@@ -52,11 +51,11 @@ class StoreBinding {
   constructor (event, transform) {
     this._channel = dc.channel(event)
     this._transform = data => {
-      const store = legacyStorage.getStore()
+      const handle = legacyStorage.getHandle()
 
-      return !store || !store.noop || (data && Object.hasOwn(data, 'currentStore'))
+      return !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
         ? transform(data)
-        : store
+        : legacyStorage.getStore()
     }
   }
 
