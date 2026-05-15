@@ -251,11 +251,11 @@ function wrapResolve (resolve) {
 
     const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
+    return callInAsyncScope(resolve, this, arguments, ctx.abortController, field && ((err) => {
       field.ctx.error = err
       field.ctx.field = field
       updateFieldCh.publish(field.ctx)
-    })
+    }))
   }
 
   patchedResolvers.add(resolveAsync)
@@ -294,22 +294,55 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
 }
 
 /**
- * @param {{ fields: Map<object, { error: unknown, ctx: object }> }} rootCtx
- * @param {{ path: object }} info
+ * @param {{
+ *   fields: Map<object, { error: unknown, ctx: object }>,
+ *   collapse: boolean,
+ *   depth: number,
+ *   collapsedFields?: Set<string>,
+ * }} rootCtx
+ * @param {import('graphql').GraphQLResolveInfo} info
  * @param {Record<string, unknown>} args
  */
 function assertField (rootCtx, info, args) {
   const path = info.path
-  const fields = rootCtx.fields
-  let field = fields.get(path)
+  const collapse = rootCtx.collapse
+  const depth = rootCtx.depth
 
-  if (!field) {
-    const fieldCtx = { info, rootCtx, args, path }
-    startResolveCh.publish(fieldCtx)
-    field = { error: null, ctx: fieldCtx }
-    fields.set(path, field)
+  let length = 0
+  let stringSegments = 0
+  for (let curr = path; curr; curr = curr.prev) {
+    length += 1
+    if (typeof curr.key === 'string') stringSegments += 1
   }
 
+  if (depth >= 0 && depth < (collapse ? length : stringSegments)) return
+
+  const segments = new Array(length)
+  let index = length - 1
+  for (let curr = path; curr; curr = curr.prev) {
+    segments[index--] = collapse && typeof curr.key === 'number' ? '*' : curr.key
+  }
+  const pathString = segments.join('.')
+
+  if (collapse) {
+    const collapsedFields = rootCtx.collapsedFields ??= new Set()
+    if (collapsedFields.has(pathString)) return
+    collapsedFields.add(pathString)
+  }
+
+  const fieldCtx = {
+    rootCtx,
+    args,
+    path,
+    pathString,
+    fieldName: info.fieldName,
+    returnType: info.returnType,
+    fieldNode: info.fieldNodes[0],
+    variableValues: info.variableValues,
+  }
+  startResolveCh.publish(fieldCtx)
+  const field = { error: null, ctx: fieldCtx }
+  rootCtx.fields.set(path, field)
   return field
 }
 
@@ -346,7 +379,6 @@ function wrapFieldType (field) {
 function finishResolvers ({ fields }) {
   for (const field of fields.values()) {
     const fieldCtx = field.ctx
-    if (!fieldCtx.currentStore) continue
     fieldCtx.finishTime = field.finishTime
     fieldCtx.field = field
     if (field.error) {

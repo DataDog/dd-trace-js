@@ -8,40 +8,37 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static operation = 'resolve'
 
   /**
-   * @param {{ info: object, rootCtx: object, args: Record<string, unknown>, path: object }} fieldCtx
+   * @param {{
+   *   rootCtx: { source?: string },
+   *   args: Record<string, unknown>,
+   *   path: object,
+   *   pathString: string,
+   *   fieldName: string,
+   *   returnType: { name: string },
+   *   fieldNode: { loc?: { start: number, end: number }, arguments?: object[], directives?: object[] } | undefined,
+   *   variableValues: Record<string, unknown> | undefined,
+   * }} fieldCtx
    */
   start (fieldCtx) {
-    if (!shouldInstrument(this.config, fieldCtx.path)) return
-
-    const { info, rootCtx, args, path } = fieldCtx
-    const collapse = this.config.collapse
-    const pathString = buildPathString(path, collapse)
-    fieldCtx.pathString = pathString
-
-    if (collapse) {
-      const collapsedFields = rootCtx.collapsedFields ??= new Set()
-      if (collapsedFields.has(pathString)) return
-      collapsedFields.add(pathString)
-    }
+    const { rootCtx, args, path, pathString, fieldName, returnType, fieldNode, variableValues } = fieldCtx
 
     const parentField = getParentField(rootCtx, path)
     const childOf = parentField?.ctx?.currentStore?.span
 
     const document = rootCtx.source
-    const fieldNode = info.fieldNodes[0]
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
-    let namedReturnType = info.returnType
+    let namedReturnType = returnType
     while (namedReturnType.ofType) namedReturnType = namedReturnType.ofType
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
-      resource: `${info.fieldName}:${info.returnType}`,
+      resource: `${fieldName}:${returnType}`,
       childOf,
       type: 'graphql',
       meta: {
-        'graphql.field.name': info.fieldName,
+        'graphql.field.name': fieldName,
         'graphql.field.path': pathString,
         'graphql.field.type': namedReturnType.name,
         'graphql.source': source,
@@ -49,7 +46,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }, fieldCtx)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(info.variableValues)
+      const variables = this.config.variables(variableValues)
 
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
@@ -60,7 +57,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     if (this.resolverStartCh.hasSubscribers) {
-      this.resolverStartCh.publish({ ctx: rootCtx, resolverInfo: getResolverInfo(info, args) })
+      this.resolverStartCh.publish({ ctx: rootCtx, resolverInfo: getResolverInfo(fieldNode, fieldName, args) })
     }
 
     return fieldCtx.currentStore
@@ -70,10 +67,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.addTraceSub('updateField', (ctx) => {
-      const { field, error, path } = ctx
-
-      if (!shouldInstrument(this.config, path)) return
-
+      const { field, error } = ctx
       const span = ctx?.currentStore?.span || this.activeSpan
       field.finishTime = span._getTime ? span._getTime() : 0
       field.error = field.error || error
@@ -100,52 +94,18 @@ class GraphQLResolvePlugin extends TracingPlugin {
 // helpers
 
 /**
- * @param {{ depth: number, collapse: boolean }} config
- * @param {{ prev: object | undefined, key: string | number }} path
- */
-function shouldInstrument (config, path) {
-  if (config.depth < 0) return true
-
-  let depth = 0
-  if (config.collapse) {
-    for (let curr = path; curr; curr = curr.prev) depth += 1
-  } else {
-    for (let curr = path; curr; curr = curr.prev) {
-      if (typeof curr.key === 'string') depth += 1
-    }
-  }
-
-  return config.depth >= depth
-}
-
-/**
- * @param {{ prev: object | undefined, key: string | number }} path
- * @param {boolean} collapse Replace numeric segments with `*`.
- */
-function buildPathString (path, collapse) {
-  let length = 0
-  for (let curr = path; curr; curr = curr.prev) length += 1
-
-  const segments = new Array(length)
-  let index = length - 1
-  for (let curr = path; curr; curr = curr.prev) {
-    segments[index--] = collapse && typeof curr.key === 'number' ? '*' : curr.key
-  }
-  return segments.join('.')
-}
-
-/**
- * @param {object} info
+ * @param {object | undefined} fieldNode
+ * @param {string} fieldName
  * @param {Record<string, unknown> | undefined} args
  */
-function getResolverInfo (info, args) {
+function getResolverInfo (fieldNode, fieldName, args) {
   let resolverVars
 
   if (args && Object.keys(args).length > 0) {
     resolverVars = { ...args }
   }
 
-  const directives = info.fieldNodes?.[0]?.directives
+  const directives = fieldNode?.directives
   if (Array.isArray(directives)) {
     for (const directive of directives) {
       if (directive.arguments.length === 0) continue
@@ -160,7 +120,7 @@ function getResolverInfo (info, args) {
     }
   }
 
-  return resolverVars === undefined ? null : { [info.fieldName]: resolverVars }
+  return resolverVars === undefined ? null : { [fieldName]: resolverVars }
 }
 
 /**
