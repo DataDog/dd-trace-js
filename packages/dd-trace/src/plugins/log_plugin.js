@@ -6,6 +6,10 @@ const Plugin = require('./plugin')
 
 const legacyStorage = storage('legacy')
 
+/**
+ * @param {object} message Caller-owned log record; never mutated.
+ * @param {{ dd?: object }} holder Holds the `dd` fields injected by the tracer.
+ */
 function messageProxy (message, holder) {
   return new Proxy(message, {
     get (target, key) {
@@ -31,11 +35,15 @@ function messageProxy (message, holder) {
   })
 }
 
+/**
+ * @param {object} target
+ * @param {string | symbol} p
+ */
 function shouldOverride (target, p) {
   return p === 'dd' && !Object.hasOwn(target, p) && Reflect.isExtensible(target)
 }
 
-module.exports = class LogPlugin extends Plugin {
+class LogPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
@@ -57,3 +65,6 @@ module.exports = class LogPlugin extends Plugin {
     })
   }
 }
+
+module.exports = LogPlugin
+module.exports.messageProxy = messageProxy
