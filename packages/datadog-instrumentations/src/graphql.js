@@ -251,11 +251,31 @@ function wrapResolve (resolve) {
 
     const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, field && ((err) => {
-      field.ctx.error = err
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
-    }))
+    if (ctx.abortController.signal.aborted) {
+      if (field !== undefined) publishResolverFinish(field, null)
+      throw new AbortError('Aborted')
+    }
+
+    try {
+      const result = resolve.call(this, source, args, contextValue, info)
+      if (result !== null && typeof result?.then === 'function') {
+        return result.then(
+          res => {
+            if (field !== undefined) publishResolverFinish(field, null)
+            return res
+          },
+          error => {
+            if (field !== undefined) publishResolverFinish(field, error)
+            throw error
+          }
+        )
+      }
+      if (field !== undefined) publishResolverFinish(field, null)
+      return result
+    } catch (error) {
+      if (field !== undefined) publishResolverFinish(field, error)
+      throw error
+    }
   }
 
   patchedResolvers.add(resolveAsync)
@@ -263,33 +283,42 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb = cb || (() => {})
+/**
+ * @param {{ ctx: object, error: unknown }} field
+ * @param {unknown} error
+ */
+function publishResolverFinish (field, error) {
+  const fieldCtx = field.ctx
+  fieldCtx.error = error
+  fieldCtx.field = field
+  updateFieldCh.publish(fieldCtx)
+}
 
-  if (abortController?.signal.aborted) {
+function callInAsyncScope (fn, thisArg, args, abortController, cb) {
+  if (abortController.signal.aborted) {
     cb(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
     const result = fn.apply(thisArg, args)
-    if (result && typeof result.then === 'function') {
+    if (result !== null && typeof result?.then === 'function') {
       return result.then(
         res => {
           cb(null, res)
           return res
         },
-        err => {
-          cb(err)
-          throw err
+        error => {
+          cb(error)
+          throw error
         }
       )
     }
     cb(null, result)
     return result
-  } catch (err) {
-    cb(err)
-    throw err
+  } catch (error) {
+    cb(error)
+    throw error
   }
 }
 
