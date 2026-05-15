@@ -34,10 +34,6 @@ const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
-// Datadog scan/test markers, tagged unconditionally so the API endpoint
-// reducer can keep scan/test traffic out of the API inventory.
-const SECURITY_TESTING_HEADERS = ['x-datadog-endpoint-scan', 'x-datadog-security-test']
-
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
@@ -404,31 +400,18 @@ function addRequestTags (context, spanType) {
     }
   }
 
-  addSecurityTestingHeaders(req, span, inferredProxySpan)
-  addHeaders(context)
-}
-
-/**
- * Tag SECURITY_TESTING_HEADERS on the entry span (and inferred proxy span, if any)
- * unconditionally — independent of `DD_TRACE_HEADER_TAGS` and AppSec enablement.
- * Lookup relies on Node-style lowercase header normalization: every in-tree HTTP
- * server path (`http`, `http2`, Azure Functions Fetch `Headers`, etc.) feeds
- * `req.headers` with lowercase keys, so a direct lookup is sufficient.
- *
- * @param {import('http').IncomingMessage} req
- * @param {import('../../opentracing/span')} span
- * @param {import('../../opentracing/span') | undefined} inferredProxySpan
- * @returns {void}
- */
-function addSecurityTestingHeaders (req, span, inferredProxySpan) {
-  for (const name of SECURITY_TESTING_HEADERS) {
-    const value = req.headers[name]
-    if (value === undefined) continue
-
-    const tag = `${HTTP_REQUEST_HEADERS}.${name}`
-    span.setTag(tag, value)
-    inferredProxySpan?.setTag(tag, value)
+  // Datadog scan/test markers, tagged unconditionally so the API endpoint
+  // reducer can keep scan/test traffic out of the API inventory.
+  const endpointScan = req.headers['x-datadog-endpoint-scan']
+  if (endpointScan !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-endpoint-scan`, endpointScan)
   }
+  const securityTest = req.headers['x-datadog-security-test']
+  if (securityTest !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-security-test`, securityTest)
+  }
+
+  addHeaders(context)
 }
 
 function addResponseTags (context) {

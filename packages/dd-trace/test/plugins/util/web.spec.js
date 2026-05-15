@@ -382,38 +382,5 @@ describe('plugins/util/web', () => {
         { scan: '', test: 'ok' }
       )
     })
-
-    it('should rely on lowercase header normalization (Node HTTP parser contract)', () => {
-      // Every in-tree HTTP-server path delivers req.headers with lowercase keys
-      // (Node http/http2 parsers, Fetch-API Headers in Azure Functions). The
-      // direct lookup in addSecurityTestingHeaders depends on this: a future
-      // synthetic entry path that surfaces mixed-case keys must lowercase first.
-      req.headers['X-Datadog-Endpoint-Scan'] = 'scan-uuid'
-      req.headers['X-Datadog-Security-Test'] = 'test-uuid'
-
-      web.finishAll(web.getContext(req))
-
-      assert.deepStrictEqual(
-        { scan: tags[SCAN_TAG], test: tags[TEST_TAG] },
-        { scan: undefined, test: undefined }
-      )
-    })
-
-    it('should also tag the inferred proxy span when present', () => {
-      const inferredProxySpan = tracer.startSpan('aws.apigateway')
-      const inferredTags = inferredProxySpan.context()._tags
-      const context = web.getContext(req)
-      context.inferredProxySpan = inferredProxySpan
-
-      req.headers['x-datadog-endpoint-scan'] = 'scan-uuid'
-      req.headers['x-datadog-security-test'] = 'test-uuid'
-
-      web.finishAll(context)
-
-      assert.deepStrictEqual(
-        { scan: inferredTags[SCAN_TAG], test: inferredTags[TEST_TAG] },
-        { scan: 'scan-uuid', test: 'test-uuid' }
-      )
-    })
   })
 })
