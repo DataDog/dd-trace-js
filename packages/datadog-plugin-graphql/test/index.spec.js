@@ -656,6 +656,7 @@ describe('Plugin', () => {
                 resource: 'friends:[Human]',
                 meta: {
                   'graphql.field.path': 'friends',
+                  'graphql.field.type': 'Human',
                 },
               })
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
@@ -665,6 +666,7 @@ describe('Plugin', () => {
                 resource: 'name:String',
                 meta: {
                   'graphql.field.path': 'friends.*.name',
+                  'graphql.field.type': 'String',
                 },
               })
               assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
@@ -674,6 +676,7 @@ describe('Plugin', () => {
                 resource: 'pets:[Pet!]',
                 meta: {
                   'graphql.field.path': 'friends.*.pets',
+                  'graphql.field.type': 'Pet',
                 },
               })
               assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
@@ -683,6 +686,7 @@ describe('Plugin', () => {
                 resource: 'name:String',
                 meta: {
                   'graphql.field.path': 'friends.*.pets.*.name',
+                  'graphql.field.type': 'String',
                 },
               })
               assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
