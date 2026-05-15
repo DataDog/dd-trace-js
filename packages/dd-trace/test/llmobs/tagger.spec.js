@@ -40,9 +40,13 @@ describe('tagger', () => {
     // Pass `writeBridgeTags` through to the real helper so the bridge-tag
     // hook in `registerLLMObsSpan` is exercised end-to-end. Unit coverage
     // for the helper itself lives in `util.spec.js`.
+    // Default `findGenAIAncestorSpanId` to a stub returning null so existing
+    // tests get the "no OTel gen_ai ancestor" branch — individual tests can
+    // re-stub it to exercise the suppression behavior.
     util = {
       generateTraceId: sinon.stub().returns('0123'),
       writeBridgeTags,
+      findGenAIAncestorSpanId: sinon.stub().returns(null),
     }
 
     logger = {
@@ -244,6 +248,45 @@ describe('tagger', () => {
 
           assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, undefined)
           assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, undefined)
+        })
+
+        // MLOS-591: when the registering LLMObs span sits below an OTel
+        // `gen_ai.*` ancestor in the APM trace, we suppress
+        // `llmobs_parent_id` (which would otherwise tell the indexer to
+        // reparent gen_ai ancestors under this leaf) and use the ancestor
+        // as the SDK-emitted event's `parent_id` so the span renders under
+        // the OTel workflow rather than as a parallel root.
+        describe('with an OTel gen_ai.* APM ancestor', () => {
+          beforeEach(() => {
+            // Mutate the existing sinon stub in place; reassigning
+            // `util.findGenAIAncestorSpanId` here would create a new stub
+            // that Tagger's captured destructured reference doesn't see.
+            util.findGenAIAncestorSpanId.returns('444444')
+          })
+
+          it('writes llmobs_trace_id but omits llmobs_parent_id', () => {
+            tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+            assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, '00000000000000001111111111111111')
+            assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, undefined)
+          })
+
+          it('uses the gen_ai ancestor span_id as the SDK-emitted parent_id', () => {
+            tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+            const tags = Tagger.tagMap.get(span)
+            assert.strictEqual(tags['_ml_obs.llmobs_parent_id'], '444444')
+          })
+
+          it('still prefers an explicit LLMObs storage parent over the gen_ai ancestor', () => {
+            const sdkParent = { context () { return { toSpanId () { return '777777' } } } }
+            Tagger.tagMap.set(sdkParent, { '_ml_obs.meta.ml_app': 'app' })
+
+            tagger.registerLLMObsSpan(span, { kind: 'llm', parent: sdkParent })
+
+            const tags = Tagger.tagMap.get(span)
+            assert.strictEqual(tags['_ml_obs.llmobs_parent_id'], '777777')
+          })
         })
       })
     })

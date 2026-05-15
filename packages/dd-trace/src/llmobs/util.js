@@ -263,15 +263,73 @@ function safeJsonParse (value, fallback) {
 // `LLMObsTagger.registerLLMObsSpan` chokepoint, which every registration path
 // (SDK, default plugin start, and bespoke plugin registrations like
 // `bedrockruntime.setLLMObsTags`) flows through.
-function writeBridgeTags (span) {
+//
+// When the registering span sits below an OTel `gen_ai.*` ancestor (MLOS-591
+// shape — manual OTel workflow wrapping an auto-instrumented LLMObs leaf), the
+// caller passes `includeParentId: false`. We still publish `llmobs_trace_id`
+// so the indexer pulls the OTel-converted spans into the same LLMObs trace,
+// but we skip `llmobs_parent_id` — the indexer treats that tag as "the SDK
+// LLMObs span is the LLMObs root, reparent gen_ai children under it"
+// (processor.go:184-191, 298-302). When the SDK span is a leaf rather than a
+// root, that reparenting produces a cycle/inversion (gen_ai parents hoisted
+// under the leaf). Suppressing `llmobs_parent_id` lets the indexer fall back
+// to including the APM root and reparenting gen_ai spans naturally.
+/**
+ * @param {import('../opentracing/span')} span
+ * @param {{ includeParentId?: boolean }} [opts]
+ */
+function writeBridgeTags (span, { includeParentId = true } = {}) {
   const traceTags = span?.context?.()._trace?.tags
   if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
   traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
-  traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+  if (includeParentId) {
+    traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+  }
+}
+
+// Walks up the APM parent chain looking for the nearest ancestor with any
+// `gen_ai.*` tag. Returns the decimal span_id string of that ancestor, or
+// `null`. Used by `LLMObsTagger.registerLLMObsSpan` so an auto-instrumented
+// LLMObs span nested under a manual OTel workflow points its `parent_id` at
+// the OTel parent instead of the default `ROOT_PARENT_ID` — the SDK-emitted
+// LLMObs event then renders under the workflow rather than as a parallel
+// root. OTel `setAttribute(...)` lands in `context()._tags` via
+// `setOtelAttribute -> ddSpan.setTag` (see opentelemetry/span-helpers.js), so
+// scanning `_tags` keys for the `gen_ai.` prefix is the right check.
+/**
+ * @param {import('../opentracing/span')} span
+ * @returns {string | null}
+ */
+function findGenAIAncestorSpanId (span) {
+  const ctx = span?.context?.()
+  const started = ctx?._trace?.started
+  if (!started || started.length === 0) return null
+
+  const byId = new Map()
+  for (const s of started) {
+    byId.set(s.context()._spanId.toString(10), s)
+  }
+
+  let parentId = ctx._parentId?.toString(10)
+  while (parentId && parentId !== '0') {
+    const parent = byId.get(parentId)
+    if (!parent) return null
+
+    const tags = parent.context()._tags
+    if (tags) {
+      for (const key in tags) {
+        if (key.startsWith('gen_ai.')) return parentId
+      }
+    }
+
+    parentId = parent.context()._parentId?.toString(10)
+  }
+  return null
 }
 
 module.exports = {
   encodeUnicode,
+  findGenAIAncestorSpanId,
   validateCostTags,
   validateKind,
   getFunctionArguments,

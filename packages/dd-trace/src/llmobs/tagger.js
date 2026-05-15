@@ -43,7 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { writeBridgeTags } = require('./util')
+const { findGenAIAncestorSpanId, writeBridgeTags } = require('./util')
 const { validateCostTags } = require('./util')
 
 // global registry of LLMObs spans
@@ -98,6 +98,17 @@ class LLMObsTagger {
 
     this._register(span)
 
+    // Detect whether the registering span sits below an OTel `gen_ai.*`
+    // ancestor in the APM trace (MLOS-591 shape — manual OTel
+    // workflow/agent wrapping an auto-instrumented LLMObs leaf). When it
+    // does, suppress the `llmobs_parent_id` bridge tag (the indexer would
+    // otherwise reparent the gen_ai ancestors under this leaf — see
+    // dd-go/trace/apps/trace-indexer/processors/llmobs/processor.go:184-191
+    // and :298-302) and fall through to using that ancestor as the
+    // SDK-emitted event's `parent_id` so this span renders under the OTel
+    // workflow rather than as a parallel root.
+    const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
+
     // Single bridge-tag hook for the dd-go LLMObs trace-indexer. Mirrors
     // dd-trace-py's `_activate_llmobs_span` (in `_llmobs.py`), which is wired
     // as a global span-start hook gated on `SpanTypes.LLM`. JS has no
@@ -105,7 +116,7 @@ class LLMObsTagger {
     // tagMap registration — so calling `writeBridgeTags` from this single
     // chokepoint covers every caller (SDK, default plugin path, and
     // bespoke plugin registrations like `bedrockruntime.setLLMObsTags`).
-    writeBridgeTags(span)
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null })
 
     this._setTag(span, ML_APP, spanMlApp)
 
@@ -123,6 +134,7 @@ class LLMObsTagger {
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
 
