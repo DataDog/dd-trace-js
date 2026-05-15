@@ -197,6 +197,87 @@ describe('encode', () => {
       })
     })
 
+    it('pre-warms _stringMap with the well-known meta and metrics tag keys', () => {
+      // `#encodeMetaEntries` looks up each key in `_stringMap` and falls
+      // through to `_cacheString` on a miss. Without the pre-warm, every
+      // first span of every payload pays that fallback cost for the same
+      // canonical HTTP / runtime keys, because `_reset` clears the map
+      // after every flush.
+      const wellKnown = [
+        'language',
+        'process_id',
+        '_sampling_priority_v1',
+        '_dd.hostname',
+        '_dd.origin',
+        '_dd.measured',
+        'runtime-id',
+        'service',
+        'version',
+        'env',
+        'component',
+        'span.kind',
+        'http.url',
+        'http.method',
+        'http.status_code',
+        'http.useragent',
+        'http.route',
+      ]
+
+      for (const key of wellKnown) {
+        assert.ok(encoder._stringMap[key], `pre-warmed key missing after construction: ${key}`)
+      }
+
+      encoder.encode(data)
+      encoder.makePayload()
+
+      for (const key of wellKnown) {
+        assert.ok(encoder._stringMap[key], `pre-warmed key missing after reset: ${key}`)
+      }
+    })
+
+    it('produces byte-identical output via the pre-warmed and lazy cache paths', () => {
+      // The pre-warm writes the same fixstr bytes into `_stringBytes` that
+      // `_cacheString` would write on the lazy fallback. Clearing the map
+      // after `makePayload` forces the second encode through the lazy
+      // path; both payloads must match byte-for-byte for any HTTP span.
+      data[0].meta = {
+        'http.url': 'http://localhost/foo',
+        'http.method': 'GET',
+        'http.status_code': '200',
+        'http.useragent': 'curl/8.0',
+        'http.route': '/foo/:id',
+        component: 'express',
+        'span.kind': 'server',
+        'runtime-id': '00000000-0000-0000-0000-000000000000',
+        service: 'svc',
+        version: '1.2.3',
+        env: 'prod',
+        language: 'javascript',
+        '_dd.origin': 'rum',
+      }
+      data[0].metrics = {
+        process_id: 1234,
+        _sampling_priority_v1: 1,
+        '_dd.hostname': 1,
+        '_dd.measured': 1,
+      }
+
+      encoder.encode(data)
+      const prewarmedPayload = encoder.makePayload()
+
+      encoder._stringMap = Object.create(null)
+      encoder._cacheString('')
+
+      encoder.encode(data)
+      const lazyPayload = encoder.makePayload()
+
+      assert.deepStrictEqual(Buffer.from(prewarmedPayload), Buffer.from(lazyPayload))
+
+      const [[decoded]] = msgpack.decode(prewarmedPayload, { useBigInt64: true })
+      assert.deepStrictEqual(decoded.meta, data[0].meta)
+      assert.deepStrictEqual(decoded.metrics, data[0].metrics)
+    })
+
     it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
       // Force enough unique strings to overflow the 2 MB initial chunk so
       // _stringBytes resizes mid-encode. Probes _stringMap to make sure no

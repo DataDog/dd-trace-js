@@ -94,6 +94,30 @@ const ATTR_PREFIX_ARRAY = Buffer.concat([
 const ATTR_PAYLOAD_BOOL_TRUE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0xC3])])
 const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0xC2])])
 
+// Pre-warm `_stringMap` for the tag keys that show up in `meta` / `metrics`
+// on every HTTP server span. Cached via `_cacheString` from `_reset` so each
+// entry stays a subarray of `_stringBytes`; `#refreshStringCache` relies on
+// that invariant after a buffer resize.
+const PREWARM_TAG_KEYS = Object.freeze([
+  'language',
+  'process_id',
+  '_sampling_priority_v1',
+  '_dd.hostname',
+  '_dd.origin',
+  '_dd.measured',
+  'runtime-id',
+  'service',
+  'version',
+  'env',
+  'component',
+  'span.kind',
+  'http.url',
+  'http.method',
+  'http.status_code',
+  'http.useragent',
+  'http.route',
+])
+
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
@@ -396,6 +420,13 @@ class AgentEncoder {
     this._stringMap = Object.create(null)
 
     this._cacheString('')
+    // The 0.5 subclass replaces `_cacheString` to intern strings into a
+    // wire-shipped table; pre-warming there would bloat its payloads.
+    if (this._cacheString === AgentEncoder.prototype._cacheString) {
+      for (const key of PREWARM_TAG_KEYS) {
+        this._cacheString(key)
+      }
+    }
   }
 
   _encodeBuffer (bytes, buffer) {
