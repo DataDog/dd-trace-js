@@ -88,9 +88,9 @@ function formatSpan (span) {
 
 function setSingleSpanIngestionTags (span, options) {
   if (!options) return
-  addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
-  addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
-  addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
+  addNumberTag(span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
+  addNumberTag(span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
+  addNumberTag(span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
 /**
@@ -149,7 +149,7 @@ function extractTags (formattedSpan, span) {
   const priority = context._sampling.priority
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
-    addTag({}, formattedSpan.metrics, MEASURED, 1)
+    addNumberTag(formattedSpan.metrics, MEASURED, 1)
   }
 
   const tracerService = span.tracer()._service.toLowerCase()
@@ -159,7 +159,8 @@ function extractTags (formattedSpan, span) {
     registerExtraService(tags['service.name'])
   }
 
-  for (const [tag, value] of Object.entries(tags)) {
+  for (const tag of Object.keys(tags)) {
+    const value = tags[tag]
     // TODO(BridgeAR)[31.03.2025]: Check how many tags are defined in average.
     // In case there are more than 2 tags in average, check for all special
     // cases up front and loop over the tags afterwards, skipping the already
@@ -168,18 +169,18 @@ function extractTags (formattedSpan, span) {
       case 'service.name':
       case 'span.type':
       case 'resource.name':
-        addTag(formattedSpan, {}, map[tag], value)
+        addStringTag(formattedSpan, map[tag], value)
         break
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code':
-        addTag(formattedSpan.meta, {}, tag, value && String(value))
+        addStringTag(formattedSpan.meta, tag, value && String(value))
         break
       case 'analytics.event':
-        addTag({}, formattedSpan.metrics, ANALYTICS, value === undefined || value ? 1 : 0)
+        addNumberTag(formattedSpan.metrics, ANALYTICS, value === undefined || value ? 1 : 0)
         break
       case HOSTNAME_KEY:
       case MEASURED:
-        addTag({}, formattedSpan.metrics, tag, value === undefined || value ? 1 : 0)
+        addNumberTag(formattedSpan.metrics, tag, value === undefined || value ? 1 : 0)
         break
       // TODO(BridgeAR)[31.03.2025]: How come we use two different ways to pass
       // through errors? Can we just unify the behavior to always use one way?
@@ -200,16 +201,16 @@ function extractTags (formattedSpan, span) {
           formattedSpan.error = 1
         }
       default: // eslint-disable-line no-fallthrough
-        addTag(formattedSpan.meta, formattedSpan.metrics, tag, value)
+        addMixedTag(formattedSpan.meta, formattedSpan.metrics, tag, value)
     }
   }
   setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
-  addTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
-  addTag(formattedSpan.meta, formattedSpan.metrics, PROCESS_ID, process.pid)
-  addTag(formattedSpan.meta, formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
-  addTag(formattedSpan.meta, formattedSpan.metrics, ORIGIN_KEY, origin)
-  addTag(formattedSpan.meta, formattedSpan.metrics, HOSTNAME_KEY, hostname)
+  addMixedTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
+  addMixedTag(formattedSpan.meta, formattedSpan.metrics, PROCESS_ID, process.pid)
+  addMixedTag(formattedSpan.meta, formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
+  addMixedTag(formattedSpan.meta, formattedSpan.metrics, ORIGIN_KEY, origin)
+  addMixedTag(formattedSpan.meta, formattedSpan.metrics, HOSTNAME_KEY, hostname)
 }
 
 function extractRootTags (formattedSpan, span) {
@@ -219,10 +220,10 @@ function extractRootTags (formattedSpan, span) {
 
   if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
 
-  addTag({}, formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
-  addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
+  addNumberTag(formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
+  addNumberTag(formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
+  addNumberTag(formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+  addNumberTag(formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
 function extractChunkTags (formattedSpan, span, isFirstSpanInChunk, tagForFirstSpanInChunk) {
@@ -231,11 +232,11 @@ function extractChunkTags (formattedSpan, span, isFirstSpanInChunk, tagForFirstS
   if (!isFirstSpanInChunk) return
 
   if (tagForFirstSpanInChunk) {
-    addTag(formattedSpan.meta, formattedSpan.metrics, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
+    addMixedTag(formattedSpan.meta, formattedSpan.metrics, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
   }
 
   for (const [key, value] of Object.entries(context._trace.tags)) {
-    addTag(formattedSpan.meta, formattedSpan.metrics, key, value)
+    addMixedTag(formattedSpan.meta, formattedSpan.metrics, key, value)
   }
 }
 
@@ -248,13 +249,36 @@ function extractError (formattedSpan, error) {
     // AggregateError only has a code and no message.
     // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
     // the code just generally be added, if available?
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
+    addMixedTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
+    addMixedTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
+    addMixedTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
   }
 }
 
-function addTag (meta, metrics, key, value, nested) {
+/**
+ * @param {Record<string, string>} meta
+ * @param {string} key
+ * @param {string} value
+ */
+function addStringTag (meta, key, value) {
+  if (typeof value !== 'string') return
+  if (value.length > MAX_META_VALUE_LENGTH) {
+    value = `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+  }
+  meta[key] = value
+}
+
+/**
+ * @param {Record<string, number>} metrics
+ * @param {string} key
+ * @param {number} value
+ */
+function addNumberTag (metrics, key, value) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return
+  metrics[key] = value
+}
+
+function addMixedTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
       if (key.length > MAX_META_KEY_LENGTH) {
@@ -290,7 +314,7 @@ function addTag (meta, metrics, key, value, nested) {
         metrics[key] = value.toString()
       } else if (!Array.isArray(value) && !nested) {
         for (const [prop, val] of Object.entries(value)) {
-          addTag(meta, metrics, `${key}.${prop}`, val, true)
+          addMixedTag(meta, metrics, `${key}.${prop}`, val, true)
         }
       }
   }
