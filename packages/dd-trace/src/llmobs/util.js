@@ -295,29 +295,49 @@ function writeBridgeTags (span, { includeParentId = true } = {}) {
 // LLMObs event then renders under the workflow rather than as a parallel
 // root. OTel `setAttribute(...)` lands in `context()._tags` via
 // `setOtelAttribute -> ddSpan.setTag` (see opentelemetry/span-helpers.js), so
-// scanning `_tags` keys for the `gen_ai.` prefix is the right check.
+// scanning `_tags` keys for the `gen_ai.` prefix is the right check. The
+// prefix matches dd-go's `isRelevantForLLMObs` in
+// `trace/apps/trace-indexer/processors/llmobs/processor.go` so what we treat
+// as a "gen_ai ancestor" here lines up with what the indexer will convert
+// into an LLMObs span on the other side.
+//
+// Trade-off: this fires only on the FIRST LLMObs registration per local
+// trace (writeBridgeTags has a first-writer-wins guard on `_trace.tags`).
+// For mixed topologies — e.g. OTel agent wrapping an auto-instr leaf AND a
+// later SDK workflow — the suppression decision is locked in by whichever
+// LLMObs span registers first. The result is still a unified trace via
+// `llmobs_trace_id`; the LLMObs root is the APM root rather than the SDK
+// workflow. Optimizing that case would mean revisiting the bridge-tag write
+// at flush time instead of at register time.
 /**
  * @param {import('../opentracing/span')} span
  * @returns {string | null}
  */
 function findGenAIAncestorSpanId (span) {
   const ctx = span?.context?.()
-  const started = ctx?._trace?.started
+  let parentId = ctx?._parentId?.toString(10)
+  // Short-circuit before scanning `_trace.started` — orphan / root spans
+  // shouldn't pay the walk cost (this runs on every LLMObs registration).
+  if (!parentId || parentId === '0') return null
+
+  const started = ctx._trace?.started
   if (!started || started.length === 0) return null
 
-  const byId = new Map()
-  for (const s of started) {
-    byId.set(s.context()._spanId.toString(10), s)
-  }
-
-  let parentId = ctx._parentId?.toString(10)
+  // Parent chains are short (typically ≤ 5 hops); a linear scan per hop
+  // avoids allocating a Map over every started span on every registration.
   while (parentId && parentId !== '0') {
-    const parent = byId.get(parentId)
+    let parent = null
+    for (const s of started) {
+      if (s.context()._spanId.toString(10) === parentId) {
+        parent = s
+        break
+      }
+    }
     if (!parent) return null
 
     const tags = parent.context()._tags
     if (tags) {
-      for (const key in tags) {
+      for (const key of Object.keys(tags)) {
         if (key.startsWith('gen_ai.')) return parentId
       }
     }
