@@ -10,6 +10,8 @@ const tags = require('../../../../../ext/tags')
 
 const ERROR = tags.ERROR
 const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 
@@ -381,6 +383,47 @@ describe('plugins/util/web', () => {
         { scan: tags[SCAN_TAG], test: tags[TEST_TAG] },
         { scan: '', test: 'ok' }
       )
+    })
+  })
+
+  describe('configured header tagging across the request lifecycle', () => {
+    const USER_AGENT_TAG = `${HTTP_REQUEST_HEADERS}.user-agent`
+    const SERVER_TAG = `${HTTP_RESPONSE_HEADERS}.server`
+
+    beforeEach(() => {
+      req.url = '/users'
+      req.headers['user-agent'] = 'test'
+    })
+
+    it('honours headers added to the plugin config after startSpan', () => {
+      const httpConfig = web.normalizeConfig({})
+      const frameworkConfig = web.normalizeConfig({ headers: ['user-agent', 'server'] })
+
+      web.startSpan(tracer, httpConfig, req, res, 'test.request')
+      span = web.root(req)
+      tags = span.context()._tags
+
+      assert.ok(Object.hasOwn(tags, 'http.url'))
+      assert.ok(!Object.hasOwn(tags, USER_AGENT_TAG))
+
+      web.setFramework(req, 'test-framework', frameworkConfig)
+
+      web.finishAll(web.getContext(req))
+
+      assert.strictEqual(tags[USER_AGENT_TAG], 'test')
+      assert.strictEqual(tags[SERVER_TAG], 'test')
+    })
+
+    it('still tags headers when the http-side config already lists them', () => {
+      const httpConfig = web.normalizeConfig({ headers: ['user-agent'] })
+
+      web.startSpan(tracer, httpConfig, req, res, 'test.request')
+      span = web.root(req)
+      tags = span.context()._tags
+
+      web.finishAll(web.getContext(req))
+
+      assert.strictEqual(tags[USER_AGENT_TAG], 'test')
     })
   })
 })
