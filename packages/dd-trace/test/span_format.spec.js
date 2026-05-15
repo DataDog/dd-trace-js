@@ -150,8 +150,9 @@ describe('spanFormat', () => {
       span.context()._tags[acceptedMetricKey] = 11
 
       // First-rejected lengths (limit + 1) get sliced and gain a `...` suffix.
-      // Cover all four typed branches in `addTag`: string / number / boolean /
-      // Buffer (the URL branch shares the boolean/buffer truncation line).
+      // Cover all four typed branches in `addMixedTag`: string / number /
+      // boolean / Buffer (the URL branch shares the boolean/buffer truncation
+      // line).
       const overlongMetaKey = `${'c'.repeat(MAX_META_KEY_LENGTH)}X`
       const overlongMetaValue = `${'d'.repeat(MAX_META_VALUE_LENGTH)}Y`
       const overlongMetricKey = `${'e'.repeat(MAX_METRIC_KEY_LENGTH)}Z`
@@ -162,6 +163,11 @@ describe('spanFormat', () => {
       span.context()._tags[overlongBoolKey] = true
       span.context()._tags[overlongBufferKey] = Buffer.from('payload')
 
+      // `service.name` is dispatched through `addStringTag` (not the
+      // polymorphic helper); pin its value-truncate branch here too.
+      const overlongServiceValue = `${'s'.repeat(MAX_META_VALUE_LENGTH)}!`
+      span.context()._tags['service.name'] = overlongServiceValue
+
       trace = spanFormat(span)
 
       const truncatedMetaKey = `${overlongMetaKey.slice(0, MAX_META_KEY_LENGTH)}...`
@@ -169,12 +175,14 @@ describe('spanFormat', () => {
       const truncatedMetricKey = `${overlongMetricKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       const truncatedBoolKey = `${overlongBoolKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedServiceValue = `${overlongServiceValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       assert.strictEqual(trace.meta[acceptedMetaKey], acceptedMetaValue)
       assert.strictEqual(trace.meta[truncatedMetaKey], truncatedMetaValue)
       assert.strictEqual(trace.metrics[acceptedMetricKey], 11)
       assert.strictEqual(trace.metrics[truncatedMetricKey], 42)
       assert.strictEqual(trace.metrics[truncatedBoolKey], 1)
       assert.strictEqual(trace.metrics[truncatedBufferKey], 'payload')
+      assert.strictEqual(trace.service, truncatedServiceValue)
     })
 
     it('should truncate the serialized span_links meta value past MAX_META_VALUE_LENGTH', () => {
@@ -249,6 +257,7 @@ describe('spanFormat', () => {
       spanContext._tags['service.name'] = 'service'
       spanContext._tags['span.type'] = 'type'
       spanContext._tags['resource.name'] = 'resource'
+      spanContext._tags['http.status_code'] = 200
 
       trace = spanFormat(span)
 
@@ -256,7 +265,28 @@ describe('spanFormat', () => {
         service: 'service',
         type: 'type',
         resource: 'resource',
+        meta: { 'http.status_code': '200' },
       })
+    })
+
+    it('should skip non-string values for the string-typed Datadog tag slots', () => {
+      // `span.type`, `resource.name`, and `http.status_code` are dispatched
+      // through `addStringTag`. Non-string source values are dropped instead
+      // of leaking into metrics (the prior throwaway-`{}` pattern hid the
+      // same skip behind an allocated empty object).
+      spanContext._tags['span.type'] = false
+      spanContext._tags['resource.name'] = { foo: 'bar' }
+      // `value && String(value)` short-circuits on `0`, so the addStringTag
+      // call receives a non-string and skips writing.
+      spanContext._tags['http.status_code'] = 0
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.type, undefined)
+      // `trace.resource` is initialised by `formatSpan` from the span name
+      // and must not be overwritten when the source tag is not a string.
+      assert.strictEqual(trace.resource, spanContext._name)
+      assert.strictEqual(trace.meta['http.status_code'], undefined)
     })
 
     it('should extract Datadog specific root tags', () => {
@@ -286,6 +316,22 @@ describe('spanFormat', () => {
         !sampledKeys.some(k => Object.hasOwn(trace.metrics, k)),
         `Expected none of ${inspect(sampledKeys)} in metrics, got keys: ${inspect(Object.keys(trace.metrics))}`
       )
+    })
+
+    it('should skip numeric root tags whose source value is not a finite number', () => {
+      // `addNumberTag` drops non-numbers (e.g. `undefined`) and `NaN`, so
+      // those decisions never reach the metrics object even though the span
+      // is otherwise eligible for root-tag extraction.
+      spanContext._parentId = null
+      spanContext._trace[SAMPLING_AGENT_DECISION] = Number.NaN
+      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
+      // SAMPLING_RULE_DECISION is intentionally left undefined.
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics[SAMPLING_LIMIT_DECISION], 0.2)
+      assert.ok(!(SAMPLING_AGENT_DECISION in trace.metrics))
+      assert.ok(!(SAMPLING_RULE_DECISION in trace.metrics))
     })
 
     it('should always add single span ingestion tags from options if present', () => {
@@ -372,10 +418,11 @@ describe('spanFormat', () => {
         count: 1,
       }
 
-      trace = spanFormat(span, true)
+      trace = spanFormat(span, true, 'process-tag-value')
 
       assertObjectContains(trace.meta, {
         chunk: 'test',
+        '_dd.tags.process': 'process-tag-value',
       })
 
       assertObjectContains(trace.metrics, {
@@ -452,6 +499,14 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.metrics.metric, 50)
     })
 
+    it('should extract buffer tags as stringified metrics', () => {
+      spanContext._tags.payload = Buffer.from('hello')
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics.payload, 'hello')
+    })
+
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }
 
@@ -470,7 +525,9 @@ describe('spanFormat', () => {
     })
 
     it('should ignore metrics that are not a number', () => {
-      spanContext._metrics = { metric: NaN }
+      // Numeric user tags with `NaN` are dropped before they reach metrics
+      // via `addMixedTag`'s number branch.
+      spanContext._tags.metric = Number.NaN
 
       trace = spanFormat(span)
 
@@ -499,6 +556,16 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
       assert.ok(!(ERROR_TYPE in trace.meta))
       assert.ok(!(ERROR_STACK in trace.meta))
+    })
+
+    it('should fall back to error.code when error.message is empty', () => {
+      const error = new Error('')
+      error.code = 'E_BOOM'
+      spanContext._tags.error = error
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], 'E_BOOM')
     })
 
     it('should extract the origin', () => {
@@ -696,6 +763,14 @@ describe('spanFormat', () => {
       trace = spanFormat(span)
 
       assert.strictEqual(trace.metrics['_dd1.sr.eausr'], 1)
+    })
+
+    it('should map analytics.event false to a zero metric', () => {
+      spanContext._tags['analytics.event'] = false
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics['_dd1.sr.eausr'], 0)
     })
   })
 })
