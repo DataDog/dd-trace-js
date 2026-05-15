@@ -200,12 +200,38 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    // Skip the `{ [key]: value }` wrapper allocation and the polymorphic
+    // tagger dispatch — the dominant setTag shape is a single primitive value
+    // landing on `_tags` directly.
+    this._spanContext._tags[key] = value
+    this._prioritySampler.sample(this, false)
+    if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
     return this
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    // Bypass the polymorphic `tagger.add` dispatch for the dominant shapes
+    // plugins pass in (single object, array of objects). Strings still fall
+    // through to `tagger.add` so the `key:val,key:val` env-var parser stays
+    // available for `config.tags`.
+    const tags = this._spanContext._tags
+    if (keyValueMap !== null && typeof keyValueMap === 'object') {
+      if (Array.isArray(keyValueMap)) {
+        for (const item of keyValueMap) {
+          if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+            Object.assign(tags, item)
+          }
+        }
+      } else {
+        Object.assign(tags, keyValueMap)
+      }
+    } else if (typeof keyValueMap === 'string') {
+      tagger.add(tags, keyValueMap)
+    } else {
+      return this
+    }
+    this._prioritySampler.sample(this, false)
+    if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
     return this
   }
 
@@ -405,16 +431,6 @@ class DatadogSpan {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
-  }
-
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
-
-    if (tagsUpdateCh.hasSubscribers) {
-      tagsUpdateCh.publish(this)
-    }
   }
 }
 
