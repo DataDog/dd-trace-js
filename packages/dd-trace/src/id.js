@@ -13,6 +13,8 @@ let batch = 0
 class Identifier {
   /** @type {number[] | Uint8Array} */
   #buffer
+  /** @type {bigint | undefined} */
+  #bigInt
 
   /**
    * @param {string} value
@@ -38,7 +40,8 @@ class Identifier {
    * @returns {bigint}
    */
   toBigInt () {
-    return Buffer.from(this.#buffer).readBigUInt64BE(0)
+    this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(0)
+    return this.#bigInt
   }
 
   /**

@@ -99,4 +99,30 @@ describe('id', () => {
       assert.strictEqual(spanId.toBigInt(), expected)
     }
   })
+
+  it('should return the same BigInt value across repeated toBigInt calls', () => {
+    const samples = [
+      id('abcd', 16),
+      id('12293a8527e70a7f27c8d624ace0f559', 16),
+      id('1234', 10),
+      id('0', 16),
+    ]
+
+    for (const spanId of samples) {
+      const first = spanId.toBigInt()
+      assert.strictEqual(spanId.toBigInt(), first)
+      assert.strictEqual(spanId.toBigInt(), first)
+    }
+  })
+
+  it('should match Buffer#readBigUInt64BE on the underlying buffer', () => {
+    const cases = ['abcd', '12293a8527e70a7f27c8d624ace0f559', '7f00ff00ff00ff00']
+
+    for (const hex of cases) {
+      const spanId = id(hex, 16)
+      const expected = Buffer.from(spanId.toBuffer()).readBigUInt64BE(0)
+
+      assert.strictEqual(spanId.toBigInt(), expected)
+    }
+  })
 })
