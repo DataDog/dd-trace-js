@@ -301,11 +301,18 @@ const web = {
     const writeHead = res.writeHead
 
     return function (statusCode, statusMessage, headers) {
-      headers = typeof statusMessage === 'string' ? headers : statusMessage
-      headers = { ...res.getHeaders(), ...headers }
+      // CORS preflight tagging only matters for OPTIONS requests. Skip the
+      // getHeaders() spread + isOriginAllowed work entirely for the common
+      // GET / POST / etc. case. Node's http module passes `req.method`
+      // through unchanged, so all standard methods are uppercase; the
+      // `toLowerCase` fallback covers any non-standard caller.
+      if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
+        headers = typeof statusMessage === 'string' ? headers : statusMessage
+        headers = { ...res.getHeaders(), ...headers }
 
-      if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
-        addAllowHeaders(req, res, headers)
+        if (isOriginAllowed(req, headers)) {
+          addAllowHeaders(req, res, headers)
+        }
       }
 
       return writeHead.apply(this, arguments)
