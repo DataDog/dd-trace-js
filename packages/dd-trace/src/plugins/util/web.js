@@ -268,7 +268,16 @@ const web = {
 
     if (context.finished && !req.stream) return
 
+    // `addRequestTags` is idempotent: in the normal HTTP path it ran during
+    // `web.startSpan`. Serverless callers (e.g. Azure Functions) skip
+    // `web.startSpan` and rely on this call to do the request-side work.
     addRequestTags(context, spanType)
+    // Configured-header tagging runs at finish time. Framework plugins
+    // (connect, express, ...) install their own config via `setFramework`
+    // after `web.startSpan` has already locked the http-plugin config in;
+    // tagging earlier would use the http-plugin's `headers` list and drop
+    // the framework's.
+    addRequestHeaders(context)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -353,6 +362,16 @@ function splitHeader (str) {
 
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
+  const spanContext = span.context()
+
+  // Idempotency guard. `addRequestTags` runs in `web.startSpan` for the
+  // normal HTTP path and again in `web.finishSpan`; without this guard the
+  // second call would re-extract the URL, re-obfuscate the query string,
+  // and re-publish five `tagsUpdateCh` events with the same values. The
+  // serverless path skips `startSpan` and lands here first, in which case
+  // HTTP_URL is unset and the work runs normally.
+  if (spanContext.hasTag(HTTP_URL)) return
+
   const url = extractURL(req)
   const type = spanType ?? WEB
 
@@ -365,7 +384,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.extractIp && !span.context().hasTag(HTTP_CLIENT_IP)) {
+  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
     const clientIp = config.extractIp(config, req)
 
     if (clientIp) {
@@ -384,8 +403,6 @@ function addRequestTags (context, spanType) {
   if (securityTest !== undefined) {
     span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-security-test`, securityTest)
   }
-
-  addHeaders(context)
 }
 
 function addResponseTags (context) {
@@ -399,6 +416,8 @@ function addResponseTags (context) {
   inferredProxySpan?.addTags({
     [HTTP_STATUS_CODE]: res.statusCode,
   })
+
+  addResponseHeaders(context)
 
   web.addStatusError(req, res.statusCode)
 }
@@ -438,21 +457,28 @@ function addResourceTag (context) {
   span.setTag(RESOURCE_NAME, resource)
 }
 
-function addHeaders (context) {
-  const { req, res, config, span, inferredProxySpan } = context
+function addRequestHeaders (context) {
+  const { req, config, span, inferredProxySpan } = context
 
   for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
-    const resHeader = res.getHeader(key)
-
     if (reqHeader) {
-      span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
-      inferredProxySpan?.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+      const tagName = tag || `${HTTP_REQUEST_HEADERS}.${key}`
+      span.setTag(tagName, reqHeader)
+      inferredProxySpan?.setTag(tagName, reqHeader)
     }
+  }
+}
 
+function addResponseHeaders (context) {
+  const { res, config, span, inferredProxySpan } = context
+
+  for (const [key, tag] of config.headers) {
+    const resHeader = res.getHeader(key)
     if (resHeader) {
-      span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
-      inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
+      const tagName = tag || `${HTTP_RESPONSE_HEADERS}.${key}`
+      span.setTag(tagName, resHeader)
+      inferredProxySpan?.setTag(tagName, resHeader)
     }
   }
 }

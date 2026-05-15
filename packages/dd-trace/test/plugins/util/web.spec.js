@@ -12,6 +12,8 @@ const tagsExt = require('../../../../../ext/tags')
 const ERROR = tagsExt.ERROR
 const HTTP_CLIENT_IP = tagsExt.HTTP_CLIENT_IP
 const HTTP_ENDPOINT = tagsExt.HTTP_ENDPOINT
+const HTTP_REQUEST_HEADERS = tagsExt.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tagsExt.HTTP_RESPONSE_HEADERS
 const HTTP_ROUTE = tagsExt.HTTP_ROUTE
 const RESOURCE_NAME = tagsExt.RESOURCE_NAME
 
@@ -438,6 +440,47 @@ describe('plugins/util/web', () => {
         { scan: tags[SCAN_TAG], test: tags[TEST_TAG] },
         { scan: '', test: 'ok' }
       )
+    })
+  })
+
+  describe('configured header tagging across the request lifecycle', () => {
+    const USER_AGENT_TAG = `${HTTP_REQUEST_HEADERS}.user-agent`
+    const SERVER_TAG = `${HTTP_RESPONSE_HEADERS}.server`
+
+    beforeEach(() => {
+      req.url = '/users'
+      req.headers['user-agent'] = 'test'
+    })
+
+    it('honours headers added to the plugin config after startSpan', () => {
+      const httpConfig = web.normalizeConfig({})
+      const frameworkConfig = web.normalizeConfig({ headers: ['user-agent', 'server'] })
+
+      web.startSpan(tracer, httpConfig, req, res, 'test.request')
+      span = web.root(req)
+      tags = span.context().getTags()
+
+      assert.ok(Object.hasOwn(tags, 'http.url'), `${inspect(tags)} may not contain 'http.url' property`)
+      assert.ok(!Object.hasOwn(tags, USER_AGENT_TAG), `${inspect(tags)} may not contain ${USER_AGENT_TAG} property`)
+
+      web.setFramework(req, 'test-framework', frameworkConfig)
+
+      web.finishAll(web.getContext(req))
+
+      assert.strictEqual(tags[USER_AGENT_TAG], 'test')
+      assert.strictEqual(tags[SERVER_TAG], 'test')
+    })
+
+    it('still tags headers when the http-side config already lists them', () => {
+      const httpConfig = web.normalizeConfig({ headers: ['user-agent'] })
+
+      web.startSpan(tracer, httpConfig, req, res, 'test.request')
+      span = web.root(req)
+      tags = span.context().getTags()
+
+      web.finishAll(web.getContext(req))
+
+      assert.strictEqual(tags[USER_AGENT_TAG], 'test')
     })
   })
 })
