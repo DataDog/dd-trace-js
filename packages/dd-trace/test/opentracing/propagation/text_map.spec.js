@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
@@ -1903,6 +1903,10 @@ describe('TextMapPropagator', () => {
         }
       })
 
+      afterEach(() => {
+        delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      })
+
       it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
         config = getConfigFresh({
@@ -1991,6 +1995,61 @@ describe('TextMapPropagator', () => {
 
         assert.strictEqual(extracted.toTraceId(), '123')
         assert.strictEqual(extracted.toSpanId(), '456')
+      })
+    })
+
+    describe('b3 extractor cheap early-return', () => {
+      let testPropagator
+
+      beforeEach(() => {
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['b3 single header', 'b3multi'] },
+        })
+        testPropagator = new TextMapPropagator(config)
+      })
+
+      it('returns undefined without throwing when the b3 single-header carrier is empty', () => {
+        assert.strictEqual(testPropagator._extractB3SingleContext({}), undefined)
+      })
+
+      it('returns undefined when the b3 single header is present but not a string', () => {
+        assert.strictEqual(testPropagator._extractB3SingleContext({ b3: 123 }), undefined)
+        assert.strictEqual(testPropagator._extractB3SingleContext({ b3: ['0'] }), undefined)
+        assert.strictEqual(testPropagator._extractB3SingleContext({ b3: undefined }), undefined)
+      })
+
+      it('still parses a real b3 single header', () => {
+        const context = testPropagator._extractB3SingleContext({
+          b3: '1111aaaa2222bbbb-3333cccc4444dddd-1',
+        })
+
+        assert.strictEqual(context.toTraceId(true), '0000000000000000' + '1111aaaa2222bbbb')
+        assert.strictEqual(context.toSpanId(true), '3333cccc4444dddd')
+      })
+
+      it('returns undefined without allocating when the b3-multi carrier carries no b3 header', () => {
+        assert.strictEqual(testPropagator._extractB3MultipleHeaders({}), undefined)
+        assert.strictEqual(testPropagator._extractB3MultipleHeaders({ 'x-b3-parentspanid': 'ignored' }), undefined)
+      })
+
+      it('still extracts when only the b3 sampled flag is present', () => {
+        const b3 = testPropagator._extractB3MultipleHeaders({ 'x-b3-sampled': '1' })
+
+        assert.deepStrictEqual(b3, { 'x-b3-sampled': '1' })
+      })
+
+      it('still extracts a full b3-multi carrier', () => {
+        const b3 = testPropagator._extractB3MultipleHeaders({
+          'x-b3-traceid': '1111aaaa2222bbbb',
+          'x-b3-spanid': '3333cccc4444dddd',
+          'x-b3-sampled': '1',
+        })
+
+        assert.deepStrictEqual(b3, {
+          'x-b3-traceid': '1111aaaa2222bbbb',
+          'x-b3-spanid': '3333cccc4444dddd',
+          'x-b3-sampled': '1',
+        })
       })
     })
   })
