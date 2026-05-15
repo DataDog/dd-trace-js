@@ -7,6 +7,7 @@ const { before, describe, it } = require('mocha')
 const getConfig = require('../../src/config')
 const {
   encodeUnicode,
+  findGenAIAncestorSpanId,
   getFunctionArguments,
   validateCostTags,
   safeJsonParse,
@@ -272,6 +273,78 @@ describe('util', () => {
 
     it('is a no-op when span is undefined', () => {
       writeBridgeTags(undefined)
+    })
+
+    it('omits llmobs_parent_id when includeParentId is false', () => {
+      const traceTags = {}
+      writeBridgeTags(makeSpan(traceTags), { includeParentId: false })
+      assert.strictEqual(traceTags.llmobs_trace_id, '00000000000000001111111111111111')
+      assert.strictEqual(traceTags.llmobs_parent_id, undefined)
+    })
+  })
+
+  describe('findGenAIAncestorSpanId', () => {
+    // Build a minimal Datadog-shaped span fixture: each span has `_spanId`,
+    // optional `_parentId`, `_tags`, and shares the `_trace.started` array
+    // so the helper can walk up the chain via `_parentId` lookup.
+    function makeTrace (spanDefs) {
+      const started = []
+      const trace = { started, tags: {} }
+      for (const def of spanDefs) {
+        started.push({
+          context: () => ({
+            _spanId: { toString: () => def.spanId },
+            _parentId: def.parentId ? { toString: () => def.parentId } : null,
+            _tags: def.tags || {},
+            _trace: trace,
+          }),
+        })
+      }
+      return started
+    }
+
+    it('returns the nearest gen_ai.* ancestor span_id', () => {
+      const [root, agent, workflow, leaf] = makeTrace([
+        { spanId: '100', tags: {} }, // http.request
+        { spanId: '200', parentId: '100', tags: { 'gen_ai.operation.name': 'invoke_agent' } },
+        { spanId: '300', parentId: '200', tags: { 'gen_ai.operation.name': 'workflow' } },
+        { spanId: '400', parentId: '300', tags: {} }, // the LLMObs leaf
+      ])
+      void root; void agent; void workflow
+      assert.strictEqual(findGenAIAncestorSpanId(leaf), '300')
+    })
+
+    it('skips non-gen_ai ancestors and returns the first gen_ai.* match', () => {
+      const [root, plain, agent, leaf] = makeTrace([
+        { spanId: '100', tags: {} },
+        { spanId: '200', parentId: '100', tags: { 'http.method': 'GET' } },
+        { spanId: '300', parentId: '200', tags: { 'gen_ai.system': 'gemini' } },
+        { spanId: '400', parentId: '300', tags: {} },
+      ])
+      void root; void plain; void agent
+      assert.strictEqual(findGenAIAncestorSpanId(leaf), '300')
+    })
+
+    it('returns null when no ancestor has gen_ai.* tags', () => {
+      const [root, plain, leaf] = makeTrace([
+        { spanId: '100', tags: { 'service.name': 'web' } },
+        { spanId: '200', parentId: '100', tags: { 'http.method': 'GET' } },
+        { spanId: '300', parentId: '200', tags: {} },
+      ])
+      void root; void plain
+      assert.strictEqual(findGenAIAncestorSpanId(leaf), null)
+    })
+
+    it('returns null when the span has no parent', () => {
+      const [orphan] = makeTrace([
+        { spanId: '100', tags: {} },
+      ])
+      assert.strictEqual(findGenAIAncestorSpanId(orphan), null)
+    })
+
+    it('is a no-op-safe when span has no context', () => {
+      assert.strictEqual(findGenAIAncestorSpanId(undefined), null)
+      assert.strictEqual(findGenAIAncestorSpanId({}), null)
     })
   })
 })
