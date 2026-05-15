@@ -140,6 +140,16 @@ function truncate (input) {
 // - returns '?' for BSON types without toJSON (MinKey, MaxKey) where `value === original`,
 // - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to '?'.
 function sanitiseAndStringify (input) {
+  // Fast path: mongoose / mongo driver issue the dominant filter shapes as
+  // plain objects whose values are primitives (`{ _id: 'x' }`,
+  // `{ authorId: 'x' }`, `{ tags: 'perf' }`). Those need no Buffer / BSON
+  // / depth / cycle handling, so `JSON.stringify` without a replacer
+  // produces the correct output and skips both the closure allocation and
+  // the per-key replacer dispatch.
+  if (canStringifyDirect(input)) {
+    return JSON.stringify(input)
+  }
+
   const ancestors = []
   return JSON.stringify(input, function (key, value) {
     if (typeof value === 'function') return
@@ -162,6 +172,25 @@ function sanitiseAndStringify (input) {
 
     return value
   })
+}
+
+// Detect inputs the replacer's checks never fire on: a plain object whose own
+// enumerable values are all `string` / `number` / `boolean` / `null`. Arrays,
+// BSON-wrapped values, Buffers, bigints, functions, and any nested objects
+// fall to the slow path so depth / cycle / Buffer / BSON / function handling
+// is preserved unchanged.
+function canStringifyDirect (input) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) return false
+  if (input._bsontype !== undefined || Buffer.isBuffer(input)) return false
+
+  for (const key of Object.keys(input)) {
+    const value = input[key]
+    if (value === null) continue
+    const valueType = typeof value
+    if (valueType === 'string' || valueType === 'number' || valueType === 'boolean') continue
+    return false
+  }
+  return true
 }
 
 function isHeartbeat (ops, config) {
