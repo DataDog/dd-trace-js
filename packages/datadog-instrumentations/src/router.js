@@ -112,8 +112,10 @@ function createWrapRouterMethod (name, compile) {
     }
   }
 
-  function wrapNext (req, next) {
-    return shimmer.wrapFunction(next, next => function (error) {
+  function wrapNext (req, originalNext) {
+    // Per layer dispatch, N per request. `shimmer.wrapCallback` preserves
+    // only `name` + `length`; see its JSDoc for the full contract.
+    return shimmer.wrapCallback(originalNext, next => function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
