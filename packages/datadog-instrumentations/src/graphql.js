@@ -215,7 +215,6 @@ function wrapResolve (resolve) {
 
     return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
       field.ctx.error = err
-      field.ctx.info = info
       field.ctx.field = field
       updateFieldCh.publish(field.ctx)
     })
