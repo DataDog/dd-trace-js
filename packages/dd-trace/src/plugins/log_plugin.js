@@ -38,7 +38,16 @@ function shouldOverride (target, p) {
 module.exports = class LogPlugin extends Plugin {
   constructor (...args) {
     super(...args)
+    this._addLogSubs()
+  }
 
+  /**
+   * Wire the log-injection subscriber. Subclasses (PinoPlugin) override this
+   * to subscribe to a different channel and inject `dd` without the Proxy
+   * round-trip when the underlying logger lets us splice the output JSON
+   * string directly.
+   */
+  _addLogSubs () {
     this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
       const span = legacyStorage.getStore()?.span
 

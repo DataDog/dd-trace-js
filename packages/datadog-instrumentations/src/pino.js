@@ -6,7 +6,16 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+/**
+ * @param {string} symbol
+ * @param {(original: Function) => Function} wrapper
+ * @param {Function} pino
+ */
 function wrapPino (symbol, wrapper, pino) {
+  /**
+   * @param {unknown[]} args
+   * @returns {unknown}
+   */
   return function pinoWithTrace (...args) {
     const instance = pino.apply(this, args)
 
@@ -22,15 +31,36 @@ function wrapPino (symbol, wrapper, pino) {
 }
 
 function wrapAsJson (asJson) {
-  const ch = channel('apm:pino:log')
+  // `apm:pino:log` is the legacy pre-serialisation hook. Subscribers receive
+  // the message object and can mutate it; only fires when something is
+  // listening so apps without a registered subscriber (the common case once
+  // `PinoPlugin` moves to the JSON-line channel) pay zero allocation here.
+  //
+  // `apm:pino:log:json` is the fast log-injection path. Subscribers receive
+  // the JSON line pino just produced and may rewrite it before it reaches the
+  // destination stream; the line is a sync string, so the subscriber can
+  // splice trace-correlation fields in without ever touching the caller-owned
+  // message object.
+  const messageCh = channel('apm:pino:log')
+  const jsonCh = channel('apm:pino:log:json')
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
 
-    const payload = { message: obj }
-    ch.publish(payload)
-    arguments[0] = payload.message
+    // Caller-provided `dd` wins -- pin it before any subscriber on
+    // `apm:pino:log` may add a virtual `dd` via a Proxy view.
+    const callerHasDd = Object.hasOwn(obj, 'dd')
 
-    return asJson.apply(this, arguments)
+    if (messageCh.hasSubscribers) {
+      const payload = { message: obj }
+      messageCh.publish(payload)
+      arguments[0] = payload.message
+    }
+
+    if (!jsonCh.hasSubscribers || callerHasDd) return asJson.apply(this, arguments)
+
+    const payload = { line: asJson.apply(this, arguments) }
+    jsonCh.publish(payload)
+    return payload.line
   }
 }
 
