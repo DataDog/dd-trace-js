@@ -443,6 +443,64 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('setRouteOrEndpointTag http.route fast path', () => {
+    let context
+
+    beforeEach(() => {
+      span = tracer.startSpan('test.request')
+      tags = span.context().getTags()
+
+      req.url = '/'
+
+      web.patch(req)
+      context = web.getContext(req)
+      context.span = span
+      context.req = req
+      context.res = res
+      context.config = config
+    })
+
+    it('leaves http.route unset when no segments were collected', () => {
+      context.paths = []
+
+      web.setRouteOrEndpointTag(req)
+
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `${inspect(tags)} may not contain ${HTTP_ROUTE} property`)
+    })
+
+    it('uses the single segment directly without entering Array.join', () => {
+      context.paths = ['/users/:id']
+
+      web.setRouteOrEndpointTag(req)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
+    })
+
+    it('leaves http.route unset for a single empty-string segment', () => {
+      context.paths = ['']
+
+      web.setRouteOrEndpointTag(req)
+
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `${inspect(tags)} may not contain ${HTTP_ROUTE} property`)
+    })
+
+    it('joins two segments byte-identical to the legacy join shape', () => {
+      context.paths = ['/api', '/users/:id']
+
+      web.setRouteOrEndpointTag(req)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/api/users/:id')
+    })
+
+    it('joins three segments byte-identical to the legacy join shape', () => {
+      context.paths = ['/api', '/users', '/:id/items']
+
+      web.setRouteOrEndpointTag(req)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/api/users/:id/items')
+    })
+  })
+
   describe('configured header tagging across the request lifecycle', () => {
     const USER_AGENT_TAG = `${HTTP_REQUEST_HEADERS}.user-agent`
     const SERVER_TAG = `${HTTP_RESPONSE_HEADERS}.server`
