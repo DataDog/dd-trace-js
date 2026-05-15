@@ -30,14 +30,6 @@ const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 const { IGNORE_OTEL_ERROR } = constants
 
-// TODO(BridgeAR)[31.03.2025]: Should these land in the constants file?
-const map = {
-  'operation.name': 'name',
-  'service.name': 'service',
-  'span.type': 'type',
-  'resource.name': 'resource',
-}
-
 /**
  * @typedef {object} FormattedSpan
  * @property {import('./id').Identifier} trace_id
@@ -45,6 +37,8 @@ const map = {
  * @property {import('./id').Identifier} parent_id
  * @property {string} name
  * @property {string} resource
+ * @property {string | undefined} service
+ * @property {string | undefined} type
  * @property {number} error
  * @property {Record<string, string>} meta
  * @property {Record<string, number>} metrics
@@ -52,7 +46,7 @@ const map = {
  * @property {number} start
  * @property {number} duration
  * @property {Array} links
- * @property {Array<{ name: string, time_unix_nano: number, attributes?: Record<string, string> }>} [span_events]
+ * @property {Array<{ name: string, time_unix_nano: number, attributes?: Record<string, string> }> | undefined} span_events
  */
 
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
@@ -71,13 +65,18 @@ function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = fals
 
 function formatSpan (span) {
   const spanContext = span.context()
-
+  // Pre-initialise the `service`, `type`, and `span_events` slots so every
+  // formatted span shares one V8 hidden class regardless of which optional
+  // tags fire later. Downstream encoders gate on truthy values for each,
+  // so `undefined` stays byte-identical on the msgpack wire.
   return {
     trace_id: spanContext._traceId,
     span_id: spanContext._spanId,
     parent_id: spanContext._parentId || id('0'),
     name: String(spanContext._name),
     resource: String(spanContext._name),
+    service: undefined,
+    type: undefined,
     error: 0,
     meta: {},
     meta_struct: span.meta_struct,
@@ -85,14 +84,22 @@ function formatSpan (span) {
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
     links: [],
+    span_events: undefined,
   }
 }
 
-function setSingleSpanIngestionTags (span, options) {
+function setSingleSpanIngestionTags (formattedSpan, options) {
   if (!options) return
-  addNumberTag(span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
-  addNumberTag(span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
-  addNumberTag(span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
+  const metrics = formattedSpan.metrics
+  metrics[SPAN_SAMPLING_MECHANISM] = SAMPLING_MECHANISM_SPAN
+  const sampleRate = options.sampleRate
+  if (typeof sampleRate === 'number' && !Number.isNaN(sampleRate)) {
+    metrics[SPAN_SAMPLING_RULE_RATE] = sampleRate
+  }
+  const maxPerSecond = options.maxPerSecond
+  if (typeof maxPerSecond === 'number' && !Number.isNaN(maxPerSecond)) {
+    metrics[SPAN_SAMPLING_MAX_PER_SECOND] = maxPerSecond
+  }
 }
 
 /**
@@ -149,9 +156,11 @@ function extractTags (formattedSpan, span) {
   const tags = context.getTags()
   const hostname = context._hostname
   const priority = context._sampling.priority
+  const meta = formattedSpan.meta
+  const metrics = formattedSpan.metrics
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
-    addNumberTag(formattedSpan.metrics, MEASURED, 1)
+    metrics[MEASURED] = 1
   }
 
   const tracerService = span.tracer()._service.toLowerCase()
@@ -163,26 +172,49 @@ function extractTags (formattedSpan, span) {
 
   for (const tag of Object.keys(tags)) {
     const value = tags[tag]
-    // TODO(BridgeAR)[31.03.2025]: Check how many tags are defined in average.
-    // In case there are more than 2 tags in average, check for all special
-    // cases up front and loop over the tags afterwards, skipping the already
-    // visited property names by checking a map with these keys.
+    // The typed-helper bodies are inlined per case: V8 was not inlining
+    // `addStringTag` / `addNumberTag` / `addMixedTag` here at the call rate
+    // this loop runs in HTTP-server traces (10+ tags × 1M spans/sec), so each
+    // one paid an extra call frame the helper body was small enough to
+    // expand inline.
     switch (tag) {
       case 'service.name':
+        if (typeof value === 'string') {
+          formattedSpan.service = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        }
+        break
       case 'span.type':
+        if (typeof value === 'string') {
+          formattedSpan.type = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        }
+        break
       case 'resource.name':
-        addStringTag(formattedSpan, map[tag], value)
+        if (typeof value === 'string') {
+          formattedSpan.resource = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        }
         break
       // HACK: remove when Datadog supports numeric status code
-      case 'http.status_code':
-        addStringTag(formattedSpan.meta, tag, value && String(value))
+      case 'http.status_code': {
+        const stringValue = value && String(value)
+        if (typeof stringValue === 'string') {
+          meta[tag] = stringValue.length > MAX_META_VALUE_LENGTH
+            ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : stringValue
+        }
         break
+      }
       case 'analytics.event':
-        addNumberTag(formattedSpan.metrics, ANALYTICS, value === undefined || value ? 1 : 0)
+        metrics[ANALYTICS] = value === undefined || value ? 1 : 0
         break
       case HOSTNAME_KEY:
       case MEASURED:
-        addNumberTag(formattedSpan.metrics, tag, value === undefined || value ? 1 : 0)
+        metrics[tag] = value === undefined || value ? 1 : 0
         break
       // TODO(BridgeAR)[31.03.2025]: How come we use two different ways to pass
       // through errors? Can we just unify the behavior to always use one way?
@@ -202,40 +234,105 @@ function extractTags (formattedSpan, span) {
         if (!tags[IGNORE_OTEL_ERROR]) {
           formattedSpan.error = 1
         }
-      default: // eslint-disable-line no-fallthrough
-        addMixedTag(formattedSpan.meta, formattedSpan.metrics, tag, value)
+      default: { // eslint-disable-line no-fallthrough
+        const valueType = typeof value
+        if (valueType === 'string') {
+          let writeKey = tag
+          if (writeKey.length > MAX_META_KEY_LENGTH) {
+            writeKey = `${writeKey.slice(0, MAX_META_KEY_LENGTH)}...`
+          }
+          meta[writeKey] = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        } else if (valueType === 'number') {
+          if (!Number.isNaN(value)) {
+            let writeKey = tag
+            if (writeKey.length > MAX_METRIC_KEY_LENGTH) {
+              writeKey = `${writeKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+            }
+            metrics[writeKey] = value
+          }
+        } else if (valueType === 'boolean') {
+          let writeKey = tag
+          if (writeKey.length > MAX_METRIC_KEY_LENGTH) {
+            writeKey = `${writeKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+          }
+          metrics[writeKey] = value ? 1 : 0
+        } else {
+          addMixedTag(meta, metrics, tag, value)
+        }
+      }
     }
   }
   setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
-  formattedSpan.meta.language = 'javascript'
-  formattedSpan.metrics[PROCESS_ID] = process.pid
-  addNumberTag(formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
-  addStringTag(formattedSpan.meta, ORIGIN_KEY, origin)
-  addStringTag(formattedSpan.meta, HOSTNAME_KEY, hostname)
+  meta.language = 'javascript'
+  metrics[PROCESS_ID] = process.pid
+  if (typeof priority === 'number' && !Number.isNaN(priority)) {
+    metrics[SAMPLING_PRIORITY_KEY] = priority
+  }
+  if (typeof origin === 'string') {
+    meta[ORIGIN_KEY] = origin.length > MAX_META_VALUE_LENGTH
+      ? `${origin.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : origin
+  }
+  if (typeof hostname === 'string') {
+    meta[HOSTNAME_KEY] = hostname.length > MAX_META_VALUE_LENGTH
+      ? `${hostname.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : hostname
+  }
 }
 
 function extractRootTags (formattedSpan, span) {
   const context = span.context()
-  const isLocalRoot = span === context._trace.started[0]
   const parentId = context._parentId
 
-  if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
+  if (span !== context._trace.started[0] || (parentId && parentId.toString(10) !== '0')) return
 
-  addNumberTag(formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
-  addNumberTag(formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
-  addNumberTag(formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
-  addNumberTag(formattedSpan.metrics, TOP_LEVEL_KEY, 1)
+  const trace = context._trace
+  const metrics = formattedSpan.metrics
+  const ruleDecision = trace[SAMPLING_RULE_DECISION]
+  if (typeof ruleDecision === 'number' && !Number.isNaN(ruleDecision)) {
+    metrics[SAMPLING_RULE_DECISION] = ruleDecision
+  }
+  const limitDecision = trace[SAMPLING_LIMIT_DECISION]
+  if (typeof limitDecision === 'number' && !Number.isNaN(limitDecision)) {
+    metrics[SAMPLING_LIMIT_DECISION] = limitDecision
+  }
+  const agentDecision = trace[SAMPLING_AGENT_DECISION]
+  if (typeof agentDecision === 'number' && !Number.isNaN(agentDecision)) {
+    metrics[SAMPLING_AGENT_DECISION] = agentDecision
+  }
+  metrics[TOP_LEVEL_KEY] = 1
 }
 
 function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {
-  if (tagForFirstSpanInChunk) {
-    addStringTag(formattedSpan.meta, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
+  const meta = formattedSpan.meta
+  if (typeof tagForFirstSpanInChunk === 'string') {
+    meta[TRACING_FIELD_NAME] = tagForFirstSpanInChunk.length > MAX_META_VALUE_LENGTH
+      ? `${tagForFirstSpanInChunk.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : tagForFirstSpanInChunk
   }
 
+  // Chunk tags are always strings in production (`_dd.p.dm`, `_dd.p.tid`,
+  // `_dd.p.ts`, `baggage.*`). Inline only the string branch; non-string
+  // values fall through to `addMixedTag` so we don't carry duplicate
+  // truncation logic for branches no real chunk tag ever takes.
+  const metrics = formattedSpan.metrics
   const traceTags = span.context()._trace.tags
   for (const key of Object.keys(traceTags)) {
-    addMixedTag(formattedSpan.meta, formattedSpan.metrics, key, traceTags[key])
+    const value = traceTags[key]
+    if (typeof value === 'string') {
+      let writeKey = key
+      if (writeKey.length > MAX_META_KEY_LENGTH) {
+        writeKey = `${writeKey.slice(0, MAX_META_KEY_LENGTH)}...`
+      }
+      meta[writeKey] = value.length > MAX_META_VALUE_LENGTH
+        ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+        : value
+    } else {
+      addMixedTag(meta, metrics, key, value)
+    }
   }
 }
 
@@ -255,28 +352,17 @@ function extractError (formattedSpan, error) {
 }
 
 /**
+ * Mixed-type dispatch retained for `extractError` and the slow-path fallback
+ * inside the inlined per-tag loops in `extractTags` / `extractChunkTags`.
+ * The scalar branches are kept here so a single `addMixedTag` call covers
+ * recursion (nested object values) without re-entering the inlined paths.
+ *
  * @param {Record<string, string>} meta
- * @param {string} key
- * @param {string} value
- */
-function addStringTag (meta, key, value) {
-  if (typeof value !== 'string') return
-  if (value.length > MAX_META_VALUE_LENGTH) {
-    value = `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
-  }
-  meta[key] = value
-}
-
-/**
  * @param {Record<string, number>} metrics
  * @param {string} key
- * @param {number} value
+ * @param {unknown} value
+ * @param {boolean} [nested]
  */
-function addNumberTag (metrics, key, value) {
-  if (typeof value !== 'number' || Number.isNaN(value)) return
-  metrics[key] = value
-}
-
 function addMixedTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
