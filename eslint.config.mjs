@@ -21,6 +21,7 @@ import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
+import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -381,6 +382,7 @@ export default [
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-require-export-exists': eslintRequireExportExists,
+          'eslint-timer-unref': eslintTimerUnref,
         },
       },
       import: eslintPluginImport,
@@ -499,6 +501,7 @@ export default [
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+      'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {
         // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
@@ -576,7 +579,9 @@ export default [
       'eslint.config.mjs',
     ],
     rules: {
-      'eslint-rules/eslint-config-names-sync': 'error',
+      'eslint-rules/eslint-config-names-sync': ['error', {
+        indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
+      }],
     },
   },
   {

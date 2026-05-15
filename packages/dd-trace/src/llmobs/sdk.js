@@ -53,6 +53,11 @@ class LLMObs extends NoopLLMObs {
   }
 
   enable (options = {}) {
+    logger.warn(
+      'Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
+      'Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.'
+    )
+
     if (this.enabled) {
       logger.debug('LLMObs is already enabled.')
       return
@@ -77,6 +82,11 @@ class LLMObs extends NoopLLMObs {
   }
 
   disable () {
+    logger.warn(
+      'Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
+      'Set DD_LLMOBS_ENABLED=false to disable LLM Observability.'
+    )
+
     if (!this.enabled) {
       logger.debug('LLMObs is already disabled.')
       return
