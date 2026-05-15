@@ -61,7 +61,9 @@ function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = fals
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
-  extractChunkTags(formatted, span, isFirstSpanInChunk, tagForFirstSpanInChunk)
+  if (isFirstSpanInChunk) {
+    extractChunkTags(formatted, span, tagForFirstSpanInChunk)
+  }
   extractTags(formatted, span)
 
   return formatted
@@ -206,11 +208,11 @@ function extractTags (formattedSpan, span) {
   }
   setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
-  addMixedTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
-  addMixedTag(formattedSpan.meta, formattedSpan.metrics, PROCESS_ID, process.pid)
-  addMixedTag(formattedSpan.meta, formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
-  addMixedTag(formattedSpan.meta, formattedSpan.metrics, ORIGIN_KEY, origin)
-  addMixedTag(formattedSpan.meta, formattedSpan.metrics, HOSTNAME_KEY, hostname)
+  formattedSpan.meta.language = 'javascript'
+  formattedSpan.metrics[PROCESS_ID] = process.pid
+  addNumberTag(formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
+  addStringTag(formattedSpan.meta, ORIGIN_KEY, origin)
+  addStringTag(formattedSpan.meta, HOSTNAME_KEY, hostname)
 }
 
 function extractRootTags (formattedSpan, span) {
@@ -226,17 +228,14 @@ function extractRootTags (formattedSpan, span) {
   addNumberTag(formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
-function extractChunkTags (formattedSpan, span, isFirstSpanInChunk, tagForFirstSpanInChunk) {
-  const context = span.context()
-
-  if (!isFirstSpanInChunk) return
-
+function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {
   if (tagForFirstSpanInChunk) {
-    addMixedTag(formattedSpan.meta, formattedSpan.metrics, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
+    addStringTag(formattedSpan.meta, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
   }
 
-  for (const [key, value] of Object.entries(context._trace.tags)) {
-    addMixedTag(formattedSpan.meta, formattedSpan.metrics, key, value)
+  const traceTags = span.context()._trace.tags
+  for (const key of Object.keys(traceTags)) {
+    addMixedTag(formattedSpan.meta, formattedSpan.metrics, key, traceTags[key])
   }
 }
 
