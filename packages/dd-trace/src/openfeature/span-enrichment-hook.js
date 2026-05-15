@@ -83,8 +83,7 @@ class SpanEnrichmentHook {
 
       // Extract serial ID and doLog from flagMetadata (set by provider)
       const serialId = flagMetadata?.__dd_split_serial_id
-      // Prefer new key, fallback to deprecated
-      const doLog = flagMetadata?.__dd_do_log ?? flagMetadata?.doLog ?? false
+      const doLog = flagMetadata?.__dd_do_log ?? false
       // targetingKey is in hookContext.context (OpenFeature evaluation context)
       const targetingKey = context?.targetingKey
 

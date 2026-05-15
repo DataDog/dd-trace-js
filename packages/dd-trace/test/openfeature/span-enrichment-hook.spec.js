@@ -165,20 +165,6 @@ describe('SpanEnrichmentHook', () => {
       assert.strictEqual(tagCall, undefined, 'ffe_subjects_enc should not be set without targetingKey')
     })
 
-    it('should fallback to deprecated doLog when __dd_do_log is not present', () => {
-      const hook = new SpanEnrichmentHook(mockTracer)
-
-      hook.finally(
-        hookContext({ context: { targetingKey: 'user-789' } }),
-        evalDetails({ flagMetadata: { __dd_split_serial_id: 100, doLog: true } })
-      )
-
-      finishSubscriber(mockRootSpan)
-
-      const tagCall = mockRootSpan.setTag.getCalls().find(c => c.args[0] === 'ffe_subjects_enc')
-      assert.ok(tagCall, 'ffe_subjects_enc tag should be set when using deprecated doLog')
-    })
-
     it('should add default when reason is DEFAULT and no serialId', () => {
       const hook = new SpanEnrichmentHook(mockTracer)
 
