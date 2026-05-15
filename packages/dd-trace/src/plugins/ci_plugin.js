@@ -82,6 +82,8 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('./util/test')
 
+const legacyStorage = storage('legacy')
+
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
   mocha: 'mocha',
@@ -147,7 +149,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
       const { onDone, frameworkVersion } = ctx
-      ctx.currentStore = storage('legacy').getStore()
+      ctx.currentStore = legacyStorage.getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
