@@ -82,10 +82,8 @@ class SpanEnrichmentHook {
       const { flagMetadata, reason, value } = evaluationDetails || {}
 
       // Extract serial ID and doLog from flagMetadata (set by provider)
-      // eslint-disable-next-line camelcase
       const serialId = flagMetadata?.__dd_split_serial_id
       // Prefer new key, fallback to deprecated
-      // eslint-disable-next-line camelcase
       const doLog = flagMetadata?.__dd_do_log ?? flagMetadata?.doLog ?? false
       // targetingKey is in hookContext.context (OpenFeature evaluation context)
       const targetingKey = context?.targetingKey
