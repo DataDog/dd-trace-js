@@ -438,7 +438,9 @@ function applyRouteOrEndpointTag (context) {
   // two calls, so the second pass has nothing to add.
   if (tags[HTTP_ROUTE] || tags[HTTP_ENDPOINT]) return
 
-  const route = paths.join('')
+  // Skip the `Array.prototype.join` builtin in the empty / single-segment
+  // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
+  const route = paths.length > 1 ? paths.join('') : paths[0]
 
   if (route) {
     // Use http.route from trusted framework instrumentation.
