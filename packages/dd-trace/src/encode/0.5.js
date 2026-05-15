@@ -87,18 +87,18 @@ class AgentEncoder extends BaseEncoder {
   }
 
   _encodeString (bytes, value = '') {
-    let index = this._stringMap[value]
+    let index = this._stringMap.get(value)
     if (index === undefined) {
       index = this._stringCount++
-      this._stringMap[value] = index
+      this._stringMap.set(value, index)
       this._stringBytes.write(value)
     }
     this._encodeInteger(bytes, index)
   }
 
   _cacheString (value) {
-    if (this._stringMap[value] === undefined) {
-      this._stringMap[value] = this._stringCount++
+    if (this._stringMap.get(value) === undefined) {
+      this._stringMap.set(value, this._stringCount++)
       this._stringBytes.write(value)
     }
   }
