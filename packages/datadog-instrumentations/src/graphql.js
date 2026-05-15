@@ -343,6 +343,11 @@ addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor =>
   return executor
 })
 
+// TODO(BridgeAR): graphql >=17.0.0-alpha.9 routes execute() through
+// experimentalExecuteIncrementally(), bypassing this hook. The same
+// function returns { initialResult, subsequentResults } for @defer /
+// @stream which callInAsyncScope does not handle — execute finishes
+// before the streamed payloads land.
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
   shimmer.wrap(execute, 'execute', wrapExecute(execute))
   return execute
