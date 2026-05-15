@@ -189,7 +189,7 @@ function patch (http, methodName) {
         let callback = args.callback
 
         if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function (...args) {
+          callback = shimmer.wrapCallback(args.callback, cb => function (...args) {
             return asyncStartChannel.runStores(ctx, () => {
               return cb.apply(this, args)
             })
