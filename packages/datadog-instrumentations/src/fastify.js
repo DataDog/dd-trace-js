@@ -54,63 +54,119 @@ function wrapAddHook (addHook) {
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
-      const req = getReq(request)
-      const ctx = { req }
-
-      try {
-        // done callback is always the last argument
-        const doneCallback = arguments[arguments.length - 1]
-
-        if (typeof doneCallback === 'function') {
-          arguments[arguments.length - 1] = function (err) {
-            ctx.error = err
-            publishError(ctx)
-
-            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
-
-            if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
-              ctx.res = getRes(reply)
-              ctx.abortController = new AbortController()
-              ctx.cookies = request.cookies
-
-              cookieParserReadCh.publish(ctx)
-              cookiesPublished.add(req)
-
-              if (ctx.abortController.signal.aborted) return
-            }
-
-            if (name === 'onRequest' || name === 'preParsing') {
-              parsingContexts.set(req, ctx)
-
-              return callbackFinishCh.runStores(ctx, () => {
-                return doneCallback.apply(this, arguments)
-              })
-            }
-            return doneCallback.apply(this, arguments)
-          }
-
-          return fn.apply(this, arguments)
-        }
-
-        const promise = fn.apply(this, arguments)
-
-        if (promise && typeof promise.catch === 'function') {
-          return promise.catch(err => {
-            ctx.error = err
-            return publishError(ctx)
-          })
-        }
-
-        return promise
-      } catch (e) {
-        ctx.error = e
-        throw publishError(ctx)
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function wrappedHook () {
+      // Fast path: every fastify request invokes each addHook'd handler, so the wrap
+      // runs in the user's hot path. The only side effects this wrapper carries are
+      // the three channels below; when none of them have a subscriber (the default
+      // plugin config, and the steady state once appsec / cookie subscribers detach),
+      // the wrap has nothing to do, and a `fn.apply(this, arguments)` forward keeps
+      // V8's CallApplyArguments fast path intact.
+      //
+      // The previous shape mutated `arguments[arguments.length - 1]` to swap `done`.
+      // That mutation materialises the magical arguments object and disables V8
+      // inlining of the enclosing function. The slow path below builds a fresh args
+      // array instead so the hot fast path keeps a clean forward.
+      if (errorChannel.hasSubscribers ||
+          cookieParserReadCh.hasSubscribers ||
+          callbackFinishCh.hasSubscribers) {
+        return invokeHookWithContext(name, fn, this, arguments)
       }
+      return fn.apply(this, arguments)
     })
 
     return addHook.apply(this, arguments)
   })
+}
+
+/**
+ * Slow path of {@link wrapAddHook}; entered only when at least one wrap-fed
+ * channel has a subscriber. Allocates the per-request context, rewraps `done`,
+ * and forwards to the user-supplied hook.
+ *
+ * @param {string} name Lifecycle phase the hook was registered against.
+ * @param {Function} fn User-supplied hook.
+ * @param {unknown} thisArg `this` Fastify passes to the hook.
+ * @param {ArrayLike<unknown>} args Fastify's positional args; the dispatcher always
+ *   places `done` as the trailing positional (see fastify/lib/hooks.js hookIterator,
+ *   onSendHookRunner, preParsingHookRunner, onRequestAbortHookRunner).
+ */
+function invokeHookWithContext (name, fn, thisArg, args) {
+  const request = args[0]
+  const reply = args[1]
+  const req = getReq(request)
+  const ctx = { req }
+
+  try {
+    const lastArg = args[args.length - 1]
+
+    if (typeof lastArg === 'function') {
+      // Copy the args so we can swap the trailing `done` without touching the
+      // caller's magical arguments object. Fastify hook arities are 2 to 4
+      // across lifecycle phases, but `done` is always last.
+      const callArgs = [...args]
+      callArgs[callArgs.length - 1] = wrapHookDone(ctx, request, reply, req, name, lastArg)
+      return fn.apply(thisArg, callArgs)
+    }
+
+    const promise = fn.apply(thisArg, args)
+
+    if (promise && typeof promise.catch === 'function') {
+      return promise.catch(error => {
+        ctx.error = error
+        return publishError(ctx)
+      })
+    }
+
+    return promise
+  } catch (error) {
+    ctx.error = error
+    throw publishError(ctx)
+  }
+}
+
+/**
+ * Per-request closure invoked when fastify resolves the user hook's `done`.
+ * Captures `ctx` plus the dispatcher-level fields needed to publish on the
+ * cookie / callback channels. The closure cannot be hoisted: fastify invokes
+ * `done` with a single `(err)` arg, so request / reply / req / name / doneCallback
+ * must close over rather than ride the call signature.
+ *
+ * @param {{ req: unknown, [key: string]: unknown }} ctx
+ * @param {{ cookies?: Record<string, unknown>, [key: string]: unknown }} request
+ * @param {object} reply
+ * @param {unknown} req
+ * @param {string} name
+ * @param {Function} doneCallback
+ */
+function wrapHookDone (ctx, request, reply, req, name, doneCallback) {
+  return function wrappedDone (error) {
+    ctx.error = error
+    publishError(ctx)
+
+    const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+
+    if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
+      ctx.res = getRes(reply)
+      ctx.abortController = new AbortController()
+      ctx.cookies = request.cookies
+
+      cookieParserReadCh.publish(ctx)
+      cookiesPublished.add(req)
+
+      if (ctx.abortController.signal.aborted) return
+    }
+
+    if (name === 'onRequest' || name === 'preParsing') {
+      parsingContexts.set(req, ctx)
+
+      if (callbackFinishCh.hasSubscribers) {
+        const self = this
+        const allArgs = arguments
+        return callbackFinishCh.runStores(ctx, () => doneCallback.apply(self, allArgs))
+      }
+    }
+    return doneCallback.apply(this, arguments)
+  }
 }
 
 function onRequest (request, reply, done) {
@@ -157,45 +213,51 @@ function preValidation (request, reply, done) {
   const ctx = parsingContexts.get(req)
   ctx.res = res
 
-  const processInContext = () => {
-    let abortController
+  if (!ctx) return processInContext(request, ctx, done, req)
 
-    if (queryParamsReadCh.hasSubscribers && request.query) {
-      abortController ??= new AbortController()
-      ctx.abortController = abortController
-      ctx.query = request.query
-      queryParamsReadCh.publish(ctx)
+  preValidationCh.runStores(ctx, processInContext, undefined, request, ctx, done, req)
+}
 
-      if (abortController.signal.aborted) return
-    }
+/**
+ * @param {{ query?: object, body?: object, params?: object, [key: string]: unknown }} request
+ * @param {{ res?: object, abortController?: AbortController, [key: string]: unknown }} ctx
+ * @param {Function} done
+ * @param {unknown} req
+ */
+function processInContext (request, ctx, done, req) {
+  let abortController
 
-    // Analyze body before schema validation
-    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
-      abortController ??= new AbortController()
-      ctx.abortController = abortController
-      ctx.body = request.body
-      bodyParserReadCh.publish(ctx)
+  if (queryParamsReadCh.hasSubscribers && request.query) {
+    abortController ??= new AbortController()
+    ctx.abortController = abortController
+    ctx.query = request.query
+    queryParamsReadCh.publish(ctx)
 
-      bodyPublished.add(req)
-
-      if (abortController.signal.aborted) return
-    }
-
-    if (pathParamsReadCh.hasSubscribers && request.params) {
-      abortController ??= new AbortController()
-      ctx.abortController = abortController
-      ctx.params = request.params
-      pathParamsReadCh.publish(ctx)
-
-      if (abortController.signal.aborted) return
-    }
-
-    done()
+    if (abortController.signal.aborted) return
   }
 
-  if (!ctx) return processInContext()
+  // Analyze body before schema validation
+  if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
+    abortController ??= new AbortController()
+    ctx.abortController = abortController
+    ctx.body = request.body
+    bodyParserReadCh.publish(ctx)
 
-  preValidationCh.runStores(ctx, processInContext)
+    bodyPublished.add(req)
+
+    if (abortController.signal.aborted) return
+  }
+
+  if (pathParamsReadCh.hasSubscribers && request.params) {
+    abortController ??= new AbortController()
+    ctx.abortController = abortController
+    ctx.params = request.params
+    pathParamsReadCh.publish(ctx)
+
+    if (abortController.signal.aborted) return
+  }
+
+  done()
 }
 
 function preParsing (request, reply, payload, done) {
