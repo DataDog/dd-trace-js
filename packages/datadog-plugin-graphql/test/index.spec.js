@@ -1035,7 +1035,7 @@ describe('Plugin', () => {
               assert.ok(('startTime' in spanEvents[0]))
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(('stacktrace' in spanEvents[0].attributes))
+              assert.ok(!Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
               assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
