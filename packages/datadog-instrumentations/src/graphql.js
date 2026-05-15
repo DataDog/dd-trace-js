@@ -62,10 +62,15 @@ function getOperation (document, operationName) {
 function normalizeArgs (args, defaultFieldResolver) {
   if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
 
-  args[0].contextValue ||= {}
-  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
+  const original = args[0]
+  const normalized = {
+    ...original,
+    contextValue: original.contextValue ?? {},
+    fieldResolver: wrapResolve(original.fieldResolver || defaultFieldResolver),
+  }
 
-  return args[0]
+  args[0] = normalized
+  return normalized
 }
 
 function normalizePositional (args, defaultFieldResolver) {

@@ -423,6 +423,25 @@ describe('Plugin', () => {
           }
         })
 
+        it('should not add fieldResolver to a frozen caller-owned execute args object', async () => {
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const args = Object.freeze({ schema, document, contextValue: {} })
+
+          assert.ok(await graphql.execute(args), 'execute returned a result')
+          assert.ok(!Object.hasOwn(args, 'fieldResolver'),
+            'instrumentation must not add fieldResolver to caller args')
+        })
+
+        it('should not overwrite the caller-supplied fieldResolver on the execute args object', async () => {
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+
+          assert.ok(await graphql.execute(args), 'execute returned a result')
+          assert.strictEqual(args.fieldResolver, callerFieldResolver,
+            'instrumentation must not overwrite the caller-supplied fieldResolver')
+        })
+
         it('should not include variables by default', done => {
           const source = 'query MyQuery($who: String!) { hello(name: $who) }'
           const variableValues = { who: 'world' }
@@ -1870,9 +1889,10 @@ describe('Plugin', () => {
                 contextValue: params.contextValue,
                 variableValues: params.variableValues,
                 operationName: params.operationName,
-                fieldResolver: params.fieldResolver,
                 typeResolver: params.typeResolver,
               })
+              assert.strictEqual(typeof args.fieldResolver, 'function')
+              assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
               assert.strictEqual(res, result)
             })
             .then(done)
