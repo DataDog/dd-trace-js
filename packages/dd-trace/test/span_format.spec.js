@@ -63,6 +63,7 @@ describe('spanFormat', () => {
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
         _service: 'test',
+        _serviceLower: 'test',
       }),
       setTag: sinon.stub(),
       _startTime: 1500000000000.123,

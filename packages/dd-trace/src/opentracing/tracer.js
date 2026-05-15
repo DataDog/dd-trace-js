@@ -23,6 +23,11 @@ class DatadogTracer {
   constructor (config, prioritySampler) {
     this._config = config
     this._service = config.service
+    // Pre-computed for the per-format `_service` lowercase comparison in
+    // `span_format#extractTags`. `_service` is stable for the lifetime of a
+    // tracer; the per-span `toLowerCase` allocates a fresh string on every
+    // flushed span and shows up in the encoder hot path.
+    this._serviceLower = typeof config.service === 'string' ? config.service.toLowerCase() : ''
     this._version = config.version
     this._env = config.env
     this._logInjection = config.logInjection
