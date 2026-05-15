@@ -15,12 +15,13 @@ const { createDeepObject, getWebSpan } = require('./utils')
 
 describe('extended data collection', () => {
   withVersions('next', 'next', '>=11.1', version => {
-    if (version === '>=11.0.0 <13' && NODE_VERSION === '24.0.0') {
-      // node 24.0.0 fails, but 24.0.1 works
+    const realVersion = require(`../../../../versions/next@${version}`).version()
+
+    if (satisfies(realVersion, '>=12 <13') && NODE_VERSION === '24.0.0') {
+      // next 12.x fails on node 24.0.0, but 24.0.1 works
       return
     }
 
-    const realVersion = require(`../../../../versions/next@${version}`).version()
     if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
       return
     }

@@ -372,34 +372,21 @@ jobs:
           - oldest
           - latest
         range:
-          [
-            ">=10.2.0 <11",
-            ">=11.0.0 <13",
-            "11.1.4",
-            ">=13.0.0 <14",
-            "13.2.0",
-            ">=14.0.0 <=14.2.6",
-            ">=14.2.7 <15",
-            ">=15.0.0",
-          ]
+          - "11.1.4"
+          - "12.3.7"
+          - "13.0.0"
+          - "13.2.0"
+          - "13.5.11"
+          - "14.0.0"
+          - "14.2.6"
+          - "14.2.7"
+          - "14.2.35"
+          - "15.0.0"
+          - "*"
         include:
-          - range: ">=10.2.0 <11"
-            range_clean: gte.10.2.0.and.lt.11
-          - range: ">=11.0.0 <13"
-            range_clean: gte.11.0.0.and.lt.13
-          - range: "11.1.4"
-            range_clean: 11.1.4
-          - range: ">=13.0.0 <14"
-            range_clean: gte.13.0.0.and.lt.14
-          - range: "13.2.0"
-            range_clean: 13.2.0
-          - range: ">=14.0.0 <=14.2.6"
-            range_clean: gte.14.0.0.and.lte.14.2.6
-          - range: ">=14.2.7 <15"
-            range_clean: gte.14.2.7.and.lt.15
-          - range: ">=15.0.0"
-            range_clean: gte.15.0.0
-    name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean }})
+          - range: "*"
+            range_clean: latest
+    name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean || matrix.range }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -417,7 +404,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
+          flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean || matrix.range }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
