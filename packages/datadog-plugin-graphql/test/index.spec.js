@@ -405,6 +405,24 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
+        it('should instrument every execute even when the args object is reused', async () => {
+          const startChannel = dc.channel('apm:graphql:execute:start')
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const args = { schema, document, contextValue: {} }
+
+          let starts = 0
+          const handler = () => { starts++ }
+          startChannel.subscribe(handler)
+
+          try {
+            await graphql.execute(args)
+            await graphql.execute(args)
+            assert.strictEqual(starts, 2)
+          } finally {
+            startChannel.unsubscribe(handler)
+          }
+        })
+
         it('should not include variables by default', done => {
           const source = 'query MyQuery($who: String!) { hello(name: $who) }'
           const variableValues = { who: 'world' }

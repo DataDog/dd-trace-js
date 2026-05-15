@@ -194,6 +194,7 @@ function wrapExecute (execute) {
           }
 
           ctx.res = res
+          contexts.delete(contextValue)
           finishExecuteCh.publish(ctx)
         })
       })
