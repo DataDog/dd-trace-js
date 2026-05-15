@@ -195,7 +195,7 @@ function wrapExecute (execute) {
         args,
         docSource: source,
         source,
-        fields: Object.create(null),
+        fields: new Map(),
         abortController: new AbortController(),
       }
 
@@ -294,37 +294,21 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
   }
 }
 
-function pathToArray (path) {
-  let length = 0
-  for (let curr = path; curr; curr = curr.prev) {
-    length += 1
-  }
-
-  const flattened = new Array(length)
-  let index = length
-  for (let curr = path; curr; curr = curr.prev) {
-    flattened[--index] = curr.key
-  }
-  return flattened
-}
-
+/**
+ * @param {{ fields: Map<object, { error: unknown, ctx: object }> }} rootCtx
+ * @param {{ path: object }} info
+ * @param {Record<string, unknown>} args
+ */
 function assertField (rootCtx, info, args) {
-  const pathInfo = info && info.path
-
-  const path = pathToArray(pathInfo)
-
-  const pathString = path.join('.')
+  const path = info.path
   const fields = rootCtx.fields
-
-  let field = fields[pathString]
+  let field = fields.get(path)
 
   if (!field) {
-    const fieldCtx = { info, rootCtx, args, path, pathString }
+    const fieldCtx = { info, rootCtx, args, path }
     startResolveCh.publish(fieldCtx)
-    field = fields[pathString] = {
-      error: null,
-      ctx: fieldCtx,
-    }
+    field = { error: null, ctx: fieldCtx }
+    fields.set(path, field)
   }
 
   return field
@@ -361,14 +345,16 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  for (const field of Object.values(fields)) {
-    field.ctx.finishTime = field.finishTime
-    field.ctx.field = field
+  for (const field of fields.values()) {
+    const fieldCtx = field.ctx
+    if (!fieldCtx.currentStore) continue
+    fieldCtx.finishTime = field.finishTime
+    fieldCtx.field = field
     if (field.error) {
-      field.ctx.error = field.error
-      resolveErrorCh.publish(field.ctx)
+      fieldCtx.error = field.error
+      resolveErrorCh.publish(fieldCtx)
     }
-    finishResolveCh.publish(field.ctx)
+    finishResolveCh.publish(fieldCtx)
   }
 }
 

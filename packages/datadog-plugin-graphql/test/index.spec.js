@@ -1868,6 +1868,53 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with collapsing disabled and a depth >=1', () => {
+        before(async () => {
+          tracer = await agent.load('graphql', { collapse: false, depth: 2 })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should count only string segments when collapsing is disabled', done => {
+          const source = `
+            {
+              friends {
+                name
+                pets {
+                  name
+                }
+              }
+            }
+          `
+
+          agent
+            .assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
+
+              assert.deepStrictEqual(paths, [
+                'friends',
+                'friends.0.name',
+                'friends.0.pets',
+                'friends.1.name',
+                'friends.1.pets',
+              ])
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql({ schema, source }).catch(done)
+        })
+      })
+
       describe('with signature calculation disabled', () => {
         before(() => {
           tracer = require('../../dd-trace')
