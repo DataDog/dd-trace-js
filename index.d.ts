@@ -3446,11 +3446,15 @@ declare namespace tracer {
 
       /**
        * Enable LLM Observability tracing.
+       *
+       * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
       enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
+       *
+       * @deprecated Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. Set DD_LLMOBS_ENABLED=false to disable LLM Observability.
        */
       disable (): void,
 
