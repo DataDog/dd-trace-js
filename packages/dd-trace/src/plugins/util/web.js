@@ -33,7 +33,6 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
-const ends = new WeakMap()
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -308,34 +307,6 @@ const web = {
   },
   getContext (req) {
     return contexts.get(req)
-  },
-  wrapRes (context, req, res, end) {
-    return function (...args) {
-      web.finishAll(context)
-
-      return end.apply(res, args)
-    }
-  },
-  wrapEnd (context) {
-    const req = context.req
-    const res = context.res
-    const end = res.end
-
-    res.writeHead = web.wrapWriteHead(context)
-
-    ends.set(res, this.wrapRes(context, req, res, end))
-
-    Object.defineProperty(res, 'end', {
-      configurable: true,
-      get () {
-        return ends.get(this)
-      },
-      set (value) {
-        ends.set(this, function (...args) {
-          return storage('legacy').run(context.store, value, ...args)
-        })
-      },
-    })
   },
   setRouteOrEndpointTag (req) {
     const context = contexts.get(req)
