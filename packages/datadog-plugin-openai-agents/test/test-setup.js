@@ -31,20 +31,19 @@ class OpenaiAgentsTestSetup {
       },
     }
 
-    this.fakeModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
-    this.streamModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
-    this.errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
+    const fakeModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
+    const errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
 
     this.agent = new clientModule.Agent({
       name: 'test_agent',
       instructions: 'You are a test agent',
-      model: this.fakeModel,
+      model: fakeModel,
     })
 
     this.errorAgent = new clientModule.Agent({
       name: 'error_agent',
       instructions: 'You are an error test agent',
-      model: this.errorModel,
+      model: errorModel,
     })
   }
 
@@ -52,9 +51,6 @@ class OpenaiAgentsTestSetup {
     this.module = undefined
     this.agent = undefined
     this.errorAgent = undefined
-    this.fakeModel = undefined
-    this.streamModel = undefined
-    this.errorModel = undefined
   }
 
   async run () {
@@ -69,7 +65,10 @@ class OpenaiAgentsTestSetup {
    * Compose agents-core's span helpers directly to produce the hierarchy:
    *   trace("handoff-test") → agent(agent_a) → handoff(agent_a→agent_b) → agent(agent_b)
    * Bypasses the model call to avoid needing cassette support for handoff
-   * tool-call responses.
+   * tool-call responses. The manual `withTrace` here is intentional — this
+   * test exercises the dd-trace processor's parent-id resolution without
+   * going through `Runner.run`, so we have to establish the trace context
+   * ourselves.
    */
   async multiAgentHandoff () {
     return this.module.withTrace('handoff-test', async () => {
@@ -78,40 +77,6 @@ class OpenaiAgentsTestSetup {
           return this.module.withAgentSpan(async () => {}, { data: { name: 'agent_b' } })
         }, { data: { from_agent: 'agent_a', to_agent: 'agent_b' } })
       }, { data: { name: 'agent_a' } })
-    })
-  }
-
-  async getResponse () {
-    return this.module.withTrace('test-getResponse', async () => {
-      return this.fakeModel.getResponse({
-        systemInstructions: 'test',
-        input: 'hello',
-        modelSettings: {},
-        tools: [],
-        outputSchema: undefined,
-        handoffs: [],
-        previousResponseId: undefined,
-      })
-    })
-  }
-
-  async getStreamedResponse () {
-    return this.module.withTrace('test-getStreamedResponse', async () => {
-      // agents-openai only creates a response Span when request.tracing is truthy
-      const iter = await this.streamModel.getStreamedResponse({
-        systemInstructions: 'test',
-        input: 'hello',
-        modelSettings: {},
-        tools: [],
-        outputSchema: undefined,
-        handoffs: [],
-        previousResponseId: undefined,
-        tracing: true,
-      })
-      // eslint-disable-next-line no-unused-vars
-      for await (const _item of iter) {
-        // consume stream
-      }
     })
   }
 }

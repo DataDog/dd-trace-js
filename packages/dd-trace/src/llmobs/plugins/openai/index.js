@@ -7,12 +7,12 @@ const {
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
 const { safeJsonParse } = require('../../util')
-const { getOpenAIModelProvider } = require('../utils')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   hasMultimodalInputs,
+  getOpenAIModelProvider,
 } = require('./utils')
 
 const allowedParamKeys = new Set([

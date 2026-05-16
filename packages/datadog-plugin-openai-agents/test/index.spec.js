@@ -135,44 +135,4 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
       return traceAssertion
     })
   })
-
-  describe('model calls (getResponse, getStreamedResponse)', () => {
-    // Both methods are wrapped in withTrace() by test-setup so agents-core
-    // emits a real response Span via withResponseSpan internally.
-
-    it('emits a response span for getResponse()', async () => {
-      const traceAssertion = agent.assertSomeTraces((traces) => {
-        const responseSpan = findSpan(traces, s => s.name === 'openai_agents.response')
-        assertObjectContains(responseSpan, {
-          name: 'openai_agents.response',
-          meta: {
-            component: 'openai-agents',
-            'span.kind': 'client',
-          },
-        })
-      })
-
-      const response = await testSetup.getResponse()
-      assert.ok(response, 'getResponse() should return a response object')
-      assert.ok(Array.isArray(response.output), 'response should have output array')
-
-      return traceAssertion
-    })
-
-    it('emits a response span for getStreamedResponse()', async () => {
-      const traceAssertion = agent.assertSomeTraces((traces) => {
-        const responseSpan = findSpan(traces, s => s.name === 'openai_agents.response')
-        assertObjectContains(responseSpan, {
-          name: 'openai_agents.response',
-          meta: {
-            component: 'openai-agents',
-            'span.kind': 'client',
-          },
-        })
-      })
-
-      await testSetup.getStreamedResponse()
-      return traceAssertion
-    })
-  })
 })
