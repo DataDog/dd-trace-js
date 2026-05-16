@@ -1,15 +1,16 @@
 'use strict'
 
-const { getOpenAIModelProvider } = require('../../dd-trace/src/llmobs/plugins/utils')
+const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
+const { getOpenAIModelProvider } = require('../../dd-trace/src/llmobs/plugins/openai/utils')
 const {
   extractInputMessages,
   extractOutputMessages,
   extractMetrics,
   extractMetadata,
 } = require('../../dd-trace/src/llmobs/plugins/openai-agents/utils')
+const { AGENTS_ERROR_TYPE, applyError, deriveSpanName } = require('./util')
 
 const COMPONENT = 'openai-agents'
-const AGENTS_ERROR_TYPE = 'AgentsCoreError'
 const DEFAULT_MODEL_PROVIDER = 'openai'
 
 const KIND_TO_SPAN_KIND = {
@@ -39,25 +40,33 @@ const KIND_TO_SPAN_KIND = {
  * spans of the top-level agent.
  */
 class OpenAIAgentsIntegration {
-  constructor ({ tracer, tagger, config } = {}) {
-    this._tracer = tracer
-    this._tagger = tagger
-    this._config = config
-    this._enabled = false
-    this._modelProvider = DEFAULT_MODEL_PROVIDER
+  #tracer
+  #enabled = false
+  #modelProvider = DEFAULT_MODEL_PROVIDER
+  /**
+   * LLMObs is gated independently of APM tracing: when llmobs.enabled is
+   * false we keep emitting APM spans for the agent workflow but skip all
+   * LLMObs tagging and the work that feeds it. The tagger is the single
+   * source of truth for "is LLMObs on for this integration?".
+   * @type {LLMObsTagger | undefined}
+   */
+  #tagger
+  /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
+  #oaiToDdSpan = new Map()
+  /** @type {Map<string, LLMObsTraceInfo>} */
+  #traceInfo = new Map()
 
-    /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
-    this._oaiToDdSpan = new Map()
-    /** @type {Map<string, LLMObsTraceInfo>} */
-    this._traceInfo = new Map()
+  constructor ({ tracer, config } = {}) {
+    this.#tracer = tracer
+    this.#tagger = config?.llmobs?.enabled ? new LLMObsTagger(config, true) : undefined
   }
 
   get enabled () {
-    return this._enabled
+    return this.#enabled
   }
 
   setEnabled (enabled) {
-    this._enabled = enabled
+    this.#enabled = enabled
   }
 
   /**
@@ -70,18 +79,18 @@ class OpenAIAgentsIntegration {
    */
   setClientBaseURL (baseURL) {
     if (typeof baseURL !== 'string' || baseURL.length === 0) return
-    this._modelProvider = getOpenAIModelProvider(baseURL)
+    this.#modelProvider = getOpenAIModelProvider(baseURL)
   }
 
   clearState () {
     // Finish any dd-trace spans still in-flight so we don't leak open traces
     // when agents-core's TracingProcessor.shutdown() runs (e.g., process
     // exiting mid-run).
-    for (const ddSpan of this._oaiToDdSpan.values()) {
+    for (const ddSpan of this.#oaiToDdSpan.values()) {
       ddSpan.finish()
     }
-    this._oaiToDdSpan.clear()
-    this._traceInfo.clear()
+    this.#oaiToDdSpan.clear()
+    this.#traceInfo.clear()
   }
 
   // ── Trace lifecycle ─────────────────────────────────────────────────────────
@@ -91,22 +100,22 @@ class OpenAIAgentsIntegration {
     if (!traceId) return
 
     const name = oaiTrace.name || 'Agent workflow'
-    const ddSpan = this._tracer.startSpan(name, {
+    const ddSpan = this.#tracer.startSpan(name, {
       tags: {
         component: COMPONENT,
         'span.kind': 'internal',
       },
     })
 
-    this._oaiToDdSpan.set(traceId, ddSpan)
-    this._traceInfo.set(traceId, {
+    this.#oaiToDdSpan.set(traceId, ddSpan)
+    this.#traceInfo.set(traceId, {
       spanId: ddSpan.context().toSpanId(),
       traceId,
       groupId: oaiTrace.groupId || undefined,
       metadata: oaiTrace.metadata,
     })
 
-    this._tagger.registerLLMObsSpan(ddSpan, {
+    this.#tagger?.registerLLMObsSpan(ddSpan, {
       kind: 'workflow',
       name,
       integration: COMPONENT,
@@ -115,7 +124,7 @@ class OpenAIAgentsIntegration {
   }
 
   endTrace (oaiTrace) {
-    this._completeWorkflowSpan(oaiTrace.traceId)
+    this.#completeWorkflowSpan(oaiTrace.traceId)
   }
 
   /**
@@ -128,9 +137,9 @@ class OpenAIAgentsIntegration {
    * @param {string | undefined} traceId
    * @param {object} [rootAgentSpan] - parentless oai-span that ended in error.
    */
-  _completeWorkflowSpan (traceId, rootAgentSpan) {
+  #completeWorkflowSpan (traceId, rootAgentSpan) {
     if (!traceId) return
-    const ddSpan = this._oaiToDdSpan.get(traceId)
+    const ddSpan = this.#oaiToDdSpan.get(traceId)
     if (!ddSpan) return
 
     if (rootAgentSpan?.error) {
@@ -141,10 +150,10 @@ class OpenAIAgentsIntegration {
       }
     }
 
-    this._setTraceAttributes(ddSpan, traceId)
+    if (this.#tagger) this.#setTraceAttributes(ddSpan, traceId)
     ddSpan.finish()
-    this._oaiToDdSpan.delete(traceId)
-    this._traceInfo.delete(traceId)
+    this.#oaiToDdSpan.delete(traceId)
+    this.#traceInfo.delete(traceId)
   }
 
   // ── Span lifecycle ──────────────────────────────────────────────────────────
@@ -153,10 +162,10 @@ class OpenAIAgentsIntegration {
     const spanId = oaiSpan.spanId
     if (!spanId) return
 
-    const parentSpan = this._resolveParent(oaiSpan)
-    const spanName = this._deriveSpanName(oaiSpan)
+    const parentSpan = this.#resolveParent(oaiSpan)
+    const spanName = deriveSpanName(oaiSpan)
 
-    const ddSpan = this._tracer.startSpan(spanName, {
+    const ddSpan = this.#tracer.startSpan(spanName, {
       childOf: parentSpan,
       tags: {
         component: COMPONENT,
@@ -164,54 +173,57 @@ class OpenAIAgentsIntegration {
       },
     })
 
-    this._oaiToDdSpan.set(spanId, ddSpan)
+    this.#oaiToDdSpan.set(spanId, ddSpan)
 
-    const llmobsOptions = {
-      kind: llmobsKind,
-      name: spanName,
-      integration: COMPONENT,
-      parent: parentSpan,
+    if (this.#tagger) {
+      const llmobsOptions = {
+        kind: llmobsKind,
+        name: spanName,
+        integration: COMPONENT,
+        parent: parentSpan,
+      }
+
+      if (oaiSpan.spanData?.type === 'response') {
+        // Model name only arrives with the response; tagged in
+        // `#setResponseAttributes` once known. Model provider is resolved from
+        // the agents-openai client's baseURL captured at getResponse time.
+        llmobsOptions.modelProvider = this.#modelProvider
+      }
+
+      this.#tagger.registerLLMObsSpan(ddSpan, llmobsOptions)
+      this.#updateTraceInfoInput(oaiSpan, spanName)
     }
-
-    if (oaiSpan.spanData?.type === 'response') {
-      // Model name only arrives with the response; tagged in
-      // `_setResponseAttributes` once known. Model provider is resolved from
-      // the agents-openai client's baseURL captured at getResponse time.
-      llmobsOptions.modelProvider = this._modelProvider
-    }
-
-    this._tagger.registerLLMObsSpan(ddSpan, llmobsOptions)
-
-    this._updateTraceInfoInput(oaiSpan, spanName)
   }
 
   endSpan (oaiSpan) {
     const spanId = oaiSpan.spanId
-    const ddSpan = this._oaiToDdSpan.get(spanId)
+    const ddSpan = this.#oaiToDdSpan.get(spanId)
     if (!ddSpan) return
 
-    this._applyError(ddSpan, oaiSpan)
+    applyError(ddSpan, oaiSpan)
 
-    const spanData = oaiSpan.spanData
-    switch (spanData?.type) {
-      case 'response':
-        this._setResponseAttributes(ddSpan, oaiSpan)
-        this._updateTraceInfoOutput(oaiSpan)
-        break
-      case 'function':
-        this._tagger.tagTextIO(ddSpan, spanData.input ?? '', spanData.output ?? '')
-        break
-      case 'handoff':
-        this._tagger.tagTextIO(ddSpan, spanData.from_agent ?? '', spanData.to_agent ?? '')
-        break
-      case 'agent':
-        this._setAgentAttributes(ddSpan, oaiSpan)
-        break
-      case 'custom':
-        if (spanData.data && typeof spanData.data === 'object') {
-          this._tagger.tagMetadata(ddSpan, spanData.data)
-        }
-        break
+    if (this.#tagger) {
+      const spanData = oaiSpan.spanData
+      switch (spanData?.type) {
+        case 'response':
+          this.#setResponseAttributes(ddSpan, oaiSpan)
+          this.#updateTraceInfoOutput(oaiSpan)
+          break
+        case 'function':
+          this.#tagger.tagTextIO(ddSpan, spanData.input ?? '', spanData.output ?? '')
+          break
+        case 'handoff':
+          this.#tagger.tagTextIO(ddSpan, spanData.from_agent ?? '', spanData.to_agent ?? '')
+          break
+        case 'agent':
+          this.#setAgentAttributes(ddSpan, oaiSpan)
+          break
+        case 'custom':
+          if (spanData.data && typeof spanData.data === 'object') {
+            this.#tagger.tagMetadata(ddSpan, spanData.data)
+          }
+          break
+      }
     }
 
     ddSpan.finish()
@@ -219,18 +231,18 @@ class OpenAIAgentsIntegration {
     // agents-core's withTrace skips Trace.end() when its callback throws, so a
     // parentless span that errors is our last chance to finalize the workflow.
     if (oaiSpan.parentId == null) {
-      this._completeWorkflowSpan(oaiSpan.traceId, oaiSpan)
+      this.#completeWorkflowSpan(oaiSpan.traceId, oaiSpan)
     }
-    this._oaiToDdSpan.delete(spanId)
+    this.#oaiToDdSpan.delete(spanId)
   }
 
   // ── Per-type attribute setters ──────────────────────────────────────────────
 
-  _setResponseAttributes (ddSpan, oaiSpan) {
+  #setResponseAttributes (ddSpan, oaiSpan) {
     const response = oaiSpan.spanData?._response
     const input = oaiSpan.spanData?._input
     if (response?.model) {
-      this._tagger.tagModelName(ddSpan, response.model)
+      this.#tagger.tagModelName(ddSpan, response.model)
     }
 
     // Override the LLMObs span name to `{parent_agent_name} (LLM)` only when
@@ -238,31 +250,31 @@ class OpenAIAgentsIntegration {
     // see `_llmobs_set_response_attributes` in dd-trace-py). For bare
     // `withResponseSpan` calls outside a `Runner.run()` flow the default
     // name (`openai_agents.response`) stays.
-    const parentAgentName = this._llmSpanParentAgentName(oaiSpan)
+    const parentAgentName = this.#llmSpanParentAgentName(oaiSpan)
     if (parentAgentName) {
-      this._tagger.setName(ddSpan, `${parentAgentName} (LLM)`)
+      this.#tagger.setName(ddSpan, `${parentAgentName} (LLM)`)
     }
 
     // Always tag LLM I/O so the LLMObs event shape is consistent across
     // happy/error paths. The extract* helpers emit placeholder messages
     // when their source is absent.
     const inputMessages = extractInputMessages(input, response?.instructions)
-    this._tagger.tagLLMIO(ddSpan, inputMessages, extractOutputMessages(response))
+    this.#tagger.tagLLMIO(ddSpan, inputMessages, extractOutputMessages(response))
 
     // Cache messages for the workflow span's trace-level input (Python
     // parity: last message of the first response under the top-level agent).
-    // Avoids re-running extractInputMessages in _setTraceAttributes.
-    const info = this._traceInfo.get(oaiSpan.traceId)
+    // Avoids re-running extractInputMessages in #setTraceAttributes.
+    const info = this.#traceInfo.get(oaiSpan.traceId)
     if (info && info.inputOaiSpan === oaiSpan) {
       info.inputMessages = inputMessages
     }
 
     if (response) {
       const metrics = extractMetrics(response)
-      if (metrics) this._tagger.tagMetrics(ddSpan, metrics)
+      if (metrics) this.#tagger.tagMetrics(ddSpan, metrics)
 
       const metadata = extractMetadata(response)
-      if (metadata) this._tagger.tagMetadata(ddSpan, metadata)
+      if (metadata) this.#tagger.tagMetadata(ddSpan, metadata)
     }
   }
 
@@ -274,14 +286,14 @@ class OpenAIAgentsIntegration {
    * @param {object} oaiSpan
    * @returns {string | undefined}
    */
-  _llmSpanParentAgentName (oaiSpan) {
-    const traceInfo = this._traceInfo.get(oaiSpan.traceId)
+  #llmSpanParentAgentName (oaiSpan) {
+    const traceInfo = this.#traceInfo.get(oaiSpan.traceId)
     if (!traceInfo?.currentTopLevelAgentSpanId) return
     if (oaiSpan.parentId !== traceInfo.currentTopLevelAgentSpanId) return
     return traceInfo.currentTopLevelAgentName
   }
 
-  _setAgentAttributes (ddSpan, oaiSpan) {
+  #setAgentAttributes (ddSpan, oaiSpan) {
     const spanData = oaiSpan.spanData
     let metadata
     if (Array.isArray(spanData?.handoffs) && spanData.handoffs.length > 0) {
@@ -295,33 +307,33 @@ class OpenAIAgentsIntegration {
       metadata ??= {}
       metadata.output_type = spanData.output_type
     }
-    if (metadata) this._tagger.tagMetadata(ddSpan, metadata)
+    if (metadata) this.#tagger.tagMetadata(ddSpan, metadata)
   }
 
-  _setTraceAttributes (ddSpan, traceId) {
-    const info = this._traceInfo.get(traceId)
+  #setTraceAttributes (ddSpan, traceId) {
+    const info = this.#traceInfo.get(traceId)
     if (!info) return
 
     // Workflow-level input is the last input message of the first response
     // span under the top-level agent; output is `response.output_text` of
     // the last response span. Matches dd-trace-py's
     // `OaiSpanAdapter.llmobs_trace_input` / `response_output_text`. The
-    // input messages were cached during _setResponseAttributes.
+    // input messages were cached during #setResponseAttributes.
     const lastInputMessage = info.inputMessages?.at(-1)
     const inputValue = typeof lastInputMessage?.content === 'string' ? lastInputMessage.content : ''
     const outputValue = info.outputOaiSpan?.spanData?._response?.output_text ?? ''
 
-    this._tagger.tagTextIO(ddSpan, inputValue, outputValue)
+    this.#tagger.tagTextIO(ddSpan, inputValue, outputValue)
 
     if (info.metadata && Object.keys(info.metadata).length > 0) {
-      this._tagger.tagMetadata(ddSpan, info.metadata)
+      this.#tagger.tagMetadata(ddSpan, info.metadata)
     }
   }
 
   // ── Trace-info reconstruction (Python parity) ───────────────────────────────
 
-  _updateTraceInfoInput (oaiSpan, spanName) {
-    const info = this._traceInfo.get(oaiSpan.traceId)
+  #updateTraceInfoInput (oaiSpan, spanName) {
+    const info = this.#traceInfo.get(oaiSpan.traceId)
     if (!info) return
 
     const parentId = oaiSpan.parentId
@@ -347,8 +359,8 @@ class OpenAIAgentsIntegration {
     }
   }
 
-  _updateTraceInfoOutput (oaiSpan) {
-    const info = this._traceInfo.get(oaiSpan.traceId)
+  #updateTraceInfoOutput (oaiSpan) {
+    const info = this.#traceInfo.get(oaiSpan.traceId)
     if (!info) return
 
     if (
@@ -362,51 +374,17 @@ class OpenAIAgentsIntegration {
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  _resolveParent (oaiSpan) {
+  #resolveParent (oaiSpan) {
     const parentId = oaiSpan.parentId
     const traceId = oaiSpan.traceId
     if (parentId) {
-      const parent = this._oaiToDdSpan.get(parentId)
+      const parent = this.#oaiToDdSpan.get(parentId)
       if (parent) return parent
     }
     if (traceId) {
-      const root = this._oaiToDdSpan.get(traceId)
+      const root = this.#oaiToDdSpan.get(traceId)
       if (root) return root
     }
-  }
-
-  _deriveSpanName (oaiSpan) {
-    const spanData = oaiSpan.spanData
-    if (spanData?.type === 'handoff') {
-      const toAgent = spanData.to_agent || ''
-      if (toAgent) return `transfer_to_${toAgent.replaceAll(' ', '_').toLowerCase()}`
-    }
-    if (spanData?.name) return spanData.name
-    return spanData?.type ? `openai_agents.${spanData.type}` : 'openai_agents.request'
-  }
-
-  // agents-core's `error` is a plain `{ message, data }` object, not a JS
-  // Error — there's no constructor to name and no stack. We tag a stable
-  // type constant and stringify `data` into the message so the LLMObs error
-  // shape stays consistent with other integrations.
-  _applyError (ddSpan, oaiSpan) {
-    const err = oaiSpan.error
-    if (!err) return
-
-    ddSpan.setTag('error', true)
-
-    let errorMessage = err.message || 'Error'
-    if (err.data) {
-      try {
-        errorMessage = JSON.stringify(err.data)
-      } catch {
-        // circular / non-serializable — fall back to the raw message
-      }
-    }
-
-    ddSpan.setTag('error.type', AGENTS_ERROR_TYPE)
-    ddSpan.setTag('error.message', errorMessage)
-    ddSpan.setTag('error.stack', err.stack || '')
   }
 }
 
