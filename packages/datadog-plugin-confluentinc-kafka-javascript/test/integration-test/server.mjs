@@ -10,16 +10,16 @@ const kafka = new Kafka({
 })
 
 const sendMessage = async (topic, messages) => {
-  try {
-    const producer = kafka.producer()
-    await producer.connect()
-    await producer.send({
-      topic,
-      messages,
-    })
-    await producer.disconnect()
-  } catch (error) {
-    // pass
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const producer = kafka.producer()
+      await producer.connect()
+      await producer.send({ topic, messages })
+      await producer.disconnect()
+      return
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
   }
 }
 
