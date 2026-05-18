@@ -499,6 +499,13 @@ addHook({
     // Counts how many original tests per pure-root file still need their final attempt.
     // Hits zero when the last test's lifecycle completes, triggering the suite finish.
     const rootPendingCountByFile = new Map()
+    const rootFinalizationPendingCountByFile = new Map()
+    const rootFallbackPendingFiles = new Set()
+    const rootFinalizationPendingTests = new WeakSet()
+    let pendingRootFinalizations = 0
+    let hasEnded = false
+    let hasFinishedRun = false
+    let endRunner
 
     function updateRootTestForFinalAttempt (test) {
       if (!test._retriedTest) return
@@ -510,6 +517,45 @@ addHook({
       if (retriedTestIndex !== -1) {
         rootTests[retriedTestIndex] = test
       }
+    }
+
+    function finishRunIfReady () {
+      if (hasFinishedRun) return
+      if (hasEnded && pendingRootFinalizations === 0) {
+        hasFinishedRun = true
+        onEnd.call(endRunner)
+      }
+    }
+
+    function incrementPendingRootFinalization (test) {
+      if (!rootPendingCountByFile.has(test.file) || rootFinalizationPendingTests.has(test)) return
+
+      rootFinalizationPendingTests.add(test)
+      pendingRootFinalizations++
+      rootFinalizationPendingCountByFile.set(
+        test.file,
+        (rootFinalizationPendingCountByFile.get(test.file) || 0) + 1
+      )
+    }
+
+    function decrementPendingRootFinalization (test) {
+      if (!rootFinalizationPendingTests.has(test)) return
+
+      rootFinalizationPendingTests.delete(test)
+      pendingRootFinalizations--
+
+      const remaining = rootFinalizationPendingCountByFile.get(test.file) - 1
+      if (remaining > 0) {
+        rootFinalizationPendingCountByFile.set(test.file, remaining)
+      } else {
+        rootFinalizationPendingCountByFile.delete(test.file)
+      }
+
+      if (!rootFinalizationPendingCountByFile.has(test.file) && rootFallbackPendingFiles.delete(test.file)) {
+        finishRootSuiteFallbackForFile(test.file)
+      }
+
+      finishRunIfReady()
     }
 
     function finishRootSuiteForFile (file) {
@@ -539,9 +585,32 @@ addHook({
       testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
     }
 
+    function finishRootSuiteFallbackForFile (file) {
+      const ctx = testFileToSuiteCtx.get(file)
+      if (!ctx || !rootPendingCountByFile.has(file)) return
+
+      const rootTests = rootTestsByFile.get(file) || []
+      const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
+      rootPendingCountByFile.delete(file)
+      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+    }
+
+    function finishRootSuiteAfterFinalAttempt (test) {
+      if (!test._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+
+      updateRootTestForFinalAttempt(test)
+      finishRootSuiteForFile(test.file)
+    }
+
+    const onEnd = getOnEndHandler(false)
+
     this.once('start', getOnStartHandler(frameworkVersion))
 
-    this.once('end', getOnEndHandler(false))
+    this.once('end', function () {
+      hasEnded = true
+      endRunner = this
+      finishRunIfReady()
+    })
 
     // The job of this listener is to
     // initialize the suite span tag in correct order
@@ -559,10 +628,12 @@ addHook({
 
     this.on('test', getOnTestHandler(true))
 
-    this.on('test end', getOnTestEndHandler(config, function (test) {
-      if (!test._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
-      updateRootTestForFinalAttempt(test)
-      finishRootSuiteForFile(test.file)
+    this.on('test end', getOnTestEndHandler(config, {
+      onStart: incrementPendingRootFinalization,
+      onFinish: function (test) {
+        finishRootSuiteAfterFinalAttempt(test)
+        decrementPendingRootFinalization(test)
+      },
     }))
 
     this.on('retry', getOnTestRetryHandler(config))
@@ -572,9 +643,8 @@ addHook({
 
     this.on('hook end', function (hook) {
       const test = hook.ctx?.currentTest
-      if (!test?._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
-      updateRootTestForFinalAttempt(test)
-      finishRootSuiteForFile(test.file)
+      if (!test) return
+      finishRootSuiteAfterFinalAttempt(test)
     })
 
     this.on('fail', getOnFailHandler(true, config))
@@ -582,9 +652,8 @@ addHook({
     this.on('fail', function (testOrHook) {
       if (testOrHook.type !== 'hook') return
       const test = testOrHook.ctx?.currentTest
-      if (!test?._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
-      updateRootTestForFinalAttempt(test)
-      finishRootSuiteForFile(test.file)
+      if (!test) return
+      finishRootSuiteAfterFinalAttempt(test)
     })
 
     this.on('pending', getOnPendingHandler())
@@ -666,10 +735,12 @@ addHook({
             testSuiteStartCh.runStores(ctx, () => {})
             testSuiteFinishCh.publish({ status: 'skip', ...ctx.currentStore }, () => {})
           } else if (rootPendingCountByFile.has(test.file)) {
-            const rootTests = rootTestsByFile.get(test.file) || []
-            const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
-            rootPendingCountByFile.delete(test.file)
-            testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+            if (rootFinalizationPendingCountByFile.has(test.file)) {
+              rootFallbackPendingFiles.add(test.file)
+              continue
+            }
+
+            finishRootSuiteFallbackForFile(test.file)
           }
         }
         return

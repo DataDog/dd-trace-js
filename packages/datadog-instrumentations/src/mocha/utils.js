@@ -503,7 +503,7 @@ function getTestFinishInfo (test, status, config, error) {
   }
 }
 
-function getOnTestEndHandler (config, onFinalAttempt) {
+function getOnTestEndHandler (config, finalAttemptHandlers) {
   return async function (test) {
     if (test._ddShouldSkipEfdRetry) {
       return
@@ -532,6 +532,10 @@ function getOnTestEndHandler (config, onFinalAttempt) {
       }
     }
 
+    if (isFinalAttempt) {
+      finalAttemptHandlers?.onStart?.(test)
+    }
+
     // After finishing it might take a bit for the snapshot to be handled.
     // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
     if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
@@ -553,7 +557,7 @@ function getOnTestEndHandler (config, onFinalAttempt) {
     }
 
     if (isFinalAttempt) {
-      onFinalAttempt?.(test)
+      finalAttemptHandlers?.onFinish?.(test)
     }
   }
 }
