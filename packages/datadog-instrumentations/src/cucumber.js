@@ -15,6 +15,7 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
+  getMaxEfdRetryCount,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
   logAttemptToFixTestExecution,
@@ -51,6 +52,8 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
+const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
@@ -67,7 +70,7 @@ const atrStatusesByScenarioKey = new Map()
 const numRetriesByPickleId = new Map()
 const efdRetryCountByPickleId = new Map()
 const efdSlowAbortedPickleIds = new Set()
-const testCaseStartedTimesById = new Map()
+const finishedParallelSuites = new Set()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 const attemptToFixTestsByTestFullname = new Map()
@@ -115,6 +118,68 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
     return 'skip'
   }
   return 'pass'
+}
+
+function getConfiguredEfdRetryCount () {
+  const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  return maxSlowTestRetryCount || earlyFlakeDetectionNumRetries
+}
+
+function publishWorkerEfdRetryCount (pickle, retryCount) {
+  if (typeof process.send !== 'function') return
+
+  try {
+    process.send({
+      [DD_EFD_RETRY_COUNT_MESSAGE]: {
+        pickleId: pickle.id,
+        retryCount,
+        testFileAbsolutePath: pickle.uri,
+        testName: pickle.name,
+      },
+    })
+  } catch {
+    // ignore IPC errors
+  }
+}
+
+function finishParallelSuiteIfDone (testFileAbsolutePath) {
+  const finished = pickleResultByFile[testFileAbsolutePath]
+  const expectedPickles = pickleByFile[testFileAbsolutePath]
+
+  if (!finished || !expectedPickles || finished.length !== expectedPickles.length) return
+  if (finishedParallelSuites.has(testFileAbsolutePath)) return
+
+  finishedParallelSuites.add(testFileAbsolutePath)
+  testSuiteFinishCh.publish({
+    status: getSuiteStatusFromTestStatuses(finished),
+    testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
+  })
+}
+
+function maybeRecordFinalParallelEfdStatus ({ pickleId, testFileAbsolutePath, testFullname }) {
+  const efdRetryCount = efdRetryCountByPickleId.get(pickleId)
+  const testStatuses = newTestsByTestFullname.get(testFullname)
+  const finished = pickleResultByFile[testFileAbsolutePath]
+
+  if (efdRetryCount === undefined || !testStatuses || !finished) return
+  if (testStatuses.length !== efdRetryCount + 1) return
+
+  finished.push(getTestStatusFromRetries(testStatuses))
+  newTestsByTestFullname.delete(testFullname)
+  finishParallelSuiteIfDone(testFileAbsolutePath)
+}
+
+function handleEfdRetryCountMessage (message) {
+  const { pickleId, retryCount, testFileAbsolutePath, testName } = message
+
+  if (!pickleId || typeof retryCount !== 'number' || !testFileAbsolutePath || !testName) return
+
+  efdRetryCountByPickleId.set(pickleId, retryCount)
+  maybeRecordFinalParallelEfdStatus({
+    pickleId,
+    testFileAbsolutePath,
+    testFullname: `${testFileAbsolutePath}:${testName}`,
+  })
 }
 
 function getStatusFromResult (result) {
@@ -720,7 +785,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     attemptToFixTestsByTestFullname.clear()
     efdRetryCountByPickleId.clear()
     efdSlowAbortedPickleIds.clear()
-    testCaseStartedTimesById.clear()
+    finishedParallelSuites.clear()
     newTestsByTestFullname.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
@@ -875,6 +940,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
           efdSlowAbortedPickleIds.add(pickle.id)
         }
       }
+      if (isWorker) {
+        publishWorkerEfdRetryCount(pickle, efdRetryCount)
+      }
       for (let retryIndex = 0; retryIndex < efdRetryCount; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
         // eslint-disable-next-line no-await-in-loop
@@ -973,6 +1041,10 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         return
       }
     }
+    if (message[DD_EFD_RETRY_COUNT_MESSAGE]) {
+      handleEfdRetryCountMessage(message[DD_EFD_RETRY_COUNT_MESSAGE])
+      return
+    }
 
     const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
@@ -989,12 +1061,13 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         return parseWorkerMessageFunction.apply(this, arguments)
       }
     }
+    if (parsed[DD_EFD_RETRY_COUNT_MESSAGE]) {
+      handleEfdRetryCountMessage(parsed[DD_EFD_RETRY_COUNT_MESSAGE])
+      return
+    }
     let pickle
 
     if (parsed.testCaseStarted) {
-      if (parsed.testCaseStarted.id) {
-        testCaseStartedTimesById.set(parsed.testCaseStarted.id, performance.now())
-      }
       if (isNewVersion) {
         pickle = this.inProgress[worker.id].pickle
       } else {
@@ -1016,10 +1089,6 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
 
     // after calling `parseWorkerMessageFunction`, the test status can already be read
     if (parsed.testCaseFinished) {
-      const testCaseStartedId = parsed.testCaseFinished.testCaseStartedId
-      const testCaseStartedAt = testCaseStartedTimesById.get(testCaseStartedId)
-      testCaseStartedTimesById.delete(testCaseStartedId)
-
       let worstTestStepResult
       if (isNewVersion && eventDataCollector) {
         pickle = this.inProgress[worker.id].pickle
@@ -1052,21 +1121,15 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         }
         let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
         if (efdRetryCount === undefined) {
-          const firstExecutionDurationMs = testCaseStartedAt === undefined ? 0 : performance.now() - testCaseStartedAt
           efdRetryCount = status === 'skip'
             ? 0
-            : getEfdRetryCount(firstExecutionDurationMs, earlyFlakeDetectionSlowTestRetries)
+            : getConfiguredEfdRetryCount()
           efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
           if (efdRetryCount === 0 && status !== 'skip') {
             efdSlowAbortedPickleIds.add(pickle.id)
           }
         }
-        // We have finished all retries
-        if (testStatuses.length === efdRetryCount + 1) {
-          const newTestFinalStatus = getTestStatusFromRetries(testStatuses)
-          // we only push to `finished` if the retries have finished
-          finished.push(newTestFinalStatus)
-        }
+        maybeRecordFinalParallelEfdStatus({ pickleId: pickle.id, testFileAbsolutePath, testFullname })
       } else if (
         isTestManagementTestsEnabled &&
         getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
@@ -1090,12 +1153,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         finished.push(status)
       }
 
-      if (finished.length === pickleByFile[testFileAbsolutePath].length) {
-        testSuiteFinishCh.publish({
-          status: getSuiteStatusFromTestStatuses(finished),
-          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
-        })
-      }
+      finishParallelSuiteIfDone(testFileAbsolutePath)
     }
 
     return parseWorkerResponse
