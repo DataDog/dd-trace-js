@@ -57,14 +57,16 @@ describe('Plugin', () => {
           }, (err, res) => {
             if (err) return done(err)
 
-            agent.load('aws-sdk').then(done, done)
+            agent.load('aws-sdk').then(loaded => {
+              tracer = loaded
+              done()
+            }, done)
           })
-          tracer = require('../../dd-trace')
         })
 
         after(done => {
           lambda.deleteFunction({ FunctionName: 'ironmaiden' }, err => {
-            agent.close({ ritmReset: false }).then(() => done(err), done)
+            agent.close().then(() => done(err), done)
           })
         })
 

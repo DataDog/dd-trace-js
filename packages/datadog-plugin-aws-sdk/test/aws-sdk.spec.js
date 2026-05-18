@@ -51,7 +51,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -119,7 +119,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -298,7 +298,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configured', (done) => {
@@ -340,7 +340,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should allow disabling a specific service', (done) => {
@@ -404,7 +404,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {
@@ -431,7 +431,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {

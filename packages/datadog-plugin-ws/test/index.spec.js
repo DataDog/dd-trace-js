@@ -71,7 +71,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
         })
 
         it('should not crash when sending on a socket without spanContext', async () => {
@@ -139,7 +139,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
         })
 
         it('should not retain the connection span during socket setup', async () => {
@@ -502,7 +502,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
         })
 
         it('should work with custom service configuration', () => {
@@ -619,7 +619,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
         })
 
         it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
@@ -674,7 +674,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
         })
 
         it('should not inherit sampling decisions from root trace', () => {
@@ -781,7 +781,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
         })
 
         it('should add span pointers to producer spans', async () => {

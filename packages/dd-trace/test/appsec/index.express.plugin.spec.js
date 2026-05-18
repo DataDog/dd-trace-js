@@ -69,7 +69,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -219,7 +219,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -297,7 +297,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

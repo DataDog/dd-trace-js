@@ -28,7 +28,7 @@ describe('Plugin', () => {
       after(async () => {
         delete process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
         delete process.env.AWS_LAMBDA_FUNCTION_NAME
-        await agent.close({ ritmReset: false })
+        await agent.close()
       })
 
       describe('DynamoDB-Serverless', () => {

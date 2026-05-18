@@ -57,7 +57,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await resetLocalStackS3()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withPeerService(
