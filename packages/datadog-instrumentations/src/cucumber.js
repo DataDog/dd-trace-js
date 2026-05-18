@@ -20,6 +20,7 @@ const {
   collectAttemptToFixExecutionsFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
@@ -704,18 +705,31 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
     isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
 
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+      skippableSuitesResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled,
+      isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled,
+      getKnownTests: () => getChannelPromise(knownTestsCh),
+      getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+      getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+    })
+
     if (isKnownTestsEnabled) {
-      const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (knownTestsResponse.err) {
+      const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
+      if (currentKnownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
       } else {
-        knownTests = knownTestsResponse.knownTests
+        knownTests = currentKnownTestsResponse.knownTests
       }
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableResponse = await getChannelPromise(skippableSuitesCh)
+      const skippableResponse = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
@@ -759,11 +773,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isTestManagementTestsEnabled) {
-      const testManagementTestsResponse = await getChannelPromise(testManagementTestsCh)
-      if (testManagementTestsResponse.err) {
+      const currentTestManagementTestsResponse =
+        testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
+      if (currentTestManagementTestsResponse.err) {
         isTestManagementTestsEnabled = false
       } else {
-        testManagementTests = testManagementTestsResponse.testManagementTests
+        testManagementTests = currentTestManagementTestsResponse.testManagementTests
       }
     }
 
