@@ -141,6 +141,7 @@ class CucumberPlugin extends CiPlugin {
           'cucumber'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -308,6 +309,7 @@ class CucumberPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      earlyFlakeAbortReason,
       finalStatus,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
@@ -316,6 +318,9 @@ class CucumberPlugin extends CiPlugin {
 
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
 
       if (isNew) {

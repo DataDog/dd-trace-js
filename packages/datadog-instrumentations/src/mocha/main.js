@@ -326,6 +326,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+    config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -369,17 +370,17 @@ addHook({
 }, (Mocha, frameworkVersion) => {
   warnDeprecatedMochaVersion(frameworkVersion)
 
-  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+  shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
     this.options.delay = true
 
-    const runner = run.apply(this, arguments)
+    const runner = run.apply(this, args)
 
     // eslint-disable-next-line unicorn/no-array-for-each
     this.files.forEach((path) => {
@@ -426,11 +427,11 @@ addHook({
   file: 'lib/cli/run-helpers.js',
 }, (run) => {
   // `runMocha` is an async function
-  shimmer.wrap(run, 'runMocha', runMocha => function () {
+  shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return runMocha.apply(this, arguments)
+      return runMocha.apply(this, args)
     }
-    const mocha = arguments[0]
+    const mocha = args[0]
 
     /**
      * This attaches `run` to the global context, which we'll call after
@@ -444,7 +445,7 @@ addHook({
       mocha.options.delay = true
     }
 
-    return runMocha.apply(this, arguments)
+    return runMocha.apply(this, args)
   })
   return run
 })
@@ -462,12 +463,16 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
-  shimmer.wrap(Runner.prototype, 'run', run => function () {
+  shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+    // Root-level tests (direct children of root, no describe wrapper) keyed by file.
+    // Populated during the root 'suite' event so the normal finish path can include them
+    // in mixed-file status calculation.
+    const rootTestsByFile = new Map()
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
@@ -488,6 +493,30 @@ addHook({
 
     this.on('suite', function (suite) {
       if (suite.root || !suite.tests.length) {
+        // This branch can be triggered when we have top level it(...) inside test files.
+        // In that case, they all (even if they are from different files) are going to be
+        // children of the root suite.
+        // Note: We could have suites that contain top level it(...) and also it(...) nested
+        // inside describe(...) ("mixed case"). Duplication is avoided by the context guard
+        // below. Since 'suite' fires for root first, in the mixed case the ctx is created
+        // here and the describe-based handler finds it already set.
+        if (suite.root && suite.tests.length > 0) {
+          const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
+          for (const file of files) {
+            rootTestsByFile.set(file, suite.tests.filter(t => t.file === file))
+            if (testFileToSuiteCtx.get(file)) continue
+            const isUnskippable = unskippableSuites.includes(file)
+            isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(file, process.cwd()))
+            const ctx = {
+              testSuiteAbsolutePath: file,
+              isUnskippable,
+              isForcedToRun,
+              itrCorrelationId,
+            }
+            testFileToSuiteCtx.set(file, ctx)
+            testSuiteStartCh.runStores(ctx, () => {})
+          }
+        }
         return
       }
       let ctx = testFileToSuiteCtx.get(suite.file)
@@ -507,6 +536,44 @@ addHook({
 
     this.on('suite end', function (suite) {
       if (suite.root) {
+        // Symmetric to the suite start fix
+        const fileToTests = new Map()
+        for (const test of suite.tests) {
+          if (!test.file) continue
+          if (!fileToTests.has(test.file)) fileToTests.set(test.file, [])
+          fileToTests.get(test.file).push(test)
+        }
+        for (const [file, tests] of fileToTests) {
+          // Mixed case: if a file appears in suitesByTestFile (pre-populated before the run),
+          // its numSuitesByTestFile counter hits zero when its last describe-based suite ends
+          // and the normal path below fires testSuiteFinishCh. Since root is last when
+          // 'suite end' fires, any such file has already been handled — skipping it here
+          // avoids duplication.
+          if (suitesByTestFile[file]) continue
+          let status = 'pass'
+          if (tests.every(test => test.isPending())) {
+            status = 'skip'
+          } else {
+            for (const test of tests) {
+              if (test.state === 'failed' || test.timedOut) {
+                status = 'fail'
+                break
+              }
+            }
+          }
+          if (global.__coverage__) {
+            const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+            testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+            mergeCoverage(global.__coverage__, originalCoverageMap)
+            resetCoverage(global.__coverage__)
+          }
+          const ctx = testFileToSuiteCtx.get(file)
+          if (ctx) {
+            testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+          } else {
+            log.warn('No ctx found for suite', file)
+          }
+        }
         return
       }
       const suitesInTestFile = suitesByTestFile[suite.file]
@@ -516,8 +583,9 @@ addHook({
         return
       }
 
+      const rootTests = rootTestsByFile.get(suite.file) || []
       let status = 'pass'
-      if (suitesInTestFile.every(suite => suite.pending)) {
+      if (suitesInTestFile.every(suite => suite.pending) && rootTests.every(test => test.isPending())) {
         status = 'skip'
       } else {
         // has to check every test in the test file
@@ -529,6 +597,11 @@ addHook({
             }
           })
         })
+        for (const test of rootTests) {
+          if (test.state === 'failed' || test.timedOut) {
+            status = 'fail'
+          }
+        }
       }
 
       if (global.__coverage__) {
@@ -552,7 +625,7 @@ addHook({
       }
     })
 
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   })
 
   return Runner
@@ -722,6 +795,7 @@ addHook({
       if (config.knownTests?.mocha) {
         const testSuiteKnownTests = config.knownTests.mocha[testPath] || []
         newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
+        newWorkerArgs._ddEfdSlowTestRetries = config.earlyFlakeDetectionSlowTestRetries
         newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
         newWorkerArgs._ddIsKnownTestsEnabled = true
         newWorkerArgs._ddKnownTests = {

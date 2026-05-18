@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
+const getConfig = require('../../src/config')
 const DatadogSpan = require('../../src/opentracing/span')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
@@ -36,7 +37,8 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
 
   describe('sample', () => {
     it('should provide the context when invoking _getPriorityFromTags', () => {
-      const span = new DatadogSpan({}, {}, prioritySampler, {
+      const tracer = { _config: getConfig() }
+      const span = new DatadogSpan(tracer, {}, prioritySampler, {
         operationName: 'operation',
       })
 

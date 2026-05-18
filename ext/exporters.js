@@ -10,4 +10,5 @@ module.exports = {
   MOCHA_WORKER: 'mocha_worker',
   PLAYWRIGHT_WORKER: 'playwright_worker',
   VITEST_WORKER: 'vitest_worker',
+  ELECTRON: 'electron',
 }

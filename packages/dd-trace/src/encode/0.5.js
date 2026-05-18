@@ -1,17 +1,18 @@
 'use strict'
 
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const { AgentEncoder: BaseEncoder } = require('./0.4')
+const { normalizeSpan } = require('./tags-processors')
+const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
 
 function formatSpan (span) {
-  span = normalizeSpan(truncateSpan(span, false))
-  // ensure span events are encoded as tags
+  span = normalizeSpan(span)
+  // v0.5 has no native span_events slot; always serialize as a meta tag.
   if (span.span_events) {
-    span.meta.events = JSON.stringify(span.span_events)
-    delete span.span_events
+    span.meta.events = stringifySpanEvents(span.span_events)
+    // `= undefined` over `delete` to keep the span's hidden class.
+    span.span_events = undefined
   }
   return span
 }
@@ -45,22 +46,58 @@ class AgentEncoder extends BaseEncoder {
       this._encodeId(bytes, span.trace_id)
       this._encodeId(bytes, span.span_id)
       this._encodeId(bytes, span.parent_id)
-      this._encodeLong(bytes, span.start || 0)
-      this._encodeLong(bytes, span.duration || 0)
-      this._encodeInteger(bytes, span.error)
+      this._encodeIntOrFloat(bytes, span.start || 0)
+      this._encodeIntOrFloat(bytes, span.duration || 0)
+      this._encodeIntOrFloat(bytes, span.error)
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
     }
   }
 
+  // Override the inherited 0.4 `_encodeMap` so the v0.5 wire emits each numeric
+  // value via `_encodeIntOrFloat` (compact unsigned/signed int when integer,
+  // float64 otherwise) instead of always float64. The 0.4 base method stays on
+  // float64 because the CI-visibility encoders inherit it and target a
+  // different intake.
+  _encodeMap (bytes, value) {
+    const offset = bytes.length
+    bytes.reserve(5)
+    bytes.buffer[offset] = 0xDF
+
+    let count = 0
+    for (const key of Object.keys(value)) {
+      const entryValue = value[key]
+      if (typeof entryValue === 'string') {
+        this._encodeString(bytes, key)
+        this._encodeString(bytes, entryValue)
+        count++
+      } else if (typeof entryValue === 'number') {
+        this._encodeString(bytes, key)
+        this._encodeIntOrFloat(bytes, entryValue)
+        count++
+      }
+    }
+
+    const target = bytes.buffer
+    target[offset + 1] = count >>> 24
+    target[offset + 2] = count >>> 16
+    target[offset + 3] = count >>> 8
+    target[offset + 4] = count
+  }
+
   _encodeString (bytes, value = '') {
-    this._cacheString(value)
-    this._encodeInteger(bytes, this._stringMap[value])
+    let index = this._stringMap[value]
+    if (index === undefined) {
+      index = this._stringCount++
+      this._stringMap[value] = index
+      this._stringBytes.write(value)
+    }
+    this._encodeInteger(bytes, index)
   }
 
   _cacheString (value) {
-    if (!(value in this._stringMap)) {
+    if (this._stringMap[value] === undefined) {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
     }

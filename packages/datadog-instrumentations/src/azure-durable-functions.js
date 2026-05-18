@@ -38,14 +38,14 @@ function entityWrapper (method) {
 }
 
 function entityHandler (handler, entityName) {
-  return function () {
-    if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, arguments)
+  return function (...args) {
+    if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
-    const entityContext = arguments[0]
+    const entityContext = args[0]
     return azureDurableFunctionsChannel.traceSync(
       handler,
       { trigger: 'Entity', functionName: entityName, operationName: entityContext?.df?.operationName },
-      this, ...arguments)
+      this, ...args)
   }
 }
 
@@ -55,19 +55,19 @@ function activityHandler (method) {
       const isAsync =
         handler && handler.constructor && handler.constructor.name === 'AsyncFunction'
 
-      return function () {
-        if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, arguments)
+      return function (...args) {
+        if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
         // use tracePromise if this is an async handler. otherwise, use traceSync
         return isAsync
           ? azureDurableFunctionsChannel.tracePromise(
             handler,
             { trigger: 'Activity', functionName: activityName },
-            this, ...arguments)
+            this, ...args)
           : azureDurableFunctionsChannel.traceSync(
             handler,
             { trigger: 'Activity', functionName: activityName },
-            this, ...arguments)
+            this, ...args)
       }
     })
     return method.apply(this, arguments)

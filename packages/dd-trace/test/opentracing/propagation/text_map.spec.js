@@ -10,12 +10,16 @@ const { channel } = require('dc-polyfill')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 const { getConfigFresh } = require('../../helpers/config')
+const { DD_MAJOR } = require('../../../../../version')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+
+// v5 spells single-header B3 propagation as `'b3 single header'`; v6 reuses `'b3'` for it.
+const B3_SINGLE_STYLE = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -31,7 +35,7 @@ describe('TextMapPropagator', () => {
 
   const createContext = (params = {}) => {
     const trace = { started: [], finished: [], tags: {} }
-    const spanContext = new SpanContext({
+    return new SpanContext({
       traceId: id('123', 10),
       spanId: id('456', 10),
       isRemote: params.isRemote === undefined ? true : params.isRemote,
@@ -42,8 +46,6 @@ describe('TextMapPropagator', () => {
         ...params.trace,
       },
     })
-
-    return spanContext
   }
 
   beforeEach(() => {
@@ -327,7 +329,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3']
+      config.tracePropagationStyle.inject = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -354,7 +356,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3']
+      config.tracePropagationStyle.inject = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -373,7 +375,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3']
+      config.tracePropagationStyle.inject = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -422,6 +424,73 @@ describe('TextMapPropagator', () => {
 
       assert.ok(!('x-b3-traceid' in carrier))
     })
+
+    it(`should inject the b3 single header when style is "${B3_SINGLE_STYLE}"`, () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456'),
+        sampling: { priority: USER_KEEP },
+      })
+
+      config.tracePropagationStyle.inject = [B3_SINGLE_STYLE]
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+      assert.ok(!('x-b3-traceid' in carrier))
+    })
+
+    if (DD_MAJOR >= 6) {
+      it('should treat inject:["b3"] as the single-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
+
+      it('should treat inject:["b3multi"] as the multi-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3multi']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier['x-b3-spanid'], '0000000000000456')
+        assert.ok(!('b3' in carrier))
+      })
+
+      it('should treat inject:["b3 single header"] as the single-header form on v6', () => {
+        const carrier = {}
+        const spanContext = createContext({
+          traceId: id('0000000000000123'),
+          spanId: id('0000000000000456'),
+          sampling: { priority: USER_KEEP },
+        })
+
+        config.tracePropagationStyle.inject = ['b3 single header']
+
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
+    }
 
     it('should skip injection of traceparent header without the feature flag', () => {
       const carrier = {}
@@ -1357,7 +1426,10 @@ describe('TextMapPropagator', () => {
       })
     })
 
-    describe('with B3 propagation from DD_TRACE_PROPAGATION_STYLE', () => {
+    // v6 routes `'b3'` to the single-header path regardless of source, so the v5-only
+    // dispatch-by-source distinction tested below has nothing left to assert on v6.
+    const describeOrSkip = DD_MAJOR < 6 ? describe : describe.skip
+    describeOrSkip('with B3 propagation from DD_TRACE_PROPAGATION_STYLE', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3']
         config.getOrigin = sinon.stub().withArgs('tracePropagationStyle.extract').returns('env_var')
@@ -1429,7 +1501,7 @@ describe('TextMapPropagator', () => {
 
     describe('with B3 propagation as a single header', () => {
       beforeEach(() => {
-        config.tracePropagationStyle.extract = ['b3 single header']
+        config.tracePropagationStyle.extract = [B3_SINGLE_STYLE]
 
         delete textMap['x-datadog-trace-id']
         delete textMap['x-datadog-parent-id']
@@ -1574,7 +1646,7 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(log.debug)
         assert.strictEqual(
           log.debug.firstCall.args[0](),
-          `Extract from carrier (b3 single header): {"b3":"${textMap.b3}"}.`
+          `Extract from carrier (${B3_SINGLE_STYLE}): {"b3":"${textMap.b3}"}.`
         )
       })
     })
@@ -1620,6 +1692,84 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
         assert.ok('_dd.p.tid' in spanContext._trace.tags)
         assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '1111aaaa2222bbbb')
+      })
+
+      it('should derive sampled bit from base-16 trace-flags per W3C §3.2.2.5', () => {
+        // Sampled bit is the lower-nibble parity of the byte. Pin every
+        // lower-nibble outcome plus upper nibbles that defeat base-10
+        // parseInt: 1a-1f makes it stop after the leading digit, a-f as
+        // upper nibble makes it return NaN.
+        const cases = [
+          ['00', 0], ['01', 1], ['02', 0], ['03', 1], ['04', 0], ['05', 1],
+          ['06', 0], ['07', 1], ['08', 0], ['09', 1],
+          ['0a', 0], ['0b', 1], ['0c', 0], ['0d', 1], ['0e', 0], ['0f', 1],
+          ['1a', 0], ['1c', 0], ['1e', 0], ['1f', 1],
+          ['ab', 1], ['cd', 1], ['fe', 0], ['ff', 1],
+        ]
+        config.tracePropagationStyle.extract = ['tracecontext']
+        for (const [flags, sampled] of cases) {
+          const carrier = { traceparent: `00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-${flags}` }
+          const spanContext = propagator.extract(carrier)
+          assert.strictEqual(spanContext._sampling.priority, sampled, `flags=${flags}`)
+        }
+      })
+
+      it('should round-trip origin = through tracestate ~ encoding', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = 'dd=o:foo~bar'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._trace.origin, 'foo=bar')
+
+        propagator.inject(spanContext, carrier)
+        assert.match(carrier.tracestate, /o:foo~bar/)
+      })
+
+      it('should combine array-valued tracestate per W3C §3.3.1.1 / RFC 7230 §3.2.2', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = ['vendor1=value1', 'vendor2=value2']
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._tracestate.get('vendor1'), 'value1')
+        assert.strictEqual(spanContext._tracestate.get('vendor2'), 'value2')
+      })
+
+      it('should ignore non-string members when extracting array-valued tracestate', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = [
+          Symbol('x'),
+          'dd=s:1',
+          { toString () { throw new Error('boom') } },
+        ]
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
+        assert.strictEqual(spanContext._spanId.toString(16), '5555eeee6666ffff')
+        assert.strictEqual(spanContext._sampling.priority, 1)
+        assert.strictEqual(spanContext._tracestate.get('dd'), 's:1')
+      })
+
+      it('should extract a valid context when array-valued tracestate has only non-string members', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = [Symbol('x'), 42, { toString () { throw new Error('nope') } }]
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
+        assert.strictEqual(spanContext._spanId.toString(16), '5555eeee6666ffff')
+        assert.strictEqual(spanContext._sampling.priority, 1)
+        assert.strictEqual(spanContext._tracestate.size, 0)
+      })
+
+      it('should ignore non-string traceparent values without crashing', () => {
+        config.tracePropagationStyle.extract = ['tracecontext']
+        for (const value of [['00-bad'], { foo: 'bar' }, 42, true]) {
+          assert.strictEqual(propagator.extract({ traceparent: value }), null)
+        }
       })
 
       it('should skip extracting upper bits for 64-bit trace IDs', () => {
@@ -1675,6 +1825,22 @@ describe('TextMapPropagator', () => {
         propagator.inject(spanContext, carrier)
 
         assert.match(carrier.tracestate, /p:4444eeee6666aaaa/)
+      })
+
+      it('should propagate last datadog id from _dd.parent_id when tracestate has no p entry', () => {
+        textMap['x-datadog-trace-id'] = '61185'
+        textMap['x-datadog-parent-id'] = '15'
+        textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
+        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._isRemote, true)
+        assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '000000000000000f')
+
+        propagator.inject(spanContext, carrier)
+
+        assert.match(carrier.tracestate, /dd=[^,]*p:000000000000000f/)
       })
 
       it('should fix _dd.p.dm if invalid (non-hyphenated) input is received', () => {
@@ -1786,6 +1952,45 @@ describe('TextMapPropagator', () => {
         propagator.extract(textMap)
 
         assert.deepStrictEqual(getAllBaggageItems(), {})
+      })
+
+      it('returns null without throwing when ignore mode has no matching extractors', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['tracecontext', 'datadog'] },
+        })
+        propagator = new TextMapPropagator(config)
+
+        assert.strictEqual(propagator.extract({}), null)
+      })
+
+      it('returns null without throwing when restart mode has no matching extractors', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['tracecontext', 'datadog'] },
+        })
+        propagator = new TextMapPropagator(config)
+
+        assert.strictEqual(propagator.extract({}), null)
+      })
+
+      it('falls back to the SQSD context in ignore mode when no extractors match', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = getConfigFresh({
+          tracePropagationStyle: { extract: ['tracecontext', 'datadog'] },
+        })
+        propagator = new TextMapPropagator(config)
+        const sqsdCarrier = {
+          'x-aws-sqsd-attr-_datadog': JSON.stringify({
+            'x-datadog-trace-id': '123',
+            'x-datadog-parent-id': '456',
+          }),
+        }
+
+        const extracted = propagator.extract(sqsdCarrier)
+
+        assert.strictEqual(extracted.toTraceId(), '123')
+        assert.strictEqual(extracted.toSpanId(), '456')
       })
     })
   })

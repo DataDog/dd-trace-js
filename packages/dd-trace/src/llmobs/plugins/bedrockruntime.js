@@ -24,7 +24,17 @@ const ENABLED_OPERATIONS = new Set([
 ])
 const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 
-const requestIdsToTokens = {}
+/**
+ * @typedef {{
+ *   inputTokensFromHeaders?: number,
+ *   outputTokensFromHeaders?: number,
+ *   cacheReadTokensFromHeaders?: number,
+ *   cacheWriteTokensFromHeaders?: number,
+ * }} HeaderTokens
+ */
+
+/** @type {Map<string, HeaderTokens>} */
+const pendingTokenHeaders = new Map()
 
 class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   constructor () {
@@ -34,33 +44,39 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const { response } = ctx
       const request = response.request
       const operation = request.operation
+
+      // Release the cached headers even for operations the plugin does not tag,
+      // so non-LLM Bedrock calls do not leak entries into pendingTokenHeaders.
+      const tokensFromHeaders = consumeTokenHeaders(response.$metadata?.requestId)
+
       // avoids instrumenting other non supported runtime operations
-      if (!ENABLED_OPERATIONS.has(operation)) {
-        return
-      }
+      if (!ENABLED_OPERATIONS.has(operation)) return
+
       const { modelProvider, modelName } = parseModelId(request.params.modelId)
 
       // avoids instrumenting non llm type
-      if (modelName.includes('embed')) {
-        return
-      }
+      if (modelName.includes('embed')) return
+
       const span = ctx.currentStore?.span
-      this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName })
+      this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     })
 
     this.addSub('apm:aws:response:deserialize:bedrockruntime', ({ headers }) => {
       const requestId = headers['x-amzn-requestid']
+      // No request id means no way to correlate with the :complete: event.
+      if (!requestId) return
+
       const inputTokenCount = headers['x-amzn-bedrock-input-token-count']
       const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
       const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
-      requestIdsToTokens[requestId] = {
+      pendingTokenHeaders.set(requestId, {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount),
         cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount),
         cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount),
-      }
+      })
     })
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
@@ -70,14 +86,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
   }
 
-  setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName }) {
+  setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders }) {
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
     this.#registerSpan(span, request)
 
     if (CONVERSE_OPERATIONS.has(request?.operation)) {
-      this.#tagConverseSpan({ ctx, request, span, response })
+      this.#tagConverseSpan({ ctx, request, span, response, tokensFromHeaders })
     } else {
-      this.#tagInvokeModelSpan({ ctx, request, span, response, modelProvider, modelName })
+      this.#tagInvokeModelSpan({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     }
   }
 
@@ -94,7 +110,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
   }
 
-  #tagConverseSpan ({ ctx, request, span, response }) {
+  #tagConverseSpan ({ ctx, request, span, response, tokensFromHeaders }) {
     const requestParams = extractRequestParamsConverse(request.params)
     const generation = request.operation === 'converseStream'
       ? buildConverseStreamGeneration(ctx.chunks)
@@ -105,39 +121,53 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     if (generation.finishReason) {
       this._tagger.tagMetadata(span, { stop_reason: generation.finishReason })
     }
-    this.#tagCommon({ span, requestParams, generation, response })
+    this.#tagCommon({ span, requestParams, generation, tokensFromHeaders })
   }
 
-  #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName }) {
+  #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders }) {
     const requestParams = extractRequestParams(request.params, modelProvider)
     const generation = request.operation === 'invokeModelWithResponseStream'
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
-    this.#tagCommon({ span, requestParams, generation, response })
+    this.#tagCommon({ span, requestParams, generation, tokensFromHeaders })
   }
 
-  #tagCommon ({ span, requestParams, generation, response }) {
+  #tagCommon ({ span, requestParams, generation, tokensFromHeaders }) {
     this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
       max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
     })
     this._tagger.tagLLMIO(span, requestParams.prompt, generation.messages)
     this._tagger.tagMetrics(span, extractTokens({
-      requestId: response.$metadata.requestId,
+      tokensFromHeaders,
       usage: generation.usage,
     }))
   }
 }
 
-function extractTokens ({ requestId, usage }) {
+/**
+ * @param {string | undefined} requestId
+ * @returns {HeaderTokens | undefined}
+ */
+function consumeTokenHeaders (requestId) {
+  const tokens = pendingTokenHeaders.get(requestId)
+  pendingTokenHeaders.delete(requestId)
+  return tokens
+}
+
+/**
+ * Combine response-body usage with header-derived counts, preferring the body.
+ *
+ * @param {{ tokensFromHeaders: HeaderTokens | undefined, usage: Record<string, number | undefined> }} options
+ */
+function extractTokens ({ tokensFromHeaders, usage }) {
   const {
     inputTokensFromHeaders,
     outputTokensFromHeaders,
     cacheReadTokensFromHeaders,
     cacheWriteTokensFromHeaders,
-  } = requestIdsToTokens[requestId] || {}
-  delete requestIdsToTokens[requestId]
+  } = tokensFromHeaders ?? {}
 
   const inputTokens = usage.inputTokens || inputTokensFromHeaders || 0
   const outputTokens = usage.outputTokens || outputTokensFromHeaders || 0

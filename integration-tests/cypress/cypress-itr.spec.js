@@ -10,10 +10,11 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  stopCiVisTestEnv,
   warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
   TEST_CODE_COVERAGE_ENABLED,
@@ -27,11 +28,17 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
-const RECEIVER_STOP_TIMEOUT = 20000
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
+
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
 
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
@@ -91,7 +98,7 @@ moduleTypes.forEach(({
     }
 
     this.timeout(80_000)
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
@@ -100,66 +107,23 @@ moduleTypes.forEach(({
     before(async function () {
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
+
+      const webApp = await startWebAppServer()
+      webAppBaseUrl = webApp.baseUrl
+      webAppServer = webApp.server
     })
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-
-      // Create a fresh web server for each test to avoid state issues
-      webAppServer = createWebAppServer()
-      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-        webAppServer.once('error', reject)
-        webAppServer.listen(0, 'localhost', () => {
-          webAppPort = webAppServer.address().port
-          webAppServer.removeListener('error', reject)
-          resolve()
-        })
-      }))
     })
 
-    // Cypress child processes can sometimes hang or take longer to
-    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
-    // because there are pending connections.
     afterEach(async () => {
-      if (childProcess && childProcess.pid) {
-        try {
-          childProcess.kill('SIGKILL')
-        } catch (error) {
-          // Process might already be dead - this is fine, ignore error
-        }
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
+    })
 
-        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
-        // The OS will clean up zombies, and fresh server per test prevents port conflicts
-      }
-
-      // Close web server before stopping receiver
-      if (webAppServer) {
-        await /** @type {Promise<void>} */ (new Promise((resolve) => {
-          webAppServer.close((err) => {
-            if (err) {
-              // eslint-disable-next-line no-console
-              console.error('Web server close error:', err)
-            }
-            resolve()
-          })
-        }))
-      }
-
-      // Add timeout to prevent hanging
-      const stopPromise = receiver.stop()
-      const timeoutPromise = new Promise((resolve, reject) =>
-        setTimeout(() => reject(new Error('Receiver stop timeout')), RECEIVER_STOP_TIMEOUT)
-      )
-
-      try {
-        await Promise.race([stopPromise, timeoutPromise])
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn('Receiver stop timed out:', error.message)
-      }
-
-      // Small delay to allow OS to release ports
-      await new Promise(resolve => setTimeout(resolve, 100))
+    after(async () => {
+      await stopWebAppServer(webAppServer)
     })
 
     context('intelligent test runner', () => {
@@ -179,7 +143,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
@@ -224,7 +188,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
@@ -270,6 +234,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
             assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'test')
+            assertItrSkippingEnabledTags(events, 'true')
           }, 25000)
 
         const coverageRequestPromise = receiver
@@ -292,7 +257,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
           }
@@ -347,7 +312,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/other.cy.js',
             },
           }
@@ -422,7 +387,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
           }
@@ -491,7 +456,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
           }
@@ -528,6 +493,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
             assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+            assertItrSkippingEnabledTags(events, 'true')
           }, 30000)
 
         const skippableRequestPromise = receiver
@@ -544,7 +510,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
@@ -581,7 +547,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
@@ -634,7 +600,7 @@ moduleTypes.forEach(({
             cwd: `${cwd}/ci-visibility/subproject`,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
             },
           }
         )
@@ -674,7 +640,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },

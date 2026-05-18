@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const { TOP_LEVEL_KEY } = require('../constants')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { normalizeSpan } = require('./tags-processors')
 
 // Soft limit for estimated payload size. Triggers an early flush to stay under intake request size limits.
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -14,7 +14,7 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
  * @returns {object} The formatted span
  */
 function formatSpan (span, isFirstSpan) {
-  span = normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(span)
 
   // Remove _dd.p.tid (the upper 64 bits of a 128-bit trace ID) since trace_id is truncated to lower 64 bits
   delete span.meta['_dd.p.tid']
@@ -85,7 +85,7 @@ function spanToJSON (span) {
 class AgentlessJSONEncoder {
   /**
    * @param {object} writer - Writer instance with a flush() method, called when the buffer exceeds the soft limit
-   * @param {object} [metadata={}] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
+   * @param {object} [metadata] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
    */
   constructor (writer, metadata = {}) {
     this._writer = writer

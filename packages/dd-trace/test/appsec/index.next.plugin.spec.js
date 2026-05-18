@@ -10,12 +10,13 @@ const { initApp, startServer } = require('./next.utils')
 
 describe('test suite', () => {
   withVersions('next', 'next', '>=11.1', version => {
-    if (version === '>=11.0.0 <13' && NODE_MAJOR === 24 &&
+    const realVersion = require(`../../../../versions/next@${version}`).version()
+
+    if (satisfies(realVersion, '>=12 <13') && NODE_MAJOR === 24 &&
       NODE_MINOR === 0 && NODE_PATCH === 0) {
-      return // node 24.0.0 fails, but 24.0.1 works
+      return // next 12.x fails on node 24.0.0, but 24.0.1 works
     }
 
-    const realVersion = require(`../../../../versions/next@${version}`).version()
     if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
       return
     }

@@ -15,10 +15,10 @@ const {
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
-  let agent
-  let proc
-
   withVersions('azure-functions', '@azure/functions', version => {
+    let agent
+    let proc
+
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
@@ -27,11 +27,15 @@ describe('esm', () => {
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
       './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
 
-    beforeEach(async () => {
+    before(async function () {
+      this.timeout(60000)
       agent = await new FakeAgent().start()
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+      })
     })
 
-    afterEach(async () => {
+    after(async () => {
       await stopProc(proc, { signal: 'SIGINT' })
       await agent.stop()
     })
@@ -41,11 +45,6 @@ describe('esm', () => {
     // have manually tested that all the usual import variants work, but really we ought
     // to figure out a way of automating this.
     it('is instrumented', async () => {
-      const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-      }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
-
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.strictEqual(payload.length, 1)
@@ -64,11 +63,6 @@ describe('esm', () => {
     }).timeout(60_000)
 
     it('propagates context to child http requests', async () => {
-      const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-      }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
-
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
         assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)

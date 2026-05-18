@@ -34,7 +34,7 @@ updates:
     directories:
       - "/"
       - "/docs"
-      - "/.github/actions/push_to_test_optimization"
+      - "/.github/actions/datadog-ci"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
