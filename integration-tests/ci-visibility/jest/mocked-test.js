@@ -3,6 +3,7 @@
 const assert = require('assert')
 
 jest.mock('../test/sum.js')
+jest.doMock('../test/static-mock.js')
 
 test('adds 1 + 2 to equal 3', () => {
   assert.strictEqual(1 + 2, 3)
