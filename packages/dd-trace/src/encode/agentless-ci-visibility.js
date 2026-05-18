@@ -21,6 +21,9 @@ const TEST_AND_SPAN_KEYS_LENGTH = 11
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
+// Prefix is ~1 KB in practice; `MsgpackChunk` resizes on overflow.
+const PREFIX_CHUNK_INITIAL_SIZE = 2048
+
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
   if (span.type === 'test' && span.meta && span.meta.test_session_id) {
@@ -284,7 +287,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     // diagnostic channels (`session:start` adds `test_session.name`, the async
     // `library-configuration` callback adds capability tags). Any span finished between
     // those calls would otherwise freeze the prefix with stale metadata.
-    const prefixBytes = new MsgpackChunk()
+    const prefixBytes = new MsgpackChunk(PREFIX_CHUNK_INITIAL_SIZE)
     this._encodePayloadStart(prefixBytes)
 
     const eventsOffset = this._eventsOffset
