@@ -10,4 +10,3 @@
  */
 require(process.env.PATH_TO_DDTRACE)
 require(process.env.PATH_TO_OPENAI).get()
-process.exit(0)
