@@ -113,36 +113,37 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
   #tagConverseSpan ({ ctx, request, span, response, tokensFromHeaders, isStream }) {
     const requestParams = extractRequestParamsConverse(request.params)
-    const generation = isStream
+    const textAndResponseReason = isStream
       ? extractTextAndResponseReasonConverseFromStream(ctx.chunks)
       : extractTextAndResponseReasonConverse(response)
 
     const toolDefinitions = extractConverseToolDefinitions(request.params)
     if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
-    if (generation.finishReason) {
-      this._tagger.tagMetadata(span, { stop_reason: generation.finishReason })
+    if (textAndResponseReason.finishReason) {
+      this._tagger.tagMetadata(span, { stop_reason: textAndResponseReason.finishReason })
     }
-    this.#tagCommon({ span, requestParams, generation, tokensFromHeaders })
+    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
   }
 
   #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream }) {
     const requestParams = extractRequestParams(request.params, modelProvider)
-    const generation = isStream
+    // for streamed responses, we'll use the coerced response object we formed in the stream handler
+    const textAndResponseReason = isStream
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
-    this.#tagCommon({ span, requestParams, generation, tokensFromHeaders })
+    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
   }
 
-  #tagCommon ({ span, requestParams, generation, tokensFromHeaders }) {
+  #tagCommon ({ span, requestParams, textAndResponseReason, tokensFromHeaders }) {
     this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
       max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
     })
-    this._tagger.tagLLMIO(span, requestParams.prompt, generation.messages)
+    this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.messages)
     this._tagger.tagMetrics(span, extractTokens({
       tokensFromHeaders,
-      usage: generation.usage,
+      usage: textAndResponseReason.usage,
     }))
   }
 }
