@@ -32,7 +32,6 @@ describe('Plugin', () => {
       let tracer
       let Kafka
       let Broker
-      let clusterIdAvailable
       let testTopic
 
       describe('without configuration', () => {
@@ -59,25 +58,25 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
-          clusterIdAvailable = semver.intersects(version, '>=1.13')
         })
 
         describe('producer', () => {
           it('should be instrumented', async () => {
-            const meta = {
-              'span.kind': 'producer',
-              component: 'kafkajs',
-              'messaging.destination.name': testTopic,
-              'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
-            }
-            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
-
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.send.opName,
               service: expectedSchema.send.serviceName,
-              meta,
+              meta: {
+                'span.kind': 'producer',
+                component: 'kafkajs',
+                'messaging.destination.name': testTopic,
+                'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
+                'kafka.cluster_id': testKafkaClusterId,
+                'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                'kafka.message.offset': '0',
+              },
               metrics: {
                 'kafka.batch_size': messages.length,
+                'kafka.partition': 0,
               },
               resource: testTopic,
               error: 0,
@@ -87,6 +86,46 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
 
             return expectedSpanPromise
+          })
+
+          it('should not emit flat partition/offset tags for multi-message batches', async () => {
+            const batch = [
+              { key: 'a', value: '1' },
+              { key: 'b', value: '2' },
+              { key: 'c', value: '3' },
+            ]
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              assertObjectContains(span, {
+                name: expectedSchema.send.opName,
+                meta: {
+                  'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                },
+                metrics: {
+                  'kafka.batch_size': batch.length,
+                },
+              })
+              assert.ok(!Object.hasOwn(span.metrics, 'kafka.partition'),
+                'kafka.partition must not be set for multi-message batches')
+              assert.ok(!Object.hasOwn(span.meta, 'kafka.message.offset'),
+                'kafka.message.offset must not be set for multi-message batches')
+            })
+
+            await sendMessages(kafka, testTopic, batch)
+
+            return expectedSpanPromise
+          })
+
+          it('should not call Kafka.admin from instrumentation during normal send', async () => {
+            // Spy after the test setup has already created topics; from here
+            // on no internal admin connection should be opened.
+            const adminSpy = sinon.spy(kafka, 'admin')
+            try {
+              await sendMessages(kafka, testTopic, messages)
+              assert.strictEqual(adminSpy.callCount, 0)
+            } finally {
+              adminSpy.restore()
+            }
           })
 
           withPeerService(
@@ -453,19 +492,17 @@ describe('Plugin', () => {
           })
 
           it('should be instrumented', async () => {
-            const meta = {
-              'span.kind': 'consumer',
-              component: 'kafkajs',
-              'kafka.topic': testTopic,
-              'messaging.destination.name': testTopic,
-              'messaging.system': 'kafka',
-            }
-            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
-
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
-              meta,
+              meta: {
+                'span.kind': 'consumer',
+                component: 'kafkajs',
+                'kafka.topic': testTopic,
+                'messaging.destination.name': testTopic,
+                'messaging.system': 'kafka',
+                'kafka.cluster_id': testKafkaClusterId,
+              },
               metrics: {
                 'messaging.batch.message_count': batchMessages.length,
               },
@@ -524,19 +561,17 @@ describe('Plugin', () => {
             const messagesWithHeaders = [
               { key: 'key1', value: 'test1', headers: { 'x-custom-header': 'value' } },
             ]
-            const meta = {
-              'span.kind': 'consumer',
-              component: 'kafkajs',
-              'kafka.topic': testTopic,
-              'messaging.destination.name': testTopic,
-              'messaging.system': 'kafka',
-            }
-            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
-
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
-              meta,
+              meta: {
+                'span.kind': 'consumer',
+                component: 'kafkajs',
+                'kafka.topic': testTopic,
+                'messaging.destination.name': testTopic,
+                'messaging.system': 'kafka',
+                'kafka.cluster_id': testKafkaClusterId,
+              },
               resource: testTopic,
               error: 0,
               type: 'worker',

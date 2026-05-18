@@ -11,6 +11,7 @@ const {
   GITHUB_TOKEN,
   POLLING_INTERVAL,
   RETRIES,
+  RUN_ATTEMPT,
 } = process.env
 
 const octokit = new Octokit({
@@ -41,7 +42,8 @@ const conclusionEmojis = {
   timed_out: '⌛',
 }
 
-const failureConclusions = new Set(['failure', 'timed_out'])
+const failureConclusions = new Set(['failure', 'timed_out', 'cancelled'])
+const pollingRetryConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
 const retriedRunIds = new Set()
@@ -106,7 +108,7 @@ async function pollUntilDone () {
 
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
-    failureConclusions.has(r.conclusion) &&
+    pollingRetryConclusions.has(r.conclusion) &&
     !retriedRunIds.has(r.id)
   )
 
@@ -132,13 +134,35 @@ async function pollUntilDone () {
 async function rerunFailedWorkflows (workflowRuns) {
   await Promise.all(
     workflowRuns.map(workflowRun => {
-      console.log(`Rerunning failed jobs for workflow run ${workflowRun.id} (${workflowRun.name}).`)
+      console.log(`Rerunning ${workflowRun.conclusion} workflow run ${workflowRun.id} (${workflowRun.name}).`)
+      if (workflowRun.conclusion === 'cancelled') {
+        return octokit.rest.actions.reRunWorkflow({ owner, repo, run_id: workflowRun.id })
+      }
       return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
     })
   )
 }
 
+async function rerunOnStartup () {
+  if (RUN_ATTEMPT <= 1) return
+  const runs = await getRuns()
+  const toRerun = runs.filter(r =>
+    r.status === 'completed' &&
+    failureConclusions.has(r.conclusion)
+  )
+  if (toRerun.length > 0) {
+    console.log(`Rerunning ${toRerun.length} failed workflow(s) before polling.`)
+    await rerunFailedWorkflows(toRerun)
+    for (const run of toRerun) retriedRunIds.add(run.id)
+    runsCache = undefined
+    console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling.`)
+    await setTimeout(POLLING_INTERVAL * 60_000)
+  }
+}
+
 async function checkAllGreen () {
+  await rerunOnStartup()
+
   const { runs, done } = await pollUntilDone()
 
   await printSummary(runs)

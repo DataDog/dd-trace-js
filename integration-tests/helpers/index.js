@@ -277,8 +277,8 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
- * @param {NodeJS.Signals} [options.signal='SIGTERM'] - Signal to send before escalating.
- * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
+ * @param {NodeJS.Signals} [options.signal] - Signal to send before escalating. Defaults to `SIGTERM`.
+ * @param {number} [options.timeoutMs] - Max wait per signal in milliseconds. Defaults to the stop-proc timeout.
  * @returns {Promise<void>}
  */
 async function stopProc (proc, options = {}) {
@@ -305,6 +305,27 @@ async function stopProc (proc, options = {}) {
   if (!exitedAfterSigkill) {
     throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
   }
+}
+
+/**
+ * Tear down a Test Optimization integration fixture between tests.
+ *
+ * Awaits each step so the next test starts from a clean slate — letting the
+ * previous child outlive `afterEach` leaks sockets and file descriptors that
+ * the next Cypress / Playwright run then races against.
+ *
+ * @param {object} env
+ * @param {childProcess.ChildProcess} [env.childProcess] - Test child to stop.
+ * @param {import('http').Server} [env.webAppServer] - Web fixture server to close.
+ * @param {FakeAgent} [env.receiver] - Fake agent / intake to stop.
+ * @returns {Promise<void>}
+ */
+async function stopCiVisTestEnv ({ childProcess, webAppServer, receiver }) {
+  await stopProc(childProcess)
+  if (webAppServer?.listening) {
+    await /** @type {Promise<void>} */ (new Promise((resolve) => webAppServer.close(() => resolve())))
+  }
+  await receiver?.stop()
 }
 
 /**
@@ -1144,6 +1165,7 @@ module.exports = {
   assertUUID,
   deepFreeze,
   stopProc,
+  stopCiVisTestEnv,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,
