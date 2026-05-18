@@ -88,8 +88,6 @@ jobs:
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
-        with:
-          cache: "true"
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
       - uses: ./.github/actions/node-crash-report

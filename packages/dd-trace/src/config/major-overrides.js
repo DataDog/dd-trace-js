@@ -13,7 +13,10 @@ const INGESTION_PREFIX = 'ingestion.'
  * @param {number} majorVersion
  */
 function applyMajorOverrides (supportedConfigurations, majorVersion) {
-  if (majorVersion < 6) return
+  if (majorVersion < 6) {
+    applyV5Overrides(supportedConfigurations)
+    return
+  }
 
   for (const entries of Object.values(supportedConfigurations)) {
     for (const entry of entries) {
@@ -58,7 +61,26 @@ function applyMajorOverrides (supportedConfigurations, majorVersion) {
 }
 
 /**
- * @param {SupportedConfigurations[string] | undefined} entries
+ * @param {SupportedConfigurations} supportedConfigurations Mutated in place.
+ */
+function applyV5Overrides (supportedConfigurations) {
+  const startupLogsEntry = supportedConfigurations.DD_TRACE_STARTUP_LOGS?.[0]
+  if (startupLogsEntry) {
+    startupLogsEntry.default = 'false'
+  }
+
+  const iastEntry = supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION?.[0]
+  if (!iastEntry) return
+
+  iastEntry.configurationNames = [
+    iastEntry.internalPropertyName || iastEntry.configurationNames?.[0],
+    `${EXPERIMENTAL_IAST_PREFIX}.securityControlsConfiguration`,
+  ]
+  delete iastEntry.internalPropertyName
+}
+
+/**
+ * @param {import('./helper').SupportedConfigurationEntry[] | undefined} entries
  * @param {string | ((alias: string) => boolean)} dropPredicate
  */
 function dropAlias (entries, dropPredicate) {

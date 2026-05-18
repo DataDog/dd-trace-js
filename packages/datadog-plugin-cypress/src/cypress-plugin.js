@@ -70,10 +70,11 @@ const {
   getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const getConfig = require('../../dd-trace/src/config')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -505,8 +506,7 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
-    const envFlushWait = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'))
-    this.rumFlushWaitMillis = Number.isFinite(envFlushWait) ? envFlushWait : undefined
+    this.rumFlushWaitMillis = getConfig().DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -788,19 +788,29 @@ class CypressPlugin {
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+      skippableSuitesResponse: skippableTestsRequestResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: this.isKnownTestsEnabled,
+      isTestManagementTestsEnabled: this.isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
+      getKnownTests: () => getKnownTests(this.tracer, this.testConfiguration),
+      getTestManagementTests: () => getTestManagementTests(this.tracer, this.testConfiguration),
+      getSkippableSuites: () => getSkippableTests(this.tracer, this.testConfiguration),
+    })
+
     if (this.isKnownTestsEnabled) {
-      const knownTestsResponse = await getKnownTests(
-        this.tracer,
-        this.testConfiguration
-      )
-      if (knownTestsResponse.err) {
-        log.error('Cypress known tests response error', knownTestsResponse.err)
+      const currentKnownTestsResponse = knownTestsResponse || await getKnownTests(this.tracer, this.testConfiguration)
+      if (currentKnownTestsResponse.err) {
+        log.error('Cypress known tests response error', currentKnownTestsResponse.err)
         this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, value: 'true' })
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        if (knownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
-          this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        if (currentKnownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
+          this.knownTestsByTestSuite = currentKnownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
         } else {
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
@@ -824,10 +834,8 @@ class CypressPlugin {
     }
 
     if (this.isSuitesSkippingEnabled) {
-      const skippableTestsResponse = await getSkippableTests(
-        this.tracer,
-        this.testConfiguration
-      )
+      const skippableTestsResponse =
+        skippableTestsRequestResponse || await getSkippableTests(this.tracer, this.testConfiguration)
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
         this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, value: 'true' })
@@ -840,19 +848,17 @@ class CypressPlugin {
     }
 
     if (this.isTestManagementTestsEnabled) {
-      const testManagementTestsResponse = await getTestManagementTests(
-        this.tracer,
-        this.testConfiguration
-      )
-      if (testManagementTestsResponse.err) {
-        log.error('Cypress test management tests response error', testManagementTestsResponse.err)
+      const currentTestManagementTestsResponse =
+        testManagementTestsResponse || await getTestManagementTests(this.tracer, this.testConfiguration)
+      if (currentTestManagementTestsResponse.err) {
+        log.error('Cypress test management tests response error', currentTestManagementTestsResponse.err)
         this._pendingRequestErrorTags.push({
           tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
           value: 'true',
         })
         this.isTestManagementTestsEnabled = false
       } else {
-        this.testManagementTests = testManagementTestsResponse.testManagementTests
+        this.testManagementTests = currentTestManagementTestsResponse.testManagementTests
       }
     }
 
@@ -995,7 +1001,7 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       incrementCountMetric(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!getConfig().DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       finishAllTraceSpans(this.testSessionSpan)

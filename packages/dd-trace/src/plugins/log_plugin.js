@@ -4,6 +4,8 @@ const { LOG } = require('../../../../ext/formats')
 const { storage } = require('../../../datadog-core')
 const Plugin = require('./plugin')
 
+const legacyStorage = storage('legacy')
+
 function messageProxy (message, holder) {
   return new Proxy(message, {
     get (target, key) {
@@ -38,7 +40,7 @@ module.exports = class LogPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
-      const span = storage('legacy').getStore()?.span
+      const span = legacyStorage.getStore()?.span
 
       // NOTE: This needs to run whether or not there is a span
       // so service, version, and env will always get injected.

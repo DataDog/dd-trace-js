@@ -109,7 +109,8 @@ class AgentlessExporter {
           log.error('Failed to flush traces on timer: %s', err.message)
         }
         this.#timer = undefined
-      }, flushInterval).unref()
+      }, flushInterval)
+      this.#timer.unref?.()
     }
   }
 
