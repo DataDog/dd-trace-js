@@ -19,6 +19,7 @@ const {
   collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -460,6 +461,16 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     }, 'Could not send test session configuration to workers.')
   }
 
+  const {
+    knownTestsResponse,
+    testManagementTestsResponse,
+  } = await getTestOptimizationRequestResults({
+    isKnownTestsEnabled,
+    isTestManagementTestsEnabled,
+    getKnownTests: () => getChannelPromise(knownTestsCh),
+    getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+  })
+
   if (isFlakyTestRetriesEnabled && !ctx.config.retry && flakyTestRetriesCount > 0) {
     ctx.config.retry = flakyTestRetriesCount
     setProvidedContext(ctx, {
@@ -469,11 +480,11 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   if (isKnownTestsEnabled) {
-    const knownTestsResponse = await getChannelPromise(knownTestsCh)
-    if (knownTestsResponse.err) {
+    const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
+    if (currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
     } else {
-      const knownTests = knownTestsResponse.knownTests
+      const knownTests = currentKnownTestsResponse.knownTests
       const testFilepaths = await getTestFilepaths(ctx, testSpecifications)
 
       if (isValidKnownTests(knownTests)) {
@@ -511,7 +522,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   if (isTestManagementTestsEnabled) {
-    const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
+    const { err, testManagementTests: receivedTestManagementTests } =
+      testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
     if (err) {
       isTestManagementTestsEnabled = false
       log.error('Could not get test management tests.')
