@@ -16,76 +16,87 @@ const { values } = parseArgs({
 const cwd = process.cwd()
 const coverageDir = path.join(cwd, 'coverage')
 
-/** @type {string[]} */
-const reportDirsAbs = []
+// Two layouts to support:
+//   - Unit/CI tests under c8 emit the lcov directly at `coverage/lcov.info`.
+//   - `integration-tests/coverage/runtime.js` (`getMergedReportDir()`) still
+//     emits per-Node-version-and-script subdirectories at
+//     `coverage/node-${version}${label}/lcov.info`.
+/** @type {{ lcov: string, dir: string }[]} */
+const lcovEntries = []
+let skippedCount = 0
 
-// Match `nyc.config.js` and `integration-tests/coverage/runtime.js` (`getMergedReportDir()`),
-// which both emit `coverage/node-${version}${label}` directories so Codecov can attribute each
-// test script/Node.js combination independently.
+const flatLcov = path.join(coverageDir, 'lcov.info')
+if (fs.existsSync(flatLcov)) {
+  lcovEntries.push({ lcov: flatLcov, dir: coverageDir })
+}
+
 try {
   for (const entry of fs.readdirSync(coverageDir, { withFileTypes: true })) {
-    if (entry.isDirectory() && entry.name.startsWith('node-')) {
-      reportDirsAbs.push(path.join(coverageDir, entry.name))
+    if (!entry.isDirectory() || !entry.name.startsWith('node-')) continue
+    const dirAbs = path.join(coverageDir, entry.name)
+
+    // Runtime matrix filters (e.g. cucumber/cypress version guards) can legitimately skip
+    // every test. `merge-lcov.js` drops a `.skipped` sentinel in that case so we stay silent
+    // instead of failing on an empty report.
+    if (fs.existsSync(path.join(dirAbs, '.skipped'))) {
+      try { fs.rmSync(dirAbs, { recursive: true, force: true }) } catch {}
+      skippedCount++
+      continue
     }
+
+    lcovEntries.push({ lcov: path.join(dirAbs, 'lcov.info'), dir: dirAbs })
   }
 } catch {}
 
-if (reportDirsAbs.length === 0) {
+if (lcovEntries.length === 0 && skippedCount > 0) {
+  process.stdout.write('All coverage reports were skipped (matrix filters dropped every test). Skipping upload.\n')
+  process.exit(0)
+}
+
+if (lcovEntries.length === 0) {
   throw new Error(
     format(
-      'No coverage report directories found under %s. ' +
-      'Expected at least one `node-<version>-<script>` subdirectory with an `lcov.info` ' +
-      '(check that the test step produced coverage and that no later step wiped it). Flags: %s.',
+      'No coverage report found under %s. Expected `lcov.info` either directly or in a ' +
+      '`node-<version>-<script>` subdirectory (check that the test step produced coverage ' +
+      'and that no later step wiped it). Flags: %s.',
       path.relative(cwd, coverageDir) || '.',
       values.flags
     )
   )
 }
 
-const emptyReportDirs = []
+const emptyEntries = []
 
-for (const dirAbs of reportDirsAbs) {
-  // Runtime matrix filters (e.g. cucumber/cypress version guards) can legitimately skip
-  // every test. `merge-lcov.js` drops a `.skipped` sentinel in that case so we stay silent
-  // instead of failing on an empty report.
-  if (fs.existsSync(path.join(dirAbs, '.skipped'))) {
-    try {
-      fs.rmSync(dirAbs, { recursive: true, force: true })
-    } catch {}
-    continue
-  }
-
-  const lcovPath = path.join(dirAbs, 'lcov.info')
+for (const { lcov, dir } of lcovEntries) {
   let lcovContent
   try {
-    lcovContent = fs.readFileSync(lcovPath, 'utf8')
+    lcovContent = fs.readFileSync(lcov, 'utf8')
   } catch {}
 
   // Consider it empty unless we see at least one `SF:` record.
   const isMissingOrEmpty = lcovContent === undefined || !/(^|\n)SF:/.test(lcovContent)
   if (!isMissingOrEmpty) continue
 
-  emptyReportDirs.push(dirAbs)
+  emptyEntries.push(lcov)
 
   // If the file exists but is empty, remove it so uploaders don't pick it up.
   if (lcovContent !== undefined) {
-    try {
-      fs.unlinkSync(lcovPath)
-    } catch {}
+    try { fs.unlinkSync(lcov) } catch {}
   }
 
-  // If we deleted the last artifact, avoid leaving an empty coverage directory behind.
-  try {
-    if (fs.readdirSync(dirAbs).length === 0) fs.rmdirSync(dirAbs)
-  } catch {}
+  // If we deleted the last artifact in a per-version subdirectory, avoid leaving it behind.
+  if (dir !== coverageDir) {
+    try {
+      if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+    } catch {}
+  }
 }
 
-if (emptyReportDirs.length > 0) {
+if (emptyEntries.length === lcovEntries.length) {
   throw new Error(
     format(
-      'Expected non-empty lcov.info coverage report but none was produced in %s. Searched in %s with flags %s.',
-      emptyReportDirs.map(d => path.relative(cwd, d) || '.').join(','),
-      reportDirsAbs.map(d => path.relative(cwd, d) || '.').join(','),
+      'Expected at least one non-empty lcov.info coverage report. Searched in %s with flags %s.',
+      lcovEntries.map(({ lcov }) => path.relative(cwd, lcov)).join(','),
       values.flags
     )
   )

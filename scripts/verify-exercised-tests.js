@@ -10,7 +10,7 @@ const DEFAULT_IGNORE_GLOBS = [
   '**/node_modules/**',
   '**/coverage/**',
   '**/.git/**',
-  '**/.nyc_output/**',
+  '**/.c8_output/**',
   '**/.junit-tmp/**',
   'vendor/dist/**',
 ]

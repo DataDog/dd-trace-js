@@ -360,7 +360,7 @@ Use `clock.tick(ms)` to advance time, `clock.restore()` to restore real timers, 
 
 ### Test Coverage
 
-Coverage is measured with nyc. To check coverage for your changes, use the `:ci` variant of the test scripts:
+Coverage is measured with c8 (V8's built-in coverage). To check coverage for your changes, use the `:ci` variant of the test scripts:
 
 ```sh
 # Run tests with coverage for specific components
@@ -370,7 +370,7 @@ yarn test:llmobs:sdk:ci
 yarn test:lambda:ci
 ```
 
-**Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards nyc's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
+**Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards c8's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
 
 ### Plugin Tests
 
