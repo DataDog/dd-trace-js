@@ -39,6 +39,10 @@ if (process.env.ENABLE_HAPPY_DOM) {
   options.testEnvironment = '@happy-dom/jest-environment'
 }
 
+if (process.env.JEST_TEST_ENVIRONMENT) {
+  options.testEnvironment = process.env.JEST_TEST_ENVIRONMENT
+}
+
 if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
