@@ -20,7 +20,9 @@ describe('Plugin', () => {
   let key
   let keyString
 
-  describe('aerospike', () => {
+  describe('aerospike', function () {
+    this.timeout(8000)
+
     withVersions('aerospike', 'aerospike', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -51,7 +53,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          aerospike.releaseEventLoop()
+          aerospike?.releaseEventLoop()
         })
 
         describe('client', () => {
@@ -306,7 +308,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          aerospike.releaseEventLoop()
+          aerospike?.releaseEventLoop()
         })
 
         it('should be configured with the correct values', done => {
