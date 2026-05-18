@@ -503,13 +503,34 @@ function getTestFinishInfo (test, status, config, error) {
   }
 }
 
-function getOnTestEndHandler (config) {
+function getOnTestEndHandler (config, onFinalAttempt) {
   return async function (test) {
     if (test._ddShouldSkipEfdRetry) {
       return
     }
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
+    const shouldFinishTest = ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))
+    let testFinishInfo
+    let isFinalAttempt = false
+
+    // If there are afterEach to be run, we don't finish the test yet.
+    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
+    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
+    // directly sets finalStatus without waiting for hooks
+    if (!ctx && test.isPending()) {
+      test._ddIsFinalAttempt = true
+      isFinalAttempt = true
+    }
+
+    if (shouldFinishTest) {
+      testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
+      if (testFinishInfo.finalStatus !== undefined) {
+        test._ddIsFinalAttempt = true
+        isFinalAttempt = true
+      }
+    }
 
     // After finishing it might take a bit for the snapshot to be handled.
     // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
@@ -521,20 +542,7 @@ function getOnTestEndHandler (config) {
       })
     }
 
-    // If there are afterEach to be run, we don't finish the test yet.
-    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
-    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
-    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
-    // directly sets finalStatus without waiting for hooks
-    if (!ctx && test.isPending()) {
-      test._ddIsFinalAttempt = true
-    }
-
-    if (ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))) {
-      const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
-      if (testFinishInfo.finalStatus !== undefined) {
-        test._ddIsFinalAttempt = true
-      }
+    if (shouldFinishTest) {
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
@@ -542,6 +550,10 @@ function getOnTestEndHandler (config) {
         ...testFinishInfo,
         ...ctx.currentStore,
       })
+    }
+
+    if (isFinalAttempt) {
+      onFinalAttempt?.(test)
     }
   }
 }

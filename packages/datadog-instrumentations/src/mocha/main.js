@@ -109,6 +109,29 @@ function isTestFailed (test) {
   return false
 }
 
+function getRootSuiteStatus (rootTests) {
+  let status = 'pass'
+  if (rootTests.every(t => t.isPending())) {
+    status = 'skip'
+  } else {
+    for (const test of rootTests) {
+      if (test.state === 'failed' || test.timedOut || test._ddHookFailed) {
+        status = 'fail'
+      }
+    }
+  }
+  return status
+}
+
+function haveRootTestsFinished (rootTests) {
+  for (const test of rootTests) {
+    if (!test.isPending() && !test.state && !test.timedOut && !test._ddHookFailed) {
+      return false
+    }
+  }
+  return true
+}
+
 function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
@@ -477,6 +500,18 @@ addHook({
     // Hits zero when the last test's lifecycle completes, triggering the suite finish.
     const rootPendingCountByFile = new Map()
 
+    function updateRootTestForFinalAttempt (test) {
+      if (!test._retriedTest) return
+
+      const rootTests = rootTestsByFile.get(test.file)
+      if (!rootTests) return
+
+      const retriedTestIndex = rootTests.indexOf(test._retriedTest)
+      if (retriedTestIndex !== -1) {
+        rootTests[retriedTestIndex] = test
+      }
+    }
+
     function finishRootSuiteForFile (file) {
       const remaining = rootPendingCountByFile.get(file) - 1
       if (remaining > 0) {
@@ -492,16 +527,7 @@ addHook({
       }
 
       const rootTests = rootTestsByFile.get(file) || []
-      let status = 'pass'
-      if (rootTests.every(t => t.isPending())) {
-        status = 'skip'
-      } else {
-        for (const test of rootTests) {
-          if (test.state === 'failed' || test.timedOut || test._ddHookFailed) {
-            status = 'fail'
-          }
-        }
-      }
+      const status = getRootSuiteStatus(rootTests)
 
       if (global.__coverage__) {
         const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
@@ -533,12 +559,11 @@ addHook({
 
     this.on('test', getOnTestHandler(true))
 
-    this.on('test end', getOnTestEndHandler(config))
-
-    this.on('test end', function (test) {
+    this.on('test end', getOnTestEndHandler(config, function (test) {
       if (!test._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+      updateRootTestForFinalAttempt(test)
       finishRootSuiteForFile(test.file)
-    })
+    }))
 
     this.on('retry', getOnTestRetryHandler(config))
 
@@ -548,6 +573,7 @@ addHook({
     this.on('hook end', function (hook) {
       const test = hook.ctx?.currentTest
       if (!test?._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+      updateRootTestForFinalAttempt(test)
       finishRootSuiteForFile(test.file)
     })
 
@@ -557,6 +583,7 @@ addHook({
       if (testOrHook.type !== 'hook') return
       const test = testOrHook.ctx?.currentTest
       if (!test?._ddIsFinalAttempt || !rootPendingCountByFile.has(test.file)) return
+      updateRootTestForFinalAttempt(test)
       finishRootSuiteForFile(test.file)
     })
 
@@ -622,8 +649,11 @@ addHook({
         // 2. Aborted mid-run (e.g. a beforeEach hook failure): Mocha skips remaining
         //    tests and jumps straight to 'suite end'. rootPendingCountByFile still has
         //    a nonzero count for the file because the last tests never ran. Finish it
-        //    now — testSuiteErrorCh has already tagged the span with 'fail' if a hook
-        //    failed, so we just need to call testSuiteFinishCh to close the span.
+        //    as failed now.
+        //
+        // 3. Async finalization lagged behind Mocha's synchronous events (e.g. DI retry
+        //    wait): all tests have Mocha terminal state, but the final-attempt callback
+        //    did not run before root 'suite end'. Finish from the observed test states.
         const processedFiles = new Set()
         for (const test of suite.tests) {
           if (!test.file || processedFiles.has(test.file)) continue
@@ -636,8 +666,10 @@ addHook({
             testSuiteStartCh.runStores(ctx, () => {})
             testSuiteFinishCh.publish({ status: 'skip', ...ctx.currentStore }, () => {})
           } else if (rootPendingCountByFile.has(test.file)) {
+            const rootTests = rootTestsByFile.get(test.file) || []
+            const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
             rootPendingCountByFile.delete(test.file)
-            testSuiteFinishCh.publish({ status: 'fail', ...ctx.currentStore }, () => {})
+            testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
           }
         }
         return

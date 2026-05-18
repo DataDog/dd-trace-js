@@ -1264,7 +1264,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-        it.only('reports a suite event when a beforeEach hook fails on top-level tests', async () => {
+        it('reports a suite event when a beforeEach hook fails on top-level tests', async () => {
           const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-with-failing-hook.js'
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -4291,6 +4291,53 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(snapshotIdByTest, snapshotIdByLog)
           assert.strictEqual(spanIdByTest, spanIdByLog)
           assert.strictEqual(traceIdByTest, traceIdByLog)
+          done()
+        }).catch(done)
+      })
+    })
+
+    onlyLatestIt('reports a passing suite for top-level tests retried with dynamic instrumentation', (done) => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const suiteFile = 'ci-visibility/dynamic-instrumentation/top-level-test-hit-breakpoint.js'
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(suiteEvents.length, 1)
+          assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+
+          assert.strictEqual(retriedTests.length, 1)
+          assert.strictEqual(retriedTests[0].meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/top-level-test-hit-breakpoint',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            TEST_SHOULD_PASS_AFTER_RETRY: '1',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        eventsPromise.then(() => {
+          assert.strictEqual(code, 0)
           done()
         }).catch(done)
       })
