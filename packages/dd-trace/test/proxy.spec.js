@@ -1096,6 +1096,19 @@ describe('TracerProxy', () => {
       })
     })
   })
+
+  describe('inner tracer swap', () => {
+    it('routes calls to whichever inner tracer is current when called', () => {
+      proxy.trace('pre', {}, () => {})
+      sinon.assert.called(noop.trace)
+      sinon.assert.notCalled(tracer.trace)
+
+      proxy.init()
+
+      proxy.trace('post', {}, () => {})
+      sinon.assert.called(tracer.trace)
+    })
+  })
 })
 
 // Helper function to create APM_TRACING batch transaction objects

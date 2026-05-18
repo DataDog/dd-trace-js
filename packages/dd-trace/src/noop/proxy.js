@@ -22,9 +22,11 @@ const noopProfiling = {
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
+  #publicTracerCache
+  #publicTracerFor
+
   constructor () {
     this._tracer = noop
-    this._publicTracer = publicNoopTracer
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
@@ -35,6 +37,16 @@ class NoopProxy {
     this.getAllBaggageItems = () => {}
     this.removeBaggageItem = (keyToRemove) => {}
     this.removeAllBaggageItems = () => {}
+  }
+
+  get #publicTracer () {
+    if (this.#publicTracerFor !== this._tracer) {
+      this.#publicTracerFor = this._tracer
+      this.#publicTracerCache = this._tracer === noop
+        ? publicNoopTracer
+        : new PublicTracer(this._tracer)
+    }
+    return this.#publicTracerCache
   }
 
   init () {
@@ -50,36 +62,36 @@ class NoopProxy {
   }
 
   trace () {
-    return this._publicTracer.trace(...arguments)
+    return this.#publicTracer.trace(...arguments)
   }
 
   wrap () {
-    return this._publicTracer.wrap(...arguments)
+    return this.#publicTracer.wrap(...arguments)
   }
 
   setUrl () {
-    this._publicTracer.setUrl(...arguments)
+    this.#publicTracer.setUrl(...arguments)
     return this
   }
 
   startSpan () {
-    return this._publicTracer.startSpan(...arguments)
+    return this.#publicTracer.startSpan(...arguments)
   }
 
   inject () {
-    return this._publicTracer.inject(...arguments)
+    return this.#publicTracer.inject(...arguments)
   }
 
   extract () {
-    return this._publicTracer.extract(...arguments)
+    return this.#publicTracer.extract(...arguments)
   }
 
   scope () {
-    return this._publicTracer.scope(...arguments)
+    return this.#publicTracer.scope(...arguments)
   }
 
   getRumData () {
-    return this._publicTracer.getRumData(...arguments)
+    return this.#publicTracer.getRumData(...arguments)
   }
 
   setUser (user) {
