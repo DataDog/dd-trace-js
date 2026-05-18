@@ -49,17 +49,18 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), '[ [Object], 2, 3, ... 2 more items ]')
         assert.strictEqual(messages.shift(), '{}')
         const obj = messages.shift()
-        assert.strictEqual(
-          obj,
-          '{ ' +
-            'foo: [Object], ' +
-            'bar: true, ' +
-            'baz: [Getter], ' +
-            (NODE_MAJOR >= 24
-              ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
-              : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
-          '}'
-        )
+        let expectedObjectShape = '{ ' +
+          'foo: [Object], ' +
+          'bar: true, ' +
+          'baz: [Getter], ' +
+          (NODE_MAJOR >= 24
+            ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
+            : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
+        '}'
+        if (NODE_MAJOR >= 26) {
+          expectedObjectShape = `Proxy(${expectedObjectShape})`
+        }
+        assert.strictEqual(obj, expectedObjectShape)
         assert.strictEqual(messages.shift(), obj) // a proxy should just be stringified to the wrapped object
         assert.strictEqual(messages.shift(), '<ref *1> { circular: [Circular *1] }')
         assert.strictEqual(messages.shift(), '[class CustomClass]')
