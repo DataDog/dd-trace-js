@@ -45,7 +45,7 @@ describe('esm', () => {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
-      }).timeout(20000)
+      }).timeout(5000)
     }
   })
 })
