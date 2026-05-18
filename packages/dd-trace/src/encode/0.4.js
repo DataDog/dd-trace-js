@@ -94,6 +94,30 @@ const ATTR_PREFIX_ARRAY = Buffer.concat([
 const ATTR_PAYLOAD_BOOL_TRUE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0xC3])])
 const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0xC2])])
 
+// Pre-warm `_stringMap` for the tag keys that show up in `meta` / `metrics`
+// on every HTTP server span. Cached via `_cacheString` from `_reset` so each
+// entry stays a subarray of `_stringBytes`; `#refreshStringCache` relies on
+// that invariant after a buffer resize.
+const PREWARM_TAG_KEYS = Object.freeze([
+  'language',
+  'process_id',
+  '_sampling_priority_v1',
+  '_dd.hostname',
+  '_dd.origin',
+  '_dd.measured',
+  'runtime-id',
+  'service',
+  'version',
+  'env',
+  'component',
+  'span.kind',
+  'http.url',
+  'http.method',
+  'http.status_code',
+  'http.useragent',
+  'http.route',
+])
+
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
@@ -292,11 +316,11 @@ class AgentEncoder {
       // header, type, three IDs, three strings) with one.
       let typeEntry
       if (span.type) {
-        typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
+        typeEntry = stringMap.get(span.type) ?? this._cacheString(span.type)
       }
-      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name)
-      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource)
-      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service)
+      const nameEntry = stringMap.get(span.name) ?? this._cacheString(span.name)
+      const resourceEntry = stringMap.get(span.resource) ?? this._cacheString(span.resource)
+      const serviceEntry = stringMap.get(span.service) ?? this._cacheString(span.service)
       const nameLen = nameEntry.length
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
@@ -382,9 +406,8 @@ class AgentEncoder {
   #refreshStringCache () {
     const newBuffer = this._stringBytes.buffer
     const stringMap = this._stringMap
-    for (const key of Object.keys(stringMap)) {
-      const old = stringMap[key]
-      stringMap[key] = newBuffer.subarray(old.byteOffset, old.byteOffset + old.length)
+    for (const [key, old] of stringMap) {
+      stringMap.set(key, newBuffer.subarray(old.byteOffset, old.byteOffset + old.length))
     }
   }
 
@@ -393,9 +416,16 @@ class AgentEncoder {
     this._traceBytes.length = 0
     this._stringCount = 0
     this._stringBytes.length = 0
-    this._stringMap = Object.create(null)
+    this._stringMap = new Map()
 
     this._cacheString('')
+    // The 0.5 subclass replaces `_cacheString` to intern strings into a
+    // wire-shipped table; pre-warming there would bloat its payloads.
+    if (this._cacheString === AgentEncoder.prototype._cacheString) {
+      for (const key of PREWARM_TAG_KEYS) {
+        this._cacheString(key)
+      }
+    }
   }
 
   _encodeBuffer (bytes, buffer) {
@@ -480,7 +510,7 @@ class AgentEncoder {
   }
 
   _encodeString (bytes, value = '') {
-    const entry = this._stringMap[value] ?? this._cacheString(value)
+    const entry = this._stringMap.get(value) ?? this._cacheString(value)
     const length = entry.length
     const offset = bytes.length
     bytes.reserve(length)
@@ -488,13 +518,13 @@ class AgentEncoder {
   }
 
   _cacheString (value) {
-    let entry = this._stringMap[value]
+    let entry = this._stringMap.get(value)
     if (entry === undefined) {
       this._stringCount++
       const start = this._stringBytes.length
       const written = this._stringBytes.write(value)
       entry = this._stringBytes.buffer.subarray(start, start + written)
-      this._stringMap[value] = entry
+      this._stringMap.set(value, entry)
     }
     return entry
   }
@@ -535,12 +565,12 @@ class AgentEncoder {
       const entryValue = value[key]
       if (typeof entryValue !== 'string' && typeof entryValue !== 'number') continue
 
-      const keyEntry = stringMap[key] ?? this._cacheString(key)
+      const keyEntry = stringMap.get(key) ?? this._cacheString(key)
       const keyEntryLen = keyEntry.length
       const writeOffset = bytes.length
 
       if (typeof entryValue === 'string') {
-        const valueEntry = stringMap[entryValue] ?? this._cacheString(entryValue)
+        const valueEntry = stringMap.get(entryValue) ?? this._cacheString(entryValue)
         const valueEntryLen = valueEntry.length
         bytes.reserve(keyEntryLen + valueEntryLen)
         const target = bytes.buffer

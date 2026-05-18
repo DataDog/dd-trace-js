@@ -197,6 +197,87 @@ describe('encode', () => {
       })
     })
 
+    it('pre-warms _stringMap with the well-known meta and metrics tag keys', () => {
+      // `#encodeMetaEntries` looks up each key in `_stringMap` and falls
+      // through to `_cacheString` on a miss. Without the pre-warm, every
+      // first span of every payload pays that fallback cost for the same
+      // canonical HTTP / runtime keys, because `_reset` clears the map
+      // after every flush.
+      const wellKnown = [
+        'language',
+        'process_id',
+        '_sampling_priority_v1',
+        '_dd.hostname',
+        '_dd.origin',
+        '_dd.measured',
+        'runtime-id',
+        'service',
+        'version',
+        'env',
+        'component',
+        'span.kind',
+        'http.url',
+        'http.method',
+        'http.status_code',
+        'http.useragent',
+        'http.route',
+      ]
+
+      for (const key of wellKnown) {
+        assert.ok(encoder._stringMap.has(key), `pre-warmed key missing after construction: ${key}`)
+      }
+
+      encoder.encode(data)
+      encoder.makePayload()
+
+      for (const key of wellKnown) {
+        assert.ok(encoder._stringMap.has(key), `pre-warmed key missing after reset: ${key}`)
+      }
+    })
+
+    it('produces byte-identical output via the pre-warmed and lazy cache paths', () => {
+      // The pre-warm writes the same fixstr bytes into `_stringBytes` that
+      // `_cacheString` would write on the lazy fallback. Clearing the map
+      // after `makePayload` forces the second encode through the lazy
+      // path; both payloads must match byte-for-byte for any HTTP span.
+      data[0].meta = {
+        'http.url': 'http://localhost/foo',
+        'http.method': 'GET',
+        'http.status_code': '200',
+        'http.useragent': 'curl/8.0',
+        'http.route': '/foo/:id',
+        component: 'express',
+        'span.kind': 'server',
+        'runtime-id': '00000000-0000-0000-0000-000000000000',
+        service: 'svc',
+        version: '1.2.3',
+        env: 'prod',
+        language: 'javascript',
+        '_dd.origin': 'rum',
+      }
+      data[0].metrics = {
+        process_id: 1234,
+        _sampling_priority_v1: 1,
+        '_dd.hostname': 1,
+        '_dd.measured': 1,
+      }
+
+      encoder.encode(data)
+      const prewarmedPayload = encoder.makePayload()
+
+      encoder._stringMap = new Map()
+      encoder._cacheString('')
+
+      encoder.encode(data)
+      const lazyPayload = encoder.makePayload()
+
+      assert.deepStrictEqual(Buffer.from(prewarmedPayload), Buffer.from(lazyPayload))
+
+      const [[decoded]] = msgpack.decode(prewarmedPayload, { useBigInt64: true })
+      assert.deepStrictEqual(decoded.meta, data[0].meta)
+      assert.deepStrictEqual(decoded.metrics, data[0].metrics)
+    })
+
     it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
       // Force enough unique strings to overflow the 2 MB initial chunk so
       // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
@@ -227,10 +308,75 @@ describe('encode', () => {
       const finalBuffer = encoder._stringBytes.buffer
       assert.notStrictEqual(initialBuffer, finalBuffer, '_stringBytes must have resized for this test to be meaningful')
       let staleEntries = 0
-      for (const key of Object.keys(encoder._stringMap)) {
-        if (encoder._stringMap[key].buffer !== finalBuffer.buffer) staleEntries++
+      for (const entry of encoder._stringMap.values()) {
+        if (entry.buffer !== finalBuffer.buffer) staleEntries++
       }
       assert.strictEqual(staleEntries, 0)
+    })
+
+    it('emits byte-identical msgpack for a representative redis-shaped span', () => {
+      // Snapshot guard for hot-path optimizations (`_stringMap`, the fused
+      // header writes, `#encodeMetaEntries`). Captured against the parent
+      // commit before this refactor — any divergence here means a wire
+      // change escaped the regular decode-and-assert tests, which compare
+      // post-`msgpack.decode` shapes and tolerate equivalent encodings.
+      data = [{
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('cafe0001cafe0001'),
+        parent_id: id('beef0002beef0002'),
+        name: 'redis.command',
+        resource: 'GET',
+        service: 'rkm-bench',
+        type: 'redis',
+        error: 0,
+        meta: {
+          service: 'rkm-bench',
+          env: 'bench',
+          version: '1.2.3',
+          component: 'redis',
+          'span.kind': 'client',
+          'db.type': 'redis',
+          'db.name': '0',
+          'redis.raw_command': 'GET bench:burst:7',
+          'out.host': '127.0.0.1',
+          '_dd.origin': 'rum',
+          '_dd.base_service': 'rkm-bench',
+          language: 'javascript',
+        },
+        metrics: {
+          'network.destination.port': 6379,
+          '_dd.measured': 1,
+          _sampling_priority_v1: 1,
+          process_id: 12345,
+        },
+        start: 1_715_000_000_000_000_000,
+        duration: 1_250_000,
+      }]
+
+      const expectedHex = 'dd00000001dd000000018ca474797065a57265646973a874726163655f6964' +
+        'cf1234abcd1234abcda77370616e5f6964cfcafe0001cafe0001a9706172656e' +
+        '745f6964cfbeef0002beef0002a46e616d65ad72656469732e636f6d6d616e64' +
+        'a87265736f75726365a3474554a773657276696365a9726b6d2d62656e6368a5' +
+        '6572726f7200a57374617274cf17cce769ddcb8000a86475726174696f6ece00' +
+        '1312d0a46d657461df0000000ca773657276696365a9726b6d2d62656e6368a3' +
+        '656e76a562656e6368a776657273696f6ea5312e322e33a9636f6d706f6e656e' +
+        '74a57265646973a97370616e2e6b696e64a6636c69656e74a764622e74797065' +
+        'a57265646973a764622e6e616d65a130b172656469732e7261775f636f6d6d61' +
+        '6e64b14745542062656e63683a62757273743a37a86f75742e686f7374a93132' +
+        '372e302e302e31aa5f64642e6f726967696ea372756db05f64642e626173655f' +
+        '73657276696365a9726b6d2d62656e6368a86c616e6775616765aa6a61766173' +
+        '6372697074a76d657472696373df00000004b86e6574776f726b2e6465737469' +
+        '6e6174696f6e2e706f7274cd18ebac5f64642e6d6561737572656401b55f7361' +
+        '6d706c696e675f7072696f726974795f763101aa70726f636573735f6964cd30' +
+        '39'
+
+      encoder.encode(data)
+      const payload = encoder.makePayload()
+      assert.strictEqual(Buffer.from(payload).toString('hex'), expectedHex)
+
+      encoder.encode(data)
+      const second = encoder.makePayload()
+      assert.strictEqual(Buffer.from(second).toString('hex'), expectedHex)
     })
 
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
