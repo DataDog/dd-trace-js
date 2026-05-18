@@ -604,6 +604,100 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  it('reports tests when using a custom testEnvironment', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const test = tests.find(
+          test => test.meta[TEST_SUITE] === 'ci-visibility/jest-custom-environment/custom-environment-test.js'
+        )
+        const suite = suites.find(
+          suite => suite.meta[TEST_SUITE] === 'ci-visibility/jest-custom-environment/custom-environment-test.js'
+        )
+
+        assert.ok(test, testOutput)
+        assert.ok(suite, testOutput)
+        assertObjectContains(test.meta, {
+          [TEST_NAME]: 'custom test environment runs with a custom environment and reports tests',
+          [TEST_STATUS]: 'pass',
+          [TEST_SOURCE_FILE]: 'ci-visibility/jest-custom-environment/custom-environment-test.js',
+          [JEST_TEST_RUNNER]: 'jest-circus',
+        })
+        assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_TEST_ENVIRONMENT: '<rootDir>/ci-visibility/jest-custom-environment.js',
+          SHOULD_CHECK_RESULTS: 'true',
+          TESTS_TO_RUN: 'jest-custom-environment/custom-environment-test',
+        },
+      }
+    )
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('reports tests when using a custom testEnvironment in parallel mode', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const resourceNames = tests.map(test => test.resource)
+        const suiteNames = suites.map(suite => suite.meta[TEST_SUITE])
+
+        assert.deepStrictEqual(resourceNames.sort(), [
+          'ci-visibility/jest-custom-environment/custom-environment-test.js.' +
+            'custom test environment runs with a custom environment and reports tests',
+          'ci-visibility/jest-custom-environment/parallel-environment-test.js.' +
+            'custom test environment parallel suite runs with a custom environment in parallel mode',
+        ].sort(), testOutput)
+        assert.deepStrictEqual(suiteNames.sort(), [
+          'ci-visibility/jest-custom-environment/custom-environment-test.js',
+          'ci-visibility/jest-custom-environment/parallel-environment-test.js',
+        ].sort())
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_TEST_ENVIRONMENT: '<rootDir>/ci-visibility/jest-custom-environment.js',
+          RUN_IN_PARALLEL: 'true',
+          SHOULD_CHECK_RESULTS: 'true',
+          TESTS_TO_RUN: 'jest-custom-environment/(custom-environment-test|parallel-environment-test)',
+        },
+      }
+    )
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   const envVarSettings = ['DD_TRACE_ENABLED']
 
   envVarSettings.forEach(envVar => {

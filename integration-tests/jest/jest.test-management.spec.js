@@ -162,6 +162,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-a'))
           assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-b'))
         })
+      const configurationRequestsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => (
+          url.endsWith('/api/v2/libraries/tests/services/setting') ||
+          url.endsWith('/api/v2/ci/libraries/tests')
+        ), (payloads) => {
+          const settingsRequests = payloads
+            .filter(({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting'))
+          const knownTestsRequests = payloads
+            .filter(({ url }) => url.endsWith('/api/v2/ci/libraries/tests'))
+
+          assert.strictEqual(settingsRequests.length, 2)
+          assert.strictEqual(knownTestsRequests.length, 2)
+        })
 
       childProcess = exec(
         'node ./ci-visibility/run-jest-lage-multi.js',
@@ -178,6 +191,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise,
+        configurationRequestsPromise,
       ])
 
       assert.strictEqual(exitCode, 0)
@@ -1457,8 +1471,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
 
-        // it runs regardless of quarantine status
-        assert.match(stdout, /I am running when quarantined/)
+        // it runs regardless of quarantine status. In parallel mode, the test event assertions above
+        // verify execution because Jest may not replay worker console output after suppression.
+        if (!isParallel) {
+          assert.match(stdout, /I am running when quarantined/)
+        }
         if (isQuarantining) {
           // even though a test fails, the exit code is 0 because the test is quarantined
           assert.strictEqual(exitCode, 0)

@@ -14,7 +14,6 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @google/genai,google-genai,1.19.0,1.37.0,True
 @grpc/grpc-js,grpc,1.0.3,1.14.3,True
 @hapi/hapi,hapi,17.9.0,21.4.4,True
-@happy-dom/jest-environment,jest,10.0.0,20.3.1,True
 @jest/core,jest,28.0.0,30.4.1,True
 @jest/test-sequencer,jest,28.0.0,30.4.1,True
 @jest/transform,jest,28.0.0,30.4.1,True
@@ -58,8 +57,6 @@ ioredis,ioredis,2.0.0,5.9.2,True
 iovalkey,iovalkey,0.0.1,0.3.3,True
 jest-circus,jest,28.0.0,30.4.1,True
 jest-config,jest,28.0.0,30.4.1,True
-jest-environment-jsdom,jest,28.0.0,30.4.1,True
-jest-environment-node,jest,28.0.0,30.4.1,True
 jest-runtime,jest,28.0.0,30.4.1,True
 jest-worker,jest,28.0.0,30.4.1,True
 kafkajs,kafkajs,1.4.0,2.2.4,True
