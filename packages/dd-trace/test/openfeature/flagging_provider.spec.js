@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -9,6 +11,9 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 
 describe('FlaggingProvider', () => {
+  const fixtureRoot = path.join(__dirname, 'ffe-system-test-data')
+  const fixtureCaseDir = path.join(fixtureRoot, 'evaluation-cases')
+
   let FlaggingProvider
   let mockTracer
   let mockConfig
@@ -127,4 +132,55 @@ describe('FlaggingProvider', () => {
       assert.ok(provider instanceof DatadogNodeServerProvider)
     })
   })
+
+  describe('canonical FFE fixtures', () => {
+    const fixtureCases = loadFixtureCases()
+
+    for (const { fileName, index, testCase } of fixtureCases) {
+      it(`should evaluate ${fileName}[${index}]`, async () => {
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+        provider._setConfiguration(loadUfc())
+
+        const details = await evaluateDetails(provider, testCase)
+
+        assert.deepStrictEqual(details.value, testCase.result.value)
+        assert.strictEqual(details.reason, testCase.result.reason)
+        if ('variant' in testCase.result) {
+          assert.strictEqual(details.variant, testCase.result.variant)
+        }
+      })
+    }
+  })
+
+  function loadUfc () {
+    return JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'ufc-config.json'), 'utf8'))
+  }
+
+  function loadFixtureCases () {
+    const fixtureFiles = fs.readdirSync(fixtureCaseDir).filter(file => file.endsWith('.json')).sort()
+    assert.ok(fixtureFiles.length > 0, 'FFE fixture submodule is missing or empty')
+    return fixtureFiles.flatMap(fileName => {
+      const testCases = JSON.parse(fs.readFileSync(path.join(fixtureCaseDir, fileName), 'utf8'))
+      return testCases.map((testCase, index) => ({ fileName, index, testCase }))
+    })
+  }
+
+  async function evaluateDetails (provider, testCase) {
+    const context = { targetingKey: testCase.targetingKey, ...testCase.attributes }
+    const logger = { error () {}, warn () {}, info () {}, debug () {} }
+
+    if (testCase.variationType === 'BOOLEAN') {
+      return provider.resolveBooleanEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    if (testCase.variationType === 'STRING') {
+      return provider.resolveStringEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    if (testCase.variationType === 'INTEGER' || testCase.variationType === 'NUMERIC') {
+      return provider.resolveNumberEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    if (testCase.variationType === 'JSON') {
+      return provider.resolveObjectEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    throw new Error(`Unsupported variation type: ${testCase.variationType}`)
+  }
 })
