@@ -48,6 +48,13 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
+const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
+const FLAKY_EVENTUALLY_PASSING_RESOURCE =
+  'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass'
+const FLAKY_NEVER_PASSING_RESOURCE =
+  'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
+const FLAKY_UNNECESSARY_RETRY_RESOURCE =
+  'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 // vitest@4.x requires Node.js >= 20
@@ -127,6 +134,20 @@ versions.forEach((version) => {
             assert.strictEqual(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'test')
             assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'test')
+            assert.strictEqual(
+              testModuleEvent.content.test_session_id.toString(),
+              testSessionEvent.content.test_session_id.toString()
+            )
+            testSuiteEvents.forEach(testSuiteEvent => {
+              assert.strictEqual(
+                testSuiteEvent.content.test_session_id.toString(),
+                testSessionEvent.content.test_session_id.toString()
+              )
+              assert.strictEqual(
+                testSuiteEvent.content.test_module_id.toString(),
+                testModuleEvent.content.test_module_id.toString()
+              )
+            })
 
             const passedSuite = testSuiteEvents.find(
               suite =>
@@ -446,54 +467,61 @@ versions.forEach((version) => {
           },
         })
 
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const testEvents = events.filter(event => event.type === 'test')
-          assert.strictEqual(testEvents.length, 11)
-          assertObjectContains(testEvents.map(test => test.content.resource), [
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            // passes at the third retry
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            // never passes
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            // passes on the first try
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary',
-          ])
-          const eventuallyPassingTest = testEvents.filter(
-            test => test.content.resource ===
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass'
-          )
-          assert.strictEqual(eventuallyPassingTest.length, 4)
-          assert.strictEqual(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 3)
-          assert.strictEqual(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 1)
-          assert.strictEqual(
-            eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length,
-            3
-          )
-          assert.strictEqual(eventuallyPassingTest.filter(test =>
-            test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-          ).length, 3)
+            const testEvents = events.filter(event => event.type === 'test')
+            assert.strictEqual(testEvents.length, 11)
+            assertObjectContains(testEvents.map(test => test.content.resource), [
+              FLAKY_EVENTUALLY_PASSING_RESOURCE,
+              FLAKY_EVENTUALLY_PASSING_RESOURCE,
+              FLAKY_EVENTUALLY_PASSING_RESOURCE,
+              // passes at the third retry
+              FLAKY_NEVER_PASSING_RESOURCE,
+              FLAKY_NEVER_PASSING_RESOURCE,
+              FLAKY_NEVER_PASSING_RESOURCE,
+              FLAKY_NEVER_PASSING_RESOURCE,
+              FLAKY_NEVER_PASSING_RESOURCE,
+              FLAKY_EVENTUALLY_PASSING_RESOURCE,
+              // never passes
+              FLAKY_NEVER_PASSING_RESOURCE,
+              // passes on the first try
+              FLAKY_UNNECESSARY_RETRY_RESOURCE,
+            ])
+            const eventuallyPassingTest = testEvents.filter(
+              test => test.content.resource === FLAKY_EVENTUALLY_PASSING_RESOURCE
+            )
+            assert.strictEqual(eventuallyPassingTest.length, 4)
+            assert.strictEqual(
+              eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length,
+              3
+            )
+            assert.strictEqual(
+              eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length,
+              1
+            )
+            assert.strictEqual(
+              eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length,
+              3
+            )
+            assert.strictEqual(eventuallyPassingTest.filter(test =>
+              test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            ).length, 3)
 
-          const neverPassingTest = testEvents.filter(
-            test => test.content.resource ===
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
-          )
-          assert.strictEqual(neverPassingTest.length, 6)
-          assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 6)
-          assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 0)
-          assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 5)
-          assert.strictEqual(neverPassingTest.filter(test =>
-            test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-          ).length, 5)
-        }).then(() => done()).catch(done)
+            const neverPassingTest = testEvents.filter(
+              test => test.content.resource === FLAKY_NEVER_PASSING_RESOURCE
+            )
+            assert.strictEqual(neverPassingTest.length, 6)
+            assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 6)
+            assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 0)
+            assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 5)
+            assert.strictEqual(neverPassingTest.filter(test =>
+              test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            ).length, 5)
+          }
+        )
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
@@ -502,10 +530,21 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              CUSTOM_SEQUENCER: version === '1.6.0' ? undefined : 'true',
+              CUSTOM_SEQUENCER_MARKER: version === '1.6.0' ? undefined : CUSTOM_SEQUENCER_MARKER,
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
             },
           }
         )
+        let childStdout = ''
+        childProcess.stdout?.on('data', chunk => { childStdout += chunk.toString() })
+
+        Promise.all([eventsPromise, once(childProcess, 'exit')]).then(() => {
+          if (version !== '1.6.0') {
+            assert.ok(childStdout.includes(CUSTOM_SEQUENCER_MARKER))
+          }
+          done()
+        }).catch(done)
       })
 
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
