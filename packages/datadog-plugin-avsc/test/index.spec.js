@@ -69,7 +69,7 @@ describe('Plugin', () => {
 
         after(() => {
           dateNowStub.restore()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should serialize basic schema correctly', async () => {

@@ -52,7 +52,7 @@ describe('RASP - ssrf', () => {
     after(() => {
       appsec.disable()
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     describe('ssrf', () => {
@@ -269,7 +269,7 @@ describe('RASP - ssrf', () => {
     after(() => {
       appsec.disable()
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('Should detect threat without blocking doing a GET request', async () => {

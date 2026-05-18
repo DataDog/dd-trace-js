@@ -77,7 +77,7 @@ describe('TracingPlugin', () => {
 describe('common Plugin behaviour', () => {
   before(() => agent.load())
 
-  after(() => agent.close({ ritmReset: false }))
+  after(() => agent.close())
   class CommonPlugin extends TracingPlugin {
     static id = 'commonPlugin'
     static operation = 'dothings'

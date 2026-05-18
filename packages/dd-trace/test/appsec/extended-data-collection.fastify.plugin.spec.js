@@ -19,7 +19,7 @@ describe('extended data collection', () => {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   withVersions('fastify', 'fastify', '>=2', fastifyVersion => {

@@ -121,21 +121,19 @@ describe('Multi-Tenant Routing', () => {
     let flushStub
     let logWarnSpy
 
-    before(() => {
+    before(async () => {
       process.env.DD_API_KEY = 'test-api-key'
       process.env.DD_SITE = 'datadoghq.com'
 
-      agent.wipe()
-
-      tracer = require('../../../../dd-trace')
-      tracer.init({
+      tracer = await agent.load(null, [], {
         service: 'service',
-        llmobs: {
-          mlApp: 'mlApp',
-          agentlessEnabled: true,
-        },
+        llmobs: { mlApp: 'mlApp', agentlessEnabled: true },
       })
       llmobs = tracer.llmobs
+    })
+
+    after(async () => {
+      await agent.close()
     })
 
     let evalAppendSpy
@@ -160,7 +158,6 @@ describe('Multi-Tenant Routing', () => {
     after(() => {
       delete process.env.DD_API_KEY
       delete process.env.DD_SITE
-      agent.wipe()
     })
 
     it('nested contexts route spans correctly and log warning', () => {

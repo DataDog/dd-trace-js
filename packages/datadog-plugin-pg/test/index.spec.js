@@ -39,7 +39,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(done => {
@@ -371,7 +371,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -428,7 +428,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -484,7 +484,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -551,7 +551,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -592,13 +592,13 @@ describe('Plugin', () => {
       })
 
       describe('with DBM propagation enabled with full using tracer configurations', () => {
-        const tracer = require('../../dd-trace')
+        let tracer
         let seenTraceParent
         let seenTraceId
         let seenSpanId
         const originalWrite = net.Socket.prototype.write
 
-        before(() => {
+        before(async () => {
           net.Socket.prototype.write = function (buffer) {
             let strBuf = buffer.toString()
             if (strBuf.includes('traceparent=\'')) {
@@ -609,13 +609,12 @@ describe('Plugin', () => {
             }
             return originalWrite.apply(this, arguments)
           }
-          return agent.load('pg')
+          tracer = await agent.load('pg')
         })
 
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
           })
@@ -685,17 +684,16 @@ describe('Plugin', () => {
       })
 
       describe('DBM propagation enabled with full should handle query config objects', () => {
-        const tracer = require('../../dd-trace')
         let queryQueueName
+        let tracer
 
-        before(() => {
-          return agent.load('pg')
+        before(async () => {
+          tracer = await agent.load('pg')
         })
 
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
             service: 'post',
@@ -716,7 +714,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           client.end(done)
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         it('query config objects should be handled', async () => {
@@ -741,7 +739,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', async () => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           const query = {
             text: 'SELECT $1::text as message',
           }
@@ -904,7 +902,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach((done) => {
@@ -944,7 +942,6 @@ describe('Plugin', () => {
         // Tracer-level config (third arg) only takes effect if the global
         // tracer is wiped first; tracer.init() short-circuits once the
         // process-wide singleton has been initialized by an earlier load.
-        agent.wipe()
         await agent.load('pg', {
           appendComment: true,
           service: () => 'serviced',
@@ -955,7 +952,7 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false, wipe: true })
+        return agent.close()
       })
 
       beforeEach((done) => {

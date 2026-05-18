@@ -11,13 +11,12 @@ const agent = require('./plugins/agent')
 describe('dd-trace', () => {
   let tracer
 
-  beforeEach(() => {
-    tracer = require('../')
-    return agent.load()
+  beforeEach(async () => {
+    tracer = await agent.load()
   })
 
-  afterEach(() => {
-    agent.close()
+  afterEach(async () => {
+    await agent.close()
   })
 
   it('should record and send a trace to the agent', () => {

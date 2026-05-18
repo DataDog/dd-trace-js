@@ -98,7 +98,7 @@ describe('Sfn', () => {
           stateMachineArn = data.stateMachineArn
         })
 
-        afterEach(() => { return agent.close({ ritmReset: false }) })
+        afterEach(() => { return agent.close() })
 
         afterEach(async () => {
           await deleteStateMachine(stateMachineArn)

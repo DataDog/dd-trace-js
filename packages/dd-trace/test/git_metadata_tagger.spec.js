@@ -16,21 +16,17 @@ const oldEnv = process.env
 describe('git metadata tagging', () => {
   let tracer
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env = {
       ...oldEnv,
       DD_GIT_COMMIT_SHA: DUMMY_GIT_SHA,
       DD_TAGS: `git.repository_url:${DUMMY_REPOSITORY_URL}`,
     }
-    tracer = require('../')
-    return agent.load()
+    tracer = await agent.load()
   })
 
-  afterEach(() => {
-    agent.close()
-  })
-
-  afterEach(() => {
+  afterEach(async () => {
+    await agent.close()
     process.env = oldEnv
   })
 

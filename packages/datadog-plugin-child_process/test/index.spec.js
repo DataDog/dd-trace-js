@@ -404,7 +404,7 @@ describe('Child process plugin', () => {
 
     afterEach(() => {
       global.Promise = originalPromise
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
@@ -504,7 +504,7 @@ describe('Child process plugin', () => {
         })
       })
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
       const parentSpanList = [true, false]
       parentSpanList.forEach(hasParentSpan => {
         let parentSpan
@@ -649,7 +649,7 @@ describe('Child process plugin', () => {
         })
       })
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
       const parentSpanList = [true, false]
       parentSpanList.forEach(parentSpan => {
         describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {

@@ -24,7 +24,7 @@ describe('Plugin', () => {
     this.timeout(10000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
       let kafka
@@ -38,8 +38,7 @@ describe('Plugin', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
 
         beforeEach(async () => {
-          tracer = require('../../dd-trace')
-          await agent.load('kafkajs')
+          tracer = await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
           Broker = require(`../../../versions/kafkajs@${version}/node_modules/kafkajs/src/broker`)

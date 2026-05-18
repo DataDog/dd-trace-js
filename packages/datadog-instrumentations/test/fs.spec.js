@@ -7,7 +7,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('fs instrumentation', () => {
   afterEach(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   it('require node:fs should work', () => {

@@ -18,7 +18,7 @@ function createIntegrationTestSuite (pluginName, packageName, options, testCallb
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           before(async () => {
