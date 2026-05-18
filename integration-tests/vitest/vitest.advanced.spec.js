@@ -103,7 +103,9 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              // Creates a span after ci/init but before library configuration adds capability metadata.
+              NODE_OPTIONS:
+                '--import dd-trace/register.js -r dd-trace/ci/init -r ./ci-visibility/vitest-early-span',
               DD_TEST_SESSION_NAME: 'my-test-session-name',
             },
           }
