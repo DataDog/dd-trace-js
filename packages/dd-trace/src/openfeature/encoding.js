@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 
 /**
  * Encode a single value as a varint (variable-length integer).

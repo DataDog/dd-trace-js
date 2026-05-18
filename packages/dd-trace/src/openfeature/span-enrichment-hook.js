@@ -16,7 +16,7 @@ const finishCh = channel('dd-trace:span:finish')
  * Span tags added:
  * - `ffe_flags_enc`: Base64 delta-varint encoded serial IDs
  * - `ffe_subjects_enc`: JSON dict of SHA256(targeting_key) → encoded serial IDs
- * - `ffe_defaults`: JSON dict of flag_key → "coded-default: <value>"
+ * - `ffe_runtime_defaults`: JSON dict of flag_key → default value string
  */
 class SpanEnrichmentHook {
   #tracer
