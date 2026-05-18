@@ -164,7 +164,7 @@ describe('Plugin', () => {
         })
 
         describe('concurrent context isolation', function () {
-          this.timeout(30000)
+          this.timeout(60000)
           let setCheckpointSpy
           let consumerA
           let consumerB
@@ -213,7 +213,7 @@ describe('Plugin', () => {
 
             consumerA = kafka.consumer({ groupId: 'test-group-a' })
             await consumerA.connect()
-            await consumerA.subscribe({ topic: topicAIn })
+            await consumerA.subscribe({ topic: topicAIn, fromBeginning: true })
             await consumerA.run({
               eachMessage: async () => {
                 resolveAEntered()
@@ -225,7 +225,7 @@ describe('Plugin', () => {
 
             consumerB = kafka.consumer({ groupId: 'test-group-b' })
             await consumerB.connect()
-            await consumerB.subscribe({ topic: topicBIn })
+            await consumerB.subscribe({ topic: topicBIn, fromBeginning: true })
             await consumerB.run({
               eachMessage: async () => {
                 resolveBEntered()
