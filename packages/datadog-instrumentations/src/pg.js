@@ -193,7 +193,7 @@ function wrapPoolQuery (query) {
       }
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (...args) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
           finish(ctx)
           return cb.apply(this, args)
         })
