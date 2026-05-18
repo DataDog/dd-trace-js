@@ -20,6 +20,8 @@ const {
   markEndpointReached,
 } = require('./retry')
 
+const legacyStorage = storage('legacy')
+
 const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
@@ -161,7 +163,7 @@ function request (data, options, callback) {
 
     activeBufferSize += options.headers['Content-Length'] ?? 0
 
-    storage('legacy').run({ noop: true }, () => {
+    legacyStorage.run({ noop: true }, () => {
       let finished = false
       const finalize = () => {
         if (finished) return

@@ -5,6 +5,8 @@ const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
 const Plugin = require('./plugin')
 
+const legacyStorage = storage('legacy')
+
 class TracingPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -16,7 +18,7 @@ class TracingPlugin extends Plugin {
   }
 
   get activeSpan () {
-    const store = /** @type {{ span?: import('../../../..').Span }} */ (storage('legacy').getStore())
+    const store = /** @type {{ span?: import('../../../..').Span }} */ (legacyStorage.getStore())
 
     return store?.span
   }
@@ -193,7 +195,7 @@ class TracingPlugin extends Plugin {
       serviceSource = service ? 'opt.plugin' : undefined
     }
 
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     if (store && childOf === undefined) {
       childOf = /** @type {import('../opentracing/span') | undefined} */ (store.span)
     }
@@ -226,7 +228,7 @@ class TracingPlugin extends Plugin {
 
     // TODO: Remove this after migration to TracingChannel is done.
     if (enterOrCtx === true) {
-      storage('legacy').enterWith({ ...store, span })
+      legacyStorage.enterWith({ ...store, span })
     } else if (enterOrCtx) {
       enterOrCtx.parentStore = store
       enterOrCtx.currentStore = { ...store, span }
