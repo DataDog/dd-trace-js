@@ -245,6 +245,7 @@ interface Plugins {
   "cypress": tracer.plugins.cypress;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
+  "electron": tracer.plugins.electron;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -351,17 +352,6 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
-
-    /**
-     * Causally links another span to the current span
-     *
-     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
-     * This will be removed in the next major version.
-     * @param {SpanContext} context The context of the span to link to.
-     * @param {Object} attributes An optional key value pair of arbitrary values.
-     * @returns {void}
-     */
-    addLink (context: SpanContext, attributes?: Object): void;
 
     /**
      * Adds a single link to the span.
@@ -726,7 +716,7 @@ declare namespace tracer {
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      exporter?: 'log' | 'agent' | 'datadog'
+      exporter?: 'log' | 'agent' | 'datadog' | 'electron'
 
       /**
        * Whether to enable the experimental `getRumData` method.
@@ -2344,6 +2334,26 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [electron](https://github.com/electron/electron) module.
+     */
+    interface electron extends Instrumentation {
+      /**
+       * Whether to enable instrumentation of ipc spans
+       *
+       * @default true
+       */
+      ipc?: boolean;
+
+      /**
+       * Whether to enable instrumentation of net spans
+       *
+       * @default true
+       */
+      net?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
     interface express extends HttpServer {}
@@ -3226,16 +3236,6 @@ declare namespace tracer {
       recordException(exception: Exception, time?: TimeInput): void;
 
       /**
-       * Causally links another span to the current span
-       *
-       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
-       * @param {otel.SpanContext} context The context of the span to link to.
-       * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
-       * @returns {void}
-       */
-      addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
-
-      /**
        * Adds a single link to the span.
        *
        * Links added after the creation will not affect the sampling decision.
@@ -3425,11 +3425,15 @@ declare namespace tracer {
 
       /**
        * Enable LLM Observability tracing.
+       *
+       * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
       enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
+       *
+       * @deprecated Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. Set DD_LLMOBS_ENABLED=false to disable LLM Observability.
        */
       disable (): void,
 
