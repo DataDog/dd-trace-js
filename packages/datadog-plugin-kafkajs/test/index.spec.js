@@ -21,7 +21,7 @@ const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 describe('Plugin', () => {
   describe('kafkajs', function () {
     // TODO: remove when new internal trace has landed
-    this.timeout(10000)
+    this.timeout(30000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })

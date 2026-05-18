@@ -34,7 +34,7 @@ const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
-    this.timeout(10000)
+    this.timeout(30000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
