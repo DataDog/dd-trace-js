@@ -29,7 +29,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
         if (res._callback) {
           const cb = res._callback
-          res._callback = shimmer.wrapFunction(cb, cb => function (error, result) {
+          res._callback = shimmer.wrapCallback(cb, cb => function (error, result) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)
@@ -86,7 +86,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
     return startPoolQueryCh.runStores(ctx, () => {
       const cb = args[args.length - 1]
       if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (...args) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
           return finishPoolQueryCh.runStores(ctx, cb, this, ...args)
         })
       }
