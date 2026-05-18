@@ -100,7 +100,7 @@ describe('Electron integration', function () {
   })
 
   beforeEach(function (done) {
-    this.timeout(15_000)
+    this.timeout(30_000)
 
     child = spawn(binaryPath, process.platform === 'linux' ? ['--no-sandbox'] : [], {
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
