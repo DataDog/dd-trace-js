@@ -135,77 +135,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-            assert.strictEqual(testSuites.length, 1)
-            assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'fail')
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 10)
-
-            assertObjectContains(tests.map(test => test.resource), [
-              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
-              // passes at the second retry
-              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              // never passes
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              // passes on the first try
-              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
-            ])
-
-            const eventuallyPassingTest = tests.filter(
-              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes'
-            )
-            assert.strictEqual(eventuallyPassingTest.length, 3)
-            assert.strictEqual(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
-            assert.strictEqual(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
-            assert.strictEqual(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
-            assert.strictEqual(eventuallyPassingTest.filter(test =>
-              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            ).length, 2)
-
-            const neverPassingTest = tests.filter(
-              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
-            )
-            assert.strictEqual(neverPassingTest.length, 6)
-            assert.strictEqual(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
-            assert.strictEqual(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
-            assert.strictEqual(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
-            assert.strictEqual(neverPassingTest.filter(
-              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            ).length, 5)
-
-            // Verify execution order: retries happen right after the original test
-            const testExecutionOrder = tests.map(test => ({
-              name: test.meta[TEST_NAME],
-              isRetry: test.meta[TEST_IS_RETRY] === 'true',
-            }))
-
-            // Verify order for "flaky test retry eventually passes" (first 3)
-            for (let i = 0; i < 3; i++) {
-              assert.equal(testExecutionOrder[i].name, 'flaky test retry eventually passes')
-              assert.equal(testExecutionOrder[i].isRetry, i > 0)
-            }
-
-            // Verify order for "flaky test retry never passes" (next 6)
-            for (let i = 3; i < 9; i++) {
-              assert.equal(testExecutionOrder[i].name, 'flaky test retry never passes')
-              assert.equal(testExecutionOrder[i].isRetry, i > 3)
-            }
-
-            // Verify "flaky test retry always passes" comes last
-            assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
-            assert.equal(testExecutionOrder[9].isRetry, false)
-          }, 30000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
@@ -221,6 +150,80 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(testSuites.length, 1)
+              assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'fail')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 10)
+
+              assertObjectContains(tests.map(test => test.resource), [
+                'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+                // passes at the second retry
+                'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                // never passes
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                // passes on the first try
+                'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
+              ])
+
+              const eventuallyPassingTest = tests.filter(
+                test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes'
+              )
+              assert.strictEqual(eventuallyPassingTest.length, 3)
+              assert.strictEqual(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+              assert.strictEqual(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+              assert.strictEqual(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+              assert.strictEqual(eventuallyPassingTest.filter(test =>
+                test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              ).length, 2)
+
+              const neverPassingTest = tests.filter(
+                test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+              )
+              assert.strictEqual(neverPassingTest.length, 6)
+              assert.strictEqual(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
+              assert.strictEqual(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
+              assert.strictEqual(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+              assert.strictEqual(neverPassingTest.filter(
+                test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              ).length, 5)
+
+              // Verify execution order: retries happen right after the original test
+              const testExecutionOrder = tests.map(test => ({
+                name: test.meta[TEST_NAME],
+                isRetry: test.meta[TEST_IS_RETRY] === 'true',
+              }))
+
+              // Verify order for "flaky test retry eventually passes" (first 3)
+              for (let i = 0; i < 3; i++) {
+                assert.equal(testExecutionOrder[i].name, 'flaky test retry eventually passes')
+                assert.equal(testExecutionOrder[i].isRetry, i > 0)
+              }
+
+              // Verify order for "flaky test retry never passes" (next 6)
+              for (let i = 3; i < 9; i++) {
+                assert.equal(testExecutionOrder[i].name, 'flaky test retry never passes')
+                assert.equal(testExecutionOrder[i].isRetry, i > 3)
+              }
+
+              // Verify "flaky test retry always passes" comes last
+              assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
+              assert.equal(testExecutionOrder[9].isRetry, false)
+            }, { hardTimeout: 30000 })
 
         // TODO: remove this once we have figured out flakiness
         childProcess.stdout?.pipe(process.stdout)
@@ -243,24 +246,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-            assert.strictEqual(testSuites.length, 1)
-            assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'fail')
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 3)
-
-            assertObjectContains(tests.map(test => test.resource), [
-              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
-            ])
-            assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
@@ -277,6 +262,27 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(testSuites.length, 1)
+              assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'fail')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 3)
+
+              assertObjectContains(tests.map(test => test.resource), [
+                'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
+              ])
+              assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -295,30 +301,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-            assert.strictEqual(testSuites.length, 1)
-            assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'fail')
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 5)
-
-            assertObjectContains(tests.map(test => test.resource), [
-              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
-            ])
-
-            assert.strictEqual(
-              tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length,
-              2
-            )
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
@@ -335,6 +317,33 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(testSuites.length, 1)
+              assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'fail')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 5)
+
+              assertObjectContains(tests.map(test => test.resource), [
+                'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+                'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
+              ])
+
+              assert.strictEqual(
+                tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length,
+                2
+              )
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -354,22 +363,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const neverPassingTests = tests.filter(
-              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
-            )
-            assert.strictEqual(neverPassingTests.length, 2, 'initial + 1 ATR retry')
-            const failedNeverPassing = neverPassingTests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedNeverPassing.length, 2)
-            const lastFailed = failedNeverPassing[failedNeverPassing.length - 1]
-            assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-            assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
@@ -386,6 +379,25 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const neverPassingTests = tests.filter(
+                test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+              )
+              assert.strictEqual(neverPassingTests.length, 2, 'initial + 1 ATR retry')
+              const failedNeverPassing = neverPassingTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failedNeverPassing.length, 2)
+              const lastFailed = failedNeverPassing[failedNeverPassing.length - 1]
+              assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -404,19 +416,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            // Should only have 3 tests, no retries
-            assert.equal(tests.length, 3)
-
-            // No retries should occur when testIsolation is false
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
-            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
-          }, 30000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
@@ -433,6 +432,22 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              // Should only have 3 tests, no retries
+              assert.equal(tests.length, 3)
+
+              // No retries should occur when testIsolation is false
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+              assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
+            }, { hardTimeout: 30000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -456,32 +471,6 @@ moduleTypes.forEach(({
 
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testEvent = events.find(event => event.type === 'test')
-          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-          const eventSummary = JSON.stringify(events.map(event => ({
-            type: event.type,
-            resource: event.content.resource,
-            status: event.content.meta?.[TEST_STATUS],
-          })), null, 2)
-
-          assert.ok(testEvent, `expected a test event, got events: ${eventSummary}\nCypress output:\n${testOutput}`)
-          assert.ok(
-            testSuiteEvent,
-            `expected a test_suite_end event, got events: ${eventSummary}\nCypress output:\n${testOutput}`
-          )
-
-          const test = testEvent.content
-          const testSuite = testSuiteEvent.content
-          // The test is in a subproject
-          assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
-          assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-          assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-        }, 60000)
-
       childProcess = exec(
         command,
         {
@@ -492,6 +481,35 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      const eventsPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testEvent = events.find(event => event.type === 'test')
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+            const eventSummary = JSON.stringify(events.map(event => ({
+              type: event.type,
+              resource: event.content.resource,
+              status: event.content.meta?.[TEST_STATUS],
+            })), null, 2)
+
+            assert.ok(testEvent, `expected a test event, got events: ${eventSummary}\nCypress output:\n${testOutput}`)
+            assert.ok(
+              testSuiteEvent,
+            `expected a test_suite_end event, got events: ${eventSummary}\nCypress output:\n${testOutput}`
+            )
+
+            const test = testEvent.content
+            const testSuite = testSuiteEvent.content
+            // The test is in a subproject
+            assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+            assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          }, { hardTimeout: 60000 })
       childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
@@ -521,7 +539,22 @@ moduleTypes.forEach(({
         },
       })
 
-      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      const specToRun = 'cypress/e2e/dynamic-name-test.cy.js'
+
+      childProcess = exec(
+        version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -542,21 +575,7 @@ moduleTypes.forEach(({
             assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
           })
         },
-        25000
-      )
-
-      const specToRun = 'cypress/e2e/dynamic-name-test.cy.js'
-
-      childProcess = exec(
-        version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-        {
-          cwd,
-          env: {
-            ...getCiVisEvpProxyConfig(receiver.port),
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            SPEC_PATTERN: specToRun,
-          },
-        }
+        { hardTimeout: 25000 }
       )
 
       let testOutput = ''
