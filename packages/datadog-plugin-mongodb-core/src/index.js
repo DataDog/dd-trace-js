@@ -20,6 +20,9 @@ class MongodbCorePlugin extends DatabasePlugin {
 
     this.config.heartbeatEnabled = config.heartbeatEnabled ??
       this._tracerConfig.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+    this.config.obfuscateQuery = normaliseObfuscateQuery(
+      config.obfuscateQuery ?? this._tracerConfig.DD_TRACE_MONGODB_OBFUSCATE_QUERY
+    )
   }
 
   bindStart (ctx) {
@@ -28,7 +31,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
     }
-    const query = getQuery(ops)
+    const query = getQuery(ops, this.config.obfuscateQuery)
     const resource = truncate(getResource(this, ns, query, name))
     const serviceResult = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -106,15 +109,19 @@ function extractQuery (statements) {
   return extractedQueries
 }
 
-function getQuery (cmd) {
+/**
+ * @param {Record<string, unknown> | unknown[] | undefined} cmd
+ * @param {'none' | 'types' | 'redact'} mode
+ */
+function getQuery (cmd, mode) {
   if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
 
-  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd))
-  if (cmd.query) return sanitiseAndStringify(cmd.query)
-  if (cmd.filter) return sanitiseAndStringify(cmd.filter)
-  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline)
-  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes))
-  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates))
+  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd), mode)
+  if (cmd.query) return sanitiseAndStringify(cmd.query, mode)
+  if (cmd.filter) return sanitiseAndStringify(cmd.filter, mode)
+  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline, mode)
+  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes), mode)
+  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates), mode)
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -133,35 +140,63 @@ function truncate (input) {
 
 // Single-pass sanitisation. The replacer:
 // - skips functions and coerces bigint to its decimal string,
-// - returns '?' for Buffer / BSON Binary on the *original* value (JSON.stringify already invoked
-//   toJSON before calling us; Buffer / Binary do have toJSON outputs we want to suppress),
+// - collapses Buffer / BSON Binary / BSON types without toJSON (MinKey, MaxKey) to a sentinel,
 // - lets JSON.stringify call toJSON on other BSON types (ObjectId, Long, Decimal128, Date, Timestamp, ...)
 //   so the result lands here as a primitive or plain object,
-// - returns '?' for BSON types without toJSON (MinKey, MaxKey) where `value === original`,
-// - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to '?'.
-function sanitiseAndStringify (input) {
+// - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to the sentinel,
+// - in `redact` mode, replaces every primitive leaf (including null) with '?',
+// - in `types` mode, replaces every primitive leaf with the typeof of the *original* value (so a
+//   BSON Date that flattens to a string still reports as 'object'), and 'null' for null.
+// Keys, operator names, and array / pipeline shape are preserved in both modes so the resulting
+// JSON is still a usable query signature.
+/**
+ * @param {Record<string, unknown> | unknown[]} input
+ * @param {'none' | 'types' | 'redact'} mode
+ */
+function sanitiseAndStringify (input, mode) {
   const ancestors = []
   return JSON.stringify(input, function (key, value) {
     if (typeof value === 'function') return
-    if (typeof value === 'bigint') return value.toString()
+    if (typeof value === 'bigint') {
+      if (mode === 'redact') return '?'
+      if (mode === 'types') return 'bigint'
+      return value.toString()
+    }
 
     const original = key === '' ? value : this[key]
     if (typeof original === 'object' && original !== null) {
-      if (Buffer.isBuffer(original)) return '?'
       const bsontype = original._bsontype
-      if (bsontype !== undefined && (bsontype === 'Binary' || value === original)) {
-        return '?'
+      if (Buffer.isBuffer(original) || (bsontype !== undefined && (bsontype === 'Binary' || value === original))) {
+        return mode === 'types' ? 'object' : '?'
       }
     }
 
-    if (value === null || typeof value !== 'object') return value
+    if (value === null || typeof value !== 'object') {
+      if (key === '' || mode === 'none') return value
+      if (mode === 'redact') return '?'
+      return original === null ? 'null' : typeof original
+    }
 
     while (ancestors.length > 0 && ancestors.at(-1) !== this) ancestors.pop()
-    if (ancestors.length >= MAX_DEPTH || ancestors.includes(value)) return '?'
+    if (ancestors.length >= MAX_DEPTH || ancestors.includes(value)) {
+      return mode === 'types' ? 'object' : '?'
+    }
     ancestors.push(value)
 
     return value
   })
+}
+
+/**
+ * Coerce the plugin-config and env values for `obfuscateQuery` to one of the three canonical modes.
+ * Anything outside the enum — including `undefined` — falls back to `'none'`.
+ *
+ * @param {unknown} value
+ * @returns {'none' | 'types' | 'redact'}
+ */
+function normaliseObfuscateQuery (value) {
+  if (value === 'types' || value === 'redact') return value
+  return 'none'
 }
 
 function isHeartbeat (ops, config) {
