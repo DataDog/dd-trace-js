@@ -108,6 +108,50 @@ describe('Plugin', () => {
         await expectedSpanPromise
       })
 
+      it('does not create cosmosdb or http spans for empty-path read requests', async () => {
+        agent.reload('http', { enabled: true })
+
+        const seenSpans = []
+        const collect = (payload) => {
+          if (!Array.isArray(payload)) return
+          for (const trace of payload) {
+            if (!Array.isArray(trace)) continue
+            for (const span of trace) seenSpans.push(span)
+          }
+        }
+        agent.subscribe(collect)
+
+        try {
+          await client.getDatabaseAccount()
+
+          const markerSeen = agent.assertSomeTraces(traces => {
+            const flat = traces.filter(Array.isArray).flat()
+            assert.ok(
+              flat.some(s => s?.resource === 'upsert /dbs/testDatabase/colls/testContainer/docs'),
+              'waiting for marker upsert span'
+            )
+          })
+          await container.items.upsert({ id: 'marker', productName: 'Test Product', productModel: 'Model 1' })
+          await markerSeen
+
+          const readSpan = seenSpans.find(
+            s => s?.name === 'cosmosdb.query' && s?.resource === 'read '
+          )
+          assert.equal(readSpan, undefined, 'unexpected cosmosdb read span for empty-path request')
+
+          // Account read uses an empty SDK path, so the http client plugin records
+          // http.url ending with the bare endpoint root. The upsert marker hits
+          // /dbs/testDatabase/colls/testContainer/docs, so it won't match.
+          const accountHttp = seenSpans.find(s =>
+            s?.name === 'http.request' && s?.meta?.['http.url']?.endsWith(':8081/')
+          )
+          assert.equal(accountHttp, undefined, 'unexpected http span for empty-path account read')
+        } finally {
+          agent.unsubscribe(collect)
+          agent.reload('http', { enabled: false })
+        }
+      })
+
       it('should create spans if an error occurs', async () => {
         const expectedSpanPromise = agent.assertSomeTraces(
           traces => {
