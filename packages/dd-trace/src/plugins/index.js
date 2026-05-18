@@ -2,6 +2,9 @@
 
 const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
+  get '@anthropic-ai/claude-agent-sdk' () {
+    return require('../../../datadog-plugin-anthropic-ai-claude-agent-sdk/src')
+  },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@azure/event-hubs' () { return require('../../../datadog-plugin-azure-event-hubs/src') },
