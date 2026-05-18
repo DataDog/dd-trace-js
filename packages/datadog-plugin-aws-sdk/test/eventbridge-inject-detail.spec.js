@@ -64,7 +64,7 @@ describe('EventBridge plugin requestInject', () => {
     const plugin = buildPlugin({ dsmEnabled: true })
     const entry = { Detail: '{"hello":"world"}' }
 
-    plugin.injectToEntry(null, entry, false)
+    plugin.injectToEntry(null, entry, false, true)
 
     assert.strictEqual(plugin.dsmCalls.length, 1)
     assert.deepStrictEqual(JSON.parse(plugin.dsmCalls[0].detail)._datadog, {})
@@ -78,7 +78,7 @@ describe('EventBridge plugin requestInject', () => {
     })
     const entry = { Detail: '{"hello":"world"}' }
 
-    plugin.injectToEntry(null, entry, true)
+    plugin.injectToEntry(null, entry, true, true)
 
     assert.deepStrictEqual(JSON.parse(entry.Detail)._datadog, {
       'x-datadog-trace-id': '123',
@@ -96,7 +96,7 @@ describe('EventBridge plugin requestInject', () => {
     })
     const entry = { Detail: '{"hello":"world"}' }
 
-    plugin.injectToEntry(null, entry, false)
+    plugin.injectToEntry(null, entry, false, true)
 
     const injected = JSON.parse(entry.Detail)._datadog
     assert.ok(typeof injected['dd-pathway-ctx-base64'] === 'string' && injected['dd-pathway-ctx-base64'].length > 0)
@@ -120,7 +120,7 @@ describe('EventBridge plugin requestInject', () => {
         : undefined
     }
 
-    plugin.injectToEntry(null, entry, false)
+    plugin.injectToEntry(null, entry, false, true)
 
     assert.strictEqual(entry.Detail, '{"hello":"world"}')
   })

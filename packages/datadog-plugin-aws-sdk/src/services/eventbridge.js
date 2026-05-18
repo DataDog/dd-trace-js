@@ -6,7 +6,6 @@ const {
 } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { isEmpty } = require('../util')
 
 const DEFAULT_EVENT_BUS = 'default'
 const DEFAULT_DETAIL_TYPE = 'unknown'
@@ -44,19 +43,19 @@ class EventBridge extends BaseAwsSdkPlugin {
     if (operation !== 'putEvents' || !params?.Entries?.length) return
     const dsmEnabled = this.config?.dsmEnabled === true
     const batchPropagationEnabled = this.config?.batchPropagationEnabled === true
-    if (!dsmEnabled && !batchPropagationEnabled) {
-      this.injectToEntry(span, params.Entries[0], true, false)
+    if (dsmEnabled || batchPropagationEnabled) {
+      for (let i = 0; i < params.Entries.length; i++) {
+        this.injectToEntry(
+          span,
+          params.Entries[i],
+          i === 0 || batchPropagationEnabled,
+          dsmEnabled,
+        )
+      }
       return
     }
 
-    for (let i = 0; i < params.Entries.length; i++) {
-      this.injectToEntry(
-        span,
-        params.Entries[i],
-        i === 0 || batchPropagationEnabled,
-        dsmEnabled,
-      )
-    }
+    this.injectToEntry(span, params.Entries[0], true, false)
   }
 
   /**
@@ -65,10 +64,10 @@ class EventBridge extends BaseAwsSdkPlugin {
    * @param {import('../../../..').Span} span
    * @param {object} entry
    * @param {boolean} injectTraceContext
-   * @param {boolean} [dsmEnabled]
+   * @param {boolean} dsmEnabled
    * @returns {void}
    */
-  injectToEntry (span, entry, injectTraceContext, dsmEnabled = this.config?.dsmEnabled === true) {
+  injectToEntry (span, entry, injectTraceContext, dsmEnabled) {
     if (!entry?.Detail) return
     if (!dsmEnabled) {
       if (!injectTraceContext) return
@@ -93,14 +92,17 @@ class EventBridge extends BaseAwsSdkPlugin {
 
     entry.Detail = finalData
     const dataStreamsContext = this.setDSMCheckpoint(span, entry)
-    if (dataStreamsContext) {
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
-      finalData = this.injectDetail(originalDetail, ddInfo)
-      if (!finalData) {
+    if (!dataStreamsContext) {
+      if (!injectTraceContext) {
         entry.Detail = originalDetail
         return
       }
-    } else if (isEmpty(ddInfo)) {
+      return
+    }
+
+    DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+    finalData = this.injectDetail(originalDetail, ddInfo)
+    if (!finalData) {
       entry.Detail = originalDetail
       return
     }
