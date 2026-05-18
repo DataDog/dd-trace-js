@@ -8,7 +8,10 @@ const Lambda = require('../../../packages/datadog-plugin-aws-sdk/src/services/la
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 2_000_000
+// Sized so the slowest variant (`eventbridge-inject-detail`, ~1.8 µs per
+// inject on Linux CI) lands in the ~1-3 s/iter sweet spot at the meta-level
+// `iterations: 30` outer count.
+const ITERATIONS = 1_000_000
 
 // Plugin reads `this.tracer` via a getter that forwards to `this._tracer`; wire the
 // stub through the underscore field so the public access path stays intact.

@@ -5,7 +5,14 @@ const assert = require('node:assert/strict')
 const {
   ENCODER_VERSION,
   WITH_SPAN_EVENTS = 'none',
+  // Per-variant inner-loop count keeps each variant in the ~1-3 s/iter
+  // sweet spot. Driven from meta.json so all variant tuning lives next to
+  // the rest of the variant config; the legacy and native paths run several
+  // multiples slower per encode and need fewer iterations to stay in budget.
+  INNER_ITERATIONS = '5000',
 } = process.env
+
+const innerIterations = Number(INNER_ITERATIONS)
 
 const { AgentEncoder } = require(`../../../packages/dd-trace/src/encode/${ENCODER_VERSION}`)
 const id = require('../../../packages/dd-trace/src/id')
@@ -74,11 +81,11 @@ assert.ok(encoder._traceBytes.length > 0)
 encoder._reset()
 
 if (WITH_SPAN_EVENTS === 'none') {
-  for (let iteration = 0; iteration < 5000; iteration++) {
+  for (let iteration = 0; iteration < innerIterations; iteration++) {
     encoder.encode(trace)
   }
 } else {
-  for (let iteration = 0; iteration < 5000; iteration++) {
+  for (let iteration = 0; iteration < innerIterations; iteration++) {
     attachFreshEvents()
     encoder.encode(trace)
   }

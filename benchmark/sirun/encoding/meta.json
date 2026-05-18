@@ -4,7 +4,7 @@
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
   "instructions": true,
-  "iterations": 10,
+  "iterations": 22,
   "variants": {
     "0.4": {
       "env": {
@@ -23,7 +23,8 @@
       "env": {
         "ENCODER_VERSION": "0.4",
         "WITH_SPAN_EVENTS": "native",
-        "DD_TRACE_NATIVE_SPAN_EVENTS": "true"
+        "DD_TRACE_NATIVE_SPAN_EVENTS": "true",
+        "INNER_ITERATIONS": "1000"
       }
     },
     "0.4-events-legacy": {
@@ -31,7 +32,8 @@
       "env": {
         "ENCODER_VERSION": "0.4",
         "WITH_SPAN_EVENTS": "legacy",
-        "DD_TRACE_NATIVE_SPAN_EVENTS": "false"
+        "DD_TRACE_NATIVE_SPAN_EVENTS": "false",
+        "INNER_ITERATIONS": "3000"
       }
     },
     "0.5-events-legacy": {
