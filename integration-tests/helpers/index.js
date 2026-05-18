@@ -15,6 +15,12 @@ const execAsync = promisify(exec)
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
+const {
+  FLUSH_SIGNAL_KEY,
+  isCoverageActive,
+  resolveCoverageRoot,
+} = require('../coverage/runtime')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
@@ -271,8 +277,8 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
- * @param {NodeJS.Signals} [options.signal='SIGTERM'] - Signal to send before escalating.
- * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
+ * @param {NodeJS.Signals} [options.signal] - Signal to send before escalating. Defaults to `SIGTERM`.
+ * @param {number} [options.timeoutMs] - Max wait per signal in milliseconds. Defaults to the stop-proc timeout.
  * @returns {Promise<void>}
  */
 async function stopProc (proc, options = {}) {
@@ -281,6 +287,12 @@ async function stopProc (proc, options = {}) {
 
   const signal = options.signal ?? 'SIGTERM'
   const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+  // Windows SIGTERM is forceful; ask the bootstrap to flush via the IPC sentinel instead.
+  if (process.platform === 'win32' && isCoverageActive() && proc.connected) {
+    proc.send({ [FLUSH_SIGNAL_KEY]: true }, () => {})
+    if (await waitForProcExit(proc, timeoutMs)) return
+  }
 
   proc.kill(signal)
 
@@ -293,6 +305,27 @@ async function stopProc (proc, options = {}) {
   if (!exitedAfterSigkill) {
     throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
   }
+}
+
+/**
+ * Tear down a Test Optimization integration fixture between tests.
+ *
+ * Awaits each step so the next test starts from a clean slate — letting the
+ * previous child outlive `afterEach` leaks sockets and file descriptors that
+ * the next Cypress / Playwright run then races against.
+ *
+ * @param {object} env
+ * @param {childProcess.ChildProcess} [env.childProcess] - Test child to stop.
+ * @param {import('http').Server} [env.webAppServer] - Web fixture server to close.
+ * @param {FakeAgent} [env.receiver] - Fake agent / intake to stop.
+ * @returns {Promise<void>}
+ */
+async function stopCiVisTestEnv ({ childProcess, webAppServer, receiver }) {
+  await stopProc(childProcess)
+  if (webAppServer?.listening) {
+    await /** @type {Promise<void>} */ (new Promise((resolve) => webAppServer.close(() => resolve())))
+  }
+  await receiver?.stop()
 }
 
 /**
@@ -332,8 +365,11 @@ function waitForProcExit (proc, timeoutMs) {
  * @returns {SpawnedProcess}
  */
 function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
-  // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
-  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
+  // When stdio is 'pipe', stdout/stderr are guaranteed non-null.
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, {
+    ...options,
+    stdio: 'pipe',
+  }))
 
   proc.stdout.on('data', data => {
     if (stdioHandler) {
@@ -417,13 +453,17 @@ async function execHelperAsync (command, options) {
 }
 
 /**
- * Pack dd-trace into a tarball at the specified path.
- *
- * @param {string} tarballPath - The path where the tarball should be created
- * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @param {string} tarballPath
+ * @param {NodeJS.ProcessEnv} env
  * @returns {Promise<void>}
  */
 async function packTarball (tarballPath, env) {
+  if (isCoverageActive()) {
+    const { packInstrumentedTarball } = require('../coverage/pack-instrumented-tarball')
+    await packInstrumentedTarball(tarballPath, env)
+    log('Pre-instrumented tarball packed successfully:', tarballPath)
+    return
+  }
   await execHelperAsync(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
 }
@@ -535,7 +575,11 @@ async function createSandbox (
     execHelper('yarn link')
     execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+    return {
+      coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),
+      folder: path.join(process.cwd(), 'integration-tests'),
+      remove: async () => {},
+    }
   }
   const folder = path.join(sandboxRoot, id().toString())
   const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
@@ -603,8 +647,11 @@ async function createSandbox (
   }
 
   return {
+    coverageRoot: resolveCoverageRoot({ cwd: folder }),
     folder,
-    remove: () => {
+    remove: async () => {
+      await finalizeSandboxCoverage(folder, resolveCoverageRoot({ cwd: folder }))
+
       // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
       // our `integration-guardrails` GitHub Actions workflow
       if (process.platform === 'win32') {
@@ -734,7 +781,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
         if (!data && retries < 10) {
           return tryAgain()
         }
-        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
+        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`, { cause: e })
       }
       msgs.push([telemetryType, parsed])
     }
@@ -831,6 +878,34 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
+ * Exercise the full `cypress run` pipeline (config loader + setupNodeEvents +
+ * spec resolution) once per matrix job so the first real test doesn't pay an
+ * electron + NYC require-hook cold-start that exceeds the per-test gather window.
+ * `cypress verify` only warms the binary; it leaves the run pipeline cold.
+ *
+ * The non-existent spec pattern makes cypress exit with "No specs found" *after*
+ * loading config and plugins — that's the side-effect we want. The non-zero exit
+ * code is intentionally ignored.
+ *
+ * `NODE_OPTIONS` is cleared because the workflow-level `-r ./ci/init` is relative
+ * to the dd-trace repo root and won't resolve from inside the sandbox. The
+ * coverage harness still prepends its NYC bootstrap via `patchExecOptions`, so
+ * the require-hook cold-start is absorbed here too.
+ *
+ * @param {string} cwd - Sandbox folder where cypress is installed.
+ * @returns {Promise<void>}
+ */
+function warmCypressBinary (cwd) {
+  return new Promise(resolve => {
+    childProcess.exec('./node_modules/.bin/cypress run --spec __ddwarmup_no_match__.cy.js', {
+      cwd,
+      timeout: 80_000,
+      env: { ...process.env, NODE_OPTIONS: '' },
+    }, () => resolve())
+  })
+}
+
+/**
  * @typedef {Record<string, string|undefined>} AdditionalEnvArgs
  */
 
@@ -861,8 +936,10 @@ function preparePluginIntegrationTestSpawnOptions (
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
+  const scriptPath = path.join(cwd, serverFile)
+
   return {
-    filename: path.join(cwd, serverFile),
+    filename: scriptPath,
     options: {
       cwd,
       env: {
@@ -948,9 +1025,7 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
-    const oldSandbox = sandbox
-    sandbox = undefined
-    return oldSandbox?.remove()
+    return sandbox?.remove()
   })
 }
 
@@ -1058,6 +1133,28 @@ function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
 }
 
+/**
+ * Recursively `Object.freeze` an object plus everything reachable from it. Use
+ * in tests when an instrumentation contract says "we won't mutate this": any
+ * accidental write to the value or its nested structures throws synchronously
+ * under strict mode, so the test fails at the offending assignment instead of
+ * far downstream via deep-equality.
+ *
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze (value) {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value
+  }
+  Object.freeze(value)
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze(value[key])
+  }
+  return value
+}
+
 module.exports = {
   ANY_NUMBER,
   ANY_STRING,
@@ -1066,7 +1163,9 @@ module.exports = {
   hookFile,
   assertObjectContains,
   assertUUID,
+  deepFreeze,
   stopProc,
+  stopCiVisTestEnv,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,
@@ -1084,4 +1183,5 @@ module.exports = {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  warmCypressBinary,
 }

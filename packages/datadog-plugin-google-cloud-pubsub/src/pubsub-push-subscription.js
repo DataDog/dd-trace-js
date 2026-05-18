@@ -10,6 +10,8 @@ const pushReceiveSpans = new WeakMap()
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
+  static type = 'messaging'
+  static kind = 'consumer'
 
   constructor (...args) {
     super(...args)
@@ -150,7 +152,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       childOf: parentContext,
       startTime,
       kind: 'consumer',
-      service: this.config.service || { name: `${this.tracer._service}-pubsub`, source: this.tracer._service },
+      service: this.config.service || this.serviceName(),
       meta: {
         component: 'google-cloud-pubsub',
         'pubsub.method': 'receive',
@@ -179,7 +181,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     if (linkContext) {
       if (span.addLink) {
-        span.addLink(linkContext, {})
+        span.addLink({ context: linkContext, attributes: {} })
       } else {
         span._links ??= []
         span._links.push({ context: linkContext, attributes: {} })

@@ -64,7 +64,7 @@ class GrpcClientPlugin extends ClientPlugin {
 
   error ({ span = this.activeSpan, error }) {
     this.addCode(span, error.code)
-    if (error.code && !this._tracerConfig.grpc.client.error.statuses.includes(error.code)) {
+    if (error.code && !this._tracerConfig.DD_GRPC_CLIENT_ERROR_STATUSES.includes(error.code)) {
       return
     }
     this.addError(error, span)
@@ -86,12 +86,11 @@ class GrpcClientPlugin extends ClientPlugin {
       // The only scheme we want to support here is ipv[46]:port, although
       // more are supported by the library
       // https://github.com/grpc/grpc/blob/v1.60.0/doc/naming.md
-      const parts = peer.split(':')
-      if (/^\d+/.test(parts.at(-1))) {
-        const port = parts.at(-1)
-        const ip = parts.slice(0, -1).join(':')
-        span.setTag('network.destination.ip', ip)
-        span.setTag('network.destination.port', port)
+      const colonIndex = peer.lastIndexOf(':')
+      const tail = colonIndex === -1 ? '' : peer.slice(colonIndex + 1)
+      if (tail && /^\d+$/.test(tail)) {
+        span.setTag('network.destination.ip', peer.slice(0, colonIndex))
+        span.setTag('network.destination.port', tail)
       } else {
         span.setTag('network.destination.ip', peer)
       }
@@ -121,7 +120,7 @@ function inject (tracer, span, metadata) {
 
   tracer.inject(span, TEXT_MAP, carrier)
 
-  for (const key in carrier) {
+  for (const key of Object.keys(carrier)) {
     metadata.set(key, carrier[key])
   }
 }

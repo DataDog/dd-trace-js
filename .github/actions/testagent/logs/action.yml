@@ -11,6 +11,11 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        # Preserve untracked artifacts (coverage/, .nyc_output/, node_modules/) produced by earlier
+        # test steps. Without this, the default `git clean -ffdx` wipes them before subsequent
+        # steps such as Codecov upload can pick them up.
+        clean: false
     - name: Create Artifacts Directories
       if: runner.debug == '1'
       run: mkdir -p "./artifacts/logs"

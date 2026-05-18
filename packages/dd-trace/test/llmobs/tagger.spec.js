@@ -260,6 +260,26 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagToolDefinitions', () => {
+      it('tags a span with tool definitions', () => {
+        const toolDefinitions = [
+          { name: 'get_weather', description: 'Get the weather for a city.', schema: { type: 'object' } },
+        ]
+        tagger._register(span)
+        tagger.tagToolDefinitions(span, toolDefinitions)
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.tool_definitions': toolDefinitions,
+        })
+      })
+
+      it('throws for malformed tool definitions', () => {
+        tagger._register(span)
+        assert.throws(() => tagger.tagToolDefinitions(span, 'not an array'))
+        assert.throws(() => tagger.tagToolDefinitions(span, []))
+        assert.throws(() => tagger.tagToolDefinitions(span))
+      })
+    })
+
     describe('tagSpanTags', () => {
       it('sets tags on a span', () => {
         const tags = { foo: 'bar' }
@@ -277,6 +297,61 @@ describe('tagger', () => {
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.tags': { a: 2, b: 1 },
         })
+      })
+    })
+
+    describe('tagCostTags', () => {
+      it('validates and sets cost tags', () => {
+        tagger._register(span)
+        tagger.tagSpanTags(span, { team: 'ml', feature: 'chatbot' })
+
+        tagger.tagCostTags(span, ['team', 'feature'], 'annotate')
+
+        assert.deepStrictEqual(
+          Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'],
+          ['team', 'feature']
+        )
+      })
+
+      it('dedupes cost tags across annotations', () => {
+        tagger._register(span)
+        tagger.tagSpanTags(span, { team: 'ml', feature: 'chatbot', project: 'alpha' })
+
+        tagger.tagCostTags(span, ['team', 'feature', 'team'], 'annotate')
+        tagger.tagCostTags(span, ['feature', 'project'], 'annotate')
+
+        assert.deepStrictEqual(
+          Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'],
+          ['team', 'feature', 'project']
+        )
+      })
+
+      it('skips entries that do not reference an existing span tag', () => {
+        tagger._register(span)
+        tagger.tagSpanTags(span, { team: 'ml' })
+
+        tagger.tagCostTags(span, ['team', 'missing'], 'annotate')
+
+        assert.deepStrictEqual(
+          Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'],
+          ['team']
+        )
+      })
+
+      it('does not set cost tags for an empty list', () => {
+        tagger._register(span)
+
+        tagger.tagCostTags(span, [], 'annotate')
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], undefined)
+      })
+
+      it('does not set cost tags when costTags is not an array', () => {
+        tagger._register(span)
+
+        tagger.tagCostTags(span, 'not-an-array', 'annotate')
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.metadata._dd.cost_tags'], undefined)
       })
     })
 

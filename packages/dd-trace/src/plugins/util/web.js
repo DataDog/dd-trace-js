@@ -217,9 +217,7 @@ const web = {
       }
     }
 
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
-
-    return span
+    return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
   },
 
   // Validate a request's status code and then add error tags if necessary
@@ -309,10 +307,10 @@ const web = {
     return contexts.get(req)
   },
   wrapRes (context, req, res, end) {
-    return function () {
+    return function (...args) {
       web.finishAll(context)
 
-      return end.apply(res, arguments)
+      return end.apply(res, args)
     }
   },
   wrapEnd (context) {
@@ -330,8 +328,8 @@ const web = {
         return ends.get(this)
       },
       set (value) {
-        ends.set(this, function () {
-          return storage('legacy').run(context.store, value, ...arguments)
+        ends.set(this, function (...args) {
+          return storage('legacy').run(context.store, value, ...args)
         })
       },
     })
@@ -400,6 +398,17 @@ function addRequestTags (context, spanType) {
       span.setTag(HTTP_CLIENT_IP, clientIp)
       inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
     }
+  }
+
+  // Datadog scan/test markers, tagged unconditionally so the API endpoint
+  // reducer can keep scan/test traffic out of the API inventory.
+  const endpointScan = req.headers['x-datadog-endpoint-scan']
+  if (endpointScan !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-endpoint-scan`, endpointScan)
+  }
+  const securityTest = req.headers['x-datadog-security-test']
+  if (securityTest !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-security-test`, securityTest)
   }
 
   addHeaders(context)

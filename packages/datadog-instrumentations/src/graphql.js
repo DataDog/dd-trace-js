@@ -169,7 +169,7 @@ function wrapExecute (execute) {
       const ctx = {
         operation,
         args,
-        docSource: documentSources.get(document),
+        docSource: source,
         source,
         fields: Object.create(null),
         abortController: new AbortController(),
@@ -257,13 +257,17 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
 }
 
 function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
+  let length = 0
+  for (let curr = path; curr; curr = curr.prev) {
+    length += 1
   }
-  return flattened.reverse()
+
+  const flattened = new Array(length)
+  let index = length
+  for (let curr = path; curr; curr = curr.prev) {
+    flattened[--index] = curr.key
+  }
+  return flattened
 }
 
 function assertField (rootCtx, info, args) {
@@ -295,9 +299,7 @@ function wrapFields (type) {
 
   patchedTypes.add(type)
 
-  for (const key of Object.keys(type._fields)) {
-    const field = type._fields[key]
-
+  for (const field of Object.values(type._fields)) {
     wrapFieldResolve(field)
     wrapFieldType(field)
   }
@@ -321,8 +323,7 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  for (const key of Object.keys(fields).reverse()) {
-    const field = fields[key]
+  for (const field of Object.values(fields)) {
     field.ctx.finishTime = field.finishTime
     field.ctx.field = field
     if (field.error) {

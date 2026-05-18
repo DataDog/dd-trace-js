@@ -105,6 +105,7 @@ class MochaPlugin extends CiPlugin {
           'mocha'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
@@ -218,11 +219,15 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFixRetry,
       isAtrRetry,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')

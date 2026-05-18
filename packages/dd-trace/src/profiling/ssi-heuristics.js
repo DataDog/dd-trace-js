@@ -14,12 +14,12 @@ class SSIHeuristics {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   constructor (config) {
-    const longLivedThreshold = config.profiling.longLivedThreshold || DEFAULT_LONG_LIVED_THRESHOLD
+    const longLivedThreshold = config.DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD || DEFAULT_LONG_LIVED_THRESHOLD
     if (typeof longLivedThreshold !== 'number' || longLivedThreshold <= 0) {
       this.longLivedThreshold = DEFAULT_LONG_LIVED_THRESHOLD
       log.warn(
         'Invalid SSIHeuristics.longLivedThreshold value: %s. Using default value:',
-        config.profiling.longLivedThreshold,
+        config.DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
         DEFAULT_LONG_LIVED_THRESHOLD
       )
     } else {
@@ -39,7 +39,7 @@ class SSIHeuristics {
     setTimeout(() => {
       this.shortLived = false
       this._maybeTriggered()
-    }, this.longLivedThreshold).unref()
+    }, this.longLivedThreshold).unref?.()
 
     this._onSpanCreated = this._onSpanCreated.bind(this)
     dc.subscribe('dd-trace:span:start', this._onSpanCreated)

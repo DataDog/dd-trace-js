@@ -212,6 +212,7 @@ function createGarbage (count = 50) {
             obj: {},
             invalid: 't{e*s#t5-:./',
           },
+          DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
           getOrigin: () => {
             return 'default'
           },
@@ -261,7 +262,7 @@ function createGarbage (count = 50) {
         })
 
         it('should include process tags when propagateProcessTags is enabled', function () {
-          config.propagateProcessTags = { enabled: true }
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -272,7 +273,7 @@ function createGarbage (count = 50) {
         })
 
         it('should not include process tags when propagateProcessTags is disabled', function () {
-          config.propagateProcessTags = { enabled: false }
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = false
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -427,7 +428,7 @@ function createGarbage (count = 50) {
 
           // Wait for event loop delay observer to trigger.
           let startTime = Date.now()
-          let waitTime = 60
+          const waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -453,7 +454,6 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           startTime = Date.now()
-          waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)

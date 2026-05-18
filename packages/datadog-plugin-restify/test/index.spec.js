@@ -187,8 +187,8 @@ describe('Plugin', () => {
           server.get('/user', (req, res, next) => {
             assert.notStrictEqual(tracer.scope().active(), null)
             res.send(200)
-            done()
             next()
+            done()
           })
 
           appListener = server.listen(0, 'localhost', () => {
@@ -238,12 +238,12 @@ describe('Plugin', () => {
           server.get('/user', (req, res, next) => {
             try {
               assert.strictEqual(storage.getStore(), store)
+              res.end()
               done()
             } catch (e) {
+              res.end()
               done(e)
             }
-
-            res.end()
           })
 
           appListener = server.listen(0, 'localhost', () => {

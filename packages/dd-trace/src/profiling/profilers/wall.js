@@ -223,7 +223,7 @@ class NativeWallProfiler {
       asyncContextsLiveGauge.mark(totalAsyncContextCount)
       asyncContextsUsedGauge.mark(usedAsyncContextCount)
     }, this.#telemetryHeartbeatIntervalMillis)
-    this._contextCountGaugeUpdater.unref()
+    this._contextCountGaugeUpdater.unref?.()
   }
 
   #enter () {
@@ -317,11 +317,10 @@ class NativeWallProfiler {
   }
 
   #setNewContext () {
-    this.#pprof.time.setContext(
-      this._currentContext = {
-        ref: {},
-      }
-    )
+    this._currentContext = {
+      ref: {},
+    }
+    this.#pprof.time.setContext(this._currentContext)
   }
 
   #spanFinished (span) {

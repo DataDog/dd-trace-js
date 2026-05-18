@@ -19,11 +19,9 @@ describe('Heap Snapshots', () => {
     const interval = setInterval(() => {}, 1000)
 
     await start({
-      heapSnapshot: {
-        count: 3,
-        destination,
-        interval: 1,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 3,
+      DD_HEAP_SNAPSHOT_DESTINATION: destination,
+      DD_HEAP_SNAPSHOT_INTERVAL: 1,
     })
 
     clearInterval(interval)

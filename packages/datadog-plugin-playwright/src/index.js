@@ -39,6 +39,7 @@ const {
   TEST_SUITE,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -319,6 +320,8 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAttemptToFixRetries,
       isAtrRetry,
       isModified,
+      finalStatus,
+      earlyFlakeAbortReason,
       onDone,
     }) => {
       if (!span) return
@@ -378,6 +381,12 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
@@ -451,6 +460,7 @@ class PlaywrightPlugin extends CiPlugin {
       )
 
       span.setTag(TEST_STATUS, 'skip')
+      span.setTag(TEST_FINAL_STATUS, 'skip')
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
@@ -485,7 +495,7 @@ class PlaywrightPlugin extends CiPlugin {
       [TEST_SOURCE_START]: testSourceLine,
     }
     if (testSourceFile) {
-      extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
+      extraTags[TEST_SOURCE_FILE] = testSourceFile
     }
     if (browserName) {
       // Added as parameter too because it should affect the test fingerprint

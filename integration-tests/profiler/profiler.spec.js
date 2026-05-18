@@ -27,6 +27,8 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
+const OOM_HEAP_MB = 50
+
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
@@ -328,7 +330,6 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
           }
       }
     }
-    // Timestamp must be defined and be between process start and end time
     assert.notStrictEqual(ts, undefined, encoded)
     assert.strictEqual(typeof ts, 'bigint', encoded)
     assert.ok(ts <= procEnd, encoded)
@@ -388,7 +389,7 @@ describe('profiler', () => {
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')
     oomTestFile = path.join(cwd, 'profiler/oom.js')
-    oomExecArgv = ['--max-old-space-size=50']
+    oomExecArgv = [`--max-old-space-size=${OOM_HEAP_MB}`]
   })
 
   beforeEach(async () => {
@@ -409,6 +410,7 @@ describe('profiler', () => {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
       // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      // eslint-disable-next-line sonarjs/stable-tests -- timing-dependent profiler sample alignment
       this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const env = {
@@ -596,12 +598,11 @@ describe('profiler', () => {
       // Simple server that writes a constant message to the socket.
       const msg = 'cya later!\n'
       function createServer () {
-        const server = net.createServer((socket) => {
+        return net.createServer((socket) => {
           socket.end(msg, 'utf8')
         }).on('error', (err) => {
           throw err
         })
-        return server
       }
       // Create two instances of the server
       const server1 = createServer()
@@ -686,7 +687,7 @@ describe('profiler', () => {
       })
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
+        proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })

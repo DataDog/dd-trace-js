@@ -37,11 +37,16 @@ describe('git_metadata', () => {
   before(() => {
     fs.writeFileSync(temporaryPackFile, '')
     fs.writeFileSync(secondTemporaryPackFile, '')
+    // Any request that escapes a nock interceptor used to hang up to the per
+    // request 15 s timeout and blow the mocha wall on slow Windows CI; flip the
+    // failure into an immediate `NetConnectNotAllowedError` at the call site.
+    nock.disableNetConnect()
   })
 
   after(() => {
     fs.unlinkSync(temporaryPackFile)
     fs.unlinkSync(secondTemporaryPackFile)
+    nock.enableNetConnect()
   })
 
   beforeEach(() => {
@@ -55,6 +60,17 @@ describe('git_metadata', () => {
 
     fakeConfig = { apiKey: 'api-key', DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true }
 
+    // Build a copy of the shared request module wired against an instant retry
+    // helper so the retry-success test does not pay the real backoff. The
+    // post-startup retry delay is 5 to 7.5 s and would blow the default mocha
+    // timeout once a previous spec marks the endpoint as reached.
+    const fastRequest = proxyquire('../../../../src/exporters/common/request', {
+      './retry': {
+        ...require('../../../../src/exporters/common/retry'),
+        getRetryDelay: () => 0,
+      },
+    })
+
     gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
       '../../../plugins/util/git': {
         getLatestCommits: getLatestCommitsStub,
@@ -65,6 +81,7 @@ describe('git_metadata', () => {
         unshallowRepository: unshallowRepositoryStub,
       },
       '../../../config': () => fakeConfig,
+      '../../../exporters/common/request': fastRequest,
     })
   })
 
@@ -369,13 +386,18 @@ describe('git_metadata', () => {
   })
 
   it('should retry if backend temporarily fails', (done) => {
+    // The shared retry helper only treats network errors with a transient `code`
+    // (`ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, …) as retriable; uncoded errors
+    // are no longer retried, matching real production failure modes.
+    const transientError = Object.assign(new Error('Server unavailable'), { code: 'ECONNRESET' })
+
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
-      .replyWithError('Server unavailable')
+      .replyWithError(transientError)
       .post('/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))
       .post('/api/v2/git/repository/packfile')
-      .replyWithError('Server unavailable')
+      .replyWithError(transientError)
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 

@@ -54,7 +54,8 @@ class BaseLLMObsWriter {
 
     this._periodic = setInterval(() => {
       this.flush()
-    }, this._interval).unref()
+    }, this._interval)
+    this._periodic.unref?.()
 
     const destroyer = this.destroy.bind(this)
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
@@ -87,19 +88,25 @@ class BaseLLMObsWriter {
     return buffer
   }
 
+  /**
+   * @returns {boolean} `true` if the event was buffered, `false` if it was dropped
+   * (e.g. the per-routing buffer was full). Callers that depend on the event
+   * actually being submitted should check this value.
+   */
   append (event, routing, byteLength) {
     const buffer = this._getBuffer(routing)
 
     if (buffer.events.length >= buffer.limit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
-      return
+      return false
     }
 
     const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
 
     buffer.size += eventSize
     buffer.events.push(event)
+    return true
   }
 
   flush () {

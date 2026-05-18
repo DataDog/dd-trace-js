@@ -368,6 +368,59 @@ describe('sdk', () => {
           '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
+
+      describe('bridge tags for otel correlation', () => {
+        it('writes llmobs_trace_id and llmobs_parent_id to _trace.tags on first sdk activate', () => {
+          llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+            const traceTags = span.context()._trace.tags
+            assert.strictEqual(traceTags.llmobs_trace_id, span.context().toTraceId(true))
+            assert.strictEqual(traceTags.llmobs_parent_id, span.context().toSpanId())
+          })
+        })
+
+        it('does not overwrite bridge tags on nested sdk activates', () => {
+          llmobs.trace({ kind: 'workflow', name: 'outer' }, outer => {
+            const outerTraceId = outer.context()._trace.tags.llmobs_trace_id
+            const outerParentId = outer.context()._trace.tags.llmobs_parent_id
+
+            llmobs.trace({ kind: 'task', name: 'inner' }, inner => {
+              assert.strictEqual(inner.context()._trace.tags.llmobs_trace_id, outerTraceId)
+              assert.strictEqual(inner.context()._trace.tags.llmobs_parent_id, outerParentId)
+              // sanity: the inner sdk span is NOT the bridge parent
+              assert.notStrictEqual(outerParentId, inner.context().toSpanId())
+            })
+          })
+        })
+
+        it('does not overwrite bridge tags on sibling workflows under the same apm root', () => {
+          tracer.trace('apmRoot', () => {
+            let firstTraceId, firstParentId
+            llmobs.trace({ kind: 'workflow', name: 'first' }, span => {
+              firstTraceId = span.context()._trace.tags.llmobs_trace_id
+              firstParentId = span.context()._trace.tags.llmobs_parent_id
+            })
+            llmobs.trace({ kind: 'workflow', name: 'second' }, span => {
+              // sibling workflow keeps the first workflow's bridge tags
+              assert.strictEqual(span.context()._trace.tags.llmobs_trace_id, firstTraceId)
+              assert.strictEqual(span.context()._trace.tags.llmobs_parent_id, firstParentId)
+            })
+          })
+        })
+
+        it('writes bridge tags only when an llmobs span starts (not on plain apm spans)', () => {
+          tracer.trace('plainApm', span => {
+            assert.strictEqual(span.context()._trace.tags.llmobs_trace_id, undefined)
+            assert.strictEqual(span.context()._trace.tags.llmobs_parent_id, undefined)
+          })
+        })
+
+        it('writes the trace id as a 32-char hex string', () => {
+          llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+            const traceId = span.context()._trace.tags.llmobs_trace_id
+            assert.match(traceId, /^[0-9a-f]{32}$/)
+          })
+        })
+      })
     })
 
     describe('wrap', () => {
@@ -1014,6 +1067,127 @@ describe('sdk', () => {
         })
       })
     })
+
+    it('annotates costTags if present', () => {
+      const tags = { team: 'ml', feature: 'chatbot', debug_id: 'abc' }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags, costTags: ['team', 'feature'] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': tags,
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+        })
+      })
+    })
+
+    it('dedupes costTags across annotations', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({
+          tags: { team: 'ml', feature: 'chatbot' },
+          costTags: ['team', 'feature', 'team'],
+        })
+        llmobs.annotate({
+          tags: { project: 'alpha' },
+          costTags: ['feature', 'project'],
+        })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml', feature: 'chatbot', project: 'alpha' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature', 'project'],
+        })
+      })
+    })
+
+    it('skips invalid costTags entries', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: ['team', 'missing', 123] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+        })
+      })
+    })
+
+    it('rejects non-array costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: 'team' })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('does not set costTags for an empty list', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: [] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('ignores null costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: null })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+  })
+
+  describe('annotationContext', () => {
+    it('applies costTags to spans created in the context', () => {
+      llmobs.annotationContext({ tags: { team: 'ml', feature: 'chatbot' }, costTags: ['team', 'feature'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml', feature: 'chatbot' },
+            '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+          })
+        })
+      })
+    })
+
+    it('does not retain costTags for tags added after the span starts', () => {
+      llmobs.annotationContext({ costTags: ['team'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          llmobs.annotate({ tags: { team: 'ml' } })
+
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml' },
+          })
+        })
+      })
+    })
   })
 
   describe('exportSpan', () => {
@@ -1445,7 +1619,7 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      assert.strictEqual(carrier['x-datadog-tags'], `,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      assert.strictEqual(carrier['x-datadog-tags'], `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
     })
   })
 })

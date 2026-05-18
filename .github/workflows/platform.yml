@@ -32,7 +32,14 @@ jobs:
           - name: npm
             install: npm install
           - name: pnpm
-            install: pnpm add
+            install: >-
+              pnpm
+              --allow-build=@datadog/native-appsec
+              --allow-build=@datadog/native-iast-taint-tracking
+              --allow-build=@datadog/native-metrics
+              --allow-build=@datadog/pprof
+              --allow-build=dd-trace
+              add
           - name: yarn
             install: yarn add
           - name: yarn-berry
@@ -133,7 +140,11 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
+      - run: yarn test:integration:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-integration-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

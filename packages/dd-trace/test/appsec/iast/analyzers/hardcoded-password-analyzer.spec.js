@@ -130,11 +130,9 @@ describe('Hardcoded Password Analyzer', () => {
       beforeEach(() => {
         const tracer = require('../../../../')
         const config = getConfigFresh({
-          experimental: {
-            iast: {
-              enabled: true,
-              requestSampling: 100,
-            },
+          iast: {
+            enabled: true,
+            requestSampling: 100,
           },
         })
         iast.enable(config, tracer)

@@ -881,7 +881,8 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       sinon.assert.calledOnceWithExactly(web.root, req)
-      sinon.assert.calledWithExactly(span.addTags, { a: 1, b: 2 })
+      sinon.assert.calledWith(span.setTag.firstCall, 'a', 1)
+      sinon.assert.calledWith(span.setTag.secondCall, 'b', 2)
       assert.strictEqual(Reporter.metricsQueue.size, 0)
     })
 

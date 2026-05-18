@@ -17,17 +17,11 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
-const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash) => {
-  let edgeTags
-  if (isProducer) {
-    edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
-  } else {
-    edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
-  }
-
-  if (clusterIdAvailable) {
-    edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
-  }
+const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
+  const edgeTags = isProducer
+    ? ['direction:out', 'topic:' + testTopic, 'type:kafka']
+    : ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
+  edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
   edgeTags.sort()
   return computePathwayHash('test', 'tester', edgeTags, parentHash, propagationHash.getHash())
 }
@@ -45,10 +39,13 @@ describe('Plugin', () => {
       let admin
       let tracer
       let Kafka
-      let clusterIdAvailable
       let expectedProducerHash
       let expectedConsumerHash
       let testTopic
+      let topicAIn
+      let topicAOut
+      let topicBIn
+      let topicBOut
 
       describe('data stream monitoring', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
@@ -69,19 +66,22 @@ describe('Plugin', () => {
             logLevel: lib.logLevel.WARN,
           })
           testTopic = `test-topic-${randomUUID()}`
+          topicAIn = `topic-a-in-${randomUUID()}`
+          topicAOut = `topic-a-out-${randomUUID()}`
+          topicBIn = `topic-b-in-${randomUUID()}`
+          topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
           await createTopicWithRetry(admin, {
             waitForLeaders: true,
-            topics: [{
-              topic: testTopic,
+            topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
+              topic,
               numPartitions: 1,
               replicationFactor: 1,
-            }],
+            })),
           })
           await admin.disconnect()
-          clusterIdAvailable = semver.intersects(version, '>=1.13')
-          expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
-          expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
+          expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
+          expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })
 
         describe('checkpoints', () => {
@@ -184,23 +184,6 @@ describe('Plugin', () => {
           })
 
           it('Should maintain separate DSM context for interleaved consume-produce flows', async () => {
-            // Four topics: A reads aIn → produces aOut, B reads bIn → produces bOut
-            const topicAIn = `topic-a-in-${randomUUID()}`
-            const topicAOut = `topic-a-out-${randomUUID()}`
-            const topicBIn = `topic-b-in-${randomUUID()}`
-            const topicBOut = `topic-b-out-${randomUUID()}`
-
-            const localAdmin = kafka.admin()
-            await createTopicWithRetry(localAdmin, {
-              waitForLeaders: true,
-              topics: [topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
-                topic,
-                numPartitions: 1,
-                replicationFactor: 1,
-              })),
-            })
-            await localAdmin.disconnect()
-
             producer = kafka.producer()
             await producer.connect()
 
@@ -320,15 +303,11 @@ describe('Plugin', () => {
               assert.strictEqual(runArg?.offset, commitMeta.offset)
               assert.strictEqual(runArg?.partition, commitMeta.partition)
               assert.strictEqual(runArg?.topic, commitMeta.topic)
-              const expectedBacklog = {
+              assertObjectContains(runArg, {
                 type: 'kafka_commit',
                 consumer_group: 'test-group',
-              }
-              // kafka_cluster_id is only available in kafkajs >=1.13
-              if (clusterIdAvailable) {
-                expectedBacklog.kafka_cluster_id = testKafkaClusterId
-              }
-              assertObjectContains(runArg, expectedBacklog)
+                kafka_cluster_id: testKafkaClusterId,
+              })
             })
           }
 
@@ -337,10 +316,7 @@ describe('Plugin', () => {
             sinon.assert.calledOnce(setOffsetSpy)
             const runArg = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(runArg.topic, testTopic)
-            // kafka_cluster_id is only available in kafkajs >=1.13
-            if (clusterIdAvailable) {
-              assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
-            }
+            assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
           })
         })
       })

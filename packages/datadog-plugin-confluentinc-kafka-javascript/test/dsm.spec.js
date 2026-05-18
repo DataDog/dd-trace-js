@@ -288,24 +288,65 @@ describe('Plugin', () => {
           })
 
           it('should hit an error for the first send and not inject headers in later sends', async () => {
-            const testMessages = [{ key: 'key1', value: 'test1' }]
-            const testMessages2 = [{ key: 'key2', value: 'test2' }]
+            const dc = require('dc-polyfill')
+            const { deepFreeze } = require('../../../integration-tests/helpers')
+
+            const startCh = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
+
+            // Snapshot headers at publish time. The underlying client
+            // converts each cloned message's `headers` to an array-of-pairs
+            // form before shipping, so the live reference would show that
+            // post-conversion shape; we want the bindStart-time injection
+            // result instead.
+            const headerSnapshots = []
+            const headerPresence = []
+            const captureStart = (ctx) => {
+              headerSnapshots.push(ctx.messages.map((m) => (
+                m && typeof m === 'object' && m.headers ? { ...m.headers } : undefined
+              )))
+              headerPresence.push(ctx.messages.map((m) => (
+                m && typeof m === 'object' ? Object.hasOwn(m, 'headers') : null
+              )))
+            }
+            startCh.subscribe(captureStart)
+
+            // Deep-freeze the user's input on both sends; any boundary or
+            // library write to the array, its messages, or their headers
+            // throws synchronously.
+            const testMessages = deepFreeze([{ key: 'key1', value: 'test1' }])
+            const testMessages2 = deepFreeze([{ key: 'key2', value: 'test2' }])
 
             try {
-              await producer.send({ topic: testTopic, messages: testMessages })
-              assert.fail('First producer.send() should have thrown an error')
-            } catch (e) {
-              assert.strictEqual(e, error)
+              await assert.rejects(
+                producer.send({ topic: testTopic, messages: testMessages }),
+                error
+              )
+
+              const firstHeaders = headerSnapshots.find(
+                (snapshot) => snapshot[0] && Object.hasOwn(snapshot[0], 'x-datadog-trace-id')
+              )
+              assert.ok(firstHeaders, 'expected a captured batch with x-datadog-trace-id')
+
+              const sendsBefore = headerSnapshots.length
+              produceStub.restore()
+
+              const result = await producer.send({ topic: testTopic, messages: testMessages2 })
+
+              // After the broker reports ERR_UNKNOWN the producer skips
+              // injection. The boundary still clones, so the underlying
+              // client's `headers: null` post-publish mutation lands on the
+              // clone, not on the user's frozen array. The clone must not
+              // seed `headers: {}` either: brokers that reject any header
+              // field cannot recover otherwise.
+              const injectedAfterError = headerSnapshots
+                .slice(sendsBefore)
+                .filter((snap) => snap[0] && Object.hasOwn(snap[0], 'x-datadog-trace-id'))
+              assert.strictEqual(injectedAfterError.length, 0)
+              assert.deepStrictEqual(headerPresence[sendsBefore], [false])
+              assert.notStrictEqual(result, undefined)
+            } finally {
+              startCh.unsubscribe(captureStart)
             }
-            // Verify headers were injected in the first attempt
-            assert.ok(Object.hasOwn(testMessages[0].headers[0], 'x-datadog-trace-id'))
-
-            // restore the stub to allow the next send to succeed
-            produceStub.restore()
-
-            const result = await producer.send({ topic: testTopic, messages: testMessages2 })
-            assert.strictEqual(testMessages2[0].headers, null)
-            assert.notStrictEqual(result, undefined)
           })
         })
       })

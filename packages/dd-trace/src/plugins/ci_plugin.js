@@ -49,6 +49,7 @@ const {
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_LEVEL_EVENT_TYPES,
@@ -64,7 +65,11 @@ const {
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
   getSessionRequestErrorTags,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  getSessionItrSkippingEnabledTags,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_IS_NEW,
   TEST_IS_RUM_ACTIVE,
@@ -74,6 +79,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_RETRY,
   TEST_RETRY_REASON,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -98,6 +104,21 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'mocha',
   'cucumber',
 ])
+
+function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
+  const libraryCapabilitiesTags = getLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
+
+  if (!libraryCapabilitiesTags[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] ||
+    !plugin.libraryConfig ||
+    !plugin.testSessionSpan ||
+    !plugin.testModuleSpan) {
+    return
+  }
+
+  const skippingEnabled = plugin.libraryConfig.isSuitesSkippingEnabled ? 'true' : 'false'
+  plugin.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+  plugin.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+}
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -134,9 +155,10 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
           log.error('Library configuration could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR, err)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
           this.libraryConfig = libraryConfig
+          setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
         const requestErrorTags = this.testSessionSpan
@@ -165,6 +187,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
           log.error('Skippable suites could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
         } else {
           this.itrCorrelationId = itrCorrelationId
         }
@@ -225,18 +248,7 @@ module.exports = class CiPlugin extends Plugin {
         },
         integrationName: this.constructor.id,
       })
-      // only for vitest
-      // These are added for the worker threads to use
-      if (this.constructor.id === 'vitest') {
-        // TODO: Figure out alternative ways to pass this information to the worker threads
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
-      }
-
+      setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })
 
@@ -246,6 +258,7 @@ module.exports = class CiPlugin extends Plugin {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
           ...getSessionRequestErrorTags(this.testSessionSpan),
+          ...getSessionItrSkippingEnabledTags(this.testSessionSpan),
         }
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
@@ -277,6 +290,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, err)
           if (this.libraryConfig) {
             this.libraryConfig.isEarlyFlakeDetectionEnabled = false
             this.libraryConfig.isKnownTestsEnabled = false
@@ -297,6 +311,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
         if (err) {
           log.error('Test management tests could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS, err)
           if (this.libraryConfig) {
             this.libraryConfig.isTestManagementEnabled = false
           }
@@ -342,6 +357,9 @@ module.exports = class CiPlugin extends Plugin {
 
           if (span.name?.startsWith(`${this.constructor.id}.`)) {
             span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
+            if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
+              Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
+            }
             // augment with git information (since it will not be available in the worker)
             for (const key in this.testEnvironmentMetadata) {
               // CAREFUL: this bypasses the metadata/metrics distinction
@@ -372,7 +390,8 @@ module.exports = class CiPlugin extends Plugin {
 
           // Jest and Vitest worker test spans are serialized in the worker and may not include
           // request error tags; add them from the session span in the main process.
-          if ((span.name === 'jest.test' || span.name === 'vitest.test') && this.testSessionSpan) {
+          if ((span.name === 'jest.test' || span.name === 'vitest.test' || span.name === 'vitest.test_suite') &&
+              this.testSessionSpan) {
             Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
           }
         }
@@ -449,13 +468,16 @@ module.exports = class CiPlugin extends Plugin {
    * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
    * If the session span does not exist yet (e.g. library-configuration failed before session:start),
    * the tag is queued and applied when the span is created.
-   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR)
+   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
    * @param {Error} err - Request error
    */
   _addRequestErrorTag (tag, err) {
     const value = 'true'
     if (this.testSessionSpan) {
       this.testSessionSpan.setTag(tag, value)
+      if (this.testModuleSpan) {
+        this.testModuleSpan.setTag(tag, value)
+      }
     } else {
       this._pendingRequestErrorTags.push({ tag, value })
     }
@@ -467,6 +489,15 @@ module.exports = class CiPlugin extends Plugin {
    */
   getSessionRequestErrorTags () {
     return getSessionRequestErrorTags(this.testSessionSpan)
+  }
+
+  /**
+   * Returns ITR skipping-enabled tags from the test session span for propagation to child events.
+   *
+   * @returns {Record<string, string>}
+   */
+  getSessionItrSkippingEnabledTags () {
+    return getSessionItrSkippingEnabledTags(this.testSessionSpan)
   }
 
   /**
@@ -595,6 +626,8 @@ module.exports = class CiPlugin extends Plugin {
         ...suiteTags,
       }
     }
+
+    Object.assign(testTags, getSessionItrSkippingEnabledTags(this.testSessionSpan))
 
     this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 

@@ -18,7 +18,7 @@ class AgentlessExporter {
 
   /**
    * @param {object} config - Configuration object
-   * @param {string} [config.site='datadoghq.com'] - The Datadog site
+   * @param {string} [config.site] - The Datadog site. Defaults to 'datadoghq.com'.
    * @param {string} [config.url] - Override intake URL
    * @param {number} [config.flushInterval] - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
@@ -109,7 +109,8 @@ class AgentlessExporter {
           log.error('Failed to flush traces on timer: %s', err.message)
         }
         this.#timer = undefined
-      }, flushInterval).unref()
+      }, flushInterval)
+      this.#timer.unref?.()
     }
   }
 
