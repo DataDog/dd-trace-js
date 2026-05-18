@@ -9,12 +9,12 @@ const { SchemaBuilder } = require('../../../src/datastreams/schemas/schema_build
 
 class Iterator {
   iterateOverSchema (builder) {
-    builder.addProperty('person', 'name', false, 'string', 'name of the person', null, null, null)
-    builder.addProperty('person', 'phone_numbers', true, 'string', null, null, null, null)
-    builder.addProperty('person', 'person_name', false, 'string', null, null, null, null)
-    builder.addProperty('person', 'address', false, 'object', null, '#/components/schemas/address', null, null)
-    builder.addProperty('address', 'zip', false, 'number', null, null, 'int', null)
-    builder.addProperty('address', 'street', false, 'string', null, null, null, null)
+    builder.addProperty('person', 'name', false, 'string', null, null, null)
+    builder.addProperty('person', 'phone_numbers', true, 'string', null, null, null)
+    builder.addProperty('person', 'person_name', false, 'string', null, null, null)
+    builder.addProperty('person', 'address', false, 'object', '#/components/schemas/address', null, null)
+    builder.addProperty('address', 'zip', false, 'number', null, 'int', null)
+    builder.addProperty('address', 'street', false, 'string', null, null, null)
   }
 }
 
@@ -33,7 +33,7 @@ describe('SchemaBuilder', () => {
         schemas: {
           person: {
             properties: {
-              name: { description: 'name of the person', type: 'string' },
+              name: { type: 'string' },
               phone_numbers: { items: { type: 'string' }, type: 'array' },
               person_name: { type: 'string' },
               address: { $ref: '#/components/schemas/address', type: 'object' },
@@ -50,7 +50,7 @@ describe('SchemaBuilder', () => {
     }
 
     assert.deepStrictEqual(JSON.parse(schema.definition), expectedSchema)
-    assert.strictEqual(schema.id, '9510078321201428652')
+    assert.strictEqual(schema.id, '14888728997744663998')
     assert.strictEqual(shouldExtractPerson, true)
     assert.strictEqual(shouldExtractAddress, true)
     assert.strictEqual(shouldExtractPerson2, false)
