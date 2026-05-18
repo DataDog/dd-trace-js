@@ -1,5 +1,7 @@
 'use strict'
 
+const { EOL } = require('node:os')
+
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
@@ -29,19 +31,17 @@ class Crashtracker {
   start (config) {
     if (this.#started) return this.configure(config)
 
-    this.#started = true
-
     try {
       binding.init(
         this.#getConfig(config),
         this.#getReceiverConfig(),
         this.#getMetadata(config)
       )
+      this.#started = true
+      this.#trackUnhandledExceptions()
     } catch (e) {
       log.error('Error initializing crashtracker', e)
     }
-
-    this.#trackUnhandledExceptions()
   }
 
   #trackUnhandledExceptions () {
@@ -49,7 +49,7 @@ class Crashtracker {
       try {
         binding.reportUncaughtExceptionMonitor(error, origin)
       } catch (e) {
-        process.stderr.write('Error reporting uncaught exception to crashtracker', e)
+        process.stderr.write(`Error reporting uncaught exception to crashtracker: ${e.toString()}${EOL}`)
       }
     })
   }

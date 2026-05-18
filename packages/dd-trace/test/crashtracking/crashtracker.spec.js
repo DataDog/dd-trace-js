@@ -47,11 +47,11 @@ describeNotWindows('crashtracker', () => {
   })
 
   afterEach(() => {
+    process.removeAllListeners('uncaughtExceptionMonitor')
     binding.init.restore()
     binding.updateConfig.restore()
     binding.updateMetadata.restore()
     binding.reportUncaughtExceptionMonitor.restore()
-    process.removeAllListeners('uncaughtExceptionMonitor')
   })
 
   describe('start', () => {
@@ -80,7 +80,12 @@ describeNotWindows('crashtracker', () => {
     it('should handle errors', () => {
       crashtracker.start(null)
 
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+
       crashtracker.start(config)
+
+      sinon.assert.calledOnce(binding.init)
     })
 
     it('should handle unix sockets', () => {
@@ -139,6 +144,15 @@ describeNotWindows('crashtracker', () => {
       process.emit('uncaughtExceptionMonitor', error, 'uncaughtException')
 
       sinon.assert.calledOnceWithExactly(binding.reportUncaughtExceptionMonitor, error, 'uncaughtException')
+    })
+
+    it('should not register a listener when init fails', () => {
+      binding.init.throws(new Error('init failed'))
+
+      crashtracker.start(config)
+
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
     })
   })
 
