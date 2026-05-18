@@ -44,11 +44,13 @@ let dsmStats = []
 let currentIntegrationName = null
 let loaded = false
 
-// Non-prefix env vars `dd-trace` reads at module load. Hand-maintained: every
-// new read of a non-`DD_*` / non-`OTEL_*` / non-`_DD_*` env in `src/` adds an
-// entry here. The natural follow-up is to auto-populate this from
-// `getEnvironmentVariable` / `getValueFromEnvSources`, but that needs a path
-// that does not pay for the extra Set bookkeeping in production hot calls.
+// Non-prefix env vars `dd-trace` reads at module load or in instrumentation
+// hot paths. Every non-`DD_*` / non-`OTEL_*` / non-`_DD_*` env read via
+// `getEnvironmentVariable`, `getValueFromEnvSources`, or a destructured
+// `getEnvironmentVariables(...)` in `src/` is registered here so the gate
+// below rebuilds the tracer when a spec mocks the value between two
+// `agent.load()` calls. The `eslint-non-prefix-env-names` rule extracts
+// this Set at lint time and reports new reads that bypass it.
 const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
@@ -70,6 +72,25 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_OWNER_NAME',
   'WEBSITE_OS',
   'WEBSITE_RESOURCE_GROUP',
+  // CI-visibility runner detection (test plugins, ci-visibility exporters)
+  'CUCUMBER_WORKER_ID',
+  'JEST_WORKER_ID',
+  'MOCHA_WORKER_ID',
+  'TINYPOOL_WORKER_ID',
+  'npm_config_user_agent',
+  'npm_lifecycle_script',
+  // GitHub Actions CI plugin metadata
+  'GITHUB_EVENT_PATH',
+  'RUNNER_TEMP',
+  // misc CI provider / build tooling reads
+  'HOME',
+  'LAGE_PACKAGE_NAME',
+  'NX_TASK_TARGET_PROJECT',
+  'NYC_CONFIG',
+  // instrumentation reads at module load / hot path
+  'DATABASE_URL',
+  'NODE_OPTIONS',
+  'UV_THREADPOOL_SIZE',
 ])
 
 /**
