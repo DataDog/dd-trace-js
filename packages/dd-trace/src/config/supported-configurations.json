@@ -3133,6 +3133,15 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_MONGODB_OBFUSCATE_QUERY": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "none",
+        "allowed": "none|types|redact",
+        "transform": "toLowerCase"
+      }
+    ],
     "DD_TRACE_MONGOOSE_ENABLED": [
       {
         "implementation": "A",

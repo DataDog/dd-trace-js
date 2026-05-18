@@ -324,6 +324,7 @@ export interface GeneratedConfig {
   DD_TRACE_MONGODB_CORE_ENABLED: boolean;
   DD_TRACE_MONGODB_ENABLED: boolean;
   DD_TRACE_MONGODB_HEARTBEAT_ENABLED: boolean;
+  DD_TRACE_MONGODB_OBFUSCATE_QUERY: "none" | "types" | "redact";
   DD_TRACE_MONGOOSE_ENABLED: boolean;
   DD_TRACE_MQUERY_ENABLED: boolean;
   DD_TRACE_MULTER_ENABLED: boolean;
