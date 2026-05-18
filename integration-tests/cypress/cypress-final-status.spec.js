@@ -132,48 +132,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/{spec.cy,skipped-test,hook-describe-error.cy}.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // Every test's final status should match its actual status
-            tests.forEach(test => {
-              assert.strictEqual(
-                test.meta[TEST_FINAL_STATUS],
-                test.meta[TEST_STATUS],
-                `Expected TEST_FINAL_STATUS to match TEST_STATUS for "${test.meta[TEST_NAME]}"`
-              )
-            })
-
-            // Verify each status type explicitly
-            const passingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.context passes')
-            assert.ok(passingTest, 'passing test not found')
-            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
-
-            const failingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.other context fails')
-            assert.ok(failingTest, 'failing test not found')
-            assert.strictEqual(failingTest.meta[TEST_FINAL_STATUS], 'fail')
-
-            const skippedTest = tests.find(t => t.resource === 'cypress/e2e/skipped-test.js.skipped skipped')
-            assert.ok(skippedTest, 'skipped test not found')
-            assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
-
-            // Hooks: after() failure retroactively marks the last test in the suite as failed
-            const afterHookFailed = tests.find(t =>
-              t.resource === 'cypress/e2e/hook-describe-error.cy.js.after will be marked as failed'
-            )
-            assert.ok(afterHookFailed, 'test with failing after() not found')
-            assert.strictEqual(afterHookFailed.meta[TEST_FINAL_STATUS], 'fail')
-
-            // Hooks: before() failure causes tests in the suite to be skipped
-            const beforeHookSkipped = tests.find(t =>
-              t.resource === 'cypress/e2e/hook-describe-error.cy.js.before will be skipped'
-            )
-            assert.ok(beforeHookSkipped, 'test skipped by before() not found')
-            assert.strictEqual(beforeHookSkipped.meta[TEST_FINAL_STATUS], 'skip')
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -187,6 +145,51 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // Every test's final status should match its actual status
+              tests.forEach(test => {
+                assert.strictEqual(
+                  test.meta[TEST_FINAL_STATUS],
+                  test.meta[TEST_STATUS],
+                `Expected TEST_FINAL_STATUS to match TEST_STATUS for "${test.meta[TEST_NAME]}"`
+                )
+              })
+
+              // Verify each status type explicitly
+              const passingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.context passes')
+              assert.ok(passingTest, 'passing test not found')
+              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+
+              const failingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.other context fails')
+              assert.ok(failingTest, 'failing test not found')
+              assert.strictEqual(failingTest.meta[TEST_FINAL_STATUS], 'fail')
+
+              const skippedTest = tests.find(t => t.resource === 'cypress/e2e/skipped-test.js.skipped skipped')
+              assert.ok(skippedTest, 'skipped test not found')
+              assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
+
+              // Hooks: after() failure retroactively marks the last test in the suite as failed
+              const afterHookFailed = tests.find(t =>
+                t.resource === 'cypress/e2e/hook-describe-error.cy.js.after will be marked as failed'
+              )
+              assert.ok(afterHookFailed, 'test with failing after() not found')
+              assert.strictEqual(afterHookFailed.meta[TEST_FINAL_STATUS], 'fail')
+
+              // Hooks: before() failure causes tests in the suite to be skipped
+              const beforeHookSkipped = tests.find(t =>
+                t.resource === 'cypress/e2e/hook-describe-error.cy.js.before will be skipped'
+              )
+              assert.ok(beforeHookSkipped, 'test skipped by before() not found')
+              assert.strictEqual(beforeHookSkipped.meta[TEST_FINAL_STATUS], 'skip')
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -224,50 +227,6 @@ moduleTypes.forEach(({
 
           const specToRun = 'cypress/e2e/{flaky-test-retries,flaky-with-hooks.cy}.js'
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              const sortByStart = arr =>
-                arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-              // Eventually-passing and always-failing tests are retried by ATR:
-              // only the last attempt should have TEST_FINAL_STATUS
-              for (const [suite, name] of [
-                ['cypress/e2e/flaky-test-retries.js', 'flaky test retry eventually passes'],
-                ['cypress/e2e/flaky-test-retries.js', 'flaky test retry never passes'],
-                ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks eventually passes'],
-                ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks never passes'],
-              ]) {
-                const group = sortByStart(tests.filter(t =>
-                  t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
-                ))
-                assert.ok(group.length > 1, `Expected ATR retries for "${name}"`)
-                group.forEach((test, idx) => {
-                  if (idx < group.length - 1) {
-                    assert.ok(!(TEST_FINAL_STATUS in test.meta),
-                      `TEST_FINAL_STATUS should not be set on intermediate run of "${name}"`)
-                  } else {
-                    assert.ok(TEST_FINAL_STATUS in test.meta,
-                      `TEST_FINAL_STATUS should be set on last run of "${name}"`)
-                  }
-                })
-              }
-
-              // Always-passing tests have a single execution and get TEST_FINAL_STATUS immediately
-              for (const [suite, name] of [
-                ['cypress/e2e/flaky-test-retries.js', 'flaky test retry always passes'],
-                ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks always passes'],
-              ]) {
-                const group = tests.filter(t =>
-                  t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
-                )
-                assert.strictEqual(group.length, 1, `Expected 1 execution for "${name}"`)
-                assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
-              }
-            }, 60000)
-
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           childProcess = exec(
@@ -281,6 +240,53 @@ moduleTypes.forEach(({
               },
             }
           )
+
+          const eventsPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                const sortByStart = arr =>
+                  arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                // Eventually-passing and always-failing tests are retried by ATR:
+                // only the last attempt should have TEST_FINAL_STATUS
+                for (const [suite, name] of [
+                  ['cypress/e2e/flaky-test-retries.js', 'flaky test retry eventually passes'],
+                  ['cypress/e2e/flaky-test-retries.js', 'flaky test retry never passes'],
+                  ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks eventually passes'],
+                  ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks never passes'],
+                ]) {
+                  const group = sortByStart(tests.filter(t =>
+                    t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
+                  ))
+                  assert.ok(group.length > 1, `Expected ATR retries for "${name}"`)
+                  group.forEach((test, idx) => {
+                    if (idx < group.length - 1) {
+                      assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                      `TEST_FINAL_STATUS should not be set on intermediate run of "${name}"`)
+                    } else {
+                      assert.ok(TEST_FINAL_STATUS in test.meta,
+                      `TEST_FINAL_STATUS should be set on last run of "${name}"`)
+                    }
+                  })
+                }
+
+                // Always-passing tests have a single execution and get TEST_FINAL_STATUS immediately
+                for (const [suite, name] of [
+                  ['cypress/e2e/flaky-test-retries.js', 'flaky test retry always passes'],
+                  ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks always passes'],
+                ]) {
+                  const group = tests.filter(t =>
+                    t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
+                  )
+                  assert.strictEqual(group.length, 1, `Expected 1 execution for "${name}"`)
+                  assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
+                }
+              }, { hardTimeout: 60000 })
 
           await Promise.all([
             once(childProcess, 'exit'),
@@ -308,50 +314,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/{spec,flaky-with-hooks}.cy.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const sortByStart = arr =>
-              arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            // Known test: single execution, TEST_FINAL_STATUS set immediately
-            const knownTests = tests.filter(t =>
-              t.meta[TEST_SUITE] === 'cypress/e2e/spec.cy.js' && t.meta[TEST_NAME] === 'other context fails'
-            )
-            assert.strictEqual(knownTests.length, 1)
-            assert.ok(!(TEST_IS_NEW in knownTests[0].meta))
-            assert.strictEqual(knownTests[0].meta[TEST_FINAL_STATUS], 'fail')
-
-            // New test (no hooks): EFD retries NUM_RETRIES_EFD times, only last has TEST_FINAL_STATUS
-            const newTests = sortByStart(tests.filter(t =>
-              t.meta[TEST_SUITE] === 'cypress/e2e/spec.cy.js' && t.meta[TEST_NAME] === 'context passes'
-            ))
-            assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
-            newTests.forEach((test, idx) => {
-              if (idx < newTests.length - 1) {
-                assert.ok(!(TEST_FINAL_STATUS in test.meta))
-              } else {
-                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-              }
-            })
-
-            // New tests with hooks: same — only last execution has TEST_FINAL_STATUS
-            const newTestsWithHooks = sortByStart(tests.filter(t =>
-              t.meta[TEST_SUITE] === 'cypress/e2e/flaky-with-hooks.cy.js' &&
-              t.meta[TEST_NAME] === 'flaky with hooks always passes'
-            ))
-            assert.strictEqual(newTestsWithHooks.length, NUM_RETRIES_EFD + 1)
-            newTestsWithHooks.forEach((test, idx) => {
-              if (idx < newTestsWithHooks.length - 1) {
-                assert.ok(!(TEST_FINAL_STATUS in test.meta))
-              } else {
-                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-              }
-            })
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -365,6 +327,53 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const sortByStart = arr =>
+                arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              // Known test: single execution, TEST_FINAL_STATUS set immediately
+              const knownTests = tests.filter(t =>
+                t.meta[TEST_SUITE] === 'cypress/e2e/spec.cy.js' && t.meta[TEST_NAME] === 'other context fails'
+              )
+              assert.strictEqual(knownTests.length, 1)
+              assert.ok(!(TEST_IS_NEW in knownTests[0].meta))
+              assert.strictEqual(knownTests[0].meta[TEST_FINAL_STATUS], 'fail')
+
+              // New test (no hooks): EFD retries NUM_RETRIES_EFD times, only last has TEST_FINAL_STATUS
+              const newTests = sortByStart(tests.filter(t =>
+                t.meta[TEST_SUITE] === 'cypress/e2e/spec.cy.js' && t.meta[TEST_NAME] === 'context passes'
+              ))
+              assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.forEach((test, idx) => {
+                if (idx < newTests.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                }
+              })
+
+              // New tests with hooks: same — only last execution has TEST_FINAL_STATUS
+              const newTestsWithHooks = sortByStart(tests.filter(t =>
+                t.meta[TEST_SUITE] === 'cypress/e2e/flaky-with-hooks.cy.js' &&
+              t.meta[TEST_NAME] === 'flaky with hooks always passes'
+              ))
+              assert.strictEqual(newTestsWithHooks.length, NUM_RETRIES_EFD + 1)
+              newTestsWithHooks.forEach((test, idx) => {
+                if (idx < newTestsWithHooks.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                }
+              })
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -383,61 +392,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/{flaky-test-retries,flaky-with-hooks.cy}.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const sortByStart = arr =>
-              arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            // Eventually-passing tests: final_status='pass' only on last ATR attempt
-            for (const [suite, name] of [
-              ['cypress/e2e/flaky-test-retries.js', 'flaky test retry eventually passes'],
-              ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks eventually passes'],
-            ]) {
-              const group = sortByStart(tests.filter(t =>
-                t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
-              ))
-              group.forEach((test, idx) => {
-                if (idx < group.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                }
-              })
-            }
-
-            // Always-failing tests: final_status='fail' only on last ATR attempt
-            for (const [suite, name] of [
-              ['cypress/e2e/flaky-test-retries.js', 'flaky test retry never passes'],
-              ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks never passes'],
-            ]) {
-              const group = sortByStart(tests.filter(t =>
-                t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
-              ))
-              group.forEach((test, idx) => {
-                if (idx < group.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
-                }
-              })
-            }
-
-            // Always-passing tests have a single execution — final_status='pass' immediately
-            for (const [suite, name] of [
-              ['cypress/e2e/flaky-test-retries.js', 'flaky test retry always passes'],
-              ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks always passes'],
-            ]) {
-              const group = tests.filter(t =>
-                t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
-              )
-              assert.strictEqual(group.length, 1)
-              assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
-            }
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -451,6 +405,64 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const sortByStart = arr =>
+                arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              // Eventually-passing tests: final_status='pass' only on last ATR attempt
+              for (const [suite, name] of [
+                ['cypress/e2e/flaky-test-retries.js', 'flaky test retry eventually passes'],
+                ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks eventually passes'],
+              ]) {
+                const group = sortByStart(tests.filter(t =>
+                  t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
+                ))
+                group.forEach((test, idx) => {
+                  if (idx < group.length - 1) {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  } else {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                  }
+                })
+              }
+
+              // Always-failing tests: final_status='fail' only on last ATR attempt
+              for (const [suite, name] of [
+                ['cypress/e2e/flaky-test-retries.js', 'flaky test retry never passes'],
+                ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks never passes'],
+              ]) {
+                const group = sortByStart(tests.filter(t =>
+                  t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
+                ))
+                group.forEach((test, idx) => {
+                  if (idx < group.length - 1) {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  } else {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                  }
+                })
+              }
+
+              // Always-passing tests have a single execution — final_status='pass' immediately
+              for (const [suite, name] of [
+                ['cypress/e2e/flaky-test-retries.js', 'flaky test retry always passes'],
+                ['cypress/e2e/flaky-with-hooks.cy.js', 'flaky with hooks always passes'],
+              ]) {
+                const group = tests.filter(t =>
+                  t.meta[TEST_SUITE] === suite && t.meta[TEST_NAME] === name
+                )
+                assert.strictEqual(group.length, 1)
+                assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
+              }
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -469,24 +481,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, 2, 'Expected no retries when flaky retry count is 0')
-
-            const passingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.context passes')
-            assert.ok(passingTest, 'passing test not found')
-            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
-
-            const failingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.other context fails')
-            assert.ok(failingTest, 'failing test not found')
-            assert.strictEqual(failingTest.meta[TEST_STATUS], 'fail')
-            assert.ok(!(TEST_IS_RETRY in failingTest.meta), 'failing test should not be marked as a retry')
-            assert.strictEqual(failingTest.meta[TEST_FINAL_STATUS], 'fail')
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -501,6 +495,27 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 2, 'Expected no retries when flaky retry count is 0')
+
+              const passingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.context passes')
+              assert.ok(passingTest, 'passing test not found')
+              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+
+              const failingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.other context fails')
+              assert.ok(failingTest, 'failing test not found')
+              assert.strictEqual(failingTest.meta[TEST_STATUS], 'fail')
+              assert.ok(!(TEST_IS_RETRY in failingTest.meta), 'failing test should not be marked as a retry')
+              assert.strictEqual(failingTest.meta[TEST_FINAL_STATUS], 'fail')
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -529,24 +544,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/{disable,test-management-with-hooks.cy}.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const disabledTest = tests.find(t => t.meta[TEST_NAME] === 'disable is disabled')
-            assert.ok(disabledTest)
-            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-            assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
-
-            const disabledWithHooks = tests.find(t => t.meta[TEST_NAME] === 'disabled with hooks is disabled')
-            assert.ok(disabledWithHooks)
-            assert.strictEqual(disabledWithHooks.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(disabledWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-            assert.strictEqual(disabledWithHooks.meta[TEST_FINAL_STATUS], 'skip')
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -560,6 +557,27 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const disabledTest = tests.find(t => t.meta[TEST_NAME] === 'disable is disabled')
+              assert.ok(disabledTest)
+              assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+
+              const disabledWithHooks = tests.find(t => t.meta[TEST_NAME] === 'disabled with hooks is disabled')
+              assert.ok(disabledWithHooks)
+              assert.strictEqual(disabledWithHooks.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(disabledWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              assert.strictEqual(disabledWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -588,36 +606,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/{quarantine,test-management-with-hooks.cy}.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // Quarantined: runs but failure suppressed → TEST_STATUS='fail', TEST_FINAL_STATUS='skip'
-            const quarantinedTest = tests.find(t => t.meta[TEST_NAME] === 'quarantine is quarantined')
-            assert.ok(quarantinedTest)
-            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
-
-            // Quarantined with hooks: same behavior
-            const quarantinedWithHooks = tests.find(t =>
-              t.meta[TEST_NAME] === 'quarantined with hooks is quarantined'
-            )
-            assert.ok(quarantinedWithHooks)
-            assert.strictEqual(quarantinedWithHooks.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(quarantinedWithHooks.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            assert.strictEqual(quarantinedWithHooks.meta[TEST_FINAL_STATUS], 'skip')
-
-            // Non-quarantined test with hooks: final_status='pass'
-            const passingWithHooks = tests.find(t =>
-              t.meta[TEST_NAME] === 'quarantined with hooks passes normally'
-            )
-            assert.ok(passingWithHooks)
-            assert.strictEqual(passingWithHooks.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(passingWithHooks.meta[TEST_FINAL_STATUS], 'pass')
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -631,6 +619,39 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // Quarantined: runs but failure suppressed → TEST_STATUS='fail', TEST_FINAL_STATUS='skip'
+              const quarantinedTest = tests.find(t => t.meta[TEST_NAME] === 'quarantine is quarantined')
+              assert.ok(quarantinedTest)
+              assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+
+              // Quarantined with hooks: same behavior
+              const quarantinedWithHooks = tests.find(t =>
+                t.meta[TEST_NAME] === 'quarantined with hooks is quarantined'
+              )
+              assert.ok(quarantinedWithHooks)
+              assert.strictEqual(quarantinedWithHooks.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(quarantinedWithHooks.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+
+              // Non-quarantined test with hooks: final_status='pass'
+              const passingWithHooks = tests.find(t =>
+                t.meta[TEST_NAME] === 'quarantined with hooks passes normally'
+              )
+              assert.ok(passingWithHooks)
+              assert.strictEqual(passingWithHooks.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(passingWithHooks.meta[TEST_FINAL_STATUS], 'pass')
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -656,21 +677,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/test-management-with-hooks.cy.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // Test body passes but afterEach throws; failure suppressed because test is quarantined
-            const quarantinedTest = tests.find(t =>
-              t.meta[TEST_NAME] === 'quarantined with failing afterEach is quarantined'
-            )
-            assert.ok(quarantinedTest)
-            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -684,6 +690,24 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // Test body passes but afterEach throws; failure suppressed because test is quarantined
+              const quarantinedTest = tests.find(t =>
+                t.meta[TEST_NAME] === 'quarantined with failing afterEach is quarantined'
+              )
+              assert.ok(quarantinedTest)
+              assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -711,27 +735,6 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // 1 original + 3 ATF retries = 4 executions; all fail (default behavior)
-            const atfTests = tests.filter(t => t.meta[TEST_NAME] === 'attempt to fix is attempt to fix')
-            assert.strictEqual(atfTests.length, 4)
-
-            const sorted = atfTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-            sorted.forEach((test, idx) => {
-              if (idx < sorted.length - 1) {
-                assert.ok(!(TEST_FINAL_STATUS in test.meta),
-                  `TEST_FINAL_STATUS should not be set on intermediate ATF run ${idx}`)
-              } else {
-                // All attempts failed → hasPassedAllRetries=false → final_status='fail'
-                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
-              }
-            })
-          }, 60000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         childProcess = exec(
@@ -745,6 +748,30 @@ moduleTypes.forEach(({
             },
           }
         )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // 1 original + 3 ATF retries = 4 executions; all fail (default behavior)
+              const atfTests = tests.filter(t => t.meta[TEST_NAME] === 'attempt to fix is attempt to fix')
+              assert.strictEqual(atfTests.length, 4)
+
+              const sorted = atfTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              sorted.forEach((test, idx) => {
+                if (idx < sorted.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                  `TEST_FINAL_STATUS should not be set on intermediate ATF run ${idx}`)
+                } else {
+                // All attempts failed → hasPassedAllRetries=false → final_status='fail'
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                }
+              })
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
