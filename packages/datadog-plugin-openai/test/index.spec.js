@@ -1,6 +1,6 @@
 'use strict'
 
-const { spawn } = require('child_process')
+const { execFileSync } = require('child_process')
 const fs = require('fs')
 const assert = require('node:assert/strict')
 const Path = require('path')
@@ -100,8 +100,8 @@ describe('Plugin', () => {
       })
 
       describe('without initialization', () => {
-        it('should not error', (done) => {
-          spawn('node', ['no-init'], {
+        it('should not error', () => {
+          execFileSync(process.execPath, ['no-init.js'], {
             cwd: __dirname,
             stdio: 'inherit',
             env: {
@@ -109,7 +109,7 @@ describe('Plugin', () => {
               PATH_TO_DDTRACE: tracerRequirePath,
               PATH_TO_OPENAI: moduleRequirePath,
             },
-          }).on('exit', done) // non-zero exit status fails test
+          })
         })
       })
 
