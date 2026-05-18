@@ -1785,6 +1785,59 @@ describe(`cucumber@${version} commonJS`, () => {
             })
           })
 
+          onlyLatestIt('uses the worker EFD retry count for suite status', async () => {
+            const NUM_RETRIES_EFD = 3
+            receiver.setSettings({
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD,
+                  '10s': 0,
+                },
+              },
+              known_tests_enabled: true,
+            })
+            receiver.setKnownTests({
+              cucumber: {},
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSuites = events
+                  .filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+                assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+                assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+                testSuites.forEach(testSuite => {
+                  assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+                })
+
+                const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                const passedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+
+                assert.strictEqual(failedAttempts.length, 2)
+                assert.strictEqual(passedAttempts.length, 2)
+              })
+
+            childProcess = exec(
+              './node_modules/.bin/cucumber-js ci-visibility/features-flaky/*.feature --parallel 2',
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  NODE_OPTIONS: '-r ./ci-visibility/cucumber-parallel-coordinator-slow-clock.js -r dd-trace/ci/init',
+                },
+              }
+            )
+
+            const [exitCode] = await once(childProcess, 'exit')
+            assert.strictEqual(exitCode, 0)
+            await eventsPromise
+          })
+
           onlyLatestIt('bails out of EFD if the percentage of new tests is too high', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
