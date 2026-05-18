@@ -2,76 +2,90 @@
 
 Complete guide to organizing LLMObs test files.
 
+## ⚠️ CRITICAL: ALL Tests Must Use `withVersions()` ⚠️
+
+**`withVersions()` is required in every LLMObs test, without exception.**
+
+`withVersions()` adds the version wrapper's `node_modules` to `NODE_PATH` and calls `Module._initPaths()`. Without it, the orchestrion rewriter cannot find and instrument the module files — no APM spans are produced, `getEvents()` hangs indefinitely, and all tests timeout.
+
+**This is not optional. Do not use bare `require('package-name')` at the top of the file or in `beforeEach`.**
+
 ## File Template
 
 ```javascript
 'use strict'
 
-const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
+const assert = require('node:assert')
+const { describe, before, it } = require('mocha')
+const { withVersions } = require('../../../setup/mocha')  // ← REQUIRED
 
-describe('my-integration LLMObs', () => {
-  const { getEvents } = useLlmObs({ plugin: 'my-integration' })
+const {
+  useLlmObs,
+  assertLlmObsSpanEvent,
+  MOCK_STRING,
+  MOCK_NOT_NULLISH,
+} = require('../../util')
 
-  let MyClient
-  let client
+describe('integrations', () => {
+  describe('my-integration', () => {
+    const { getEvents } = useLlmObs({ plugin: 'my-integration' })
 
-  beforeEach(() => {
-    // Load module fresh for each test
-    MyClient = require('my-integration')
+    withVersions('my-integration', 'my-package', (version) => {  // ← REQUIRED WRAPPER
+      let client
 
-    // Initialize client with VCR proxy (if using VCR)
-    client = new MyClient({
-      apiKey: 'test-api-key',
-      baseURL: 'http://127.0.0.1:9126/vcr/my-integration'
-    })
-  })
-
-  afterEach(() => {
-    // Cleanup if needed
-  })
-
-  describe('chat completions', () => {
-    it('instruments basic chat', async () => {
-      const result = await client.chat({
-        messages: [{ role: 'user', content: 'Hello' }],
-        model: 'test-model',
-        temperature: 0.7
+      before(() => {
+        // Load module inside withVersions callback using the versioned require path
+        const MyClient = require(`../../../../../../versions/my-package@${version}`).get()
+        client = new MyClient({
+          apiKey: 'test-api-key',
+          baseURL: 'http://127.0.0.1:9126/vcr/my-integration'  // VCR proxy (LLM_CLIENT only)
+        })
       })
 
-      const events = getEvents()
-      expect(events).to.have.lengthOf(1)
+      describe('chat completions', () => {
+        it('creates a span', async () => {
+          const result = await client.chat({
+            messages: [{ role: 'user', content: 'Hello' }],
+            model: 'test-model',
+            temperature: 0.7,
+          })
 
-      assertLlmObsSpanEvent(events[0], {
-        spanKind: 'llm',
-        name: 'my-integration.chat',
-        modelName: 'test-model',
-        modelProvider: 'my-integration',
-        inputMessages: [{ content: 'Hello', role: 'user' }],
-        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
-        metrics: {
-          input_tokens: MOCK_NOT_NULLISH,
-          output_tokens: MOCK_NOT_NULLISH,
-          total_tokens: MOCK_NOT_NULLISH
-        },
-        metadata: {
-          temperature: 0.7
-        }
-      })
-    })
+          assert.ok(result)
 
-    it('handles errors', async () => {
-      try {
-        await client.chat({ messages: [], model: 'invalid' })
-      } catch (err) {
-        // Expected error
-      }
+          const { apmSpans, llmobsSpans } = await getEvents()  // ← always destructure
 
-      const events = getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'my-integration.chat',
+            modelName: 'test-model',
+            modelProvider: 'my-integration',
+            inputMessages: [{ content: 'Hello', role: 'user' }],
+            outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+            metrics: {
+              input_tokens: MOCK_NOT_NULLISH,
+              output_tokens: MOCK_NOT_NULLISH,
+              total_tokens: MOCK_NOT_NULLISH,
+            },
+            metadata: { temperature: 0.7 },
+          })
+        })
 
-      assertLlmObsSpanEvent(events[0], {
-        spanKind: 'llm',
-        outputMessages: [{ content: '', role: '' }],
-        error: MOCK_NOT_NULLISH
+        it('handles errors', async () => {
+          try {
+            await client.chat({ messages: [], model: 'invalid' })
+          } catch (err) {
+            // expected
+          }
+
+          const { llmobsSpans } = await getEvents()
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            spanKind: 'llm',
+            outputMessages: [{ content: '', role: '' }],
+            error: MOCK_NOT_NULLISH,
+          })
+        })
       })
     })
   })
@@ -85,116 +99,200 @@ const { getEvents } = useLlmObs({ plugin: 'integration-name' })
 ```
 
 **Parameters:**
-- `plugin` (string): Plugin name to test
+- `plugin` (string or string[]): Plugin name(s) to test
 
 **Returns:**
-- `getEvents()` function that returns captured span events
+- `getEvents()` async function — always `await` it and destructure the result
 
 **Usage:**
-Call `useLlmObs()` once at describe block level, then call `getEvents()` in each test.
+Call `useLlmObs()` once at the inner `describe` level (inside `describe('my-integration', ...)`) but outside `withVersions`. Call `getEvents()` in each test after the instrumented operation completes.
 
 ## getEvents() Usage
 
 ```javascript
-const events = getEvents()
+const { apmSpans, llmobsSpans } = await getEvents()
 ```
 
-**Returns:** Array of captured LLMObs span events
+**Returns:** `{ apmSpans, llmobsSpans }` — an object with two arrays.
 
 **Usage:**
-- Call after instrumented operation completes
-- Returns spans in creation order
-- Use `events[0]` for first/only span
-- Use `events.length` to assert count
+- Always `await` and destructure
+- `llmobsSpans[0]` for first/only LLMObs span
+- `apmSpans[0]` for the corresponding APM span (pass as `span:` to `assertLlmObsSpanEvent`)
+- `llmobsSpans.length` to assert span count
 
 ## Module Loading Pattern
 
-**Critical for state isolation:**
+**Every test must use `withVersions()` and load modules inside its callback using the versioned path.**
 
 ```javascript
-let MyLib
-let client
+withVersions('plugin-name', 'npm-package-name', (version) => {
+  let MyLib
 
-beforeEach(() => {
-  // Fresh require each test
-  MyLib = require('my-lib')
-  client = new MyLib()
+  before(() => {
+    // ✅ Correct: versioned require inside withVersions callback
+    MyLib = require(`../../../../../../versions/npm-package-name@${version}`).get()
+  })
+
+  // tests go here...
 })
 ```
 
-**Why this matters:**
-- Ensures clean state between tests
-- Prevents test pollution
-- Especially important for orchestration packages with state management
-- Allows each test to start fresh
+**Why `withVersions()` is mandatory:**
+- Sets `NODE_PATH` to include the version wrapper's `node_modules`
+- Calls `Module._initPaths()` so the orchestrion rewriter can locate the module
+- Without it: orchestrion can't instrument the module → no APM spans → `getEvents()` hangs → all tests timeout
 
-**Bad pattern (don't do this):**
+**Bad pattern — will cause all tests to silently hang:**
 ```javascript
-// At top of file
-const MyLib = require('my-lib')  // ❌ Shared across all tests
+// ❌ FATAL: bare require outside withVersions
+const MyLib = require('my-lib')
 
-describe('tests', () => {
-  it('test 1', () => { ... })  // May affect test 2
-  it('test 2', () => { ... })  // May be affected by test 1
+// ❌ FATAL: bare require inside beforeEach (not versioned, not wrapped)
+beforeEach(() => {
+  MyLib = require('my-lib')
+})
+
+// ❌ FATAL: hardcoded version range without withVersions wrapper
+before(() => {
+  MyLib = require('../../../../../../versions/my-lib@>=1.0.0').get()
+})
+```
+
+**Good pattern:**
+```javascript
+// ✅ withVersions wrapper + versioned require inside callback
+withVersions('my-plugin', 'my-lib', (version) => {
+  before(() => {
+    MyLib = require(`../../../../../../versions/my-lib@${version}`).get()
+  })
 })
 ```
 
 ## Test Organization
 
-Group by method (`describe('chat completions')`, `describe('embeddings')`) or by scenario (`describe('basic usage')`, `describe('error handling')`).
+Group by method (`describe('chat completions')`, `describe('tool calls')`) or by scenario (`describe('basic usage')`, `describe('error handling')`).
 
-## beforeEach / afterEach
+## before / beforeEach
 
-Standard: Load module in `beforeEach`, cleanup in `afterEach` if needed.
-Async: Use `async beforeEach/afterEach` if initialization/cleanup is async.
+- **`before()`**: Use for one-time setup (creating clients, mock servers). Most LLMObs tests use `before()` inside `withVersions`.
+- **`beforeEach()`**: Use for orchestration tests that need fresh module state per test, or when resetting server state between tests.
+- **`after()` / `afterEach()`**: Use for cleanup (closing connections, stopping servers).
 
 ## Imports
 
 ```javascript
+const { withVersions } = require('../../../setup/mocha')  // always required
 const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
 ```
 
 ## Assertions
 
 ```javascript
-const events = getEvents()
-expect(events).to.have.lengthOf(1)
-assertLlmObsSpanEvent(events[0], { spanKind: 'llm', ... })
+const { apmSpans, llmobsSpans } = await getEvents()
+assert.strictEqual(llmobsSpans.length, 1)
+assertLlmObsSpanEvent(llmobsSpans[0], { span: apmSpans[0], spanKind: 'llm', ... })
 ```
 
-## Testing Orchestration (Category 3)
+## Testing Orchestration (ORCHESTRATION category)
 
-**No VCR, pure functions:**
+**No VCR, pure functions, `beforeEach` for fresh module state:**
 
 ```javascript
-describe('langgraph', () => {
-  const { getEvents } = useLlmObs({ plugin: 'langgraph' })
-
+describe('integrations', () => {
   let StateGraph, Annotation
 
-  beforeEach(() => {
-    // Fresh import
-    const langgraph = require('@langchain/langgraph')
-    StateGraph = langgraph.StateGraph
-    Annotation = langgraph.Annotation
-  })
+  describe('langgraph', () => {
+    const { getEvents } = useLlmObs({ plugin: ['langgraph', 'langchain'] })
 
-  it('instruments graph invoke', async () => {
-    const graph = new StateGraph({
-      channels: {
-        messages: Annotation.Root({ ... })
-      }
+    withVersions('langgraph', '@langchain/langgraph', (version) => {
+      beforeEach(() => {
+        // Fresh module each test for state isolation
+        const langgraph = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
+        StateGraph = langgraph.StateGraph
+        Annotation = langgraph.Annotation
+      })
+
+      describe('Pregel.stream', () => {
+        it('creates a workflow span', async () => {
+          const StateAnnotation = Annotation.Root({
+            messages: Annotation({ reducer: (x, y) => x.concat(y), default: () => [] }),
+          })
+
+          const workflow = new StateGraph(StateAnnotation)
+            .addNode('chat', (state) => ({ messages: [{ role: 'assistant', content: 'Mock' }] }))
+            .addEdge('__start__', 'chat')
+            .addEdge('chat', '__end__')
+
+          const app = workflow.compile({ name: 'test-graph' })
+
+          for await (const chunk of await app.stream({ messages: [{ role: 'user', content: 'Test' }] })) {
+            // consume stream
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'workflow',  // NOT 'llm'
+            name: 'langgraph.graph.stream',
+          })
+        })
+      })
     })
+  })
+})
+```
 
-    graph.addNode('agent', async (state) => ({
-      messages: [{ role: 'assistant', content: 'Mock response' }]
-    }))
+## Testing Tool Clients (TOOL_CLIENT category)
 
-    const result = await graph.invoke({ messages: [...] })
+**Mock server via InMemoryTransport (for MCP SDK), `before()` for setup, `after()` for teardown:**
 
-    assertLlmObsSpanEvent(events[0], {
-      spanKind: 'workflow',  // Not 'llm'
-      name: 'langgraph.graph.invoke'
+```javascript
+describe('integrations', () => {
+  let Client, Server, InMemoryTransport
+  let client, server
+
+  describe('modelcontextprotocol-sdk', () => {
+    const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
+
+    withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
+      before(async () => {
+        // Load submodules via versioned require inside withVersions
+        Client = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+          .get('@modelcontextprotocol/sdk/client').Client
+        Server = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+          .get('@modelcontextprotocol/sdk/server').Server
+        InMemoryTransport = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+          .get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+
+        server = new Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+        // register handlers...
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+        await server.connect(serverTransport)
+        client = new Client({ name: 'test-client', version: '1.0.0' })
+        await client.connect(clientTransport)
+      })
+
+      after(async () => {
+        await client?.close()
+        await server?.close()
+      })
+
+      describe('Client.callTool', () => {
+        it('creates a tool span', async () => {
+          await client.callTool({ name: 'my-tool', arguments: {} })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'tool',
+            name: 'mcp.tool.my-tool',
+          })
+        })
+      })
     })
   })
 })
@@ -202,47 +300,62 @@ describe('langgraph', () => {
 
 ## Common Pitfalls
 
-### Pitfall 1: Forgetting to call getEvents()
+### Pitfall 1: Missing `withVersions()` → tests silently hang
 
 ```javascript
-// ❌ Bad
-it('test', async () => {
-  await client.chat({ ... })
-  // Missing: const events = getEvents()
-  assertLlmObsSpanEvent(undefined, { ... })  // Error!
+// ❌ FATAL — orchestrion can't instrument, getEvents() hangs forever
+before(async () => {
+  const mod = require('../../../../../../versions/@modelcontextprotocol/sdk@>=1.27.1')
+    .get('@modelcontextprotocol/sdk/client')
+  Client = mod.Client
 })
 
-// ✅ Good
-it('test', async () => {
-  await client.chat({ ... })
-  const events = getEvents()
-  assertLlmObsSpanEvent(events[0], { ... })
+// ✅ Correct — wrap everything in withVersions
+withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
+  before(async () => {
+    Client = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/client').Client
+  })
 })
 ```
 
-### Pitfall 2: Using VCR for orchestration
+### Pitfall 2: Forgetting to await getEvents()
+
+```javascript
+// ❌ Bad — getEvents() is async
+const events = getEvents()
+assertLlmObsSpanEvent(events[0], { ... })  // events is a Promise, not an object!
+
+// ✅ Good
+const { apmSpans, llmobsSpans } = await getEvents()
+assertLlmObsSpanEvent(llmobsSpans[0], { ... })
+```
+
+### Pitfall 3: Using VCR for orchestration or tool clients
 
 ```javascript
 // ❌ Bad (orchestration with VCR)
-const client = new LangGraph({
-  baseURL: 'http://127.0.0.1:9126/vcr/langgraph'  // Wrong!
-})
+client = new StateGraph({ baseURL: 'http://127.0.0.1:9126/vcr/langgraph' })
 
 // ✅ Good (orchestration without VCR)
-const graph = new StateGraph({ ... })  // Pure functions
+const graph = new StateGraph(StateAnnotation)  // pure functions
 ```
 
-### Pitfall 3: Not isolating module state
+### Pitfall 4: Not isolating module state for orchestration
 
 ```javascript
-// ❌ Bad (shared state)
-const MyLib = require('my-lib')  // Once at top
-it('test 1', () => { ... })  // Modifies MyLib state
-it('test 2', () => { ... })  // Affected by test 1
+// ❌ Bad (shared state — orchestration libs accumulate state)
+withVersions('langgraph', '@langchain/langgraph', (version) => {
+  before(() => {  // Only once — state leaks between tests
+    langgraph = require(`...`).get()
+  })
+})
 
-// ✅ Good (isolated)
-beforeEach(() => {
-  MyLib = require('my-lib')  // Fresh each test
+// ✅ Good (fresh state per test)
+withVersions('langgraph', '@langchain/langgraph', (version) => {
+  beforeEach(() => {  // Fresh each test
+    langgraph = require(`...`).get()
+  })
 })
 ```
 
@@ -250,7 +363,8 @@ beforeEach(() => {
 
 Study these test files as templates:
 
-- `packages/dd-trace/test/llmobs/plugins/openai/index.spec.js` - Simple format
-- `packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js` - Complex format
-- `packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js` - Nested format
-- `packages/dd-trace/test/llmobs/plugins/langchain-langgraph/index.spec.js` - Orchestration
+- `packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js` — LLM_CLIENT with `before()` + VCR
+- `packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js` — LLM_CLIENT nested format
+- `packages/dd-trace/test/llmobs/plugins/openai/openaiv4.spec.js` — LLM_CLIENT simple format
+- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js` — ORCHESTRATION with `beforeEach()`
+- `packages/dd-trace/test/llmobs/plugins/ai/index.spec.js` — MULTI_PROVIDER format
