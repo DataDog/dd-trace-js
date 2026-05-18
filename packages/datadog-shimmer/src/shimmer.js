@@ -103,6 +103,9 @@ function wrapFunction (original, wrapper) {
  * @returns {Function} The wrapper closure with `name` and `length` preserved.
  */
 function wrapCallback (original, wrapper) {
+  if (typeof original !== 'function') {
+    return original
+  }
   const wrapped = wrapper(original)
   if (wrapped.name !== original.name) {
     Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
