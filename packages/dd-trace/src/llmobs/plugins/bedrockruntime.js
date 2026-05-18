@@ -10,7 +10,7 @@ const {
   extractConverseToolDefinitions,
   extractRequestParamsConverse,
   extractTextAndResponseReasonConverse,
-  buildConverseStreamGeneration,
+  extractTextAndResponseReasonConverseFromStream,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 const BaseLLMObsPlugin = require('./base')
 
@@ -87,13 +87,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders }) {
+    const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
     this.#registerSpan(span, request)
 
     if (CONVERSE_OPERATIONS.has(request?.operation)) {
-      this.#tagConverseSpan({ ctx, request, span, response, tokensFromHeaders })
+      this.#tagConverseSpan({ ctx, request, span, response, tokensFromHeaders, isStream })
     } else {
-      this.#tagInvokeModelSpan({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
+      this.#tagInvokeModelSpan({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream })
     }
   }
 
@@ -110,10 +111,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
   }
 
-  #tagConverseSpan ({ ctx, request, span, response, tokensFromHeaders }) {
+  #tagConverseSpan ({ ctx, request, span, response, tokensFromHeaders, isStream }) {
     const requestParams = extractRequestParamsConverse(request.params)
-    const generation = request.operation === 'converseStream'
-      ? buildConverseStreamGeneration(ctx.chunks)
+    const generation = isStream
+      ? extractTextAndResponseReasonConverseFromStream(ctx.chunks)
       : extractTextAndResponseReasonConverse(response)
 
     const toolDefinitions = extractConverseToolDefinitions(request.params)
@@ -124,9 +125,9 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     this.#tagCommon({ span, requestParams, generation, tokensFromHeaders })
   }
 
-  #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders }) {
+  #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream }) {
     const requestParams = extractRequestParams(request.params, modelProvider)
-    const generation = request.operation === 'invokeModelWithResponseStream'
+    const generation = isStream
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 

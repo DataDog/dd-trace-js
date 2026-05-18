@@ -621,7 +621,7 @@ function extractTextAndResponseReasonConverse (response) {
  * @param {Array<object>} chunks - Ordered ConverseStreamOutput events.
  * @returns {Generation}
  */
-function buildConverseStreamGeneration (chunks) {
+function extractTextAndResponseReasonConverseFromStream (chunks) {
   let role = 'assistant'
   let stopReason = ''
   let usage = {}
@@ -675,6 +675,6 @@ module.exports = {
   extractConverseToolDefinitions,
   extractRequestParamsConverse,
   extractTextAndResponseReasonConverse,
-  buildConverseStreamGeneration,
+  extractTextAndResponseReasonConverseFromStream,
   PROVIDER,
 }
