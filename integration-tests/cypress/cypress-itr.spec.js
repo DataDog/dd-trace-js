@@ -32,12 +32,22 @@ const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
+const CYPRESS_RUN_HARD_TIMEOUT = 70_000
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
   const test = events.find(event => event.type === 'test').content
   assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
+function gatherCypressPayloads (receiver, childProcess, endpoint, onPayload) {
+  return receiver.gatherPayloadsUntilChildExit(
+    childProcess,
+    ({ url }) => url.endsWith(endpoint),
+    onPayload,
+    { hardTimeout: CYPRESS_RUN_HARD_TIMEOUT }
+  )
 }
 
 function shouldTestsRun (type) {
@@ -173,13 +183,6 @@ moduleTypes.forEach(({
           hasReportedCodeCoverage = true
         }, ({ url }) => url.endsWith('/api/v2/citestcov')).catch(() => {})
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const eventTypes = events.map(event => event.type)
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
-          }, 25000)
-
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
@@ -194,10 +197,13 @@ moduleTypes.forEach(({
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const eventTypes = events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+        })
+
+        await receiverPromise
         assert.strictEqual(hasReportedCodeCoverage, false)
       })
 
@@ -209,34 +215,6 @@ moduleTypes.forEach(({
             suite: 'cypress/e2e/other.cy.js',
           },
         }])
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const eventTypes = events.map(event => event.type)
-
-            const skippedTest = events.find(event =>
-              event.content.resource === 'cypress/e2e/other.cy.js.context passes'
-            ).content
-            assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(skippedTest.meta[TEST_SKIPPED_BY_ITR], 'true')
-
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
-            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
-            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
-            assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
-            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'test')
-            const testModule = events.find(event => event.type === 'test_module_end').content
-            assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'true')
-            assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
-            assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
-            assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
-            assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'test')
-            assertItrSkippingEnabledTags(events, 'true')
-          }, 25000)
-
         const coverageRequestPromise = receiver
           .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'), 25000)
           .then(coverageRequest => {
@@ -267,8 +245,34 @@ moduleTypes.forEach(({
         childProcess.stdout?.pipe(process.stdout)
         childProcess.stderr?.pipe(process.stderr)
 
+        const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const eventTypes = events.map(event => event.type)
+
+          const skippedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+          ).content
+          assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTest.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'test')
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+          assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'test')
+          assertItrSkippingEnabledTags(events, 'true')
+        })
+
         await Promise.all([
-          once(childProcess, 'exit'),
           eventsPromise,
           skippableRequestPromise,
           coverageRequestPromise,
@@ -294,16 +298,6 @@ moduleTypes.forEach(({
           hasRequestedSkippable = true
         }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 25000).catch(() => {})
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const notSkippedTest = events.find(event =>
-              event.content.resource === 'cypress/e2e/other.cy.js.context passes'
-            )
-            assert.ok(notSkippedTest)
-            assert.strictEqual(notSkippedTest.content.meta[TEST_STATUS], 'pass')
-          }, 25000)
-
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
@@ -322,10 +316,16 @@ moduleTypes.forEach(({
         childProcess.stdout?.pipe(process.stdout)
         childProcess.stderr?.pipe(process.stderr)
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const notSkippedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+          )
+          assert.ok(notSkippedTest)
+          assert.strictEqual(notSkippedTest.content.meta[TEST_STATUS], 'pass')
+        })
+
+        await receiverPromise
         assert.strictEqual(hasRequestedSkippable, false)
       })
 
@@ -351,34 +351,6 @@ moduleTypes.forEach(({
             },
           },
         ])
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            const testModule = events.find(event => event.type === 'test_session_end').content
-
-            assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.strictEqual(testSession.meta[TEST_ITR_FORCED_RUN], 'true')
-            assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.strictEqual(testModule.meta[TEST_ITR_FORCED_RUN], 'true')
-
-            const unskippablePassedTest = events.find(event =>
-              event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
-            )
-            const unskippableFailedTest = events.find(event =>
-              event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
-            )
-            assert.strictEqual(unskippablePassedTest.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_FORCED_RUN], 'true')
-
-            assert.strictEqual(unskippableFailedTest.content.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(unskippableFailedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            // This was not going to be skipped
-            assert.ok(!(TEST_ITR_FORCED_RUN in unskippableFailedTest.content.meta))
-          }, 25000)
-
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
@@ -397,10 +369,34 @@ moduleTypes.forEach(({
         childProcess.stdout?.pipe(process.stdout)
         childProcess.stderr?.pipe(process.stderr)
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_FORCED_RUN], 'true')
+          assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(testModule.meta[TEST_ITR_FORCED_RUN], 'true')
+
+          const unskippablePassedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
+          )
+          const unskippableFailedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
+          )
+          assert.strictEqual(unskippablePassedTest.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_FORCED_RUN], 'true')
+
+          assert.strictEqual(unskippableFailedTest.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(unskippableFailedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          // This was not going to be skipped
+          assert.ok(!(TEST_ITR_FORCED_RUN in unskippableFailedTest.content.meta))
+        })
+
+        await receiverPromise
       })
 
       it('only sets forced to run if test was going to be skipped by ITR', async () => {
@@ -419,35 +415,6 @@ moduleTypes.forEach(({
           },
         ])
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            const testModule = events.find(event => event.type === 'test_session_end').content
-
-            assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.ok(!(TEST_ITR_FORCED_RUN in testSession.meta))
-            assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.ok(!(TEST_ITR_FORCED_RUN in testModule.meta))
-
-            const unskippablePassedTest = events.find(event =>
-              event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
-            )
-            const unskippableFailedTest = events.find(event =>
-              event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
-            )
-            assert.strictEqual(unskippablePassedTest.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            // This was not going to be skipped
-            assert.ok(!(TEST_ITR_FORCED_RUN in unskippablePassedTest.content.meta))
-
-            assert.strictEqual(unskippableFailedTest.content.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(unskippableFailedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            // This was not going to be skipped
-            assert.ok(!(TEST_ITR_FORCED_RUN in unskippableFailedTest.content.meta))
-          }, 25000)
-
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
@@ -466,10 +433,35 @@ moduleTypes.forEach(({
         childProcess.stdout?.pipe(process.stdout)
         childProcess.stderr?.pipe(process.stderr)
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.ok(!(TEST_ITR_FORCED_RUN in testSession.meta))
+          assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.ok(!(TEST_ITR_FORCED_RUN in testModule.meta))
+
+          const unskippablePassedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
+          )
+          const unskippableFailedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
+          )
+          assert.strictEqual(unskippablePassedTest.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          // This was not going to be skipped
+          assert.ok(!(TEST_ITR_FORCED_RUN in unskippablePassedTest.content.meta))
+
+          assert.strictEqual(unskippableFailedTest.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(unskippableFailedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          // This was not going to be skipped
+          assert.ok(!(TEST_ITR_FORCED_RUN in unskippableFailedTest.content.meta))
+        })
+
+        await receiverPromise
       })
 
       it('sets _dd.ci.itr.tests_skipped to false if the received test is not skipped', async () => {
@@ -480,22 +472,6 @@ moduleTypes.forEach(({
             suite: 'i/dont/exist.spec.js',
           },
         }])
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
-            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
-            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
-            assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 0)
-            const testModule = events.find(event => event.type === 'test_module_end').content
-            assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
-            assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
-            assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
-            assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
-            assertItrSkippingEnabledTags(events, 'true')
-          }, 30000)
-
         const skippableRequestPromise = receiver
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 30000)
           .then(skippableRequest => {
@@ -520,8 +496,22 @@ moduleTypes.forEach(({
         childProcess.stdout?.pipe(process.stdout)
         childProcess.stderr?.pipe(process.stderr)
 
+        const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+          assertItrSkippingEnabledTags(events, 'true')
+        })
+
         await Promise.all([
-          once(childProcess, 'exit'),
           eventsPromise,
           skippableRequestPromise,
         ])
@@ -530,14 +520,6 @@ moduleTypes.forEach(({
       it('reports itr_correlation_id in tests', async () => {
         const itrCorrelationId = '4321'
         receiver.setItrCorrelationId(itrCorrelationId)
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            tests.forEach(test => {
-              assert.strictEqual(test.itr_correlation_id, itrCorrelationId)
-            })
-          }, 25000)
 
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
@@ -553,10 +535,16 @@ moduleTypes.forEach(({
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
+        const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.ok(tests.length > 0)
+          tests.forEach(test => {
+            assert.strictEqual(test.itr_correlation_id, itrCorrelationId)
+          })
+        })
+
+        await eventsPromise
       })
 
       it('reports code coverage relative to the repository root, not working directory', async () => {
@@ -578,22 +566,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
-            const coveredFiles = payloads
-              .flatMap(({ payload }) => payload)
-              .flatMap(({ content: { coverages } }) => coverages)
-              .flatMap(({ files }) => files)
-              .map(({ filename }) => filename)
-
-            assertObjectContains(coveredFiles, [
-              'ci-visibility/subproject/src/utils.tsx',
-              'ci-visibility/subproject/src/App.tsx',
-              'ci-visibility/subproject/src/index.tsx',
-              'ci-visibility/subproject/cypress/e2e/spec.cy.js',
-            ])
-          }, 25000)
-
         childProcess = exec(
           command,
           {
@@ -609,30 +581,27 @@ moduleTypes.forEach(({
         childProcess.stdout?.pipe(process.stdout)
         childProcess.stderr?.pipe(process.stderr)
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
+        const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcov', payloads => {
+          const coveredFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(({ content: { coverages } }) => coverages)
+            .flatMap(({ files }) => files)
+            .map(({ filename }) => filename)
+
+          assertObjectContains(coveredFiles, [
+            'ci-visibility/subproject/src/utils.tsx',
+            'ci-visibility/subproject/src/App.tsx',
+            'ci-visibility/subproject/src/index.tsx',
+            'ci-visibility/subproject/cypress/e2e/spec.cy.js',
+          ])
+        })
+
+        await eventsPromise
       })
     })
 
     it('still reports correct format if there is a plugin incompatibility', async () => {
       const envVars = getCiVisEvpProxyConfig(receiver.port)
-
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testEvents = events.filter(event => event.type === 'test')
-          const testModuleEvent = events.find(event => event.type === 'test_module_end')
-
-          testEvents.forEach(testEvent => {
-            assert.ok(testEvent.content.test_suite_id)
-            assert.ok(testEvent.content.test_module_id)
-            assert.ok(testEvent.content.test_session_id)
-            assert.notStrictEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
-          })
-        }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -647,10 +616,23 @@ moduleTypes.forEach(({
         }
       )
 
-      await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
+      const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const testEvents = events.filter(event => event.type === 'test')
+        const testModuleEvent = events.find(event => event.type === 'test_module_end')
+        assert.ok(testEvents.length > 0)
+        assert.ok(testModuleEvent)
+
+        testEvents.forEach(testEvent => {
+          assert.ok(testEvent.content.test_suite_id)
+          assert.ok(testEvent.content.test_module_id)
+          assert.ok(testEvent.content.test_session_id)
+          assert.notStrictEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
+        })
+      })
+
+      await receiverPromise
     })
   })
 })
