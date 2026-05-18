@@ -558,6 +558,7 @@ async function createTopicWithRetry (admin, topicConfig, maxRetries = 5) {
       await admin.createTopics(topicConfig)
       return
     } catch (err) {
+      if (err.type === 'TOPIC_ALREADY_EXISTS') return
       if (attempt < maxRetries && err.type === 'UNKNOWN_TOPIC_OR_PARTITION') {
         await new Promise(resolve => setTimeout(resolve, 1000))
         continue
