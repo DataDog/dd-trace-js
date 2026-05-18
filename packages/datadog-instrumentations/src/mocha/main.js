@@ -18,6 +18,7 @@ const {
   getIsFaultyEarlyFlakeDetection,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -249,11 +250,38 @@ function getOnEndHandler (isParallel) {
   }
 }
 
+function getRunStoresPromise (channelToPublishTo, ctx) {
+  return new Promise(resolve => {
+    channelToPublishTo.runStores({ ...ctx, onDone: resolve }, () => {})
+  })
+}
+
+function applyKnownTestsResponse ({ err, knownTests }) {
+  if (err) {
+    config.knownTests = []
+    config.isEarlyFlakeDetectionEnabled = false
+    config.isKnownTestsEnabled = false
+  } else {
+    config.knownTests = knownTests
+  }
+}
+
+function applyTestManagementTestsResponse ({ err, testManagementTests: receivedTestManagementTests }) {
+  if (err) {
+    config.testManagementTests = {}
+    config.isTestManagementTestsEnabled = false
+    config.testManagementAttemptToFixRetries = 0
+  } else {
+    config.testManagementTests = receivedTestManagementTests
+  }
+}
+
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest) {
   const ctx = {
     isParallel,
     frameworkVersion,
   }
+  let skippableSuitesResponse
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
     if (err) {
@@ -279,6 +307,16 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     })
   }
 
+  const requestSkippableSuites = () => {
+    if (skippableSuitesResponse) {
+      onReceivedSkippableSuites(skippableSuitesResponse)
+      return
+    }
+
+    ctx.onDone = onReceivedSkippableSuites
+    skippableSuitesCh.runStores(ctx, () => {})
+  }
+
   const onReceivedImpactedTests = ({ err, modifiedFiles: receivedModifiedFiles }) => {
     if (err) {
       config.modifiedFiles = []
@@ -287,8 +325,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       config.modifiedFiles = receivedModifiedFiles
     }
     if (config.isSuitesSkippingEnabled) {
-      ctx.onDone = onReceivedSkippableSuites
-      skippableSuitesCh.runStores(ctx, () => {})
+      requestSkippableSuites()
     } else {
       mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
@@ -296,44 +333,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedTestManagementTests = ({ err, testManagementTests: receivedTestManagementTests }) => {
-    if (err) {
-      config.testManagementTests = {}
-      config.isTestManagementTestsEnabled = false
-      config.testManagementAttemptToFixRetries = 0
-    } else {
-      config.testManagementTests = receivedTestManagementTests
-    }
+  const continueAfterTestRequests = () => {
     if (config.isImpactedTestsEnabled) {
       ctx.onDone = onReceivedImpactedTests
       modifiedFilesCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
-      ctx.onDone = onReceivedSkippableSuites
-      skippableSuitesCh.runStores(ctx, () => {})
-    } else {
-      mochaGlobalRunCh.runStores(ctx, () => {
-        onFinishRequest()
-      })
-    }
-  }
-
-  const onReceivedKnownTests = ({ err, knownTests }) => {
-    if (err) {
-      config.knownTests = []
-      config.isEarlyFlakeDetectionEnabled = false
-      config.isKnownTestsEnabled = false
-    } else {
-      config.knownTests = knownTests
-    }
-    if (config.isTestManagementTestsEnabled) {
-      ctx.onDone = onReceivedTestManagementTests
-      testManagementTestsCh.runStores(ctx, () => {})
-    } else if (config.isImpactedTestsEnabled) {
-      ctx.onDone = onReceivedImpactedTests
-      modifiedFilesCh.runStores(ctx, () => {})
-    } else if (config.isSuitesSkippingEnabled) {
-      ctx.onDone = onReceivedSkippableSuites
-      skippableSuitesCh.runStores(ctx, () => {})
+      requestSkippableSuites()
     } else {
       mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
@@ -359,23 +364,30 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
-    if (config.isKnownTestsEnabled) {
-      ctx.onDone = onReceivedKnownTests
-      knownTestsCh.runStores(ctx, () => {})
-    } else if (config.isTestManagementTestsEnabled) {
-      ctx.onDone = onReceivedTestManagementTests
-      testManagementTestsCh.runStores(ctx, () => {})
-    } else if (config.isImpactedTestsEnabled) {
-      ctx.onDone = onReceivedImpactedTests
-      modifiedFilesCh.runStores(ctx, () => {})
-    } else if (config.isSuitesSkippingEnabled) {
-      ctx.onDone = onReceivedSkippableSuites
-      skippableSuitesCh.runStores(ctx, () => {})
-    } else {
-      mochaGlobalRunCh.runStores(ctx, () => {
-        onFinishRequest()
-      })
-    }
+    getTestOptimizationRequestResults({
+      isKnownTestsEnabled: config.isKnownTestsEnabled,
+      isTestManagementTestsEnabled: config.isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled: config.isSuitesSkippingEnabled,
+      getKnownTests: () => getRunStoresPromise(knownTestsCh, ctx),
+      getTestManagementTests: () => getRunStoresPromise(testManagementTestsCh, ctx),
+      getSkippableSuites: () => getRunStoresPromise(skippableSuitesCh, ctx),
+    }).then(requestResults => {
+      const {
+        knownTestsResponse,
+        testManagementTestsResponse,
+        skippableSuitesResponse: requestSkippableSuitesResponse,
+      } = requestResults
+
+      if (knownTestsResponse) {
+        applyKnownTestsResponse(knownTestsResponse)
+      }
+      if (testManagementTestsResponse) {
+        applyTestManagementTestsResponse(testManagementTestsResponse)
+      }
+      skippableSuitesResponse = requestSkippableSuitesResponse
+
+      continueAfterTestRequests()
+    })
   }
 
   ctx.onDone = onReceivedConfiguration
