@@ -567,6 +567,86 @@ describe('Plugin', () => {
         )
       })
 
+      describe('with obfuscateQuery: "types"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'types',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should report scalar value types in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"string","age":"number"}`,
+            meta: {
+              'mongodb.query': '{"user":"string","age":"number"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while reporting value types', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
+            },
+          })
+        })
+      })
+
+      describe('with obfuscateQuery: "redact"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'redact',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should redact scalar values in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"?","age":"?"}`,
+            meta: {
+              'mongodb.query': '{"user":"?","age":"?"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while redacting their values', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"?","$lte":"?"}}',
+            },
+          })
+        })
+      })
+
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', {
