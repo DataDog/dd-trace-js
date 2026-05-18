@@ -2,8 +2,6 @@
 
 const { createHash } = require('node:crypto')
 
-const shimmer = require('../../datadog-shimmer')
-
 /**
  * Returns true if the op the DurableContextImpl is about to run will be served
  * from the SDK's checkpoint (i.e. the next stepId already has a SUCCEEDED entry).
@@ -47,34 +45,4 @@ function unwrapDurableError (ctxOrError) {
   return { ...ctxOrError, error: err }
 }
 
-/**
- * Using `kind: 'Async'` in Orchestrion would side-chain `.then()` immediately on the returned
- * thenable, prematurely triggering the SDK's `ensureExecution()` and `markOperationAwaited`.
- * Callers pair `kind: 'Sync'` with this helper so `onSettle` only fires after user code first
- * awaits / chains, preserving the SDK's lazy semantics.
- * @param {object} dp - The returned DurablePromise instance.
- * @param {(err: unknown) => void} onSettle - Called once with `undefined` on success or the
- *   rejection reason on failure.
- * @returns {void}
- */
-function observeDurablePromise (dp, onSettle) {
-  if (!dp || typeof dp.then !== 'function') return
-  const proto = Object.getPrototypeOf(dp)
-  let attached = false
-
-  // Use the prototype's `.then` directly to avoid recursing into our
-  // instance-level wrapper. The promise can only settle once, so calling
-  // attachSpy at most once gives us exactly one onSettle invocation.
-  const attachSpy = () => {
-    if (attached) return
-    attached = true
-    proto.then.call(dp, () => onSettle(), err => onSettle(err))
-  }
-
-  shimmer.massWrap(dp, ['then', 'catch', 'finally'], original => function (...args) {
-    attachSpy()
-    return original.apply(this, args)
-  })
-}
-
-module.exports = { isReplayedOp, getOperationId, unwrapDurableError, observeDurablePromise }
+module.exports = { isReplayedOp, getOperationId, unwrapDurableError }

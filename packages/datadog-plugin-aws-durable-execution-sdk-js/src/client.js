@@ -1,12 +1,18 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { getOperationId, isReplayedOp, observeDurablePromise, unwrapDurableError } = require('./util')
+const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_invoke'
+  static settleChannel = 'apm:aws-durable-execution-sdk-js:invoke:settle'
+
+  constructor (...args) {
+    super(...args)
+    this.addSub(this.constructor.settleChannel, ctx => this.settle(ctx))
+  }
 
   // invoke has two overloads: invoke(name, funcId, ...) and invoke(funcId, ...).
   // They're distinguished by whether args[1] is a string (named form) or not.
@@ -39,25 +45,16 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
-  // invoke is wrapped with kind:'Sync'. The returned DurablePromise is observed
-  // lazily so the span finishes when user code awaits the result.
-  end (ctx) {
-    observeDurablePromise(ctx.result, err => {
-      if (ctx._ddFinished) return
-      ctx._ddFinished = true
-      if (err !== undefined) {
-        const errCtx = unwrapDurableError({ ...ctx, error: err })
-        ctx.currentStore?.span?.setTag('error', errCtx.error)
-      }
-      this.finish(ctx)
-    })
+  settle (ctx) {
+    if (ctx.error !== undefined) {
+      const errCtx = unwrapDurableError(ctx)
+      ctx.currentStore?.span?.setTag('error', errCtx.error)
+    }
+    this.finish(ctx)
   }
 
   error (ctxOrError) {
-    if (ctxOrError?._ddFinished) return
-    if (ctxOrError && typeof ctxOrError === 'object') ctxOrError._ddFinished = true
-    super.error(unwrapDurableError(ctxOrError))
-    super.finish(ctxOrError)
+    this.settle(ctxOrError)
   }
 }
 
