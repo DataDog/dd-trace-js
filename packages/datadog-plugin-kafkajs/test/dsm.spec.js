@@ -28,7 +28,7 @@ const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
-    this.timeout(30000)
+    this.timeout(10000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
@@ -164,7 +164,7 @@ describe('Plugin', () => {
         })
 
         describe('concurrent context isolation', function () {
-          this.timeout(60000)
+          this.timeout(30000)
           let setCheckpointSpy
           let consumerA
           let consumerB

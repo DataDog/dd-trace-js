@@ -75,13 +75,14 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.connect()
-          await createTopicWithRetry(admin, {
+          await admin.createTopics({
             topics: [{
               topic: testTopic,
               numPartitions: 1,
               replicationFactor: 1,
             }],
           })
+          await waitForTopicReady(admin, testTopic)
           await admin.disconnect()
 
           consumer = kafka.consumer({
@@ -364,18 +365,27 @@ async function sendMessages (kafka, topic, messages) {
   await producer.disconnect()
 }
 
-async function createTopicWithRetry (admin, topicConfig, maxRetries = 5) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
+  if (typeof admin?.fetchTopicMetadata !== 'function') return
+
+  const start = Date.now()
+  while ((Date.now() - start) < timeoutMs) {
     try {
-      await admin.createTopics(topicConfig)
-      return
-    } catch (err) {
-      if (err.type === 'TOPIC_ALREADY_EXISTS') return
-      if (attempt < maxRetries && err.type === 'UNKNOWN_TOPIC_OR_PARTITION') {
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        continue
+      const meta = await admin.fetchTopicMetadata({ topics: [topic], timeout: 1000 })
+      const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
+
+      const partitions = topicMeta?.partitions
+      if (Array.isArray(partitions) &&
+          partitions.length > 0 &&
+          partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
+        return
       }
-      throw err
+    } catch {
+      // Topic creation is async; metadata/leader errors can be transient.
     }
+
+    await new Promise(resolve => setTimeout(resolve, 50))
   }
+
+  throw new Error(`Timeout: Topic "${topic}" metadata was not ready within ${timeoutMs}ms`)
 }
