@@ -7,6 +7,7 @@ const log = require('../log')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const telemetryMetrics = require('../telemetry/metrics')
 const tracerVersion = require('../../../../package.json').version
+const { unwrap } = require('../opentracing/public/span')
 const { keepTrace } = require('../priority_sampler')
 const { AI_GUARD } = require('../standalone/product')
 const NoopAIGuard = require('./noop')
@@ -187,7 +188,8 @@ class AIGuard extends NoopAIGuard {
     }
     const { block = true, source = TAGS.SOURCE_SDK, integration = TAGS.INTEGRATION_NONE } = opts ?? {}
     const telemetryTags = { source, integration }
-    return this.#tracer.trace(TAGS.RESOURCE, {}, async (span) => {
+    return this.#tracer.trace(TAGS.RESOURCE, {}, async (publicSpan) => {
+      const span = unwrap(publicSpan)
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(TAGS.TARGET_TAG_KEY, target)

@@ -7,8 +7,9 @@ const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
+const { storage } = require('../../datadog-core')
 const Tracer = require('../src/tracer')
-const Span = require('../src/opentracing/span')
+const { PublicSpan } = require('../src/opentracing/public/span')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -52,7 +53,7 @@ describe('Tracer', () => {
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
-        assert.ok(span instanceof Span)
+        assert.ok(span instanceof PublicSpan)
         assert.strictEqual(span.context()._name, 'name')
       })
     })
@@ -68,7 +69,7 @@ describe('Tracer', () => {
       }
 
       tracer.trace('name', options, span => {
-        assert.ok(span instanceof Span)
+        assert.ok(span instanceof PublicSpan)
         assertObjectContains(span.context()._tags, options.tags)
         assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
@@ -110,7 +111,7 @@ describe('Tracer', () => {
     it('should start the span as a child of the active span', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.scope().activate(childOf, () => {
+      storage('legacy').run({ span: childOf }, () => {
         tracer.trace('name', {}, span => {
           assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
         })
@@ -120,10 +121,11 @@ describe('Tracer', () => {
     it('should allow overriding the parent span', () => {
       const root = tracer.startSpan('root')
       const childOf = tracer.startSpan('parent')
-
-      tracer.scope().activate(root, () => {
-        tracer.trace('name', { childOf }, span => {
-          assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+      storage('legacy').run({ span: root }, () => {
+        storage('legacy').run({ span: childOf }, () => {
+          tracer.trace('name', {}, span => {
+            assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+          })
         })
       })
     })

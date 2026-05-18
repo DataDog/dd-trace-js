@@ -1,6 +1,9 @@
 'use strict'
 
+const { storage } = require('../../../datadog-core')
 const Plugin = require('./plugin')
+
+const legacyStorage = storage('legacy')
 
 const SERIALIZATION = 'serialization'
 const DESERIALIZATION = 'deserialization'
@@ -14,7 +17,7 @@ class SchemaPlugin extends Plugin {
   }
 
   handleSerializeStart (args) {
-    const activeSpan = this.tracer.scope().active()
+    const activeSpan = legacyStorage.getStore()?.span
     if (activeSpan && this.config.dsmEnabled) {
       this.constructor.schemaExtractor.attachSchemaOnSpan(
         args, activeSpan, SERIALIZATION, this.tracer
@@ -23,7 +26,7 @@ class SchemaPlugin extends Plugin {
   }
 
   handleDeserializeFinish (args) {
-    const activeSpan = this.tracer.scope().active()
+    const activeSpan = legacyStorage.getStore()?.span
     if (activeSpan && this.config.dsmEnabled) {
       this.constructor.schemaExtractor.attachSchemaOnSpan(
         args, activeSpan, DESERIALIZATION, this.tracer

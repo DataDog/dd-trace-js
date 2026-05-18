@@ -3,6 +3,9 @@
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
 const id = require('../../dd-trace/src/id')
+const { storage } = require('../../datadog-core')
+
+const legacyStorage = storage('legacy')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
@@ -23,7 +26,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     // Skip if message already has trace context from upstream
     if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
 
-    const activeSpan = this.tracer.scope().active()
+    const activeSpan = legacyStorage.getStore()?.span
     if (!activeSpan) return
 
     // Inject current span's trace context into message attributes

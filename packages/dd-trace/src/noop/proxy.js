@@ -4,6 +4,7 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const { PublicTracer } = require('../opentracing/public/tracer')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
 
@@ -13,6 +14,7 @@ const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 const noopOpenFeatureProvider = new NoopFlaggingProvider()
 const noopAIGuard = new NoopAIGuardSDK()
+const publicNoopTracer = new PublicTracer(noop)
 const noopProfiling = {
   setCustomLabelKeys () {},
   runWithLabels (labels, fn) { return fn() },
@@ -20,6 +22,9 @@ const noopProfiling = {
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
+  #publicTracerCache
+  #publicTracerFor
+
   constructor () {
     this._tracer = noop
     this.appsec = noopAppsec
@@ -34,6 +39,16 @@ class NoopProxy {
     this.removeAllBaggageItems = () => {}
   }
 
+  get #publicTracer () {
+    if (this.#publicTracerFor !== this._tracer) {
+      this.#publicTracerFor = this._tracer
+      this.#publicTracerCache = this._tracer === noop
+        ? publicNoopTracer
+        : new PublicTracer(this._tracer)
+    }
+    return this.#publicTracerCache
+  }
+
   init () {
     return this
   }
@@ -46,55 +61,37 @@ class NoopProxy {
     return Promise.resolve(false)
   }
 
-  trace (name, options, fn) {
-    if (!fn) {
-      fn = options
-      options = {}
-    }
-
-    if (typeof fn !== 'function') return
-
-    options = options || {}
-
-    return this._tracer.trace(name, options, fn)
+  trace () {
+    return this.#publicTracer.trace(...arguments)
   }
 
-  wrap (name, options, fn) {
-    if (!fn) {
-      fn = options
-      options = {}
-    }
-
-    if (typeof fn !== 'function') return fn
-
-    options = options || {}
-
-    return this._tracer.wrap(name, options, fn)
+  wrap () {
+    return this.#publicTracer.wrap(...arguments)
   }
 
   setUrl () {
-    this._tracer.setUrl.apply(this._tracer, arguments)
+    this.#publicTracer.setUrl(...arguments)
     return this
   }
 
   startSpan () {
-    return this._tracer.startSpan.apply(this._tracer, arguments)
+    return this.#publicTracer.startSpan(...arguments)
   }
 
   inject () {
-    return this._tracer.inject.apply(this._tracer, arguments)
+    return this.#publicTracer.inject(...arguments)
   }
 
   extract () {
-    return this._tracer.extract.apply(this._tracer, arguments)
+    return this.#publicTracer.extract(...arguments)
   }
 
   scope () {
-    return this._tracer.scope.apply(this._tracer, arguments)
+    return this.#publicTracer.scope(...arguments)
   }
 
   getRumData () {
-    return this._tracer.getRumData.apply(this._tracer, arguments)
+    return this.#publicTracer.getRumData(...arguments)
   }
 
   setUser (user) {

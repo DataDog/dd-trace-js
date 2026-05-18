@@ -17,9 +17,6 @@ const gc = global.gc
 describe('AppSec store', () => {
   describe('withRequest', () => {
     it('should preserve weak request access through nested span stores', () => {
-      const tracer = new DatadogTracer(getConfigFresh({
-        enabled: true,
-      }))
       const req = {}
       const res = { req }
 
@@ -28,11 +25,13 @@ describe('AppSec store', () => {
 
       storage('legacy').enterWith(store)
 
-      tracer.trace('root', {}, rootSpan => {
+      const rootSpan = {}
+      storage('legacy').run({ ...store, span: rootSpan }, () => {
         const rootStore = storage('legacy').getStore()
         assert.strictEqual(getRequest(rootStore), req)
 
-        tracer.trace('child', {}, childSpan => {
+        const childSpan = {}
+        storage('legacy').run({ ...rootStore, span: childSpan }, () => {
           const childStore = storage('legacy').getStore()
 
           assert.notStrictEqual(childStore, rootStore)

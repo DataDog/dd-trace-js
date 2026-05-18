@@ -7,6 +7,9 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
+const { PublicSpan, unwrap } = require('../opentracing/public/span')
+
+const { storage: storageCore } = require('../../../datadog-core')
 const {
   SPAN_KIND,
   OUTPUT_VALUE,
@@ -125,13 +128,13 @@ class LLMObs extends NoopLLMObs {
     } = this.#extractOptions(options)
 
     if (fn.length > 1) {
-      return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this.#activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
+      return this._tracer.trace(name, spanOptions, (publicSpan, cb) =>
+        this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(publicSpan, cb))
       )
     }
 
-    return this._tracer.trace(name, spanOptions, span =>
-      this.#activate(span, { kind, ...llmobsOptions }, () => fn(span))
+    return this._tracer.trace(name, spanOptions, publicSpan =>
+      this.#activate(unwrap(publicSpan), { kind, ...llmobsOptions }, () => fn(publicSpan))
     )
   }
 
@@ -159,7 +162,7 @@ class LLMObs extends NoopLLMObs {
     function wrapped (...args) {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
-      const span = llmobs._tracer.scope().active()
+      const span = storageCore('legacy').getStore()?.span
       const fnArgs = args
 
       const lastArgId = fnArgs.length - 1
@@ -222,15 +225,16 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  annotate (span, options, autoinstrumented = false) {
+  annotate (publicSpan, options, autoinstrumented = false) {
     if (!this.enabled) return
 
-    if (!span) {
+    let span
+    if (!publicSpan) {
       span = this._active()
-    }
-
-    if ((span && !options) && !(span instanceof Span)) {
-      options = span
+    } else if (publicSpan instanceof PublicSpan) {
+      span = unwrap(publicSpan)
+    } else if (!options) {
+      options = publicSpan
       span = this._active()
     }
 
@@ -255,42 +259,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('Cannot annotate a finished span')
       }
 
-      const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
-      if (!spanKind) {
-        err = 'invalid_no_span_kind'
-        throw new Error('LLMObs span must have a span kind specified')
-      }
-
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
-
-      if (inputData || outputData) {
-        if (spanKind === 'llm') {
-          this._tagger.tagLLMIO(span, inputData, outputData)
-        } else if (spanKind === 'embedding') {
-          this._tagger.tagEmbeddingIO(span, inputData, outputData)
-        } else if (spanKind === 'retrieval') {
-          this._tagger.tagRetrievalIO(span, inputData, outputData)
-        } else {
-          this._tagger.tagTextIO(span, inputData, outputData)
-        }
-      }
-
-      if (metadata) {
-        this._tagger.tagMetadata(span, metadata)
-      }
-      if (metrics) {
-        this._tagger.tagMetrics(span, metrics)
-      }
-      // Apply tags before costTags so costTags can reference tags from the same annotation.
-      if (tags) {
-        this._tagger.tagSpanTags(span, tags)
-      }
-      if (costTags != null) {
-        this._tagger.tagCostTags(span, costTags, 'annotate')
-      }
-      if (prompt) {
-        this._tagger.tagPrompt(span, prompt)
-      }
+      this.#annotate(span, options)
     } catch (e) {
       if (e.ddErrorTag) {
         err = e.ddErrorTag
@@ -303,8 +272,50 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  exportSpan (span) {
-    span = span || this._active()
+  #annotate (span, options) {
+    if (!this.enabled) return
+
+    const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
+    if (!spanKind) {
+      const err = new Error('LLMObs span must have a span kind specified')
+      err.ddErrorTag = 'invalid_no_span_kind'
+      throw err
+    }
+
+    const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
+
+    if (inputData || outputData) {
+      if (spanKind === 'llm') {
+        this._tagger.tagLLMIO(span, inputData, outputData)
+      } else if (spanKind === 'embedding') {
+        this._tagger.tagEmbeddingIO(span, inputData, outputData)
+      } else if (spanKind === 'retrieval') {
+        this._tagger.tagRetrievalIO(span, inputData, outputData)
+      } else {
+        this._tagger.tagTextIO(span, inputData, outputData)
+      }
+    }
+
+    if (metadata) {
+      this._tagger.tagMetadata(span, metadata)
+    }
+    if (metrics) {
+      this._tagger.tagMetrics(span, metrics)
+    }
+    // Apply tags before costTags so costTags can reference tags from the same annotation.
+    if (tags) {
+      this._tagger.tagSpanTags(span, tags)
+    }
+    if (costTags != null) {
+      this._tagger.tagCostTags(span, costTags, 'annotate')
+    }
+    if (prompt) {
+      this._tagger.tagPrompt(span, prompt)
+    }
+  }
+
+  exportSpan (publicSpan) {
+    const span = publicSpan ? unwrap(publicSpan) : this._active()
     let err = ''
     try {
       if (!span) {
@@ -536,7 +547,9 @@ class LLMObs extends NoopLLMObs {
       annotations.outputData = output
     }
 
-    this.annotate(span, annotations, true)
+    if ((annotations.inputData || annotations.outputData) && LLMObsTagger.tagMap.has(span)) {
+      this.#annotate(span, annotations)
+    }
   }
 
   _active () {

@@ -1,6 +1,9 @@
 'use strict'
 
+const { storage } = require('../../../datadog-core')
 const DataStreamsContext = require('./context')
+
+const legacyStorage = storage('legacy')
 
 class DataStreamsCheckpointer {
   constructor (tracer) {
@@ -64,7 +67,8 @@ class DataStreamsCheckpointer {
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.config.dsmEnabled) return
-    const activeSpan = span ?? this.tracer.scope().active()
+    const activeSpan = span ?? legacyStorage.getStore()?.span ?? null
+
     this.dsmProcessor.trackTransaction(transactionId, checkpointName, activeSpan)
   }
 }

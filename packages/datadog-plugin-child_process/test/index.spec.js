@@ -517,9 +517,9 @@ describe('Child process plugin', () => {
 
           beforeEach((done) => {
             if (hasParentSpan) {
-              parentSpan = tracer.startSpan('parent')
+              parentSpan = tracer._tracer.startSpan('parent')
               parentSpan.finish()
-              tracer.scope().activate(parentSpan, done)
+              storage('legacy').run({ span: parentSpan }, done)
             } else {
               storage('legacy').enterWith({})
               done()
@@ -659,9 +659,9 @@ describe('Child process plugin', () => {
           ]
           if (parentSpan) {
             beforeEach((done) => {
-              const parentSpan = tracer.startSpan('parent')
-              parentSpan.finish()
-              tracer.scope().activate(parentSpan, done)
+              const span = tracer._tracer.startSpan('parent')
+              span.finish()
+              storage('legacy').run({ span }, done)
             })
           }
 

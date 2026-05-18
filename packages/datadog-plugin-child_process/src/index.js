@@ -31,10 +31,6 @@ class ChildProcessPlugin extends TracingPlugin {
   static id = 'child_process'
   static prefix = 'tracing:datadog:child_process:execution'
 
-  get tracer () {
-    return this._tracer
-  }
-
   start (ctx) {
     const { command, shell } = ctx
 

@@ -11,6 +11,8 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
@@ -918,6 +920,50 @@ describe('Plugin', () => {
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
+              .catch(done)
+          })
+        })
+      })
+
+      describe('with hooks configuration', () => {
+        before(() => {
+          return agent.load(['connect', 'http'], [{
+            hooks: {
+              request: (span, req, res) => {
+                span.setTag('hook.tag', 'test')
+                assert.ok(span instanceof PublicSpan)
+              },
+            },
+          }, { client: false }])
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(() => {
+          connect = require(`../../../versions/connect@${version}`).get()
+        })
+
+        it('should run the request hook before the span is finished', done => {
+          const app = connect()
+
+          app.use('/user', (req, res) => {
+            res.end()
+          })
+
+          appListener = http.createServer(app).listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })

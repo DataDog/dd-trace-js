@@ -21,6 +21,18 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
+// class MainClass {
+//   constructor() {
+//     this._tracer = something
+//   }
+// }
+
+// class SubClass extends MainClass {
+//   init() {
+//     this._tracer = somethingElse
+//   }
+// }
+
 class LazyModule {
   constructor (provider) {
     this.provider = provider
