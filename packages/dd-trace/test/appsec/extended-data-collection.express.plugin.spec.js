@@ -18,7 +18,7 @@ describe('extended data collection', () => {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   withVersions('express', 'express', expressVersion => {

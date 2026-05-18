@@ -137,7 +137,7 @@ function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
 
     server.kill()
 
-    await agent.close({ ritmReset: false })
+    await agent.close()
   })
 
   return result

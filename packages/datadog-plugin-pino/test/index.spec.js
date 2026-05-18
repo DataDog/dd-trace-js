@@ -25,7 +25,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {

@@ -194,7 +194,7 @@ withVersions('stripe', 'stripe', version => {
     after(() => {
       server.close()
       appsec.disable()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should detect checkout session creation', async () => {

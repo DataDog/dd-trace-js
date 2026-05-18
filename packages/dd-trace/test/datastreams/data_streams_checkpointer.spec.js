@@ -22,8 +22,7 @@ describe('data streams checkpointer manual api', () => {
 
   before(async () => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
-    tracer = require('../..').init()
-    await agent.load(null, { dsmEnabled: true })
+    tracer = await agent.load(null, { dsmEnabled: true })
 
     // Compute expected hashes using the actual service/env/propagationHash that the processor will use
     const proc = tracer._tracer._dataStreamsProcessor
@@ -54,8 +53,8 @@ describe('data streams checkpointer manual api', () => {
     expectedConsumerHash = consumerHash.readBigUInt64LE(0).toString()
   })
 
-  after(() => {
-    return agent.close({ ritmReset: false })
+  after(async () => {
+    await agent.close()
   })
 
   it('should set a checkpoint when calling setProduceCheckpoint', function (done) {
