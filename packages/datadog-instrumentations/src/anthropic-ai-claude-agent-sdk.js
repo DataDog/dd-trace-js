@@ -99,7 +99,14 @@ function wrapQuery (query) {
   }
 }
 
-function wrapWarmQueryQuery (originalQuery) {
+// The WarmQuery instance returned by startup() does not expose the options
+// passed to startup() on its public surface (own keys are just `query` and
+// `close`), so we cannot recover the model from `this` at WarmQuery.query()
+// call time. Instead we capture the startup options in a closure when
+// wrapping the instance, and pass them through to wrapWarmQueryQuery so the
+// request model is tagged at span creation rather than relying solely on the
+// SDKSystemMessage init-message fallback.
+function wrapWarmQueryQuery (originalQuery, startupOptions) {
   return function (...args) {
     if (!claudeAgentSdkChannel.start.hasSubscribers) {
       return originalQuery.apply(this, args)
@@ -107,7 +114,7 @@ function wrapWarmQueryQuery (originalQuery) {
 
     const ctx = {
       resource: 'WarmQuery.query',
-      options: this?._options || {},
+      options: startupOptions || {},
       params: { prompt: args[0] },
     }
 
@@ -129,13 +136,15 @@ function wrapWarmQueryQuery (originalQuery) {
 
 function wrapStartup (startup) {
   return function (...args) {
+    const startupOptions = args[0]?.options || {}
+
     const promise = startup.apply(this, args)
 
     if (!promise || typeof promise.then !== 'function') return promise
 
     return promise.then(warmQuery => {
       if (warmQuery && typeof warmQuery.query === 'function') {
-        shimmer.wrap(warmQuery, 'query', wrapWarmQueryQuery)
+        shimmer.wrap(warmQuery, 'query', original => wrapWarmQueryQuery(original, startupOptions))
       }
       return warmQuery
     })

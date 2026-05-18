@@ -64,13 +64,6 @@ class AnthropicClaudeAgentSdkPlugin extends TracingPlugin {
     span.finish()
   }
 
-  error (ctx) {
-    const span = ctx.currentStore?.span
-    if (span) {
-      span.setTag('error', ctx.error)
-    }
-  }
-
   #tagResult (span, result) {
     const tags = {}
 
