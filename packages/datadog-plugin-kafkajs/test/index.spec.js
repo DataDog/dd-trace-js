@@ -216,7 +216,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
           })
 
           afterEach(async () => {

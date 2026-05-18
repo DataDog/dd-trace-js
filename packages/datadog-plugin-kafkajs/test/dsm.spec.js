@@ -93,7 +93,7 @@ describe('Plugin', () => {
             tracer.use('kafkajs', { dsmEnabled: true })
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
           })
 
@@ -266,7 +266,7 @@ describe('Plugin', () => {
             tracer.use('kafkajs', { dsmEnabled: true })
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             setOffsetSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setOffset')
           })
 
