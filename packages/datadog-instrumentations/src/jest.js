@@ -2047,10 +2047,12 @@ function getStaticMockedFiles (suiteFilePath) {
 
 function getMockedFiles (suiteFilePath) {
   const mockedFiles = testSuiteMockedFiles.get(suiteFilePath)
+  const staticMockedFiles = getStaticMockedFiles(suiteFilePath)
+
   if (mockedFiles?.length) {
-    return mockedFiles
+    return [...new Set([...mockedFiles, ...staticMockedFiles])]
   }
-  return getStaticMockedFiles(suiteFilePath)
+  return staticMockedFiles
 }
 
 function wrapJestObject (jestObject, suiteFilePath) {
