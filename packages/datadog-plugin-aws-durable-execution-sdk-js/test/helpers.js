@@ -7,7 +7,7 @@ let _mod, _testing
 async function setup (mod, versionMod) {
   _mod = mod
   _testing = versionMod.get('@aws/durable-execution-sdk-js-testing')
-  await _testing.LocalDurableTestRunner.setupTestEnvironment({ skipTime: true })
+  await _testing.LocalDurableTestRunner.setupTestEnvironment()
 }
 
 async function teardown () {
