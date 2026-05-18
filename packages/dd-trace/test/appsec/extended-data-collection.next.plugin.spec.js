@@ -238,6 +238,32 @@ describe('extended data collection', () => {
             assert.deepEqual(metaStructBody, expectedRequestBody)
           })
         })
+
+        it('Should always report content-type and content-length on the web span when no security event is triggered',
+          async () => {
+            const response = await axios.get(
+              `http://127.0.0.1:${serverData.port}/api/no-event-headers`,
+              { headers: { 'user-agent': 'Mozilla/5.0' } }
+            )
+
+            assert.strictEqual(response.status, 200)
+            assert.ok(response.headers['content-type'])
+            assert.ok(response.headers['content-length'])
+
+            await agent.assertSomeTraces((traces) => {
+              const span = getWebSpan(traces)
+
+              assert.strictEqual(
+                span.meta['http.response.headers.content-type'],
+                response.headers['content-type']
+              )
+              assert.strictEqual(
+                span.meta['http.response.headers.content-length'],
+                response.headers['content-length']
+              )
+              assert.strictEqual(span.meta['appsec.event'], undefined)
+            })
+          })
       })
     })
   })
