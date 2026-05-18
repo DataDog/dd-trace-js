@@ -56,6 +56,16 @@ class VitestPlugin extends CiPlugin {
 
     this.taskToFinishTime = new WeakMap()
 
+    this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
+      const testSessionSpanContext = this.testSessionSpan?.context()
+      const testModuleSpanContext = this.testModuleSpan?.context()
+      onDone({
+        testSessionId: testSessionSpanContext?.toTraceId(),
+        testModuleId: testModuleSpanContext?.toSpanId(),
+        testCommand: this.command,
+      })
+    })
+
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
       // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
       if (!knownTests.vitest) {
@@ -299,14 +309,16 @@ class VitestPlugin extends CiPlugin {
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
-      // TODO: Handle case where the command is not set
-      this.command = this._tracerConfig.DD_CIVISIBILITY_TEST_COMMAND
+      const testCommand = ctx.testCommand || 'vitest run'
+      const { testSessionId, testModuleId } = ctx
+      this.command = testCommand
       this.frameworkVersion = frameworkVersion
-      const testSessionSpanContext = this.tracer.extract('text_map', {
-        // TODO: Handle case where the session ID or module ID is not set
-        'x-datadog-trace-id': this._tracerConfig.DD_CIVISIBILITY_TEST_SESSION_ID,
-        'x-datadog-parent-id': this._tracerConfig.DD_CIVISIBILITY_TEST_MODULE_ID,
-      })
+      const testSessionSpanContext = testSessionId && testModuleId
+        ? this.tracer.extract('text_map', {
+          'x-datadog-trace-id': testSessionId,
+          'x-datadog-parent-id': testModuleId,
+        })
+        : undefined
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary

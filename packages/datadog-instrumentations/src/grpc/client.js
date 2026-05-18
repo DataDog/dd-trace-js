@@ -14,11 +14,14 @@ const finishChannel = channel('apm:grpc:client:request:finish')
 const emitChannel = channel('apm:grpc:client:request:emit')
 
 function createWrapMakeRequest (type, hasPeer = false) {
+  const metadataIndex = type === types.client_stream || type === types.bidi ? 3 : 4
+
   return function wrapMakeRequest (makeRequest) {
     return function (path) {
-      const args = ensureMetadata(this, arguments, 4)
+      if (!startChannel.hasSubscribers) return makeRequest.apply(this, arguments)
 
-      return callMethod(this, makeRequest, args, path, args[4], type, hasPeer)
+      const { metadata, args } = resolveMetadata(this, arguments, metadataIndex)
+      return callMethod(this, makeRequest, args, path, metadata, type, hasPeer)
     }
   }
 }
@@ -82,9 +85,13 @@ function wrapMethod (method, path, type, hasPeer) {
     return method
   }
 
+  const metadataIndex = type === types.client_stream || type === types.bidi ? 0 : 1
+
   const wrapped = shimmer.wrapFunction(method, method => function () {
-    const args = ensureMetadata(this, arguments, 1)
-    return callMethod(this, method, args, path, args[1], type, hasPeer)
+    if (!startChannel.hasSubscribers) return method.apply(this, arguments)
+
+    const { metadata, args } = resolveMetadata(this, arguments, metadataIndex)
+    return callMethod(this, method, args, path, metadata, type, hasPeer)
   })
 
   patched.add(wrapped)
@@ -140,24 +147,25 @@ function createWrapEmit (ctx, hasPeer = false) {
 }
 
 function callMethod (client, method, args, path, metadata, type, hasPeer = false) {
-  if (!startChannel.hasSubscribers) return method.apply(client, args)
-
-  const length = args.length
-  const callback = args[length - 1]
-
   const ctx = { metadata, path, type }
 
   return startChannel.runStores(ctx, () => {
     try {
+      let callArgs = args
+
       if (type === types.unary || type === types.client_stream) {
+        if (!Array.isArray(callArgs)) callArgs = [...callArgs]
+
+        const length = callArgs.length
+        const callback = callArgs[length - 1]
         if (typeof callback === 'function') {
-          args[length - 1] = wrapCallback(ctx, callback)
+          callArgs[length - 1] = wrapCallback(ctx, callback)
         } else {
-          args[length] = wrapCallback(ctx)
+          callArgs[length] = wrapCallback(ctx)
         }
       }
 
-      const call = method.apply(client, args)
+      const call = method.apply(client, callArgs)
 
       if (call && typeof call.emit === 'function') {
         shimmer.wrap(call, 'emit', createWrapEmit(ctx, hasPeer))
@@ -167,36 +175,44 @@ function callMethod (client, method, args, path, metadata, type, hasPeer = false
     } catch (e) {
       ctx.error = e
       errorChannel.publish(ctx)
+      throw e
     }
     // No end channel needed
   })
 }
 
-function ensureMetadata (client, args, index) {
-  const grpc = getGrpc(client)
+/**
+ * Returns the `Metadata` for a gRPC client invocation, splicing or replacing
+ * one at `index` when the user did not pass their own.
+ *
+ * @param {object} client
+ * @param {ArrayLike<unknown>} args
+ * @param {number} index
+ * @returns {{ metadata: object | undefined, args: ArrayLike<unknown> }}
+ */
+function resolveMetadata (client, args, index) {
+  const grpc = client && getGrpc(client)
+  if (!grpc) return { metadata: undefined, args }
 
-  if (!client || !grpc) return args
+  const slot = args[index]
 
-  const meta = args[index]
-  const normalized = []
-
-  for (let i = 0; i < index; i++) {
-    normalized.push(args[i])
+  if (slot instanceof grpc.Metadata || slot?.constructor?.name === 'Metadata') {
+    return { metadata: slot, args }
   }
 
-  if (!meta || !meta.constructor || meta.constructor.name !== 'Metadata') {
-    normalized.push(new grpc.Metadata())
+  const metadata = new grpc.Metadata()
+
+  if (slot == null) {
+    const out = [...args]
+    out[index] = metadata
+    return { metadata, args: out }
   }
 
-  if (meta) {
-    normalized.push(meta)
-  }
-
-  for (let i = index + 1; i < args.length; i++) {
-    normalized.push(args[i])
-  }
-
-  return normalized
+  const out = new Array(args.length + 1)
+  for (let i = 0; i < index; i++) out[i] = args[i]
+  out[index] = metadata
+  for (let i = index; i < args.length; i++) out[i + 1] = args[i]
+  return { metadata, args: out }
 }
 
 function getType (definition) {

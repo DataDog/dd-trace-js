@@ -180,7 +180,7 @@ function request (data, options, callback) {
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref()
+          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
         } else {
           callback(error)
         }

@@ -39,6 +39,7 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'init')
     sinon.stub(binding, 'updateConfig')
     sinon.stub(binding, 'updateMetadata')
+    sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       '../log': log,
@@ -46,9 +47,11 @@ describeNotWindows('crashtracker', () => {
   })
 
   afterEach(() => {
+    process.removeAllListeners('uncaughtExceptionMonitor')
     binding.init.restore()
     binding.updateConfig.restore()
     binding.updateMetadata.restore()
+    binding.reportUncaughtExceptionMonitor.restore()
   })
 
   describe('start', () => {
@@ -77,7 +80,12 @@ describeNotWindows('crashtracker', () => {
     it('should handle errors', () => {
       crashtracker.start(null)
 
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+
       crashtracker.start(config)
+
+      sinon.assert.calledOnce(binding.init)
     })
 
     it('should handle unix sockets', () => {
@@ -111,6 +119,40 @@ describeNotWindows('crashtracker', () => {
       crashtracker.configure(null)
 
       crashtracker.configure(config)
+    })
+  })
+
+  describe('uncaughtExceptionMonitor', () => {
+    it('should register a listener on start', () => {
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+      crashtracker.start(config)
+
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
+    })
+
+    it('should not register a listener when start is called multiple times', () => {
+      crashtracker.start(config)
+      crashtracker.start(config)
+
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
+    })
+
+    it('should forward the error and origin to the binding', () => {
+      crashtracker.start(config)
+
+      const error = new Error('boom')
+      process.emit('uncaughtExceptionMonitor', error, 'uncaughtException')
+
+      sinon.assert.calledOnceWithExactly(binding.reportUncaughtExceptionMonitor, error, 'uncaughtException')
+    })
+
+    it('should not register a listener when init fails', () => {
+      binding.init.throws(new Error('init failed'))
+
+      crashtracker.start(config)
+
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
     })
   })
 
