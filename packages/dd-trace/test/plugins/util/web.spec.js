@@ -484,4 +484,157 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[USER_AGENT_TAG], 'test')
     })
   })
+
+  describe('wrapWriteHead', () => {
+    const ALLOW_HEADERS = 'access-control-allow-headers'
+    const ALLOW_ORIGIN = 'access-control-allow-origin'
+    let context
+
+    beforeEach(() => {
+      span = tracer.startSpan('test.request')
+
+      web.patch(req)
+      context = web.getContext(req)
+      context.span = span
+      context.req = req
+      context.res = res
+      context.config = config
+    })
+
+    it('does not touch CORS headers for non-OPTIONS requests', () => {
+      req.method = 'GET'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.notCalled)
+    })
+
+    it('skips allow-header tagging on OPTIONS when the origin is not allowed', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://evil.example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: 'https://good.example.com' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.notCalled)
+    })
+
+    it('merges datadog allow-headers on OPTIONS when allow-origin is *', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] =
+        'x-datadog-trace-id, x-datadog-parent-id, x-other'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'x-datadog-parent-id,x-datadog-trace-id']
+      )
+    })
+
+    it('honours headers passed as the second writeHead argument', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({})
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, { [ALLOW_ORIGIN]: 'https://example.com' })
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'x-datadog-trace-id']
+      )
+    })
+
+    it('honours headers passed as the third writeHead argument with a status message', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({})
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, 'OK', { [ALLOW_ORIGIN]: '*' })
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'x-datadog-trace-id']
+      )
+    })
+
+    it('treats lowercase req.method "options" as OPTIONS', () => {
+      req.method = 'options'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'x-datadog-trace-id']
+      )
+    })
+
+    it('preserves existing allow-headers and de-duplicates datadog additions', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id, x-datadog-trace-id'
+      res.getHeaders.returns({
+        [ALLOW_ORIGIN]: '*',
+        [ALLOW_HEADERS]: 'content-type, x-datadog-trace-id',
+      })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'content-type,x-datadog-trace-id']
+      )
+    })
+
+    it('leaves allow-headers untouched when no datadog header was requested', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'content-type, x-other'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.notCalled)
+    })
+
+    it('delegates to the original writeHead with the same arguments', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 204, 'No Content', { 'x-test': '1' })
+
+      assert.ok(res.writeHead.calledOnce)
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [204, 'No Content', { 'x-test': '1' }]
+      )
+    })
+  })
 })
