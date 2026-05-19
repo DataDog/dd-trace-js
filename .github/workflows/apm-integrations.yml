@@ -461,11 +461,15 @@ jobs:
           sudo apt-get update
           # Xvfb provides a virtual X display so Electron (a GUI app) can start
           # on the headless CI runner without a physical screen.
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb x11-utils
           # Launch the virtual display on screen :99 with a 24-bit 1024×768
           # framebuffer. Output is discarded; the & backgrounds it so the step
           # does not block.
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          # Wait until the display is ready before proceeding, otherwise Electron
+          # can fail to connect to the display and the test beforeEach times out.
+          # Bounded at 30s so an Xvfb crash fails fast instead of hanging.
+          timeout 30 bash -c 'until xdpyinfo -display :99 >/dev/null 2>&1; do sleep 0.1; done'
       # Point Electron at the virtual display started above.
       - run: DISPLAY=:99 yarn test:plugins:ci
       - uses: ./.github/actions/push_to_test_optimization
