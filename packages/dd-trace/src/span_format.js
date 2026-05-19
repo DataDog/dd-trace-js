@@ -142,8 +142,6 @@ function extractSpanEvents (formattedSpan, span) {
 function extractTags (formattedSpan, span) {
   const context = span.context()
   const origin = context._trace.origin
-  // TODO(BridgeAR)[31.03.2025]: Look into changing the way we store tags. Using
-  // a map is likely faster short term.
   const tags = context._tags
   const hostname = context._hostname
   const priority = context._sampling.priority
@@ -152,9 +150,10 @@ function extractTags (formattedSpan, span) {
     addTag({}, formattedSpan.metrics, MEASURED, 1)
   }
 
-  const tracerService = span.tracer()._service.toLowerCase()
+  const tracer = span.tracer()
+  const tracerService = tracer._serviceLower
   if (tags['service.name']?.toLowerCase() !== tracerService) {
-    span.setTag(BASE_SERVICE, tracerService)
+    span.setTag(BASE_SERVICE, tracer._service)
 
     registerExtraService(tags['service.name'])
   }
