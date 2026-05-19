@@ -84,7 +84,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      assert.ok(Object.keys(result).length === 0)
+      assert.strictEqual(Object.keys(result).length, 0)
     })
 
     it('should filter and format headers from passlist', () => {

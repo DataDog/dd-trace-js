@@ -750,6 +750,22 @@ export default [
       'no-restricted-syntax': ['error', {
         selector: "CallExpression:matches([callee.name='doesNotThrow'], [callee.property.name='doesNotThrow'])",
         message: 'Do not use `assert.doesNotThrow()`. Execute the expression directly instead.',
+      }, {
+        // `assert(a === b)` / `assert.ok(a === b)` → `assert.strictEqual(a, b)`
+        selector:
+          'CallExpression[arguments.length<=2]' +
+          ':matches([callee.name="assert"], [callee.object.name="assert"][callee.property.name="ok"])' +
+          ' > BinaryExpression[operator="==="]:first-child',
+        message: 'Use `assert.strictEqual(a, b)` instead of `assert(a === b)` / `assert.ok(a === b)`. ' +
+          'The strict variant includes both values in the failure message automatically.',
+      }, {
+        // `assert(a !== b)` / `assert.ok(a !== b)` → `assert.notStrictEqual(a, b)`
+        selector:
+          'CallExpression[arguments.length<=2]' +
+          ':matches([callee.name="assert"], [callee.object.name="assert"][callee.property.name="ok"])' +
+          ' > BinaryExpression[operator="!=="]:first-child',
+        message: 'Use `assert.notStrictEqual(a, b)` instead of `assert(a !== b)` / `assert.ok(a !== b)`. ' +
+          'The strict variant includes both values in the failure message automatically.',
       }],
       'n/no-missing-require': 'off',
       'require-await': 'off',
