@@ -109,7 +109,7 @@ describe('get-known-tests', () => {
 
       const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'))
       assert.deepStrictEqual(cached.data, KNOWN_TESTS_RESPONSE.data.attributes.tests)
-      assert.ok(typeof cached.timestamp === 'number')
+      assert.strictEqual(typeof cached.timestamp, 'number')
       done()
     })
   })

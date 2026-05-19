@@ -40,9 +40,9 @@ describe('Plugin', () => {
           temperature: 0.5,
         })
 
-        assert.ok(
-          typeof promise.withResponse === 'function',
-          'Expected custom Anthropic APIPromise to have a withResponse method'
+        assert.strictEqual(
+          typeof promise.withResponse, 'function',
+          'Expected custom Anthropic APIPromise to have a withResponse method',
         )
 
         const result = await promise
@@ -69,9 +69,9 @@ describe('Plugin', () => {
             stream: true,
           })
 
-          assert.ok(
-            typeof promise.withResponse === 'function',
-            'Expected custom Anthropic APIPromise to have a withResponse method'
+          assert.strictEqual(
+            typeof promise.withResponse, 'function',
+            'Expected custom Anthropic APIPromise to have a withResponse method',
           )
 
           const stream = await promise

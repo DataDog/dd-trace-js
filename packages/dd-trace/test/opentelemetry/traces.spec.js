@@ -315,13 +315,13 @@ describe('OpenTelemetry Traces', () => {
 
       const stackAttr = attrs.find(a => a.key === '_dd.stack')
       assert.ok(stackAttr, '_dd.stack attribute should be present')
-      assert.ok(stackAttr.value.bytesValue !== undefined, '_dd.stack should have bytesValue')
+      assert.notStrictEqual(stackAttr.value.bytesValue, undefined, '_dd.stack should have bytesValue')
       const stackDecoded = JSON.parse(Buffer.from(stackAttr.value.bytesValue, 'base64').toString())
       assert.deepStrictEqual(stackDecoded, { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] })
 
       const bodyAttr = attrs.find(a => a.key === 'http.request.body')
       assert.ok(bodyAttr, 'http.request.body attribute should be present')
-      assert.ok(bodyAttr.value.bytesValue !== undefined, 'http.request.body should have bytesValue')
+      assert.notStrictEqual(bodyAttr.value.bytesValue, undefined, 'http.request.body should have bytesValue')
       const bodyDecoded = JSON.parse(Buffer.from(bodyAttr.value.bytesValue, 'base64').toString())
       assert.deepStrictEqual(bodyDecoded, { key: 'value' })
     })
