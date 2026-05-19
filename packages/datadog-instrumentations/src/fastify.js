@@ -66,9 +66,7 @@ function wrapAddHook (addHook) {
       // That mutation materialises the magical arguments object and disables V8
       // inlining of the enclosing function. The slow path below builds a fresh args
       // array instead so the hot fast path keeps a clean forward.
-      if (errorChannel.hasSubscribers ||
-          cookieParserReadCh.hasSubscribers ||
-          callbackFinishCh.hasSubscribers) {
+      if (errorChannel.hasSubscribers || cookieParserReadCh.hasSubscribers || callbackFinishCh.hasSubscribers) {
         return invokeHookWithContext(name, fn, this, arguments)
       }
       return fn.apply(this, arguments)
