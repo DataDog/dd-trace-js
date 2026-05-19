@@ -112,7 +112,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when receiving', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.receive')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -155,7 +155,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.send')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.main.send')
@@ -175,7 +175,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for renderer IPC when receiving', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.renderer.receive')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -197,7 +197,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for renderer IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.renderer.send')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.renderer.send')
