@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
+const { stampIntegrationService } = require('../service-naming/source-marker')
 const Plugin = require('./plugin')
 
 const legacyStorage = storage('legacy')
@@ -205,12 +206,13 @@ class TracingPlugin extends Plugin {
       serviceSource = undefined
     }
 
+    const finalServiceName = serviceName || tracer._service
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': serviceName || tracer._service,
+        'service.name': finalServiceName,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
@@ -221,6 +223,10 @@ class TracingPlugin extends Plugin {
       integrationName: integrationName || component,
       links: childOf?._links,
     })
+
+    if (serviceSource !== undefined) {
+      stampIntegrationService(span, finalServiceName)
+    }
 
     analyticsSampler.sample(span, config.measured)
 

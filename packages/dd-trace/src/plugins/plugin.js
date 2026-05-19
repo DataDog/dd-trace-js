@@ -4,6 +4,7 @@
 
 const dc = require('dc-polyfill')
 const logger = require('../log')
+const { stampIntegrationService } = require('../service-naming/source-marker')
 const { storage } = require('../../../datadog-core')
 
 const legacyStorage = storage('legacy')
@@ -136,6 +137,25 @@ module.exports = class Plugin {
    */
   addBind (channelName, transform) {
     this._bindings.push(new StoreBinding(channelName, transform))
+  }
+
+  /**
+   * Set the `service.name` tag on a span on behalf of an integration. Records
+   * the intended value as the integration's claim, so later overrides by user
+   * code are detected at finish and reflected in `_dd.svc_src`.
+   *
+   * Integration code must use this helper instead of writing `service.name`
+   * directly via `setTag`/`addTags`; the `eslint-prefer-set-service-name` rule
+   * enforces this.
+   *
+   * @param {object} span Internal DatadogSpan instance.
+   * @param {string} name Service name the integration is claiming.
+   * @returns {void}
+   */
+  setServiceName (span, name) {
+    // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name
+    span.setTag('service.name', name)
+    stampIntegrationService(span, name)
   }
 
   /**
