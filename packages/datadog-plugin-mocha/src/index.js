@@ -11,6 +11,7 @@ const {
   TEST_PARAMETERS,
   finishAllTraceSpans,
   getTestSuitePath,
+  getRelativeCoverageFiles,
   getTestParametersString,
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
@@ -73,8 +74,10 @@ class MochaPlugin extends CiPlugin {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
+      const relativeCoverageFiles = getRelativeCoverageFiles(
+        [...coverageFiles, suiteFile],
+        this.repositoryRoot || this.sourceRoot
+      )
 
       const { _traceId, _spanId } = testSuiteSpan.context()
 
@@ -352,6 +355,7 @@ class MochaPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites,
       hasForcedToRunSuites,
       hasUnskippableSuites,
@@ -393,6 +397,14 @@ class MochaPlugin extends CiPlugin {
             hasUnskippableSuites,
           }
         )
+
+        if (testSessionCoverageFiles?.length && this.libraryConfig?.isCodeCoverageEnabled) {
+          const { _traceId } = this.testSessionSpan.context()
+          this.tracer._exporter.exportCoverage({
+            sessionId: _traceId,
+            files: getRelativeCoverageFiles(testSessionCoverageFiles, this.repositoryRoot || this.sourceRoot),
+          })
+        }
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
