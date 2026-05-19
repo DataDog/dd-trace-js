@@ -10,17 +10,25 @@ const tracingChannelPredicate = (node) => (
 )
 
 const transforms = module.exports = {
-  tracingChannelImport ({ dcModule, sourceType }, node) {
+  /**
+   * @param {{ dcModule: string, moduleType: 'esm' | 'cjs' }} state
+   * @param {import('estree').Program} node
+   */
+  tracingChannelImport ({ dcModule, moduleType }, node) {
     if (node.body.some(tracingChannelPredicate)) return
 
+    // The vendored matcher state exposes `moduleType` (`esm` / `cjs`), so we
+    // read that field directly. Naming it `sourceType` here used to silently
+    // pick the CJS branch for every ESM file, leaving `require()` baked into
+    // pure ESM modules like `@langchain/langgraph/dist/pregel/index.js`.
+    const isModule = moduleType === 'esm'
+
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = isModuleSourceType(sourceType)
-      ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
+    const code = isModule
+      ? `import tr_ch_apm_dc from "${dcModule}"; const {tracingChannel: tr_ch_apm_tracingChannel} = tr_ch_apm_dc`
       : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
-    node.body.splice(index + 1, 0, parse(code, {
-      isModule: isModuleSourceType(sourceType),
-    }).body[0])
+    node.body.splice(index + 1, 0, ...parse(code, { isModule }).body)
   },
 
   tracingChannelDeclaration (state, node) {
@@ -51,13 +59,6 @@ function traceAny (state, node, _parent, ancestry) {
   } else {
     traceFunction(state, node, program)
   }
-}
-
-/**
- * @param {string} sourceType
- */
-function isModuleSourceType (sourceType) {
-  return sourceType === 'module' || sourceType === 'esm'
 }
 
 function traceFunction (state, node, program) {
