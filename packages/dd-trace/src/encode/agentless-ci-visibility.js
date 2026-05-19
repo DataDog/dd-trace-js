@@ -7,6 +7,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
+const { MsgpackChunk } = require('../msgpack')
 const { AgentEncoder } = require('./0.4')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
@@ -19,6 +20,9 @@ const TEST_SESSION_KEYS_LENGTH = 10
 const TEST_AND_SPAN_KEYS_LENGTH = 11
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
+
+// Prefix is ~1 KB in practice; `MsgpackChunk` resizes on overflow.
+const PREFIX_CHUNK_INITIAL_SIZE = 2048
 
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
@@ -259,10 +263,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    if (this._isReset) {
-      this._encodePayloadStart(bytes)
-      this._isReset = false
-    }
     const startTime = Date.now()
 
     const events = trace.map(formatSpan)
@@ -281,20 +281,28 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   makePayload () {
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this._eventCount)
-    const bytes = this._traceBytes
+
+    // Encode the payload prefix (version + metadata + events-array header) at flush time,
+    // not on the first `_encode`. The CI Visibility flow adds metadata across multiple
+    // diagnostic channels (`session:start` adds `test_session.name`, the async
+    // `library-configuration` callback adds capability tags). Any span finished between
+    // those calls would otherwise freeze the prefix with stale metadata.
+    const prefixBytes = new MsgpackChunk(PREFIX_CHUNK_INITIAL_SIZE)
+    this._encodePayloadStart(prefixBytes)
+
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount
+    prefixBytes.buffer[eventsOffset] = 0xDD
+    prefixBytes.buffer[eventsOffset + 1] = eventsCount >> 24
+    prefixBytes.buffer[eventsOffset + 2] = eventsCount >> 16
+    prefixBytes.buffer[eventsOffset + 3] = eventsCount >> 8
+    prefixBytes.buffer[eventsOffset + 4] = eventsCount
 
-    bytes.buffer[eventsOffset] = 0xDD
-    bytes.buffer[eventsOffset + 1] = eventsCount >> 24
-    bytes.buffer[eventsOffset + 2] = eventsCount >> 16
-    bytes.buffer[eventsOffset + 3] = eventsCount >> 8
-    bytes.buffer[eventsOffset + 4] = eventsCount
-
-    const traceSize = bytes.length
-    const buffer = Buffer.allocUnsafe(traceSize)
-
-    bytes.buffer.copy(buffer, 0, 0, traceSize)
+    const eventsBytes = this._traceBytes
+    const totalSize = prefixBytes.length + eventsBytes.length
+    const buffer = Buffer.allocUnsafe(totalSize)
+    prefixBytes.buffer.copy(buffer, 0, 0, prefixBytes.length)
+    eventsBytes.buffer.copy(buffer, prefixBytes.length, 0, eventsBytes.length)
 
     this.reset()
 
@@ -302,7 +310,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodePayloadStart (bytes) {
-    // encodes the payload up to `events`. `events` will be encoded via _encode
+    // Encodes the payload up to (and including) the `events` array prefix. The 5 reserved
+    // bytes for the array length are patched in `makePayload`.
     const payload = {
       version: ENCODING_VERSION,
       metadata: {
@@ -346,7 +355,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeMap(bytes, payload.metadata.test_session_end)
     }
     this._encodeString(bytes, 'events')
-    // Get offset of the events list to update the length of the array when calling `makePayload`
     this._eventsOffset = bytes.length
     bytes.reserve(5)
   }
@@ -354,7 +362,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   reset () {
     this._reset()
     this._eventCount = 0
-    this._isReset = true
   }
 }
 
