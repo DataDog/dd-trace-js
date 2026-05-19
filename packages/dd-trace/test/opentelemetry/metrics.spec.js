@@ -441,18 +441,31 @@ describe('OpenTelemetry Meter Provider', () => {
     })
 
     it('supports DELTA for counters', (done) => {
-      const validator = mockOtlpExport((decoded) => {
+      const exportedValues = []
+
+      mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'test')
         assert.strictEqual(counter.sum.aggregationTemporality, 1)
-        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
+        exportedValues.push(counter.sum.dataPoints[0].asInt)
       })
 
       setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta' })
       const meter = metrics.getMeter('app')
-      meter.createCounter('test').add(5)
+      const counter = meter.createCounter('test')
 
-      setTimeout(() => { validator(); done() }, 150)
+      counter.add(5)
+
+      setTimeout(() => {
+        counter.add(3)
+
+        setTimeout(() => {
+          assert.strictEqual(exportedValues.length, 2, 'should have 2 exports')
+          assert.strictEqual(exportedValues[0], 5, 'first export should be 5')
+          assert.strictEqual(exportedValues[1], 3, 'second export should be 3 (delta), not 8 (cumulative)')
+          done()
+        }, 120)
+      }, 120)
     })
 
     it('LOWMEMORY uses DELTA for sync counters', (done) => {

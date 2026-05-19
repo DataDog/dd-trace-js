@@ -336,7 +336,7 @@ class MetricAggregator {
       }
     }
 
-    this.#applyDeltaTemporality(metricsMap, lastExportedState)
+    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState)
     return metricsMap
   }
 
