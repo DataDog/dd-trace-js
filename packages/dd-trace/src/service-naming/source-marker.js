@@ -36,7 +36,7 @@ function resolveServiceSource (span, tracerService) {
   const tags = span._spanContext._tags
   const currentService = tags['service.name']
 
-  if (!currentService || currentService === tracerService) {
+  if (currentService === tracerService) {
     delete tags[SVC_SRC_KEY]
     return
   }
