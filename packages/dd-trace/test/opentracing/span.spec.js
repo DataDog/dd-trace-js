@@ -446,7 +446,15 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
+      assert.strictEqual(span.context()._tags.foo, 'bar')
+    })
+
+    it('should resample after every setTag', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      prioritySampler.sample.resetHistory()
+      span.setTag('foo', 'bar')
+
+      sinon.assert.calledWith(prioritySampler.sample, span, false)
     })
   })
 
@@ -456,11 +464,23 @@ describe('Span', () => {
     })
 
     it('should add tags', () => {
-      const tags = { foo: 'bar' }
+      span.addTags({ foo: 'bar', baz: 'qux' })
 
-      span.addTags(tags)
+      assert.strictEqual(span.context()._tags.foo, 'bar')
+      assert.strictEqual(span.context()._tags.baz, 'qux')
+    })
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
+    it('should accept an array of tag objects', () => {
+      span.addTags([{ a: 1 }, { b: 2 }])
+
+      assert.strictEqual(span.context()._tags.a, 1)
+      assert.strictEqual(span.context()._tags.b, 2)
+    })
+
+    it('should parse a key:value,key:value string via tagger', () => {
+      span.addTags('foo:bar,baz:qux')
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, 'foo:bar,baz:qux')
     })
 
     it('should sample based on the tags', () => {
