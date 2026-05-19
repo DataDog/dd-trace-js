@@ -15,6 +15,30 @@ const {
 } = require('../../ci-visibility/telemetry')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 
+function mergeCoverageBitmap (targetBitmap, bitmap) {
+  if (!targetBitmap) return bitmap
+
+  const targetBuffer = Buffer.from(targetBitmap, 'base64')
+  const bitmapBuffer = Buffer.from(bitmap, 'base64')
+  const mergedBuffer = Buffer.alloc(Math.max(targetBuffer.length, bitmapBuffer.length))
+
+  targetBuffer.copy(mergedBuffer)
+  for (let i = 0; i < bitmapBuffer.length; i++) {
+    mergedBuffer[i] |= bitmapBuffer[i]
+  }
+
+  return mergedBuffer.toString('base64')
+}
+
+function mergeCoverage (targetCoverage, coverage) {
+  if (!coverage || typeof coverage !== 'object') return
+
+  for (const [filename, bitmap] of Object.entries(coverage)) {
+    if (typeof bitmap !== 'string') continue
+    targetCoverage[filename] = mergeCoverageBitmap(targetCoverage[filename], bitmap)
+  }
+}
+
 function getSkippableSuites ({
   url,
   isEvpProxy,
@@ -31,10 +55,11 @@ function getSkippableSuites ({
   runtimeVersion,
   custom,
   testLevel = 'suite',
+  isCodeCoverageEnabled = false,
 }, done) {
   const cacheKey = buildCacheKey('skippable', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, testLevel, custom,
+    runtimeName, runtimeVersion, testLevel, custom, isCodeCoverageEnabled,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {
@@ -54,11 +79,12 @@ function getSkippableSuites ({
       runtimeVersion,
       custom,
       testLevel,
+      isCodeCoverageEnabled,
       cacheKey: activeCacheKey,
     }, cb)
   }, (err, data) => {
     if (err) return done(err)
-    done(null, data.skippableSuites, data.correlationId)
+    done(null, data.skippableSuites, data.correlationId, data.coverage)
   })
 }
 
@@ -81,6 +107,7 @@ function getSkippableSuites ({
  * @param {string} params.runtimeVersion
  * @param {object} [params.custom]
  * @param {string} [params.testLevel]
+ * @param {boolean} [params.isCodeCoverageEnabled]
  * @param {string | null} params.cacheKey
  * @param {Function} done
  */
@@ -100,6 +127,7 @@ function fetchFromApi ({
   runtimeVersion,
   custom,
   testLevel,
+  isCodeCoverageEnabled,
   cacheKey,
 }, done) {
   const options = {
@@ -161,27 +189,42 @@ function fetchFromApi ({
     } else {
       try {
         const parsedResponse = JSON.parse(res)
-        const skippableSuites = parsedResponse
+        const coverage = {}
+        mergeCoverage(coverage, parsedResponse.meta?.coverage)
+
+        const skippableItems = parsedResponse
           .data
           .filter(({ type }) => type === testLevel)
-          .map(({ attributes: { suite, name } }) => {
-            if (testLevel === 'suite') {
-              return suite
-            }
-            return { suite, name }
-          })
-        const { meta: { correlation_id: correlationId } } = parsedResponse
+        const skippableSuites = []
+        const hasCoverage = Object.keys(coverage).length > 0
+        for (const {
+          attributes: {
+            suite,
+            name,
+            coverage: suiteCoverage,
+            _missing_line_code_coverage: missingLineCodeCoverage,
+          },
+        } of skippableItems) {
+          const hasSuiteCoverage = !!suiteCoverage && Object.keys(suiteCoverage).length > 0
+          mergeCoverage(coverage, suiteCoverage)
+
+          if (isCodeCoverageEnabled && !hasCoverage && !hasSuiteCoverage) continue
+          if (isCodeCoverageEnabled && missingLineCodeCoverage) continue
+
+          skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
+        }
+        const correlationId = parsedResponse.meta?.correlation_id
         incrementCountMetric(
           testLevel === 'test'
             ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS
             : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
           {},
-          skippableSuites.length
+          skippableItems.length
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
         log.debug('Number of received skippable %ss:', testLevel, skippableSuites.length)
 
-        const result = { skippableSuites, correlationId }
+        const result = { skippableSuites, correlationId, coverage }
         writeToCache(cacheKey, result)
 
         done(null, result)

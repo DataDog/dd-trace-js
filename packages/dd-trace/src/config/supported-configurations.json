@@ -1773,13 +1773,6 @@
         "internalPropertyName": "isTestManagementEnabled"
       }
     ],
-    "DD_TEST_TIA_KEEP_COV_CONFIG": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false"
-      }
-    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
