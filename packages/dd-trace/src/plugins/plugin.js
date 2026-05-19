@@ -149,8 +149,7 @@ module.exports = class Plugin {
    * @returns {void}
    */
   setServiceName (span, name) {
-    // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name
-    span.setTag('service.name', name)
+    span._spanContext._tags['service.name'] = name
     stampIntegrationService(span, name)
   }
 
