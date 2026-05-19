@@ -252,28 +252,11 @@ function safeJsonParse (value, fallback) {
   }
 }
 
-// Bridge tags read by the dd-go LLMObs trace-indexer to correlate OTel
-// gen_ai.* spans with LLMObs spans (SDK-created or auto-instrumented). Written
-// once per local trace, on the first successful LLMObs span registration. The
-// shared _trace.tags bag is serialized to the first span in every flushed
-// chunk's meta, so partial flush is covered automatically. The mirrored Python
-// implementation is `_activate_llmobs_span` in dd-trace-py's _llmobs.py, which
-// fires from a global span-start hook gated on SpanTypes.LLM. JS has no
-// SpanTypes.LLM marker, so this helper is invoked from the single
-// `LLMObsTagger.registerLLMObsSpan` chokepoint, which every registration path
-// (SDK, default plugin start, and bespoke plugin registrations like
-// `bedrockruntime.setLLMObsTags`) flows through.
-//
-// When the registering span sits below an OTel `gen_ai.*` ancestor (MLOS-591
-// shape — manual OTel workflow wrapping an auto-instrumented LLMObs leaf), the
-// caller passes `includeParentId: false`. We still publish `llmobs_trace_id`
-// so the indexer pulls the OTel-converted spans into the same LLMObs trace,
-// but we skip `llmobs_parent_id` — the indexer treats that tag as "the SDK
-// LLMObs span is the LLMObs root, reparent gen_ai children under it"
-// (processor.go:184-191, 298-302). When the SDK span is a leaf rather than a
-// root, that reparenting produces a cycle/inversion (gen_ai parents hoisted
-// under the leaf). Suppressing `llmobs_parent_id` lets the indexer fall back
-// to including the APM root and reparenting gen_ai spans naturally.
+// Bridge tags read by the trace-indexer to pull OTel `gen_ai.*` spans into
+// the same LLMObs trace. Written once per local trace (first-writer wins on
+// `_trace.tags`). Pass `includeParentId: false` when the span sits below an
+// OTel `gen_ai.*` ancestor — without it the indexer treats this span as the
+// LLMObs root and hoists the gen_ai ancestors under it, inverting the trace.
 /**
  * @param {import('../opentracing/span')} span
  * @param {{ includeParentId?: boolean }} [opts]
@@ -287,28 +270,10 @@ function writeBridgeTags (span, { includeParentId = true } = {}) {
   }
 }
 
-// Walks up the APM parent chain looking for the nearest ancestor with any
-// `gen_ai.*` tag. Returns the decimal span_id string of that ancestor, or
-// `null`. Used by `LLMObsTagger.registerLLMObsSpan` so an auto-instrumented
-// LLMObs span nested under a manual OTel workflow points its `parent_id` at
-// the OTel parent instead of the default `ROOT_PARENT_ID` — the SDK-emitted
-// LLMObs event then renders under the workflow rather than as a parallel
-// root. OTel `setAttribute(...)` lands in `context()._tags` via
-// `setOtelAttribute -> ddSpan.setTag` (see opentelemetry/span-helpers.js), so
-// scanning `_tags` keys for the `gen_ai.` prefix is the right check. The
-// prefix matches dd-go's `isRelevantForLLMObs` in
-// `trace/apps/trace-indexer/processors/llmobs/processor.go` so what we treat
-// as a "gen_ai ancestor" here lines up with what the indexer will convert
-// into an LLMObs span on the other side.
-//
-// Trade-off: this fires only on the FIRST LLMObs registration per local
-// trace (writeBridgeTags has a first-writer-wins guard on `_trace.tags`).
-// For mixed topologies — e.g. OTel agent wrapping an auto-instr leaf AND a
-// later SDK workflow — the suppression decision is locked in by whichever
-// LLMObs span registers first. The result is still a unified trace via
-// `llmobs_trace_id`; the LLMObs root is the APM root rather than the SDK
-// workflow. Optimizing that case would mean revisiting the bridge-tag write
-// at flush time instead of at register time.
+// Walks the APM parent chain for the nearest ancestor with any `gen_ai.*`
+// tag. Lets an auto-instrumented LLMObs span nested under a manual OTel
+// workflow point its `parent_id` at the OTel parent so the SDK-emitted
+// event renders under it instead of as a parallel root.
 /**
  * @param {import('../opentracing/span')} span
  * @returns {string | null}
@@ -316,15 +281,12 @@ function writeBridgeTags (span, { includeParentId = true } = {}) {
 function findGenAIAncestorSpanId (span) {
   const ctx = span?.context?.()
   let parentId = ctx?._parentId?.toString(10)
-  // Short-circuit before scanning `_trace.started` — orphan / root spans
-  // shouldn't pay the walk cost (this runs on every LLMObs registration).
   if (!parentId || parentId === '0') return null
 
   const started = ctx._trace?.started
   if (!started || started.length === 0) return null
 
-  // Parent chains are short (typically ≤ 5 hops); a linear scan per hop
-  // avoids allocating a Map over every started span on every registration.
+  // Linear scan per hop — parent chains are short, avoids a per-call Map.
   while (parentId && parentId !== '0') {
     let parent = null
     for (const s of started) {
