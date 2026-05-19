@@ -71,9 +71,12 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
+  const lineDiff = capture(`${diffCmd} --format=markdown v${releaseLine}.x ${main}`)
 
-  if (!lineDiff) {
+  // Only commits with a semver-patch/minor label warrant cutting a release;
+  // unlabeled commits (e.g. docs/chore) ride along in the notes and the
+  // cherry-pick, but are not enough on their own.
+  if (!lineDiff.includes('SEMVER-MINOR') && !lineDiff.includes('SEMVER-PATCH')) {
     pass('none (already up to date)')
     process.exit(0)
   }
