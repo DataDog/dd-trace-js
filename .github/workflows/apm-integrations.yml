@@ -442,10 +442,14 @@ jobs:
 
   electron:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: electron
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -464,6 +468,10 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
       # Point Electron at the virtual display started above.
       - run: DISPLAY=:99 yarn test:plugins:ci
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   express:
     runs-on: ubuntu-latest

@@ -372,7 +372,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should do automatic instrumentation', async () => {
@@ -602,7 +602,7 @@ describe('Plugin', () => {
               return agent.load(['prisma', 'pg'], pluginConfig)
             })
 
-            after(() => { return agent.close({ ritmReset: false }) })
+            after(() => { return agent.close() })
 
             beforeEach(() => {
               prisma = loadPrismaModule(config, range)

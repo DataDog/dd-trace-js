@@ -20,7 +20,7 @@ describe('Plugin', () => {
   describe('amqp10', () => {
     before(() => agent.load('rhea'))
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('amqp10', 'amqp10', version => {
       beforeEach(() => {

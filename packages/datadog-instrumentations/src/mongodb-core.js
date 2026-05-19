@@ -174,7 +174,7 @@ function instrument (operation, command, instance, args, server, ns, ops, option
     name,
   }
   return startCh.runStores(ctx, () => {
-    args[index] = shimmer.wrapFunction(callback, callback => function (err, res) {
+    args[index] = shimmer.wrapCallback(callback, callback => function (err, res) {
       if (err) {
         ctx.error = err
         errorCh.publish(ctx)

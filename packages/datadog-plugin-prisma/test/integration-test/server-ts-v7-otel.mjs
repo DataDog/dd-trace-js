@@ -60,7 +60,7 @@ await new Promise((resolve, reject) => {
       })
 
       assert.ok(observedTraceparent, 'Expected Prisma query to include traceparent comment')
-      assert.ok(observedTraceparent.startsWith(`00-${spanContext.traceId}-`))
+      assert.match(observedTraceparent, new RegExp(`^00-${spanContext.traceId}-`))
       assert.notStrictEqual(observedTraceparent, placeholderTraceparent)
       assert.notStrictEqual(observedTraceparent, zeroTraceparent)
       process.stdout.write(`TRACEPARENT_OK:${observedTraceparent}\n`)

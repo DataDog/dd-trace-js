@@ -13,6 +13,12 @@ let batch = 0
 class Identifier {
   /** @type {number[] | Uint8Array} */
   #buffer
+  /** @type {bigint | undefined} */
+  #bigInt
+  /** @type {string | undefined} */
+  #stringHex
+  /** @type {string | undefined} */
+  #stringDecimal
 
   /**
    * @param {string} value
@@ -29,16 +35,23 @@ class Identifier {
    * @returns {string}
    */
   toString (radix = 16) {
-    return radix === 16
-      ? Buffer.from(this.#buffer).toString('hex')
-      : toNumberString(this.#buffer, radix)
+    if (radix === 16) {
+      this.#stringHex ??= Buffer.from(this.#buffer).toString('hex')
+      return this.#stringHex
+    }
+    if (radix === 10) {
+      this.#stringDecimal ??= toNumberString(this.#buffer, 10)
+      return this.#stringDecimal
+    }
+    return toNumberString(this.#buffer, radix)
   }
 
   /**
    * @returns {bigint}
    */
   toBigInt () {
-    return Buffer.from(this.#buffer).readBigUInt64BE(0)
+    this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(0)
+    return this.#bigInt
   }
 
   /**

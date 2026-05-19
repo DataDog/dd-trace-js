@@ -12,6 +12,7 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { clientToCluster } = require('../../datadog-instrumentations/src/helpers/kafka')
 const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -25,7 +26,7 @@ describe('Plugin', () => {
     this.timeout(10000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
       let kafka
@@ -39,8 +40,7 @@ describe('Plugin', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
 
         beforeEach(async () => {
-          tracer = require('../../dd-trace')
-          await agent.load('kafkajs')
+          tracer = await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
           Broker = require(`../../../versions/kafkajs@${version}/node_modules/kafkajs/src/broker`)
@@ -147,6 +147,46 @@ describe('Plugin', () => {
             ])
 
             await sendMessages(kafka, testTopic, userMessages)
+          })
+
+          it('should disable header injection when broker advertises Produce <v3', async () => {
+            const startCh = dc.channel('apm:kafkajs:produce:start')
+            const sentMessageBatches = []
+            const captureStart = (ctx) => sentMessageBatches.push({
+              messages: ctx.messages,
+              disableHeaderInjection: ctx.disableHeaderInjection,
+            })
+            startCh.subscribe(captureStart)
+
+            const producer = kafka.producer()
+            await producer.connect()
+
+            try {
+              // Reach into kafkajs's broker pool and downgrade the negotiated
+              // Produce version. We can't ask the docker broker to pretend to
+              // be <0.11; lying locally is enough to drive the proactive
+              // header-support check.
+              const cluster = clientToCluster.get(producer)
+              cluster.brokerPool.versions[0].maxVersion = 2
+
+              const userMessages = [{ key: 'k', value: 'v' }]
+              await producer.send({ topic: testTopic, messages: userMessages })
+
+              assert.strictEqual(sentMessageBatches.length, 1)
+              assert.strictEqual(sentMessageBatches[0].disableHeaderInjection, true)
+              // Boundary clones with `cloneMessages` when injection is off,
+              // so the channel sees a fresh array whose entries have no
+              // `headers` field at all (no `{}` seeding) and the user's
+              // array stays untouched.
+              const [clonedMessage] = sentMessageBatches[0].messages
+              assert.notStrictEqual(sentMessageBatches[0].messages, userMessages)
+              assert.notStrictEqual(clonedMessage, userMessages[0])
+              assert.strictEqual(Object.hasOwn(clonedMessage, 'headers'), false)
+              assert.strictEqual(userMessages[0].headers, undefined)
+            } finally {
+              await producer.disconnect()
+              startCh.unsubscribe(captureStart)
+            }
           })
 
           it('should be instrumented w/ error', async () => {

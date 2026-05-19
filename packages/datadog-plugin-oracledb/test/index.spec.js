@@ -37,7 +37,7 @@ describe('Plugin', () => {
         })
 
         after(async () => {
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         describe('with connection', () => {
@@ -288,7 +288,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
           withNamingSchema(
             () => connection.execute(dbQuery),
@@ -331,7 +331,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
           withNamingSchema(
             () => connection.execute(dbQuery),
@@ -379,7 +379,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
           withNamingSchema(
             () => connection.execute(dbQuery),
@@ -416,7 +416,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           it('should fallback to connectionString when connectString is not available', async () => {

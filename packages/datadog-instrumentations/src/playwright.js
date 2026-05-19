@@ -18,6 +18,7 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
@@ -1075,9 +1076,24 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    const isTestOptimizationSupported = satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)
+    const shouldGetKnownTests = isKnownTestsEnabled && isTestOptimizationSupported
+    const shouldGetTestManagementTests = isTestManagementTestsEnabled && isTestOptimizationSupported
+
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: shouldGetKnownTests,
+      isTestManagementTestsEnabled: shouldGetTestManagementTests,
+      getKnownTests: () => getChannelPromise(knownTestsCh),
+      getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+    })
+
+    if (shouldGetKnownTests) {
       try {
-        const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
+        const { err, knownTests: receivedKnownTests } =
+          knownTestsResponse || await getChannelPromise(knownTestsCh)
         if (err) {
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
@@ -1096,9 +1112,10 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (shouldGetTestManagementTests) {
       try {
-        const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
+        const { err, testManagementTests: receivedTestManagementTests } =
+          testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
         if (err) {
           isTestManagementTestsEnabled = false
         } else {
@@ -1110,7 +1127,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    if (isImpactedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isImpactedTestsEnabled && isTestOptimizationSupported) {
       try {
         const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
         if (err) {

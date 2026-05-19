@@ -280,7 +280,7 @@ versions.forEach((version) => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.ok(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
-              assert.ok(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
+              assert.match(testSuiteEvent.content.meta[TEST_SOURCE_FILE], /-test\.js$/)
               assert.strictEqual(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
               assert.ok(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })

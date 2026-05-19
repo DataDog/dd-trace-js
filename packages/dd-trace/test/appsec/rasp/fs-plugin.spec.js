@@ -175,7 +175,7 @@ describe('AppsecFsPlugin', () => {
     describe('apm:fs:operation', () => {
       let fs
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
 
       beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
         fs = require('fs')

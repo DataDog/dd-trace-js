@@ -34,6 +34,7 @@ const {
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -41,6 +42,120 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('getTestOptimizationRequestResults', () => {
+  it('starts known tests, test management, and skippable requests together when enabled', async () => {
+    const startedRequests = []
+    let resolveKnownTests
+    let resolveTestManagementTests
+    let resolveSkippableSuites
+
+    const getKnownTests = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('known-tests')
+      resolveKnownTests = resolve
+    }))
+    const getTestManagementTests = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('test-management-tests')
+      resolveTestManagementTests = resolve
+    }))
+    const getSkippableSuites = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('skippable-suites')
+      resolveSkippableSuites = resolve
+    }))
+
+    const requestResultsPromise = getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    assert.deepStrictEqual(startedRequests, ['known-tests', 'test-management-tests', 'skippable-suites'])
+    sinon.assert.calledOnce(getKnownTests)
+    sinon.assert.calledOnce(getTestManagementTests)
+    sinon.assert.calledOnce(getSkippableSuites)
+
+    resolveSkippableSuites({ skippableSuites: [] })
+    resolveTestManagementTests({ testManagementTests: { jest: {} } })
+    resolveKnownTests({ knownTests: { jest: {} } })
+
+    assert.deepStrictEqual(await requestResultsPromise, {
+      knownTestsResponse: { knownTests: { jest: {} } },
+      testManagementTestsResponse: { testManagementTests: { jest: {} } },
+      skippableSuitesResponse: { skippableSuites: [] },
+    })
+  })
+
+  it('starts each supported request only when its feature is enabled', async () => {
+    const getKnownTests = sinon.stub().resolves({ knownTests: { jest: {} } })
+    const getTestManagementTests = sinon.stub().resolves({ testManagementTests: { jest: {} } })
+    const getSkippableSuites = sinon.stub().resolves({ skippableSuites: [] })
+
+    const requestResults = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: false,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    assert.deepStrictEqual(requestResults, {
+      knownTestsResponse: { knownTests: { jest: {} } },
+      skippableSuitesResponse: { skippableSuites: [] },
+    })
+
+    sinon.assert.calledOnce(getKnownTests)
+    sinon.assert.notCalled(getTestManagementTests)
+    sinon.assert.calledOnce(getSkippableSuites)
+  })
+
+  it('does not start skippable requests for frameworks without a skippable request factory', async () => {
+    const getKnownTests = sinon.stub()
+    const getTestManagementTests = sinon.stub()
+
+    assert.deepStrictEqual(
+      await getTestOptimizationRequestResults({
+        isKnownTestsEnabled: false,
+        isTestManagementTestsEnabled: false,
+        isSuitesSkippingEnabled: true,
+        getKnownTests,
+        getTestManagementTests,
+      }),
+      {}
+    )
+
+    sinon.assert.notCalled(getKnownTests)
+    sinon.assert.notCalled(getTestManagementTests)
+  })
+
+  it('uses successful responses when another request rejects before the caller awaits results', async () => {
+    const rejection = new Error('test optimization request failed')
+    const getKnownTests = sinon.stub().returns(new Promise(resolve => {
+      setImmediate(() => resolve({ knownTests: { jest: {} } }))
+    }))
+    const getTestManagementTests = sinon.stub().rejects(rejection)
+    const getSkippableSuites = sinon.stub().throws(rejection)
+
+    const requestResultsPromise = getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    await new Promise(resolve => setImmediate(resolve))
+
+    const requestResults = await requestResultsPromise
+    assert.deepStrictEqual(requestResults.knownTestsResponse, { knownTests: { jest: {} } })
+    assert.strictEqual(requestResults.testManagementTestsResponse.err, rejection)
+    assert.strictEqual(requestResults.skippableSuitesResponse.err, rejection)
+  })
+})
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {

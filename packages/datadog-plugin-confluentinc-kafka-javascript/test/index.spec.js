@@ -21,7 +21,7 @@ describe('Plugin', () => {
     this.timeout(30000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('confluentinc-kafka-javascript', module, (version) => {
@@ -39,8 +39,7 @@ describe('Plugin', () => {
           messages = [{ key: 'key1', value: 'test2' }]
 
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../dd-trace')
-          await agent.load('confluentinc-kafka-javascript')
+          tracer = await agent.load('confluentinc-kafka-javascript')
           const lib = require(`../../../versions/${module}@${version}`).get()
 
           // Store the module for later use
@@ -344,11 +343,10 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
-            await agent.load('confluentinc-kafka-javascript')
+            tracer = await agent.load('confluentinc-kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
