@@ -32,7 +32,7 @@
     "redis": "5.12.1",
     "uuid": "9.0.1",
     "winston": "3.19.0",
-    "ws": "8.20.0"
+    "ws": "8.20.1"
   },
   "overrides": {
     "fast-xml-parser": "5.7.2"
