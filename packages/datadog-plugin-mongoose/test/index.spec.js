@@ -66,7 +66,10 @@ describe('Plugin', () => {
         () => tracer,
         'mongodb-core',
         () => {
-          const PeerCat = mongoose.model('PeerCat', { name: String })
+          // Use existing model if already compiled: on master, --retries 1 reruns failed tests on
+          // the same Mongoose instance, and calling model() with a schema a second time throws
+          // OverwriteModelError.
+          const PeerCat = mongoose.models.PeerCat || mongoose.model('PeerCat', { name: String })
           return new PeerCat({ name: 'PeerCat' }).save()
         },
         () => dbName,
