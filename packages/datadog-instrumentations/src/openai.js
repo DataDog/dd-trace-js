@@ -7,6 +7,7 @@ const { convertOpenAIResponseItemsToMessages } = require('./helpers/ai-messages'
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+// TODO: this channel name is incorrect, intrumentations publish with THEIR name, not with their subscribers names.
 const aiguardChannel = dc.channel('dd-trace:ai:aiguard')
 
 const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses'])
