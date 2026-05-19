@@ -20,7 +20,8 @@ function waitForCouchbase () {
       })
         .then(response => {
           if (!response.data.results?.length) {
-            operation.retry(new Error('datadog-test keyspace not ready'))
+            const err = new Error('datadog-test keyspace not ready')
+            if (!operation.retry(err)) reject(err)
           } else {
             resolve()
           }
