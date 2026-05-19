@@ -194,7 +194,7 @@ describe('spanFormat', () => {
 
       const serialized = trace.meta['_dd.span_links']
       assert.strictEqual(serialized.length, MAX_META_VALUE_LENGTH + 3)
-      assert.ok(serialized.endsWith('...'))
+      assert.match(serialized, /\.\.\.$/)
     })
 
     it('should always set a parent ID', () => {
