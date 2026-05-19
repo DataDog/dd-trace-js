@@ -22,7 +22,6 @@
     "meriyah": "^6.1.4",
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
-    "opentracing": ">=0.14.7",
     "pprof-format": "^2.1.1",
     "protobufjs": "^8.0.1",
     "retry": "^0.13.1",

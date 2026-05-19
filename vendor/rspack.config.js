@@ -80,13 +80,6 @@ module.exports = {
     }),
     new CopyRspackPlugin({
       patterns: [
-        // The OpenTracing types are exposed in the public API of dd-trace so
-        // they need to be available in the package.
-        {
-          from: '**/*.d.ts',
-          context: join(__dirname, 'node_modules', 'opentracing', 'lib'),
-          to: 'opentracing'
-        },
         // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',
