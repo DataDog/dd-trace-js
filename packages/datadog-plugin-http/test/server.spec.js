@@ -345,6 +345,89 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with a `service` configuration', () => {
+        describe('when the override differs from the tracer service', () => {
+          beforeEach(() => {
+            return agent.load('http', { client: false, server: { service: 'my-http-service' } })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = new http.Server(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should override the service and mark the source as `opt.plugin`', done => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].service, 'my-http-service')
+                assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.plugin')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/users`).catch(done)
+          })
+
+          it('should reuse the cached start config across requests', done => {
+            const expect = traces => {
+              assert.strictEqual(traces[0][0].service, 'my-http-service')
+              assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.plugin')
+            }
+
+            // The first request populates `#startConfig`; the second takes
+            // the cached path. Asserting both ensures the cached value is
+            // not stale and the span shape stays identical.
+            Promise.all([
+              agent.assertSomeTraces(expect),
+              axios.get(`http://localhost:${port}/first`),
+            ])
+              .then(() => Promise.all([
+                agent.assertSomeTraces(expect),
+                axios.get(`http://localhost:${port}/second`),
+              ]))
+              .then(() => done())
+              .catch(done)
+          })
+        })
+
+        describe('when the override matches the tracer service', () => {
+          beforeEach(() => {
+            return agent.load('http', { client: false, server: { service: 'test' } })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = new http.Server(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should not add the service source tag when the override matches', done => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].service, 'test')
+                assert.strictEqual(Object.hasOwn(traces[0][0].meta, '_dd.svc_src'), false)
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/users`).catch(done)
+          })
+        })
+      })
+
       describe('with resourceRenamingEnabled configuration', () => {
         beforeEach(() => {
           return agent.load('http', { client: false, resourceRenamingEnabled: true })
