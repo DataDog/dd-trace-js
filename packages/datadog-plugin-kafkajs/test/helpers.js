@@ -31,6 +31,11 @@ async function createAndAwaitTopics (admin, topicSpecs, { timeoutMs = 8000, poll
   }
   if (lastError) throw lastError
 
+  // `fetchTopicMetadata` was added to admin in kafkajs 1.5; on 1.4.0 the
+  // create-with-retry above is the only knob we have. The consumer/producer
+  // will refresh its own metadata on first use.
+  if (typeof admin.fetchTopicMetadata !== 'function') return
+
   while (Date.now() < deadline) {
     try {
       const { topics } = await admin.fetchTopicMetadata({ topics: topicNames })
