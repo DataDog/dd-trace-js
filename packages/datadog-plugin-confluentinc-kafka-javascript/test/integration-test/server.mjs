@@ -9,18 +9,39 @@ const kafka = new Kafka({
   },
 })
 
-const sendMessage = async (topic, messages) => {
-  for (let attempt = 0; attempt < 10; attempt++) {
+async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
+  if (typeof admin?.fetchTopicMetadata !== 'function') return
+  const start = Date.now()
+  while ((Date.now() - start) < timeoutMs) {
     try {
-      const producer = kafka.producer()
-      await producer.connect()
-      await producer.send({ topic, messages })
-      await producer.disconnect()
-      return
+      const meta = await admin.fetchTopicMetadata({ topics: [topic], timeout: 1000 })
+      const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
+      const partitions = topicMeta?.partitions
+      if (Array.isArray(partitions) && partitions.length > 0 &&
+          partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
+        return
+      }
     } catch {
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // transient — topic not yet visible
     }
+    await new Promise(resolve => setTimeout(resolve, 50))
   }
+  throw new Error(`Timeout: topic "${topic}" not ready within ${timeoutMs}ms`)
 }
 
-await sendMessage('test-topic', [{ key: 'key1', value: 'test2' }])
+const admin = kafka.admin()
+await admin.connect()
+try {
+  await admin.createTopics({
+    topics: [{ topic: 'test-topic', numPartitions: 1, replicationFactor: 1 }],
+  })
+} catch (err) {
+  if (err.type !== 'TOPIC_ALREADY_EXISTS') throw err
+}
+await waitForTopicReady(admin, 'test-topic')
+await admin.disconnect()
+
+const producer = kafka.producer()
+await producer.connect()
+await producer.send({ topic: 'test-topic', messages: [{ key: 'key1', value: 'test2' }] })
+await producer.disconnect()
