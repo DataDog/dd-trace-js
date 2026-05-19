@@ -465,7 +465,7 @@ describe('Plugin', () => {
         after(async () => {
           dc.unsubscribe('apm:oracledb:query:start', onStart)
           await connection.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         beforeEach(() => {
@@ -493,7 +493,7 @@ describe('Plugin', () => {
         after(async () => {
           dc.unsubscribe('apm:oracledb:query:start', onStart)
           await connection.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         beforeEach(() => {
@@ -554,7 +554,7 @@ describe('Plugin', () => {
           after(async () => {
             dc.unsubscribe('apm:oracledb:query:start', onStart)
             await connection.close()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(() => {
@@ -596,7 +596,7 @@ describe('Plugin', () => {
           after(async () => {
             dc.unsubscribe('apm:oracledb:query:start', onStart)
             await connection.close()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(() => {
@@ -626,7 +626,7 @@ describe('Plugin', () => {
         after(async () => {
           dc.unsubscribe('apm:oracledb:query:start', onStart)
           await connection.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         beforeEach(() => {
@@ -667,7 +667,7 @@ describe('Plugin', () => {
         after(async () => {
           dc.unsubscribe('apm:oracledb:query:start', onStart)
           await connection.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         beforeEach(() => {
@@ -731,7 +731,7 @@ describe('Plugin', () => {
         after(async () => {
           dc.unsubscribe('apm:oracledb:query:start', onStart)
           await connection.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         beforeEach(() => {
@@ -749,18 +749,11 @@ describe('Plugin', () => {
       })
     })
 
-    // Lives outside `withVersions` so the global-tracer wipe needed to test
-    // tracer-level config (third `agent.load` arg) does not strand sibling
-    // describe blocks in the next oracledb-version iteration.
     describe('with DBM propagation enabled with append comment using tracer configuration', () => {
       let injected
       const onStart = (ctx) => { injected = ctx.injected }
 
       before(async () => {
-        // Tracer-level config (third arg) only takes effect if the global
-        // tracer is wiped first; tracer.init() short-circuits once the
-        // process-wide singleton has been initialized by an earlier load.
-        agent.wipe()
         await agent.load('oracledb', {
           appendComment: true,
           service: () => 'serviced',
@@ -776,7 +769,7 @@ describe('Plugin', () => {
       after(async () => {
         dc.unsubscribe('apm:oracledb:query:start', onStart)
         await connection.close()
-        await agent.close({ ritmReset: false, wipe: true })
+        await agent.close()
       })
 
       beforeEach(() => {
