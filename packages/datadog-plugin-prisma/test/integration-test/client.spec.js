@@ -126,6 +126,8 @@ const prismaClientConfigs = [{
   waitForService: waitForMongoReplicaSet,
   skipMigrateReset: true,
   variant: 'destructure',
+  // mongodb@7.2 dropped Node 18 (crypto.getRandomValues is not a global there).
+  skip: () => !semifies(semver.clean(process.version), '>=20.19.0'),
   dbSpan: {
     name: 'prisma.engine',
     meta: {
