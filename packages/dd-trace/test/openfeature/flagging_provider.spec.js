@@ -134,6 +134,16 @@ describe('FlaggingProvider', () => {
     })
   })
 
+  describe('onClose', () => {
+    it('should call destroy on SpanEnrichmentHook', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
+    })
+  })
+
   describe('inheritance', () => {
     it('should extend DatadogNodeServerProvider', () => {
       const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
