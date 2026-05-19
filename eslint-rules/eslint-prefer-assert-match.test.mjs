@@ -71,11 +71,19 @@ ruleTester.run('eslint-prefer-assert-match', /** @type {import('eslint').Rule.Ru
       output: "assert.doesNotMatch(x, /foo/, 'should not match')",
       errors: [{ messageId: 'preferDoesNotMatch' }],
     },
-    // RegExp identifier (non-literal) is still fixable: just shuffles args.
+    // Non-regex-literal receivers of `.test()` are reported but not auto-fixed:
+    // the receiver might not be a RegExp (e.g. a Joi schema, AJV instance, or
+    // any other helper with a `.test()` method), so blindly rewriting to
+    // `assert.match(x, re)` could throw `TypeError: regexp must be a RegExp`.
     {
       code: 'assert.ok(re.test(x))',
-      output: 'assert.match(x, re)',
+      output: null,
       errors: [{ messageId: 'preferMatch' }],
+    },
+    {
+      code: 'assert.ok(predicate.test(value))',
+      output: null,
+      errors: [{ messageId: 'preferMatch', data: { method: 'test' } }],
     },
 
     // ── String.prototype.match() ──────────────────────────────────────────

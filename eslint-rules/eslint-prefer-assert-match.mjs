@@ -176,7 +176,10 @@ function buildReplacementParts (match, sourceCode) {
     case 'test': {
       const stringNode = arg
       const regexNode = callee.object
-      return { stringNode, regexText: sourceCode.getText(regexNode), autofixable: true }
+      if (isRegexLiteral(regexNode)) {
+        return { stringNode, regexText: sourceCode.getText(regexNode), autofixable: true }
+      }
+      return { stringNode, regexText: null, autofixable: false }
     }
 
     default:
