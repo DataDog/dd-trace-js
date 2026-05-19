@@ -67,7 +67,7 @@ function expectProfileMessagePromise (agent, timeout,
         })
       }
       if (expectSeq) {
-        assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
+        assert.notStrictEqual(event.tags_profiler.indexOf(',profile_seq:'), -1)
       }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
@@ -162,7 +162,7 @@ class NetworkEventProcessor extends TimelineEventProcessor {
 
   decorateEvent (ev, pl) {
     // Exactly one of these is defined
-    assert.ok(!!pl.address !== !!pl.host, this.encoded)
+    assert.notStrictEqual(!!pl.address, !!pl.host, this.encoded)
     if (pl.address) {
       ev.address = this.strings.strings[pl.address]
     } else {

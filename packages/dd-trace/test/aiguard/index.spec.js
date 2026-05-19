@@ -487,7 +487,7 @@ describe('AIGuard SDK', () => {
       await aiguard.evaluate(prompt, { block: false })
     })
     await agent.assertSomeTraces(traces => {
-      assert.ok(traces[0].length === 2, 'Trace should contain two spans root + ai_guard')
+      assert.strictEqual(traces[0].length, 2, 'Trace should contain two spans root + ai_guard')
       for (const span of traces[0]) {
         if (span.name === 'root') {
           assert.strictEqual(span.meta[EVENT_TAG_KEY], 'true')
