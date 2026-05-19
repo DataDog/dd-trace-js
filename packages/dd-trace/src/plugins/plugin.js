@@ -144,10 +144,6 @@ module.exports = class Plugin {
    * the intended value as the integration's claim, so later overrides by user
    * code are detected at finish and reflected in `_dd.svc_src`.
    *
-   * Integration code must use this helper instead of writing `service.name`
-   * directly via `setTag`/`addTags`; the `eslint-prefer-set-service-name` rule
-   * enforces this.
-   *
    * @param {object} span Internal DatadogSpan instance.
    * @param {string} name Service name the integration is claiming.
    * @returns {void}

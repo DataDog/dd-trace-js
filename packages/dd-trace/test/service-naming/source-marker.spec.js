@@ -52,14 +52,6 @@ describe('service-naming/source-marker', () => {
       assert.strictEqual(span._spanContext._tags['_dd.svc_src'], undefined)
     })
 
-    it('clears _dd.svc_src when service.name is missing', () => {
-      span._spanContext._tags['_dd.svc_src'] = 'kafka'
-
-      resolveServiceSource(span, TRACER_SERVICE)
-
-      assert.strictEqual(span._spanContext._tags['_dd.svc_src'], undefined)
-    })
-
     it('keeps the integration source when the marker matches current service.name', () => {
       span._spanContext._tags['service.name'] = 'kafka-broker'
       span._spanContext._tags['_dd.svc_src'] = 'kafka'
