@@ -72,9 +72,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       }
 
       return startChannel.runStores(ctx, () => {
-        if (ctx.injected !== undefined) {
-          arguments[0] = ctx.injected
-        }
+        arguments[0] = ctx.injected
         try {
           let result = execute.apply(this, arguments)
 

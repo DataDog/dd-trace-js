@@ -4,6 +4,7 @@ const assert = require('node:assert')
 
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
 const ddpv = require('mocha/package.json').version
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -533,6 +534,82 @@ describe('Plugin', () => {
           ])
         })
       })
+
+      // oracledb 6.4 added object-form execute (`{ statement, values }`) to support
+      // sql-template-tag style usage. Earlier drivers reject the object outright at
+      // argument validation, so the test only runs on >= 6.4.
+      if (semver.intersects(version, '>=6.4.0')) {
+        describe('with DBM propagation enabled and object-form execute', () => {
+          let injected
+          const onStart = (ctx) => { injected = ctx.injected }
+
+          before(async () => {
+            await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+            dc.subscribe('apm:oracledb:query:start', onStart)
+            connection = await oracledb.getConnection(config)
+          })
+
+          after(async () => {
+            dc.unsubscribe('apm:oracledb:query:start', onStart)
+            await connection.close()
+            await agent.close({ ritmReset: false })
+          })
+
+          beforeEach(() => {
+            injected = undefined
+          })
+
+          it('should inject comment into statement and preserve binds', async () => {
+            await connection.execute({ statement: dbQuery, values: [] })
+            assert.deepStrictEqual(injected, {
+              statement:
+                `/*dddb='${dbInstance}',dddbs='serviced',dde='tester',ddh='${hostname}',ddps='test',` +
+                `ddpv='${ddpv}'*/ ${dbQuery}`,
+              values: [],
+            })
+          })
+
+          it('trace query resource should reflect the statement string', async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].resource, dbQuery)
+              }),
+              connection.execute({ statement: dbQuery, values: [] }),
+            ])
+          })
+        })
+
+        describe('with DBM propagation disabled and object-form execute', () => {
+          let injected
+          const onStart = (ctx) => { injected = ctx.injected }
+
+          before(async () => {
+            await agent.load('oracledb')
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+            dc.subscribe('apm:oracledb:query:start', onStart)
+            connection = await oracledb.getConnection(config)
+          })
+
+          after(async () => {
+            dc.unsubscribe('apm:oracledb:query:start', onStart)
+            await connection.close()
+            await agent.close({ ritmReset: false })
+          })
+
+          beforeEach(() => {
+            injected = undefined
+          })
+
+          it('should pass through the original object without allocating a new one', async () => {
+            const query = { statement: dbQuery, values: [] }
+            await connection.execute(query)
+            assert.strictEqual(injected, query)
+          })
+        })
+      }
 
       describe('DBM propagation should handle special characters', () => {
         let injected
