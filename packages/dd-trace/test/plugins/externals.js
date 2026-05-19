@@ -19,6 +19,10 @@ module.exports = {
       versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
     },
     {
+      name: '@ai-sdk/amazon-bedrock',
+      versions: ['^3.0.0', '>=4.0.0'],
+    },
+    {
       name: 'zod',
       versions: ['>=3.25.75'],
     },
