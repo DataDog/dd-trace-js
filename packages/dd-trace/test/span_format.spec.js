@@ -23,6 +23,7 @@ const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
 const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
+const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
 const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
@@ -130,6 +131,75 @@ describe('spanFormat', () => {
       })
     })
 
+    it('pins the formatted-span hidden-class shape for a representative HTTP server span', () => {
+      // Regression guard for the typed-helper inlining: covers every slot
+      // `formatSpan` / `extractTags` / `extractRootTags` / `extractChunkTags`
+      // populate for a chunk-root HTTP server span (the Express-profile shape
+      // that motivated the inlining). The pre-initialised `service`, `type`,
+      // and `span_events` slots stay in `Object.keys` even when the tag never
+      // fires, so the hidden class doesn't transition mid-formatting.
+      spanContext._parentId = null
+      spanContext._tags = {
+        'service.name': 'svc',
+        'span.type': 'web',
+        'resource.name': 'GET /users/:id',
+        'span.kind': 'server',
+        'http.method': 'GET',
+        'http.url': 'https://example.com/users/42',
+        'http.route': '/users/:id',
+        'http.useragent': 'Mozilla/5.0',
+        component: 'express',
+        'http.status_code': 200,
+        'http.response.content_length': 4096,
+      }
+      spanContext._sampling.priority = 1
+      spanContext._trace.tags = {
+        '_dd.p.dm': '-0',
+        '_dd.p.tid': '671d3c4500000000',
+      }
+      spanContext._trace[SAMPLING_RULE_DECISION] = 1
+      span._startTime = 1_500_000_000_000.123
+      span._duration = 1.234
+
+      trace = spanFormat(span, true, false)
+
+      assert.deepStrictEqual(trace, {
+        trace_id: spanContext._traceId,
+        span_id: spanContext._spanId,
+        parent_id: id('0'),
+        name: 'operation',
+        resource: 'GET /users/:id',
+        service: 'svc',
+        type: 'web',
+        error: 0,
+        meta: {
+          '_dd.p.dm': '-0',
+          '_dd.p.tid': '671d3c4500000000',
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'https://example.com/users/42',
+          'http.route': '/users/:id',
+          'http.useragent': 'Mozilla/5.0',
+          component: 'express',
+          'http.status_code': '200',
+          language: 'javascript',
+        },
+        meta_struct: undefined,
+        metrics: {
+          [SAMPLING_RULE_DECISION]: 1,
+          [TOP_LEVEL_KEY]: 1,
+          [MEASURED]: 1,
+          'http.response.content_length': 4096,
+          [PROCESS_ID]: process.pid,
+          [SAMPLING_PRIORITY_KEY]: 1,
+        },
+        start: Math.round(1_500_000_000_000.123 * 1e6),
+        duration: Math.round(1.234 * 1e6),
+        links: [],
+        span_events: undefined,
+      })
+    })
+
     it('should truncate meta and metric keys/values past the agent-side limits', () => {
       const {
         MAX_META_KEY_LENGTH,
@@ -145,8 +215,9 @@ describe('spanFormat', () => {
       span.context()._tags[acceptedMetricKey] = 11
 
       // First-rejected lengths (limit + 1) get sliced and gain a `...` suffix.
-      // Cover all four typed branches in `addTag`: string / number / boolean /
-      // Buffer (the URL branch shares the boolean/buffer truncation line).
+      // Cover all four typed branches in `addMixedTag`: string / number /
+      // boolean / Buffer (the URL branch shares the boolean/buffer truncation
+      // line).
       const overlongMetaKey = `${'c'.repeat(MAX_META_KEY_LENGTH)}X`
       const overlongMetaValue = `${'d'.repeat(MAX_META_VALUE_LENGTH)}Y`
       const overlongMetricKey = `${'e'.repeat(MAX_METRIC_KEY_LENGTH)}Z`
@@ -157,6 +228,11 @@ describe('spanFormat', () => {
       span.context()._tags[overlongBoolKey] = true
       span.context()._tags[overlongBufferKey] = Buffer.from('payload')
 
+      // `service.name` is dispatched through `addStringTag` (not the
+      // polymorphic helper); pin its value-truncate branch here too.
+      const overlongServiceValue = `${'s'.repeat(MAX_META_VALUE_LENGTH)}!`
+      span.context()._tags['service.name'] = overlongServiceValue
+
       trace = spanFormat(span)
 
       const truncatedMetaKey = `${overlongMetaKey.slice(0, MAX_META_KEY_LENGTH)}...`
@@ -164,12 +240,14 @@ describe('spanFormat', () => {
       const truncatedMetricKey = `${overlongMetricKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       const truncatedBoolKey = `${overlongBoolKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedServiceValue = `${overlongServiceValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       assert.strictEqual(trace.meta[acceptedMetaKey], acceptedMetaValue)
       assert.strictEqual(trace.meta[truncatedMetaKey], truncatedMetaValue)
       assert.strictEqual(trace.metrics[acceptedMetricKey], 11)
       assert.strictEqual(trace.metrics[truncatedMetricKey], 42)
       assert.strictEqual(trace.metrics[truncatedBoolKey], 1)
       assert.strictEqual(trace.metrics[truncatedBufferKey], 'payload')
+      assert.strictEqual(trace.service, truncatedServiceValue)
     })
 
     it('should truncate the serialized span_links meta value past MAX_META_VALUE_LENGTH', () => {
@@ -244,6 +322,7 @@ describe('spanFormat', () => {
       spanContext._tags['service.name'] = 'service'
       spanContext._tags['span.type'] = 'type'
       spanContext._tags['resource.name'] = 'resource'
+      spanContext._tags['http.status_code'] = 200
 
       trace = spanFormat(span)
 
@@ -251,7 +330,28 @@ describe('spanFormat', () => {
         service: 'service',
         type: 'type',
         resource: 'resource',
+        meta: { 'http.status_code': '200' },
       })
+    })
+
+    it('should skip non-string values for the string-typed Datadog tag slots', () => {
+      // `span.type`, `resource.name`, and `http.status_code` are dispatched
+      // through `addStringTag`. Non-string source values are dropped instead
+      // of leaking into metrics (the prior throwaway-`{}` pattern hid the
+      // same skip behind an allocated empty object).
+      spanContext._tags['span.type'] = false
+      spanContext._tags['resource.name'] = { foo: 'bar' }
+      // `value && String(value)` short-circuits on `0`, so the addStringTag
+      // call receives a non-string and skips writing.
+      spanContext._tags['http.status_code'] = 0
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.type, undefined)
+      // `trace.resource` is initialised by `formatSpan` from the span name
+      // and must not be overwritten when the source tag is not a string.
+      assert.strictEqual(trace.resource, spanContext._name)
+      assert.strictEqual(trace.meta['http.status_code'], undefined)
     })
 
     it('should extract Datadog specific root tags', () => {
@@ -279,6 +379,22 @@ describe('spanFormat', () => {
       assert.ok(
         !([SAMPLING_AGENT_DECISION, SAMPLING_LIMIT_DECISION, SAMPLING_RULE_DECISION]
           .some(k => Object.hasOwn(trace.metrics, k))))
+    })
+
+    it('should skip numeric root tags whose source value is not a finite number', () => {
+      // `addNumberTag` drops non-numbers (e.g. `undefined`) and `NaN`, so
+      // those decisions never reach the metrics object even though the span
+      // is otherwise eligible for root-tag extraction.
+      spanContext._parentId = null
+      spanContext._trace[SAMPLING_AGENT_DECISION] = Number.NaN
+      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
+      // SAMPLING_RULE_DECISION is intentionally left undefined.
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics[SAMPLING_LIMIT_DECISION], 0.2)
+      assert.ok(!(SAMPLING_AGENT_DECISION in trace.metrics))
+      assert.ok(!(SAMPLING_RULE_DECISION in trace.metrics))
     })
 
     it('should always add single span ingestion tags from options if present', () => {
@@ -363,15 +479,32 @@ describe('spanFormat', () => {
         count: 1,
       }
 
-      trace = spanFormat(span, true)
+      trace = spanFormat(span, true, 'process-tag-value')
 
       assertObjectContains(trace.meta, {
         chunk: 'test',
+        '_dd.tags.process': 'process-tag-value',
       })
 
       assertObjectContains(trace.metrics, {
         count: 1,
       })
+    })
+
+    it('truncates overlong chunk tag keys and values to the agent limit', () => {
+      const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+      const overlongChunkKey = `${'k'.repeat(MAX_META_KEY_LENGTH)}!`
+      const overlongChunkValue = `${'v'.repeat(MAX_META_VALUE_LENGTH)}!`
+      spanContext._trace.tags = {
+        [overlongChunkKey]: 'short',
+      }
+
+      trace = spanFormat(span, true, overlongChunkValue)
+
+      const truncatedKey = `${overlongChunkKey.slice(0, MAX_META_KEY_LENGTH)}...`
+      const truncatedValue = `${overlongChunkValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+      assert.strictEqual(trace.meta[truncatedKey], 'short')
+      assert.strictEqual(trace.meta['_dd.tags.process'], truncatedValue)
     })
 
     it('should not extract trace chunk tags when not chunk root', () => {
@@ -443,6 +576,14 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.metrics.metric, 50)
     })
 
+    it('should extract buffer tags as stringified metrics', () => {
+      spanContext._tags.payload = Buffer.from('hello')
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics.payload, 'hello')
+    })
+
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }
 
@@ -461,7 +602,9 @@ describe('spanFormat', () => {
     })
 
     it('should ignore metrics that are not a number', () => {
-      spanContext._metrics = { metric: NaN }
+      // Numeric user tags with `NaN` are dropped before they reach metrics
+      // via `addMixedTag`'s number branch.
+      spanContext._tags.metric = Number.NaN
 
       trace = spanFormat(span)
 
@@ -490,6 +633,16 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
       assert.ok(!(ERROR_TYPE in trace.meta))
       assert.ok(!(ERROR_STACK in trace.meta))
+    })
+
+    it('should fall back to error.code when error.message is empty', () => {
+      const error = new Error('')
+      error.code = 'E_BOOM'
+      spanContext._tags.error = error
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], 'E_BOOM')
     })
 
     it('should extract the origin', () => {
@@ -626,6 +779,50 @@ describe('spanFormat', () => {
       assert.ok(!Object.hasOwn(trace.meta, 'nested.A.num'))
     })
 
+    it('routes nested-object child values of every type through addMixedTag recursion', () => {
+      const {
+        MAX_META_KEY_LENGTH,
+        MAX_META_VALUE_LENGTH,
+        MAX_METRIC_KEY_LENGTH,
+      } = require('../src/encode/tags-processors')
+      // Top-level tags hit the inlined fast paths in `extractTags`. The
+      // depth-1 recursion in `addMixedTag` is the only place the helper's
+      // typeof / truncation branches stay reachable, so cover every shape
+      // (string / number / boolean / NaN / overlong key / overlong value)
+      // through a single nested-object tag.
+      const overlongMetaChildKey = 'z'.repeat(MAX_META_KEY_LENGTH)
+      const overlongStringValue = 'v'.repeat(MAX_META_VALUE_LENGTH + 1)
+      const overlongMetricChildKey = 'm'.repeat(MAX_METRIC_KEY_LENGTH)
+      const overlongBoolChildKey = 'b'.repeat(MAX_METRIC_KEY_LENGTH)
+      spanContext._tags.nested = {
+        str: 'one',
+        long_value: overlongStringValue,
+        [overlongMetaChildKey]: 'short',
+        num: 2,
+        [overlongMetricChildKey]: 7,
+        bool: true,
+        nope: false,
+        [overlongBoolChildKey]: false,
+        nan: Number.NaN,
+      }
+
+      trace = spanFormat(span)
+
+      const truncatedString = `${overlongStringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+      const truncatedMetaKey = `${`nested.${overlongMetaChildKey}`.slice(0, MAX_META_KEY_LENGTH)}...`
+      const truncatedMetricKey = `${`nested.${overlongMetricChildKey}`.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedBoolKey = `${`nested.${overlongBoolChildKey}`.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      assert.strictEqual(trace.meta['nested.str'], 'one')
+      assert.strictEqual(trace.meta['nested.long_value'], truncatedString)
+      assert.strictEqual(trace.meta[truncatedMetaKey], 'short')
+      assert.strictEqual(trace.metrics['nested.num'], 2)
+      assert.strictEqual(trace.metrics[truncatedMetricKey], 7)
+      assert.strictEqual(trace.metrics['nested.bool'], 1)
+      assert.strictEqual(trace.metrics['nested.nope'], 0)
+      assert.strictEqual(trace.metrics[truncatedBoolKey], 0)
+      assert.ok(!('nested.nan' in trace.metrics))
+    })
+
     it('should accept a boolean for measured', () => {
       spanContext._tags[MEASURED] = true
       trace = spanFormat(span)
@@ -687,6 +884,14 @@ describe('spanFormat', () => {
       trace = spanFormat(span)
 
       assert.strictEqual(trace.metrics['_dd1.sr.eausr'], 1)
+    })
+
+    it('should map analytics.event false to a zero metric', () => {
+      spanContext._tags['analytics.event'] = false
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics['_dd1.sr.eausr'], 0)
     })
   })
 })
