@@ -68,7 +68,6 @@ describe('Plugin', () => {
   let collection
   let db
   let BSON
-  let startSpy
   let injectCommentSpy
   let usesDelete
 
@@ -663,11 +662,11 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject service mode as comment', done => {
@@ -675,8 +674,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -710,12 +709,10 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
           injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
           injectCommentSpy?.restore()
         })
 
@@ -725,9 +722,7 @@ describe('Plugin', () => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(startSpy.called, true)
               assert.strictEqual(injectCommentSpy.called, true)
-
               const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
@@ -763,11 +758,11 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it(
@@ -779,8 +774,8 @@ describe('Plugin', () => {
                 const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
                 const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(startSpy.called, true)
-                const { comment } = startSpy.getCall(0).args[0].ops
+                assert.strictEqual(injectCommentSpy.called, true)
+                const comment = injectCommentSpy.getCall(0).returnValue
                 assert.match(
                   comment,
                   new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
