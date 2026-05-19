@@ -442,6 +442,93 @@ describe('Plugin', () => {
             'instrumentation must not overwrite the caller-supplied fieldResolver')
         })
 
+        describe('preserves the caller-supplied contextValue', () => {
+          let recordingSchema
+          let recordedContext
+
+          beforeEach(() => {
+            recordedContext = []
+            recordingSchema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({
+                name: 'Query',
+                fields: {
+                  ctx: {
+                    type: graphql.GraphQLString,
+                    resolve: (_source, _args, contextValue) => {
+                      recordedContext.push(contextValue)
+                      return 'ok'
+                    },
+                  },
+                },
+              }),
+            })
+          })
+
+          for (const contextValue of [false, 0, '', null, undefined, 42, 'request-1', Symbol('ctx')]) {
+            const label = String(contextValue) || typeof contextValue
+
+            it(`forwards ${label} to resolvers (object form)`, async () => {
+              const document = graphql.parse('{ ctx }')
+
+              const result = await graphql.execute({ schema: recordingSchema, document, contextValue })
+
+              assert.strictEqual(result.data?.ctx, 'ok')
+              assert.strictEqual(recordedContext.length, 1)
+              assert.strictEqual(recordedContext[0], contextValue,
+                'resolver must receive the caller-supplied contextValue unchanged')
+            })
+
+            // graphql >=16 dropped positional execute(); see PR 2904 below.
+            if (!semver.intersects(version, '>=16')) {
+              it(`forwards ${label} to resolvers (positional form)`, async () => {
+                const document = graphql.parse('{ ctx }')
+
+                const result = await graphql.execute(recordingSchema, document, undefined, contextValue)
+
+                assert.strictEqual(result.data?.ctx, 'ok')
+                assert.strictEqual(recordedContext.length, 1)
+                assert.strictEqual(recordedContext[0], contextValue,
+                  'resolver must receive the caller-supplied contextValue unchanged')
+              })
+            }
+          }
+
+          it('emits the execute span for a primitive contextValue', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].error, 0)
+              })
+              .then(done)
+              .catch(done)
+
+            Promise.resolve(graphql.execute({
+              schema: recordingSchema,
+              document: graphql.parse('{ ctx }'),
+              contextValue: 'request-1',
+            })).catch(done)
+          })
+
+          it('emits resolver spans for a primitive contextValue', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const resolveSpan = spans.find(span => span.name === 'graphql.resolve')
+                assert.ok(resolveSpan, 'graphql.resolve span should be emitted')
+                assert.strictEqual(resolveSpan.meta['graphql.field.name'], 'ctx')
+              })
+              .then(done)
+              .catch(done)
+
+            Promise.resolve(graphql.execute({
+              schema: recordingSchema,
+              document: graphql.parse('{ ctx }'),
+              contextValue: 42,
+            })).catch(done)
+          })
+        })
+
         it('should not include variables by default', done => {
           const source = 'query MyQuery($who: String!) { hello(name: $who) }'
           const variableValues = { who: 'world' }
