@@ -3435,7 +3435,7 @@ once@^1.4.0:
   dependencies:
     wrappy "1"
 
-opentracing@>=0.14.0:
+opentracing@>=0.14.7:
   version "0.14.7"
   resolved "https://registry.yarnpkg.com/opentracing/-/opentracing-0.14.7.tgz#25d472bd0296dc0b64d7b94cbc995219031428f5"
   integrity sha512-vz9iS7MJ5+Bp1URw8Khvdyw1H/hGvzHWlKQ7eRrQojSCDL1/SrWfrY9QebLw97n2deyRtzHRC3MkQfVNUCo91Q==
