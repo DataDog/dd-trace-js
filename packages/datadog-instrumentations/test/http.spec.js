@@ -89,7 +89,7 @@ describe('client', () => {
 
           sinon.assert.called(startChannelCb)
           const ctx = getContextFromStubByUrl(url, startChannelCb)
-          assert(ctx !== null)
+          assert.notStrictEqual(ctx, null)
           assert(ctx.abortController instanceof AbortController)
         })
 
@@ -181,7 +181,7 @@ describe('client', () => {
               // Necessary because the tracer makes extra requests to the agent
               if (asyncStartChannelCb.called) {
                 const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
-                assert(ctx === null)
+                assert.strictEqual(ctx, null)
               }
 
               done()
@@ -292,7 +292,7 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(typeof payload.body === 'string')
+                assert.strictEqual(typeof payload.body, 'string')
 
                 const expectedBody = chunks.join('')
                 assert.strictEqual(payload.body, expectedBody)
@@ -324,7 +324,7 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(typeof payload.body === 'string')
+                assert.strictEqual(typeof payload.body, 'string')
 
                 const expectedBody = chunks.join('')
                 assert.strictEqual(payload.body, expectedBody)
@@ -358,7 +358,7 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(typeof payload.body === 'string')
+                assert.strictEqual(typeof payload.body, 'string')
                 const expectedBody = chunks.join('')
                 assert.strictEqual(payload.body, expectedBody)
 

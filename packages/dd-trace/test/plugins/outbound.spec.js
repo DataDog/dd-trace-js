@@ -219,7 +219,7 @@ describe('OuboundPlugin', () => {
           assert.ok(Object.hasOwn(frame, 'column'))
           assert.match(frame.column, /^\d+$/)
           assert.ok(Object.hasOwn(frame, 'type'))
-          assert.ok(typeof frame.type === 'string')
+          assert.strictEqual(typeof frame.type, 'string')
         }
 
         const topFrame = tags._dd.code_origin.frames[0]

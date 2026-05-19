@@ -50,7 +50,10 @@ describe('Plugin', () => {
     describe('electron', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load('electron'))
-        beforeEach(done => startApp(done))
+        beforeEach(function (done) {
+          this.timeout(10_000)
+          startApp(done)
+        })
 
         afterEach(() => agent.close({ ritmReset: false }))
         afterEach(done => {
