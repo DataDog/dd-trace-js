@@ -1,5 +1,10 @@
 'use strict'
 
+// Produce API key 0; v0–v2 use the legacy MessageSet format with no header
+// field, so trace headers can only be carried on v3+ (Kafka >=0.11).
+const PRODUCE_API_KEY = 0
+const PRODUCE_VERSION_WITH_HEADERS = 3
+
 // Side-table mapping a kafkajs producer/consumer to the cluster captured at
 // creation time. The boundary uses it to read `cluster.brokerPool` lazily on
 // first send/consume instead of opening a parallel admin connection. A
@@ -35,7 +40,19 @@ function cloneMessages (messages, ensureHeaders) {
   return result
 }
 
+/**
+ * @param {{ versions?: Record<number, { minVersion: number, maxVersion: number }> } | undefined} brokerPool
+ *   kafkajs's `cluster.brokerPool`. `versions` is populated once the seed
+ *   broker handshakes; before that, the answer is unknown and we return
+ *   `true` so the caller defaults to injection.
+ */
+function brokerSupportsMessageHeaders (brokerPool) {
+  const produce = brokerPool?.versions?.[PRODUCE_API_KEY]
+  return !produce || produce.maxVersion >= PRODUCE_VERSION_WITH_HEADERS
+}
+
 module.exports = {
+  brokerSupportsMessageHeaders,
   clientToCluster,
   cloneMessages,
 }
