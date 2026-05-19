@@ -9,7 +9,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
   /**
    * @param {{
-   *   rootCtx: { source?: string },
+   *   rootCtx: {
+   *     source?: string,
+   *     collapse: boolean,
+   *     collapsedFields?: Map<string, { ctx: object }>,
+   *   },
    *   args: Record<string, unknown>,
    *   path: { prev: object | undefined, key: string | number },
    *   pathString: string,
@@ -23,6 +27,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (!shouldInstrument(this.config, fieldCtx.path)) return
 
     const { rootCtx, args, path, pathString, fieldName, returnType, fieldNode, variableValues } = fieldCtx
+
+    // Siblings 2..N of a collapsed list share the first sibling's span, so
+    // skip span creation here. updateField still fires on the shared ctx and
+    // advances the shared span's finishTime.
+    if (rootCtx.collapse && rootCtx.collapsedFields?.has(pathString)) return
 
     const parentField = getParentField(rootCtx, path)
     const childOf = parentField?.ctx?.currentStore?.span
