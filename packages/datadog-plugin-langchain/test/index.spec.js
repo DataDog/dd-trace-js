@@ -95,7 +95,7 @@ describe('Plugin', () => {
       after(() => {
         iastFilter.isDdTrace = isDdTrace
         // wiping in order to read new env vars for the config each time
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach(() => {

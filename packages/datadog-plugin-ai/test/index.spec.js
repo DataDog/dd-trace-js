@@ -58,7 +58,7 @@ describe('Plugin', () => {
 
     before(() => agent.load('ai'))
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()

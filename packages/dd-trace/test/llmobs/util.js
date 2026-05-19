@@ -389,7 +389,6 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {object} options
  * @param {string} options.plugin
  * @param {object} options.tracerConfigOptions
- * @param {object} options.closeOptions
  * @returns {{
  *   getEvents: () => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
  *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
@@ -398,7 +397,6 @@ function fromBuffer (spanProperty, isNumber = false) {
 function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
-  closeOptions = {},
 } = {}) {
   /** @type {Promise<Array<Array<object>>>} */
   let apmTracesPromise
@@ -415,8 +413,8 @@ function useLlmObs ({
     _DD_LLMOBS_FLUSH_INTERVAL: 0,
   })
 
-  before(() => {
-    return agent.load(plugin, {}, {
+  before(async () => {
+    await agent.load(plugin, {}, {
       llmobs: {
         mlApp: 'test',
         agentlessEnabled: false,
@@ -427,8 +425,8 @@ function useLlmObs ({
 
   beforeEach(resetTracesPromises)
 
-  after(() => {
-    return agent.close({ ritmReset: false, ...closeOptions })
+  after(async () => {
+    await agent.close()
   })
 
   return {

@@ -60,7 +60,7 @@ describe('sequelize', () => {
         // close agent
         after(() => {
           appsec.disable()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         // init express

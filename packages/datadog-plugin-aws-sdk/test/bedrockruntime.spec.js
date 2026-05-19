@@ -42,7 +42,7 @@ describe('Plugin', () => {
         })
 
         after(async () => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         models.forEach(model => {

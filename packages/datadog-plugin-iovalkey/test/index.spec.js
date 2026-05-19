@@ -31,7 +31,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load(['iovalkey']))
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent.assertSomeTraces(traces => {
@@ -121,7 +121,7 @@ describe('Plugin', () => {
           allowlist: ['get'],
         }))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should be configured with the correct values', done => {
           agent
@@ -177,7 +177,7 @@ describe('Plugin', () => {
           whitelist: ['get'],
         }))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should be able to filter commands', done => {
           agent.assertSomeTraces(() => {}) // wait for initial command

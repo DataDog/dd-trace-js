@@ -36,9 +36,8 @@ describe('Plugin', () => {
     withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
-      before(() => {
-        tracer = require(tracerRequirePath)
-        return agent.load('openai')
+      before(async () => {
+        tracer = await agent.load('openai')
       })
 
       after(() => {
@@ -46,7 +45,7 @@ describe('Plugin', () => {
           global.File = globalFile // eslint-disable-line n/no-unsupported-features/node-builtins
         }
 
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach(() => {

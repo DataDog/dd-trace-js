@@ -110,7 +110,7 @@ withVersions('passport-local', 'passport-local', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not call subscriber when an error occurs', async () => {

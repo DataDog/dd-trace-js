@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
@@ -20,28 +20,17 @@ describe('Plugin', () => {
     let tracer
     let collection
 
-    before(() => {
-      tracer = global.tracer = require('../../dd-trace')
-    })
-
     withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
-      beforeEach(() => {
-        tracer = global.tracer = require('../../dd-trace')
-      })
-
       describe('without configuration', () => {
-        beforeEach(done => {
-          agent.load('couchbase').then(() => {
-            couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
-            couchbase.connect('couchbase://localhost', {
-              username: 'Administrator',
-              password: 'password',
-            }).then(_cluster => {
-              cluster = _cluster
-              bucket = cluster.bucket('datadog-test')
-              collection = bucket.defaultCollection()
-            }).then(done).catch(done)
+        beforeEach(async () => {
+          tracer = global.tracer = await agent.load('couchbase')
+          couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
+          cluster = await couchbase.connect('couchbase://localhost', {
+            username: 'Administrator',
+            password: 'password',
           })
+          bucket = cluster.bucket('datadog-test')
+          collection = bucket.defaultCollection()
         })
 
         afterEach(async () => {
@@ -49,7 +38,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withNamingSchema(

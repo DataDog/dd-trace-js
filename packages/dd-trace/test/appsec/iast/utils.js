@@ -61,7 +61,7 @@ function testInRequest (app, tests) {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   tests(config)
@@ -73,7 +73,7 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
     await agent.load(plugins)
   })
   afterEach(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
   beforeEach(() => {
     const tracer = require('../../..')
@@ -286,7 +286,7 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
 
     after(() => {
       appListener && appListener.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     function testThatRequestHasVulnerability (
@@ -421,7 +421,7 @@ function prepareTestServerForIastInExpress (
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     const helpers = createIastVulnerabilityHelpers(config, (a) => { app = a })
@@ -490,7 +490,7 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
 
     after(() => {
       server?.close()
-      return agent?.close({ ritmReset: false })
+      return agent?.close()
     })
 
     const helpers = createIastVulnerabilityHelpers(config, (a) => { app = a })

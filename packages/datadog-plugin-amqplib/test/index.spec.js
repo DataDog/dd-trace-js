@@ -50,7 +50,7 @@ describe('Plugin', () => {
         })
 
         afterEach(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         describe('without plugin', () => {
@@ -332,7 +332,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         afterEach(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
