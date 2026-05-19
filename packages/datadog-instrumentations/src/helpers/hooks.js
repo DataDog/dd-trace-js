@@ -48,6 +48,7 @@ module.exports = {
   '@prisma/client': { esmFirst: true, fn: () => require('../prisma') },
   './runtime/library.js': () => require('../prisma'),
   '@redis/client': () => require('../redis'),
+  '@smithy/core': () => require('../aws-sdk'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
   aerospike: () => require('../aerospike'),
