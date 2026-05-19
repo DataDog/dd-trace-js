@@ -1271,6 +1271,75 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
 
+        it('throws AbortError when the execute abortController is aborted before execute runs', async () => {
+          // AppSec's WAF blocks a malicious request by aborting the execute ctx
+          // on apm:graphql:execute:start. callInAsyncScope sees the signal and
+          // throws AbortError before exe runs; the field-resolver path never
+          // fires for this query.
+          const startCh = dc.channel('apm:graphql:execute:start')
+          const handler = (ctx) => {
+            ctx.abortController.abort()
+          }
+          startCh.subscribe(handler)
+
+          const source = '{ hello(name: "world") }'
+          const document = graphql.parse(source)
+
+          try {
+            const [, error] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+                assert.strictEqual(resolveSpans.length, 0, 'no resolver should run after abort')
+                const opSpan = spans.find(span => span.name === expectedSchema.server.opName)
+                assert.ok(opSpan, 'execute span still finishes')
+                assert.strictEqual(opSpan.error, 0)
+              }),
+              assert.throws(
+                () => graphql.execute({ schema, document }),
+                { name: 'AbortError', message: 'Aborted' },
+              ),
+            ])
+            assert.strictEqual(error, undefined)
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
+
+        it('throws AbortError from the next resolver when the controller aborts mid-execution', async () => {
+          // Same WAF hook as above, but the abort lands after the first
+          // resolver finished its work (apm:graphql:resolve:updateField) so
+          // callInAsyncScope's signal check is already past. resolveAsync's
+          // own signal check is the only guard that stops the second
+          // resolver from running, and assertField has already published its
+          // startResolveCh / built its TrackedField for it.
+          const updateCh = dc.channel('apm:graphql:resolve:updateField')
+          const finished = []
+          const handler = (ctx) => {
+            finished.push(ctx.pathString)
+            if (finished.length === 1) {
+              ctx.rootCtx.abortController.abort()
+            }
+          }
+          updateCh.subscribe(handler)
+
+          try {
+            const source = '{ first: hello(name: "first") second: hello(name: "second") }'
+            const result = await graphql.graphql({ schema, source })
+
+            // graphql captures the resolver throw into result.errors; the
+            // first resolver runs to completion, the second hits the abort
+            // branch.
+            assert.ok(result.errors, 'expected an AbortError surfaced through result.errors')
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+            assert.strictEqual(result.errors[0].originalError?.message, 'Aborted')
+            assert.deepStrictEqual(finished.sort(), ['first', 'second'])
+          } finally {
+            updateCh.unsubscribe(handler)
+          }
+        })
+
         it('should support multiple executions with the same contextValue', done => {
           const schema = graphql.buildSchema(`
             type Query {
