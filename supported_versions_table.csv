@@ -29,7 +29,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @smithy/smithy-client,aws-sdk,1.0.3,4.10.9,True
 @vitest/runner,vitest,1.6.0,4.1.5,True
 aerospike,aerospike,4.0.0,6.5.2,True
-ai,ai,4.0.0,6.0.39,True
+ai,ai,4.0.0,6.0.185,True
 amqp10,amqp10,3.0.0,3.6.0,True
 amqplib,amqplib,0.5.0,0.10.9,True
 avsc,avsc,5.0.0,5.7.9,True

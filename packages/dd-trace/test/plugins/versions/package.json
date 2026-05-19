@@ -6,6 +6,7 @@
   "dependencies": {
     "@babel/core": "7.29.0",
     "@babel/preset-typescript": "7.28.5",
+    "@ai-sdk/amazon-bedrock": "4.0.107",
     "@ai-sdk/openai": "3.0.12",
     "@anthropic-ai/sdk": "0.73.0",
     "@apollo/gateway": "2.12.2",
@@ -83,7 +84,7 @@
     "@vitest/coverage-v8": "4.1.5",
     "@vitest/runner": "4.1.5",
     "aerospike": "6.5.2",
-    "ai": "6.0.39",
+    "ai": "6.0.185",
     "amqp10": "3.6.0",
     "amqplib": "0.10.9",
     "apollo-server-core": "3.13.0",

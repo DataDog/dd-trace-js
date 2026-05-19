@@ -213,7 +213,7 @@
     "dependency": "ai",
     "integration": "ai",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "6.0.39",
+    "max_tracer_supported": "6.0.185",
     "auto-instrumented": "True"
   },
   {
