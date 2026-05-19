@@ -162,9 +162,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     }
 
     // Validate result metadata is present and has valid values
-    assert.strictEqual(typeof actualMetadata.result, 'string', 'result should be a string')
-    assert.strictEqual(typeof actualMetadata.result_class, 'string', 'result_class should be a string')
-    assert.strictEqual(typeof actualMetadata.result_reason, 'string', 'result_reason should be a string')
+    assert.strictEqual(typeof actualMetadata.result, 'string')
+    assert.strictEqual(typeof actualMetadata.result_class, 'string')
+    assert.strictEqual(typeof actualMetadata.result_reason, 'string')
     assert(actualMetadata.result, 'result field should be present')
     assert(actualMetadata.result_class, 'result_class field should be present')
     assert(actualMetadata.result_reason, 'result_reason field should be present')
