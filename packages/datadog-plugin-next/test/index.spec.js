@@ -84,7 +84,7 @@ describe('Plugin', function () {
           server.kill()
 
           await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
       }
 

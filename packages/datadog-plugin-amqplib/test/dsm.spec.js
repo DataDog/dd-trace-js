@@ -56,7 +56,7 @@ describe('Plugin', () => {
         })
 
         afterEach(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

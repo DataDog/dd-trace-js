@@ -6,8 +6,6 @@ const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
 
-const globalTracer = global._ddtrace
-const tracer = globalTracer._tracer
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
 // from this channel.
@@ -25,8 +23,7 @@ let __lambdaTimeout
  */
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
-
-  const apmFlushDeadline = tracer._config.DD_APM_FLUSH_DEADLINE_MILLISECONDS
+  const apmFlushDeadline = global._ddtrace._tracer._config.DD_APM_FLUSH_DEADLINE_MILLISECONDS
 
   __lambdaTimeout = setTimeout(() => {
     timeoutChannel.publish()
@@ -42,6 +39,7 @@ function checkTimeout (context) {
  * Once that is done, it finishes the last span.
  */
 function crashFlush () {
+  const tracer = global._ddtrace._tracer
   const activeSpan = tracer.scope().active()
   if (activeSpan === null) {
     log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')

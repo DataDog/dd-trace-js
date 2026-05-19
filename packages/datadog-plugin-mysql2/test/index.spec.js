@@ -29,7 +29,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -210,7 +210,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -261,7 +261,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -314,7 +314,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -423,7 +423,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -457,10 +457,10 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -492,7 +492,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
@@ -525,7 +525,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -559,10 +559,10 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -594,7 +594,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {

@@ -68,7 +68,7 @@ describe('Plugin', () => {
       afterEach(() => {
         appListener && appListener.close()
         app = null
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('cancelled request', () => {

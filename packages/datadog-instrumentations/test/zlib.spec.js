@@ -25,7 +25,7 @@ const compressionPairs = [
     let zlib, start, finish, error
 
     before(() => agent.load('zlib'))
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     beforeEach(() => {
       start = sinon.stub()

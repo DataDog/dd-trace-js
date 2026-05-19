@@ -24,7 +24,7 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
   })
 
   afterEach(async () => {
-    await agent.close({ ritmReset: false })
+    await agent.close()
   })
 
   describe('Pregel.stream() - stream', () => {

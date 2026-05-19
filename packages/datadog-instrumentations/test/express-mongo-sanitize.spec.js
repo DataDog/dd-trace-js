@@ -46,7 +46,7 @@ describe('express-mongo-sanitize', () => {
 
       after(() => {
         server.close()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without subscriptions', () => {
@@ -141,7 +141,7 @@ describe('express-mongo-sanitize', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without subscriptions', () => {

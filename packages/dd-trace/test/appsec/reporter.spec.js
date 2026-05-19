@@ -921,7 +921,52 @@ describe('reporter', () => {
       })
     })
 
-    it('should add http response data inside request span', () => {
+    it('should always add content-type and content-length response headers when no event is triggered', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+        },
+      }
+      const res = {
+        getHeaders: () => {
+          return {
+            'content-type': 'text/html',
+            'content-length': '137',
+            'content-encoding': 'gzip',
+            'cache-control': 'no-cache',
+          }
+        },
+      }
+
+      Reporter.finishRequest(req, res)
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
+        'http.request.headers.user-agent': 'arachni',
+        'http.response.headers.content-type': 'text/html',
+        'http.response.headers.content-length': '137',
+      })
+    })
+
+    it('should add mandatory response headers from storedResponseHeaders when no event is triggered', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+        },
+      }
+      const storedResponseHeaders = {
+        'content-type': 'application/json',
+        'content-length': '137',
+      }
+
+      Reporter.finishRequest(req, undefined, storedResponseHeaders)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
+        'http.request.headers.user-agent': 'arachni',
+        'http.response.headers.content-type': 'application/json',
+        'http.response.headers.content-length': '137',
+      })
+    })
+
+    it('should add http response data inside request span when appsec event is triggered', () => {
       const req = {
         route: {
           path: '/path/:param',
@@ -947,28 +992,6 @@ describe('reporter', () => {
 
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-cloud-trace-context': 'd',
-        'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42',
-      })
-    })
-
-    it('should add http response data inside request span without endpoint', () => {
-      const req = {}
-      const res = {
-        getHeaders: () => {
-          return {
-            'content-type': 'application/json',
-            'content-length': '42',
-          }
-        },
-      }
-
-      span.context()._tags['appsec.event'] = 'true'
-
-      Reporter.finishRequest(req, res)
-      sinon.assert.calledOnceWithExactly(web.root, req)
-
-      sinon.assert.calledWithExactly(span.addTags, {
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
       })

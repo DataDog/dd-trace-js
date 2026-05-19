@@ -29,8 +29,11 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
 
       try {
         const res = batch.apply(this, arguments)
-        if (typeof res === 'function' || !res) {
+        if (typeof res === 'function') {
           return wrapCallback(finishCh, errorCh, startCtx, res)
+        }
+        if (!res) {
+          return res
         }
         return res.then(
           () => finish(finishCh, errorCh, startCtx),
@@ -162,7 +165,7 @@ function finish (finishCh, errorCh, ctx, error) {
 }
 
 function wrapCallback (finishCh, errorCh, ctx, callback) {
-  return shimmer.wrapFunction(callback, callback => function (err) {
+  return shimmer.wrapCallback(callback, callback => function (err) {
     if (err) {
       ctx.error = err
       errorCh.publish(ctx)

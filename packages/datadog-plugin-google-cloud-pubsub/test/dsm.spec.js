@@ -31,7 +31,7 @@ describe('Plugin', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
@@ -46,10 +46,7 @@ describe('Plugin', () => {
         let consume
 
         before(async () => {
-          tracer = require('../../dd-trace')
-          await agent.load('google-cloud-pubsub', {
-            dsmEnabled: true,
-          })
+          tracer = await agent.load('google-cloud-pubsub', { dsmEnabled: true })
           tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()

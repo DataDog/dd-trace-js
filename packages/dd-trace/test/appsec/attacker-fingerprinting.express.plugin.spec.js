@@ -37,7 +37,7 @@ withVersions('express', 'express', expressVersion => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

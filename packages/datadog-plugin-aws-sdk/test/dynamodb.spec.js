@@ -43,7 +43,7 @@ describe('Plugin', () => {
           tracer = require('../../dd-trace')
           tracer.init()
           await agent.load()
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
           await agent.load(
             'aws-sdk',
             {},
@@ -152,7 +152,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await resetLocalStackDynamo()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         describe('with payload tagging', () => {
@@ -274,7 +274,7 @@ describe('Plugin', () => {
 
         describe('span pointers', () => {
           beforeEach(async () => {
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           async function testSpanPointers ({ env, expectedHashes, operation }) {

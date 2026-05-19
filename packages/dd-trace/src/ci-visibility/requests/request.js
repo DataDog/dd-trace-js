@@ -14,6 +14,8 @@ const {
 } = require('../../exporters/common/retry')
 const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
 
+const legacyStorage = storage('legacy')
+
 function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
     return urlToHttpOptions(urlObjOrString)
@@ -75,7 +77,7 @@ function request (data, options, callback) {
   let firstStatusCode = null
 
   const makeRequest = () => {
-    storage('legacy').run({ noop: true }, () => {
+    legacyStorage.run({ noop: true }, () => {
       const req = client.request(opts, (res) => {
         // Capture non-2xx status code as soon as we see it so telemetry preserves it if the retry
         // fails with a network error (no HTTP response) before 'end' fires

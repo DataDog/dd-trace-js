@@ -3,6 +3,8 @@
 const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
 
+const legacyStorage = storage('legacy')
+
 const defaultLogger = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
@@ -15,7 +17,7 @@ let logger = defaultLogger
 let logChannel = new LogChannel()
 
 function withNoop (fn) {
-  storage('legacy').run({ noop: true }, fn)
+  legacyStorage.run({ noop: true }, fn)
 }
 
 function toggleSubscription (enable, level) {

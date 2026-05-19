@@ -78,9 +78,8 @@ describe('AIGuard SDK', () => {
 
   let originalFetch
 
-  beforeEach(() => {
-    tracer = require('../../../dd-trace')
-    tracer.init(config)
+  beforeEach(async () => {
+    tracer = await agent.load(null, [], config)
 
     originalFetch = global.fetch
     global.fetch = sinon.stub()
@@ -92,11 +91,9 @@ describe('AIGuard SDK', () => {
     aiguardMetrics.metrics.clear()
 
     aiguard = new AIGuard(tracer, config)
-
-    return agent.load(null, [])
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     global.fetch = originalFetch
     sinon.restore()
     return agent.close()

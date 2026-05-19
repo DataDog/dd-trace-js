@@ -75,7 +75,7 @@ describe('Plugin', () => {
   describe('@apollo/gateway', () => {
     withVersions('apollo', '@apollo/gateway', version => {
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('@apollo/server', () => {

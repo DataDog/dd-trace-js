@@ -1,6 +1,6 @@
 'use strict'
 
-const { spawn } = require('child_process')
+const { execFileSync } = require('child_process')
 const fs = require('fs')
 const assert = require('node:assert/strict')
 const Path = require('path')
@@ -36,9 +36,8 @@ describe('Plugin', () => {
     withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
-      before(() => {
-        tracer = require(tracerRequirePath)
-        return agent.load('openai')
+      before(async () => {
+        tracer = await agent.load('openai')
       })
 
       after(() => {
@@ -46,7 +45,7 @@ describe('Plugin', () => {
           global.File = globalFile // eslint-disable-line n/no-unsupported-features/node-builtins
         }
 
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach(() => {
@@ -100,8 +99,8 @@ describe('Plugin', () => {
       })
 
       describe('without initialization', () => {
-        it('should not error', (done) => {
-          spawn('node', ['no-init'], {
+        it('should not error', () => {
+          execFileSync(process.execPath, ['no-init.js'], {
             cwd: __dirname,
             stdio: 'inherit',
             env: {
@@ -109,7 +108,7 @@ describe('Plugin', () => {
               PATH_TO_DDTRACE: tracerRequirePath,
               PATH_TO_OPENAI: moduleRequirePath,
             },
-          }).on('exit', done) // non-zero exit status fails test
+          })
         })
       })
 

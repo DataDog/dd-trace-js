@@ -18,21 +18,16 @@ describe('Plugin', () => {
   let connection
 
   withVersions('tedious', 'tedious', version => {
-    beforeEach(() => {
-      tracer = require('../../dd-trace')
-    })
-
     describe('without configuration', () => {
       let config
 
-      beforeEach(() => {
-        return agent.load('tedious').then(() => {
-          tds = require(`../../../versions/tedious@${version}`).get()
-        })
+      beforeEach(async () => {
+        tracer = await agent.load('tedious')
+        tds = require(`../../../versions/tedious@${version}`).get()
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach((done) => {
@@ -419,7 +414,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach((done) => {

@@ -22,7 +22,7 @@ describe('Plugin', () => {
       return agent.load('rhea')
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {

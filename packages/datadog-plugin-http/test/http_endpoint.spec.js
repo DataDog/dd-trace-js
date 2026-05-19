@@ -21,7 +21,6 @@ describe('Plugin', () => {
           // Needed when this spec file run together with other spec files, in which case the agent config is not
           // re-loaded unless the existing agent is wiped first.
           // And we need the agent config to be re-loaded in order to enable appsec.
-          agent.wipe()
         })
 
         beforeEach(async () => {
@@ -33,7 +32,7 @@ describe('Plugin', () => {
 
         afterEach(() => {
           appListener && appListener.close()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

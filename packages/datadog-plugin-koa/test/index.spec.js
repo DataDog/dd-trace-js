@@ -48,7 +48,7 @@ describe('Plugin', () => {
           })
         )
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should do automatic instrumentation on 2.x middleware', done => {
           const app = new Koa()
@@ -738,7 +738,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => agent.load(['koa', 'http'], [{ middleware: false }, { client: false }]))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         describe('middleware set to false', () => {
           it('should not do automatic instrumentation on 2.x middleware', done => {
