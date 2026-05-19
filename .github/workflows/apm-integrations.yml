@@ -158,6 +158,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+      # `plugins/upstream` only runs `test:plugins:upstream`, which is a non-glob suite runner;
+      # the in-tree `test/integration-test/*.spec.js` files would otherwise have no CI invocation
+      # whose glob expands to reach them.
+      - uses: ./.github/actions/plugins/integration-test
 
   body-parser:
     runs-on: ubuntu-latest
@@ -168,6 +172,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+      - uses: ./.github/actions/plugins/integration-test
 
   bullmq:
     runs-on: ubuntu-latest
