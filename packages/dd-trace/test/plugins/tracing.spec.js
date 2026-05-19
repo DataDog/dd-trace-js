@@ -94,7 +94,9 @@ describe('TracingPlugin', () => {
       assert.strictEqual(span[INTEGRATION_SERVICE], 'inferred-proxy-svc')
     })
 
-    it('does not stamp the integration marker when service equals the tracer default', () => {
+    it('stamps the integration marker when service equals the tracer default', () => {
+      // resolveServiceSource handles the equal-to-tracer-default case at finish time,
+      // so we unconditionally stamp here and let finish reconcile.
       const localStub = sinon.stub().returns({})
       const localPlugin = new TracingPlugin({ _tracer: { startSpan: localStub, _service: 'app' } })
       localPlugin.configure({})
@@ -103,7 +105,7 @@ describe('TracingPlugin', () => {
       localStub.returns(span)
       localPlugin.startSpan('Test span', { service: 'app' })
 
-      assert.strictEqual(span[INTEGRATION_SERVICE], undefined)
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'app')
     })
   })
 })
