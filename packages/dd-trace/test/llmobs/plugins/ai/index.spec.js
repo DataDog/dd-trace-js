@@ -1061,6 +1061,16 @@ describe('Plugin', () => {
       AWS_REGION: 'us-east-1',
     })
 
+    // @ai-sdk/amazon-bedrock signs requests with aws4fetch, which calls
+    // globalThis.crypto for SHA256/HMAC. Node 19+ exposes crypto as a global;
+    // on Node 18 (still supported and used in CI) we polyfill it from
+    // node:crypto.webcrypto.
+    before(() => {
+      if (typeof globalThis.crypto === 'undefined') {
+        globalThis.crypto = require('node:crypto').webcrypto
+      }
+    })
+
     withVersions('ai', 'ai', '>=5.0.0', (version, _, realVersion) => {
       const bedrockPkg = getAiSdkBedrockPackage(realVersion)
       if (!bedrockPkg) return
@@ -1099,7 +1109,8 @@ describe('Plugin', () => {
 
         assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
         assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, cacheReadOnDoGenerate ? 4425 : undefined)
-        assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, 0)
+        // cache_write is 0 in this scenario; we filter zero values, so the metric is absent.
+        assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, undefined)
       })
 
       it('surfaces cache_write_input_tokens when Bedrock returns cacheWriteInputTokens', async () => {
@@ -1116,9 +1127,8 @@ describe('Plugin', () => {
 
         assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
         assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, 4425)
-        // ai@>=6.0.184 sets cachedInputTokens=0 explicitly so the metric is tagged
-        // with 0; earlier versions omit the attribute entirely.
-        assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, cacheReadOnDoGenerate ? 0 : undefined)
+        // cache_read is 0 in this scenario; we filter zero values, so the metric is absent.
+        assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, undefined)
       })
     })
   })

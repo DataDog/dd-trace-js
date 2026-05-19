@@ -102,12 +102,15 @@ function getUsage (tags) {
   // `ai.usage.cachedInputTokens`; cache WRITE tokens (and earlier AI SDK
   // versions / providers that don't fill `cachedInputTokens`) are only
   // available through provider-specific `ai.response.providerMetadata`.
+  // Skip zero values: the AI SDK sets `cachedInputTokens=0` on every span
+  // regardless of provider, so emitting it would add noise to spans that
+  // don't actually use prompt caching (e.g. OpenAI).
   const providerCache = getProviderCacheTokens(tags['ai.response.providerMetadata'])
 
   const cacheReadTokens = tags['ai.usage.cachedInputTokens'] ?? providerCache.cacheReadTokens
-  if (cacheReadTokens != null) usage.cacheReadTokens = cacheReadTokens
+  if (cacheReadTokens) usage.cacheReadTokens = cacheReadTokens
 
-  if (providerCache.cacheWriteTokens != null) usage.cacheWriteTokens = providerCache.cacheWriteTokens
+  if (providerCache.cacheWriteTokens) usage.cacheWriteTokens = providerCache.cacheWriteTokens
 
   return usage
 }
