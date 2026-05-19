@@ -18,7 +18,7 @@ const { channel } = require('./instrument')
  *
  * @param {string} prefix
  * @param {object} [options]
- * @param {boolean} [options.captureResult=false] set `ctx.result` to the promise's resolved value
+ * @param {boolean} [options.captureResult] set `ctx.result` to the promise's resolved value
  *   before publishing `:finish`. Plugins that tag spans from the call's return value rely on this.
  * @returns {(buildContext: (thisArg: unknown, args: unknown[]) => object | undefined) =>
  *   (fn: Function) => Function}
