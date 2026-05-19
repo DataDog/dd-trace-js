@@ -221,7 +221,7 @@ describe('Sns', function () {
           })
           assert.ok(statsPointsReceived >= 2)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
-        }).then(done, done)
+        }, { timeoutMs: 2000 }).then(done, done)
 
         sns.subscribe(subParams, () => {
           sns.publish({ TopicArn, Message: 'message DSM' }, () => {

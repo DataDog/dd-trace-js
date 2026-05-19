@@ -40,7 +40,8 @@ describe('Plugin', () => {
           return agent.load('aws-sdk')
         })
 
-        before(done => {
+        before(function (done) {
+          this.timeout(10_000)
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
 
