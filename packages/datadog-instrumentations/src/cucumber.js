@@ -6,11 +6,17 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const {
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  getSafeSkippableSuites,
+  getSkippedSuitesCoverage,
   getTestSuitePath,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
@@ -86,10 +92,13 @@ let pickleByFile = {}
 const pickleResultByFile = {}
 
 let skippableSuites = []
+let skippableSuitesCoverage = {}
+let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
 let isSuitesSkippingEnabled = false
+let isCodeCoverageEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let earlyFlakeDetectionSlowTestRetries = {}
@@ -274,9 +283,16 @@ function getShouldBeSkippedSuite (pickle, suitesToSkip) {
 
 // From cucumber@>=11
 function getFilteredPicklesNew (coordinator, suitesToSkip) {
+  const localSuites = coordinator.sourcedPickles.map(({ pickle }) => getTestSuitePath(pickle.uri, process.cwd()))
+  const safeSuitesToSkip = getSafeSkippableSuites({
+    skippableSuites: suitesToSkip,
+    skippedCoverage: skippableSuitesCoverage,
+    localSuites,
+    isCodeCoverageEnabled,
+  })
   return coordinator.sourcedPickles.reduce((acc, sourcedPickle) => {
     const { pickle } = sourcedPickle
-    const [shouldBeSkipped, testSuitePath] = getShouldBeSkippedSuite(pickle, suitesToSkip)
+    const [shouldBeSkipped, testSuitePath] = getShouldBeSkippedSuite(pickle, safeSuitesToSkip)
 
     if (shouldBeSkipped) {
       acc.skippedSuites.add(testSuitePath)
@@ -288,9 +304,19 @@ function getFilteredPicklesNew (coordinator, suitesToSkip) {
 }
 
 function getFilteredPickles (runtime, suitesToSkip) {
+  const localSuites = runtime.pickleIds.map(pickleId => {
+    const pickle = runtime.eventDataCollector.getPickle(pickleId)
+    return getTestSuitePath(pickle.uri, process.cwd())
+  })
+  const safeSuitesToSkip = getSafeSkippableSuites({
+    skippableSuites: suitesToSkip,
+    skippedCoverage: skippableSuitesCoverage,
+    localSuites,
+    isCodeCoverageEnabled,
+  })
   return runtime.pickleIds.reduce((acc, pickleId) => {
     const pickle = runtime.eventDataCollector.getPickle(pickleId)
-    const [shouldBeSkipped, testSuitePath] = getShouldBeSkippedSuite(pickle, suitesToSkip)
+    const [shouldBeSkipped, testSuitePath] = getShouldBeSkippedSuite(pickle, safeSuitesToSkip)
 
     if (shouldBeSkipped) {
       acc.skippedSuites.add(testSuitePath)
@@ -697,6 +723,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     earlyFlakeDetectionSlowTestRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
     earlyFlakeDetectionFaultyThreshold = configurationResponse.libraryConfig?.earlyFlakeDetectionFaultyThreshold
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
+    isCodeCoverageEnabled = configurationResponse.libraryConfig?.isCodeCoverageEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     const configRetryCount = configurationResponse.libraryConfig?.flakyTestRetriesCount
     numTestRetries = (typeof configRetryCount === 'number' && configRetryCount > 0) ? configRetryCount : 0
@@ -733,6 +760,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
+      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage ?? {}
+      skippedSuitesCoverage = {}
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator
@@ -753,6 +782,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         }
 
         skippedSuites = [...filteredPickles.skippedSuites]
+        skippedSuitesCoverage = getSkippedSuitesCoverage({
+          skippedSuites,
+          skippedCoverage: skippableSuitesCoverage,
+          isCodeCoverageEnabled,
+        })
+        writeCoverageBackfillToCache(skippedSuitesCoverage)
         itrCorrelationId = skippableResponse.itrCorrelationId
       }
     }
@@ -816,13 +851,24 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     let testCodeCoverageLinesTotal
+    let testSessionCoverageFiles
 
     if (global.__coverage__) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
-        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        applySkippedCoverageToCoverage(
+          originalCoverageMap,
+          skippedSuitesCoverage,
+          process.cwd()
+        )
+        testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+          originalCoverageMap,
+          undefined,
+          process.cwd()
+        )
+        testSessionCoverageFiles = getExecutableFilesFromCoverage(originalCoverageMap)
       } catch {
         // ignore errors
       }
@@ -834,6 +880,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       status: success ? 'pass' : 'fail',
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites: skippedSuites.length,
       hasUnskippableSuites: isUnskippable,
       hasForcedToRunSuites: isForcedToRun,
@@ -1008,7 +1055,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       // last test in suite
       const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
       if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,

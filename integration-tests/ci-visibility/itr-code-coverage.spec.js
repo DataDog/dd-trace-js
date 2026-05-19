@@ -21,6 +21,7 @@ const {
 
 const FIXTURE_ROOT = 'ci-visibility/itr-code-coverage'
 const SKIPPED_SUITE = `${FIXTURE_ROOT}/test-skipped.js`
+const CUCUMBER_SKIPPED_SUITE = `${FIXTURE_ROOT}/cucumber/test-skipped.feature`
 const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
 const SKIPPED_SOURCE = `${FIXTURE_ROOT}/src/skipped-dependency.js`
 const LINE_PCT_RE = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
@@ -66,6 +67,16 @@ const FRAMEWORKS = [
       COVERAGE_REPORTERS: 'text-summary',
     }),
   },
+  {
+    name: 'cucumber',
+    skippedSuite: CUCUMBER_SKIPPED_SUITE,
+    command: './node_modules/nyc/bin/nyc.js --all -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+      `node ./node_modules/.bin/cucumber-js ${FIXTURE_ROOT}/cucumber/*.feature ` +
+      `--require ${FIXTURE_ROOT}/cucumber/support/*.js`,
+    getEnv: () => ({
+      NYC_INCLUDE: JSON.stringify([`${FIXTURE_ROOT}/src/**`]),
+    }),
+  },
 ]
 
 describe('ITR code coverage', function () {
@@ -74,7 +85,7 @@ describe('ITR code coverage', function () {
 
   this.timeout(180_000)
 
-  useSandbox(['mocha', 'nyc', 'jest'], true)
+  useSandbox(['mocha', 'nyc', 'jest', '@cucumber/cucumber'], true)
 
   before(() => {
     cwd = sandboxCwd()

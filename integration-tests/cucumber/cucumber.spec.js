@@ -689,10 +689,18 @@ describe(`cucumber@${version} commonJS`, () => {
                 version: 2,
               },
             })
-            const allCoverageFiles = codeCovRequest.payload
-              .flatMap(coverage => coverage.content.coverages)
+            const coverages = codeCovRequest.payload.flatMap(coverage => coverage.content.coverages)
+            const allCoverageFiles = coverages
               .flatMap(file => file.files)
               .map(file => file.filename)
+            const testCoverageFiles = coverages
+              .filter(coverage => coverage.test_suite_id)
+              .flatMap(file => file.files)
+              .map(file => file.filename)
+            const coveredStepsFile = coverages
+              .flatMap(coverage => coverage.files)
+              .find(file => file.filename === `${featuresPath}support/steps.${fileExtension}`)
+            const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
 
             assertObjectContains(allCoverageFiles, [
               `${featuresPath}support/steps.${fileExtension}`,
@@ -701,9 +709,15 @@ describe(`cucumber@${version} commonJS`, () => {
             ])
             // steps is twice because there are two suites using it
             assert.strictEqual(
-              allCoverageFiles.filter(file => file === `${featuresPath}support/steps.${fileExtension}`).length,
+              testCoverageFiles.filter(file => file === `${featuresPath}support/steps.${fileExtension}`).length,
               2,
               'Steps should be covered twice'
+            )
+            assert.ok(coveredStepsFile.bitmap, 'covered source files should report line coverage bitmaps')
+            assert.ok(sessionCoverage, 'session executable line coverage should be reported')
+            assert.ok(
+              sessionCoverage.files.every(file => file.bitmap),
+              'session executable line coverage files should report bitmaps'
             )
             assert.ok(coveragePayload.content.coverages[0].test_session_id)
             assert.ok(coveragePayload.content.coverages[0].test_suite_id)
@@ -2569,6 +2583,71 @@ describe(`cucumber@${version} commonJS`, () => {
         }).catch(done)
       })
     })
+  })
+
+  it('calculates total code coverage using skippable suite coverage', async () => {
+    const featureRoot = 'ci-visibility/features-total-code-coverage'
+    const coveredSkippedLines = getLinesBitmapBase64(1, 40)
+
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: true,
+      tests_skipping: true,
+    })
+
+    const runCucumber = async (suitesToSkip, expectedItrSkipped) => {
+      let codeCoverageLinesPct
+
+      receiver.setSuitesToSkip(suitesToSkip)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], expectedItrSkipped)
+          codeCoverageLinesPct = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+        })
+
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js --all -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+        `node ./node_modules/.bin/cucumber-js ${featureRoot}/*.feature --require ${featureRoot}/support/*.js`,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NYC_INCLUDE: JSON.stringify([`${featureRoot}/**`]),
+          },
+        },
+      )
+
+      const [exitCode] = await once(childProcess, 'exit')
+      assert.strictEqual(exitCode, 0)
+      await eventsPromise
+
+      return codeCoverageLinesPct
+    }
+
+    const coverageWithoutSkippedSuiteCoverage = await runCucumber([{
+      type: 'suite',
+      attributes: {
+        suite: `${featureRoot}/test-skipped.feature`,
+      },
+    }], 'false')
+    const coverageWithSkippedSuiteCoverage = await runCucumber([{
+      type: 'suite',
+      attributes: {
+        suite: `${featureRoot}/test-skipped.feature`,
+        coverage: {
+          [hashCoverageFilePath(`${featureRoot}/test-skipped.feature`)]: coveredSkippedLines,
+          [hashCoverageFilePath(`${featureRoot}/unused-dependency.js`)]: coveredSkippedLines,
+          [hashCoverageFilePath(`${featureRoot}/support/steps.js`)]: coveredSkippedLines,
+        },
+      },
+    }], 'true')
+
+    assert.strictEqual(coverageWithoutSkippedSuiteCoverage, 100)
+    assert.strictEqual(coverageWithSkippedSuiteCoverage, 100)
   })
 
   context('known tests without early flake detection', () => {
