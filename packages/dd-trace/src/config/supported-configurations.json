@@ -1239,6 +1239,13 @@
         "default": "true"
       }
     ],
+    "DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LOG_LEVEL": [
       {
         "implementation": "C",
