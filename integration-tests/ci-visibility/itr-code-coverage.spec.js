@@ -47,6 +47,15 @@ function getLinePctFromOutput (output) {
 
 const FRAMEWORKS = [
   {
+    name: 'mocha',
+    skippedSuite: SKIPPED_SUITE,
+    command: './node_modules/nyc/bin/nyc.js --all -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+      `node node_modules/mocha/bin/mocha ./${FIXTURE_ROOT}/test-*.js`,
+    getEnv: () => ({
+      NYC_INCLUDE: JSON.stringify([`${FIXTURE_ROOT}/src/**`]),
+    }),
+  },
+  {
     name: 'jest',
     skippedSuite: SKIPPED_SUITE,
     command: 'node ./ci-visibility/run-jest.js',
@@ -65,7 +74,7 @@ describe('ITR code coverage', function () {
 
   this.timeout(180_000)
 
-  useSandbox(['jest'], true)
+  useSandbox(['mocha', 'nyc', 'jest'], true)
 
   before(() => {
     cwd = sandboxCwd()

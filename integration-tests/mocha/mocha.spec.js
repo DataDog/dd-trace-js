@@ -1967,12 +1967,24 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           .flatMap(file => file.files)
           .map(file => file.filename)
 
+        const coverages = codeCovRequest.payload.flatMap(coverage => coverage.content.coverages)
+        const coveredSourceFile = coverages
+          .flatMap(coverage => coverage.files)
+          .find(file => file.filename === 'ci-visibility/test/sum.js')
+        const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
+
         assertObjectContains(allCoverageFiles,
           [
             'ci-visibility/test/sum.js',
             'ci-visibility/test/ci-visibility-test.js',
             'ci-visibility/test/ci-visibility-test-2.js',
           ]
+        )
+        assert.ok(coveredSourceFile.bitmap, 'covered source files should report line coverage bitmaps')
+        assert.ok(sessionCoverage, 'session executable line coverage should be reported')
+        assert.ok(
+          sessionCoverage.files.every(file => file.bitmap),
+          'session executable line coverage files should report bitmaps'
         )
 
         const [coveragePayload] = codeCovRequest.payload
@@ -2103,6 +2115,97 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
+    })
+
+    it('does not skip suites with missing line coverage when code coverage is enabled', async () => {
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+          _missing_line_code_coverage: true,
+        },
+      }])
+
+      const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
+      const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      const [[skippableRequest, eventsRequest], [exitCode]] = await Promise.all([
+        Promise.all([
+          skippableRequestPromise,
+          eventsRequestPromise,
+        ]),
+        once(childProcess, 'exit'),
+      ])
+
+      assert.strictEqual(exitCode, 0)
+      assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
+
+      const eventTypes = eventsRequest.payload.events.map(event => event.type)
+      const suiteWithMissingCoverage = eventsRequest.payload.events.find(event =>
+        event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+      ).content
+      assert.strictEqual(suiteWithMissingCoverage.meta[TEST_STATUS], 'pass')
+      assert.strictEqual(suiteWithMissingCoverage.meta[TEST_SKIPPED_BY_ITR], undefined)
+
+      assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+      const numSuites = eventTypes.reduce(
+        (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+      )
+      assert.strictEqual(numSuites, 2)
+
+      const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+      assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+      assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+      assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+      assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+      assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
+    })
+
+    it('calculates total code coverage using skippable suite coverage', async () => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test-total-code-coverage/test-skipped.js',
+          coverage: {
+            [hashCoverageFilePath('ci-visibility/test-total-code-coverage/test-skipped.js')]: coveredSkippedLines,
+            [hashCoverageFilePath('ci-visibility/test-total-code-coverage/unused-dependency.js')]: coveredSkippedLines,
+          },
+        },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+        })
+
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary --all --nycrc-path ./my-nyc.config.js ' +
+        'node node_modules/mocha/bin/mocha ./ci-visibility/test-total-code-coverage/test-*.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NYC_INCLUDE: JSON.stringify(['ci-visibility/test-total-code-coverage/**']),
+          },
+        }
+      )
+
+      const [exitCode] = await once(childProcess, 'exit')
+      assert.strictEqual(exitCode, 0)
+      await eventsPromise
     })
 
     it('marks the test session as skipped if every suite is skipped', (done) => {
