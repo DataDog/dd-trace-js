@@ -325,8 +325,8 @@ function setupAssertionListeners (t, done, probe) {
     assert.deepStrictEqual(['span_id', 'trace_id'], Object.keys(payload.dd).sort())
     assert.strictEqual(typeof payload.dd.trace_id, 'string')
     assert.strictEqual(typeof payload.dd.span_id, 'string')
-    assert.ok(payload.dd.trace_id.length > 0)
-    assert.ok(payload.dd.span_id.length > 0)
+    assert.ok(payload.dd.trace_id.length > 0, `Expected ${payload.dd.trace_id.length} > 0`)
+    assert.ok(payload.dd.span_id.length > 0, `Expected ${payload.dd.span_id.length} > 0`)
     dd = payload.dd
 
     assertDD()
@@ -387,14 +387,14 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   assert.ok(data.debugger.snapshot.timestamp <= Date.now())
 
   assert.ok(Array.isArray(data.debugger.snapshot.stack))
-  assert.ok(data.debugger.snapshot.stack.length > 0)
+  assert.ok(data.debugger.snapshot.stack.length > 0, `Expected ${data.debugger.snapshot.stack.length} > 0`)
   for (const frame of data.debugger.snapshot.stack) {
     assert.ok(typeof frame === 'object' && frame !== null)
     assert.deepStrictEqual(['columnNumber', 'fileName', 'function', 'lineNumber'], Object.keys(frame).sort())
     assert.strictEqual(typeof frame.fileName, 'string')
     assert.strictEqual(typeof frame.function, 'string')
-    assert.ok(frame.lineNumber > 0)
-    assert.ok(frame.columnNumber > 0)
+    assert.ok(frame.lineNumber > 0, `Expected ${frame.lineNumber} > 0`)
+    assert.ok(frame.columnNumber > 0, `Expected ${frame.columnNumber} > 0`)
   }
   const topFrame = data.debugger.snapshot.stack[0]
   // path seems to be prefixed with `/private` on Mac

@@ -566,7 +566,7 @@ describe('_serializeBuckets with transactions', () => {
     assert.strictEqual(Stats.length, 1)
     assert.ok(Buffer.isBuffer(Stats[0].Transactions))
     assert.ok(Buffer.isBuffer(Stats[0].TransactionCheckpointIds))
-    assert.ok(Stats[0].TransactionCheckpointIds.length > 0)
+    assert.ok(Stats[0].TransactionCheckpointIds.length > 0, `Expected ${Stats[0].TransactionCheckpointIds.length} > 0`)
   })
 
   it('omits Transactions and TransactionCheckpointIds when no transactions in bucket', () => {

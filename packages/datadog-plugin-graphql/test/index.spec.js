@@ -504,13 +504,13 @@ describe('Plugin', () => {
                   }
 
                   if (span.resource === 'fastAsyncField:String') {
-                    assert.ok(fastAsyncTime < slowAsyncTime)
+                    assert.ok(fastAsyncTime < slowAsyncTime, `Expected ${fastAsyncTime} < ${slowAsyncTime}`)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    assert.ok(slowAsyncTime < syncTime)
+                    assert.ok(slowAsyncTime < syncTime, `Expected ${slowAsyncTime} < ${syncTime}`)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    assert.ok(syncTime > slowAsyncTime)
+                    assert.ok(syncTime > slowAsyncTime, `Expected ${syncTime} > ${slowAsyncTime}`)
                     foundSyncFieldSpan = true
                   }
 

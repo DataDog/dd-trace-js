@@ -212,8 +212,8 @@ describe('findScriptFromPartialPath', function () {
     it('should be cleared when calling clearState', function () {
       const path = 'server/index.js'
 
-      assert.ok(state._loadedScripts.length > 0)
-      assert.ok(state._scriptUrls.size > 0)
+      assert.ok(state._loadedScripts.length > 0, `Expected ${state._loadedScripts.length} > 0`)
+      assert.ok(state._scriptUrls.size > 0, `Expected ${state._scriptUrls.size} > 0`)
 
       const result = state.findScriptFromPartialPath(path)
       assert.ok(typeof result === 'object' && result !== null)

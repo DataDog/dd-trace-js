@@ -106,7 +106,10 @@ describe('Remote config client id', () => {
       await axios.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
-        assert.ok(payload[0][0].meta['_dd.rc.client_id'] == null)
+        assert.ok(
+          payload[0][0].meta['_dd.rc.client_id'] == null,
+          `Expected ${payload[0][0].meta['_dd.rc.client_id']} == null`
+        )
       })
     })
   })

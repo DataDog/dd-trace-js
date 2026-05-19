@@ -28,7 +28,7 @@ module.exports = ({ Assertion, expect }, { expectTypes }) => {
     assert.ok(Array.isArray(obj.location))
     assert.ok(Array.isArray(obj.function))
     assert.ok(Array.isArray(obj.stringTable.strings))
-    assert.ok(obj.stringTable.strings.length >= 1)
+    assert.ok(obj.stringTable.strings.length >= 1, `Expected ${obj.stringTable.strings.length} >= 1`)
     assert.strictEqual(obj.stringTable.strings[0], '')
 
     for (const sampleType of obj.sampleType) {
@@ -54,7 +54,7 @@ module.exports = ({ Assertion, expect }, { expectTypes }) => {
 
     for (const sample of obj.sample) {
       assert.ok(Array.isArray(sample.locationId))
-      assert.ok(sample.locationId.length >= 1)
+      assert.ok(sample.locationId.length >= 1, `Expected ${sample.locationId.length} >= 1`)
       assert.ok(Array.isArray(sample.value))
       assert.strictEqual(sample.value.length, obj.sampleType.length)
     }

@@ -220,7 +220,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.strictEqual(typeof state.err.fields.stack.value, 'string')
       assert.match(state.err.fields.stack.value, /^Error: boom!/)
       assert.strictEqual(typeof state.err.fields.stack.size, 'number')
-      assert.ok(((state.err.fields.stack.size) > (255)))
+      assert.ok(((state.err.fields.stack.size) > (255), `Expected ${state.err.fields.stack.size} > 255`))
       assertObjectContains(state.err.fields.stack, {
         type: 'string',
         truncated: true,

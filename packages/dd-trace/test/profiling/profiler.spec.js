@@ -363,7 +363,7 @@ describe('profiler', function () {
       await waitForExport()
 
       const { start: start2, end: end2 } = exporter.export.args[0][0]
-      assert.ok(start2 >= end)
+      assert.ok(start2 >= end, `Expected ${start2} >= ${end}`)
       assert.ok(start2 instanceof Date)
       assert.ok(end2 instanceof Date)
       assert.strictEqual(end2.getTime() - start2.getTime(), 65000)

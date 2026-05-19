@@ -56,7 +56,7 @@ describe('esbuild support for IAST', () => {
 
         const ddStack = msgpack.decode(span.meta_struct['_dd.stack'])
         assert.ok(Object.hasOwn(ddStack.vulnerability[0], 'frames'))
-        assert.ok(ddStack.vulnerability[0].frames.length > 0)
+        assert.ok(ddStack.vulnerability[0].frames.length > 0, `Expected ${ddStack.vulnerability[0].frames.length} > 0`)
       })
     }, null, 1, true)
   }

@@ -44,7 +44,7 @@ describe('CI Visibility Exporter', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
-        assert.ok(err == null)
+        assert.ok(err == null, `Expected ${err} == null`)
         assert.strictEqual(scope.isDone(), true)
         done()
       })
@@ -205,7 +205,7 @@ describe('CI Visibility Exporter', () => {
             isSuitesSkippingEnabled: true,
             isEarlyFlakeDetectionEnabled: false,
           })
-          assert.ok(err == null)
+          assert.ok(err == null, `Expected ${err} == null`)
           assert.strictEqual(scope.isDone(), true)
           done()
         })

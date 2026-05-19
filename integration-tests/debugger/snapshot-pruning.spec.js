@@ -14,7 +14,7 @@ describe('Dynamic Instrumentation', function () {
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload: [payload] }) => {
           const payloadSize = Buffer.byteLength(JSON.stringify(payload))
-          assert.ok(payloadSize < 1024 * 1024) // 1MB
+          assert.ok(payloadSize < 1024 * 1024, `Expected ${payloadSize} < ${1024 * 1024}`) // 1MB
 
           const capturesJson = JSON.stringify(payload.debugger.snapshot.captures)
           assert.match(capturesJson, /"pruned":true/)

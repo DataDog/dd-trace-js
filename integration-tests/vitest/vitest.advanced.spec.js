@@ -79,7 +79,7 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-            assert.ok(metadataDicts.length > 0)
+            assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
               assert.ok(!Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS))
 

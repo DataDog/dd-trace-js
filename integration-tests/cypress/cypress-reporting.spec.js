@@ -1111,7 +1111,7 @@ moduleTypes.forEach(({
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
             assert.ok(testSessionEvent)
             const testEvents = events.filter(event => event.type === 'test')
-            assert.ok(testEvents.length > 0)
+            assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
           }, { hardTimeout: 30000 })
 
       await Promise.all([

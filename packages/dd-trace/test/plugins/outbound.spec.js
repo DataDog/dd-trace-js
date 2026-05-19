@@ -210,7 +210,7 @@ describe('OuboundPlugin', () => {
 
         assertObjectContains(tags, { _dd: { code_origin: { type: 'exit' } } })
         assert.ok(Array.isArray(tags._dd.code_origin.frames))
-        assert.ok(tags._dd.code_origin.frames.length > 0)
+        assert.ok(tags._dd.code_origin.frames.length > 0, `Expected ${tags._dd.code_origin.frames.length} > 0`)
 
         for (const frame of tags._dd.code_origin.frames) {
           assert.strictEqual(frame.file, __filename)

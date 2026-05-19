@@ -20,8 +20,11 @@ function checkRaspExecutedAndHasThreat (agent, ruleId, ruleEvalCount = 1) {
     assert.ok(Object.hasOwn(span.meta, '_dd.appsec.json'))
     assert(span.meta['_dd.appsec.json'].includes(ruleId))
     assert.strictEqual(span.metrics['_dd.appsec.rasp.rule.eval'], ruleEvalCount)
-    assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-    assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+    assert(span.metrics['_dd.appsec.rasp.duration'] > 0, `Expected ${span.metrics['_dd.appsec.rasp.duration']} > 0`)
+    assert(
+      span.metrics['_dd.appsec.rasp.duration_ext'] > 0,
+      `Expected ${span.metrics['_dd.appsec.rasp.duration_ext']} > 0`
+    )
     assert.ok(Object.hasOwn(span.meta_struct, '_dd.stack'))
 
     return span

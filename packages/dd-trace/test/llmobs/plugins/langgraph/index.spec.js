@@ -56,7 +56,7 @@ describe('integrations', () => {
             chunks.push(chunk)
           }
 
-          assert.ok(chunks.length > 0)
+          assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -100,7 +100,7 @@ describe('integrations', () => {
             chunks.push(chunk)
           }
 
-          assert.ok(chunks.length > 0)
+          assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -141,7 +141,7 @@ describe('integrations', () => {
             if (chunk.add2?.text) finalOutput += chunk.add2.text
           }
 
-          assert.ok(finalOutput.length > 0)
+          assert.ok(finalOutput.length > 0, `Expected ${finalOutput.length} > 0`)
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -185,7 +185,7 @@ describe('integrations', () => {
             chunks.push(chunk)
           }
 
-          assert.ok(chunks.length > 0)
+          assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
           const { llmobsSpans } = await getEvents()
 

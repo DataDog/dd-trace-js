@@ -213,7 +213,7 @@ describe('Multi-Tenant Routing', () => {
       const spanAIndex = callNames.indexOf('span-a')
       assert.notStrictEqual(spanBIndex, -1)
       assert.notStrictEqual(spanAIndex, -1)
-      assert.ok(spanBIndex < spanAIndex)
+      assert.ok(spanBIndex < spanAIndex, `Expected ${spanBIndex} < ${spanAIndex}`)
 
       const routingFor = (name) => calls.find(c => c.args[0].name === name).args[1]
 

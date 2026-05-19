@@ -1229,7 +1229,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
               // Only tests from the non-skipped suite ran
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.ok(tests.length > 0)
+              assert.ok(tests.length > 0, `Expected ${tests.length} > 0`)
               tests.forEach(test => {
                 assert.ok(!test.meta[TEST_SUITE].includes('farewell'))
               })
@@ -2563,7 +2563,10 @@ describe(`cucumber@${version} commonJS`, () => {
           'nyc output does not match the reported coverage (no --all flag)')
 
         eventsPromise.then(() => {
-          assert.ok(codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles)
+          assert.ok(
+            codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles,
+            `Expected ${codeCoverageWithoutUntestedFiles} > ${codeCoverageWithUntestedFiles}`
+          )
           done()
         }).catch(done)
       })
@@ -2904,7 +2907,7 @@ describe(`cucumber@${version} commonJS`, () => {
             const atfTests = tests.filter(
               t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
             )
-            assert.ok(atfTests.length > 0)
+            assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
             for (const test of atfTests) {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
@@ -3434,7 +3437,7 @@ describe(`cucumber@${version} commonJS`, () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-            assert.ok(metadataDicts.length > 0)
+            assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
               assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')

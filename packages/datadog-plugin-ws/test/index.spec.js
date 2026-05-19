@@ -325,7 +325,7 @@ describe('Plugin', () => {
                   }
                 }
               }
-              assert.ok(sendCount > 0)
+              assert.ok(sendCount > 0, `Expected ${sendCount} > 0`)
             })
           })
         })
@@ -451,7 +451,7 @@ describe('Plugin', () => {
             }
 
             assert.strictEqual(receiveCount, 0)
-            assert.ok(sendCount > 0)
+            assert.ok(sendCount > 0, `Expected ${sendCount} > 0`)
           }))
         })
 

@@ -103,7 +103,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.append(exposureEvent)
 
-      assert.ok(writer._bufferSize > initialSize)
+      assert.ok(writer._bufferSize > initialSize, `Expected ${writer._bufferSize} > ${initialSize}`)
     })
 
     it('should drop events when buffer is full', () => {

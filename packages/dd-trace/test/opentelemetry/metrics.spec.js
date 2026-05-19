@@ -236,7 +236,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(gauge.name, 'memory')
         const dp = gauge.gauge.dataPoints[0]
         const value = dp.asDouble !== undefined ? dp.asDouble : dp.asInt
-        assert(value > 0)
+        assert(value > 0, `Expected ${value} > 0`)
         assert.strictEqual(dp.attributes.find(a => a.key === 'type').value.stringValue, 'heap')
       })
 
@@ -287,7 +287,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
         const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
         assert.strictEqual(dataPoint.asInt, 5)
-        assert(dataPoint.timeUnixNano > 0)
+        assert(dataPoint.timeUnixNano > 0, `Expected ${dataPoint.timeUnixNano} > 0`)
       })
 
       setupMetrics()
@@ -1044,7 +1044,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
       httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
         requestCount++
-        assert(options.headers['Content-Length'] > 0)
+        assert(options.headers['Content-Length'] > 0, `Expected ${options.headers['Content-Length']} > 0`)
 
         const handler = (event, handler) => {
           handlers[event] = handler

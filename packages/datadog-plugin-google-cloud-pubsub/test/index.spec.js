@@ -480,7 +480,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(statsPointsReceived >= 1)
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
           })
@@ -497,7 +497,7 @@ describe('Plugin', () => {
                     })
                   }
                 })
-                assert.ok(statsPointsReceived >= 2)
+                assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
                 assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
               }, { timeoutMs: TIMEOUT })
             })

@@ -102,7 +102,10 @@ describe('Push Subscription Plugin', () => {
             // Verify delivery_duration_ms
             assert.notStrictEqual(pubsubSpan.metrics['pubsub.delivery_duration_ms'], undefined)
             assert.strictEqual(typeof pubsubSpan.metrics['pubsub.delivery_duration_ms'], 'number')
-            assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] >= 0)
+            assert.ok(
+              pubsubSpan.metrics['pubsub.delivery_duration_ms'] >= 0,
+              `Expected ${pubsubSpan.metrics['pubsub.delivery_duration_ms']} >= 0`
+            )
           })
           .then(done)
           .catch(done)

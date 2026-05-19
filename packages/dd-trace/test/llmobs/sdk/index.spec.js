@@ -604,7 +604,7 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            assert.ok(err == null)
+            assert.ok(err == null, `Expected ${err} == null`)
             assert.strictEqual(res, 'output')
           })
 
@@ -686,7 +686,7 @@ describe('sdk', () => {
             workflowSpan = _workflow
             tracer.trace('apmOperation', () => {
               myWrappedLlm('input', (err, res) => {
-                assert.ok(err == null)
+                assert.ok(err == null, `Expected ${err} == null`)
                 assert.strictEqual(res, 'output')
                 llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
                   taskSpan = _task

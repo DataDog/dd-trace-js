@@ -497,7 +497,7 @@ versions.forEach((version) => {
               const atfTests = tests.filter(
                 t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
               )
-              assert.ok(atfTests.length > 0)
+              assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
               for (const test of atfTests) {
                 assert.ok(
                   !(TEST_IS_NEW in test.meta),

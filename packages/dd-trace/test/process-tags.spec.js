@@ -121,7 +121,7 @@ describe('process-tags', () => {
       // serialized should be comma-separated and not include undefined values
       if (processTags.serialized) {
         const parts = processTags.serialized.split(',')
-        assert.ok(parts.length > 0)
+        assert.ok(parts.length > 0, `Expected ${parts.length} > 0`)
         parts.forEach(part => {
           assert.match(part, /:/)
           assert.doesNotMatch(part, /undefined/)

@@ -797,8 +797,8 @@ describe('profiler', () => {
           // There's a race between the periodic uploader and the on-shutdown
           // upload, so the count can include up to one extra request.
           requestCount = requests.points[0][1]
-          assert.ok(requestCount >= 1)
-          assert.ok(requestCount <= 4)
+          assert.ok(requestCount >= 1, `Expected ${requestCount} >= 1`)
+          assert.ok(requestCount <= 4, `Expected ${requestCount} <= 4`)
 
           const responses = series.find(s => s.metric === 'profile_api.responses')
           assert.strictEqual(responses.type, 'count')
@@ -862,7 +862,7 @@ describe('profiler', () => {
             const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
             assert.notStrictEqual(sampleContexts, undefined)
             assert.strictEqual(sampleContexts.type, 'gauge')
-            assert.ok(sampleContexts.points[0][1] >= 1)
+            assert.ok(sampleContexts.points[0][1] >= 1, `Expected ${sampleContexts.points[0][1]} >= 1`)
           })
         },
         requestType: 'generate-metrics',

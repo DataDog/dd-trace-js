@@ -153,7 +153,7 @@ describe('NoopFlaggingProvider', () => {
       ])
 
       const duration = Date.now() - start
-      assert.ok(duration < 10)
+      assert.ok(duration < 10, `Expected ${duration} < 10`)
     })
   })
 })

@@ -555,15 +555,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testSessionEvent[TEST_SESSION_ID])
             assert.ok(testSessionEvent.meta[TEST_COMMAND])
-            assert.ok(testSessionEvent[TEST_SUITE_ID] == null)
-            assert.ok(testSessionEvent[TEST_MODULE_ID] == null)
+            assert.ok(testSessionEvent[TEST_SUITE_ID] == null, `Expected ${testSessionEvent[TEST_SUITE_ID]} == null`)
+            assert.ok(testSessionEvent[TEST_MODULE_ID] == null, `Expected ${testSessionEvent[TEST_MODULE_ID]} == null`)
 
             assert.ok(testModuleEvent)
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testModuleEvent[TEST_SESSION_ID])
             assert.ok(testModuleEvent[TEST_MODULE_ID])
             assert.ok(testModuleEvent.meta[TEST_COMMAND])
-            assert.ok(testModuleEvent[TEST_SUITE_ID] == null)
+            assert.ok(testModuleEvent[TEST_SUITE_ID] == null, `Expected ${testModuleEvent[TEST_SUITE_ID]} == null`)
 
             assert.ok(testSuiteEvent)
             assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
@@ -1052,7 +1052,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        assert.ok(tests.length >= 2)
+        assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
         tests.forEach(testEvent => {
           assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
         })
@@ -1515,7 +1515,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
 
-        assert.ok(testEvents.length > 0)
+        assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
       })
 
     childProcess = exec(

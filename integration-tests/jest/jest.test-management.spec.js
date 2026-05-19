@@ -670,7 +670,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const atfTests = tests.filter(
               t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
             )
-            assert.ok(atfTests.length > 0)
+            assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
             for (const test of atfTests) {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
@@ -1707,7 +1707,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const quarantinedTests = tests.filter(
               test => test.meta[TEST_NAME] === 'efd and quarantine is a quarantined failing test'
             )
-            assert.ok(quarantinedTests.length >= 1)
+            assert.ok(quarantinedTests.length >= 1, `Expected ${quarantinedTests.length} >= 1`)
             for (const test of quarantinedTests) {
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             }
@@ -2001,7 +2001,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-          assert.ok(metadataDicts.length > 0)
+          assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
           metadataDicts.forEach(metadata => {
             assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
             assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')

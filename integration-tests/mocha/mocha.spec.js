@@ -4085,7 +4085,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           'nyc output does not match the reported coverage (no --all flag)')
 
         eventsPromise.then(() => {
-          assert.ok(codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles)
+          assert.ok(
+            codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles,
+            `Expected ${codeCoverageWithoutUntestedFiles} > ${codeCoverageWithUntestedFiles}`
+          )
           done()
         }).catch(done)
       })
@@ -4829,7 +4832,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const atfTests = tests.filter(
               t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
             )
-            assert.ok(atfTests.length > 0)
+            assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
             for (const test of atfTests) {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
@@ -5491,7 +5494,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.ok(tests.length > 0)
+            assert.ok(tests.length > 0, `Expected ${tests.length} > 0`)
             const suiteEvents = events.filter(event => event.type === 'test_suite_end')
             assert.strictEqual(suiteEvents.length, 2, 'Expected exactly 2 suites to be reported')
             // Verify that tests have different runtime IDs, confirming parallel execution in different processes
@@ -5548,7 +5551,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-        assert.ok(metadataDicts.length > 0)
+        assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
         metadataDicts.forEach(metadata => {
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')

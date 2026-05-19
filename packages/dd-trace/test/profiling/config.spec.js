@@ -74,7 +74,7 @@ describe('config', () => {
       },
     })
     assert.strictEqual(typeof config.service, 'string')
-    assert.ok(config.service.length > 0)
+    assert.ok(config.service.length > 0, `Expected ${config.service.length} > 0`)
     assert.strictEqual(typeof config.version, 'string')
     assertObjectContains(config.tags, {
       service: config.service,
@@ -152,7 +152,7 @@ describe('config', () => {
     const { config } = getProfilerConfig({ reportHostname: true })
 
     assert.strictEqual(typeof config.tags.host, 'string')
-    assert.ok(config.tags.host.length > 0)
+    assert.ok(config.tags.host.length > 0, `Expected ${config.tags.host.length} > 0`)
     assert.strictEqual(config.tags.host, os.hostname())
   })
 

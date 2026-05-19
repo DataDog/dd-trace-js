@@ -279,13 +279,13 @@ describe('exporters/agent', function () {
         failed = true
       }
       assert.strictEqual(failed, true)
-      assert.ok(attempt > 0)
+      assert.ok(attempt > 0, `Expected ${attempt} > 0`)
 
       // Verify computeRetries produces correct starting values
       for (let i = 1; i <= 100; i++) {
         const [retries, timeout] = computeRetries(i * 1000)
-        assert.ok(retries >= 2)
-        assert.ok(timeout <= 1000)
+        assert.ok(retries >= 2, `Expected ${retries} >= 2`)
+        assert.ok(timeout <= 1000, `Expected ${timeout} <= 1000`)
         assert.strictEqual(Number.isInteger(timeout), true)
       }
 

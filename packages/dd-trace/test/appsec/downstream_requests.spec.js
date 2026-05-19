@@ -452,8 +452,8 @@ describe('appsec downstream_requests', () => {
       const trueCount = results.filter(r => r).length
       const falseCount = results.filter(r => !r).length
 
-      assert.ok(trueCount > 0)
-      assert.ok(falseCount > 0)
+      assert.ok(trueCount > 0, `Expected ${trueCount} > 0`)
+      assert.ok(falseCount > 0, `Expected ${falseCount} > 0`)
     })
 
     it('tracks per-request body analysis count independently', () => {
