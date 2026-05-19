@@ -229,6 +229,85 @@ describe('fastify instrumentation (unit)', () => {
       sinon.assert.calledOnce(originalDone)
     })
 
+    it('skips the cookie publish when the request has no cookies', () => {
+      const cookieListener = sinon.stub()
+      subscribe(cookieParserReadCh, cookieListener)
+
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, done) => done())
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      // No `cookies` on the request - pins the `hasCookies` false short-circuit
+      // in wrapHookDone so the cookie publish is skipped without touching the
+      // abortController / cookiesPublished side-tables.
+      const originalDone = sinon.stub()
+      wrapper({}, {}, originalDone)
+
+      sinon.assert.notCalled(cookieListener)
+      sinon.assert.calledOnce(originalDone)
+    })
+
+    it('does not republish cookies for a second invocation against the same request', () => {
+      const cookieListener = sinon.stub()
+      subscribe(cookieParserReadCh, cookieListener)
+
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, done) => done())
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      // `cookiesPublished` is keyed on the underlying `req`; passing the same
+      // request object twice keys both invocations to the same entry, so the
+      // second pass takes the `cookiesPublished.has(req)` short-circuit.
+      const request = { cookies: { token: 'abc' } }
+      const reply = { raw: { headers: {} } }
+      wrapper(request, reply, sinon.stub())
+      wrapper(request, reply, sinon.stub())
+
+      sinon.assert.calledOnce(cookieListener)
+    })
+
+    it('aborts the done chain when the cookie subscriber aborts', () => {
+      const cookieListener = sinon.stub().callsFake(ctx => {
+        ctx.abortController.abort()
+      })
+      subscribe(cookieParserReadCh, cookieListener)
+
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, done) => done())
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      const request = { cookies: { token: 'abc' } }
+      const reply = { raw: { headers: {} } }
+      const originalDone = sinon.stub()
+      wrapper(request, reply, originalDone)
+
+      sinon.assert.calledOnce(cookieListener)
+      // The cookie subscriber aborted before the dispatcher's `done` ran; the
+      // user hook still ran (fastify dispatches it), but the trailing
+      // doneCallback must not be invoked.
+      sinon.assert.notCalled(originalDone)
+    })
+
+    it('falls through to the bare doneCallback for onRequest when callbackFinishCh has no subscribers', () => {
+      // Enter the slow path through errorChannel so callbackFinishCh stays
+      // subscriber-less; this exercises the `if (callbackFinishCh.hasSubscribers)`
+      // false branch inside wrapHookDone for the onRequest / preParsing names.
+      subscribe(errorChannel, sinon.stub())
+
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, done) => done())
+      app.addHook('onRequest', userHook)
+      const wrapper = registered[0].fn
+
+      const originalDone = sinon.stub()
+      wrapper({}, {}, originalDone)
+
+      sinon.assert.calledOnce(originalDone)
+    })
+
     it('runs the original done inside callbackFinishCh.runStores for onRequest hooks', () => {
       const callbackListener = sinon.stub()
       subscribe(callbackFinishCh, callbackListener)
@@ -334,6 +413,59 @@ describe('fastify instrumentation (unit)', () => {
 
       sinon.assert.calledOnce(queryListener)
       sinon.assert.notCalled(preValidationDone)
+    })
+
+    it('aborts the chain when the body parser subscriber aborts', () => {
+      // No query subscriber, so processInContext falls into the body branch
+      // first; aborting from there pins the body-side `signal.aborted` exit.
+      const bodyListener = sinon.stub().callsFake(ctx => {
+        ctx.abortController.abort()
+      })
+      const pathListener = sinon.stub()
+      subscribe(bodyParserReadCh, bodyListener)
+      subscribe(pathParamsReadCh, pathListener)
+
+      const request = { body: { b: '2' }, params: { p: '3' } }
+      const reply = {}
+      const { preValidationDone } = runPhases({ request, reply })
+
+      sinon.assert.calledOnce(bodyListener)
+      sinon.assert.notCalled(pathListener)
+      sinon.assert.notCalled(preValidationDone)
+    })
+
+    it('aborts the chain when the path params subscriber aborts', () => {
+      const pathListener = sinon.stub().callsFake(ctx => {
+        ctx.abortController.abort()
+      })
+      subscribe(pathParamsReadCh, pathListener)
+
+      const request = { params: { p: '3' } }
+      const reply = {}
+      const { preValidationDone } = runPhases({ request, reply })
+
+      sinon.assert.calledOnce(pathListener)
+      sinon.assert.notCalled(preValidationDone)
+    })
+
+    it('publishes the body once per request even when the channel is reentered', () => {
+      const bodyListener = sinon.stub()
+      subscribe(bodyParserReadCh, bodyListener)
+
+      // `bodyPublished` is a WeakSet keyed on the underlying `req`; running the
+      // preValidation phase twice against the same request must not republish.
+      const { internalByName } = buildWrappedAddHook()
+      const [preParsingFn] = internalByName('preParsing')
+      const [preValidationFn] = internalByName('preValidation')
+
+      const request = { body: { b: '2' } }
+      const reply = {}
+      preParsingFn(request, reply, undefined, sinon.stub())
+
+      preValidationFn(request, reply, sinon.stub())
+      preValidationFn(request, reply, sinon.stub())
+
+      sinon.assert.calledOnce(bodyListener)
     })
   })
 })
