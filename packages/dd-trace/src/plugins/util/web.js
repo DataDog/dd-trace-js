@@ -19,7 +19,6 @@ let extractIp
 const WEB = types.WEB
 const SERVER = kinds.SERVER
 const RESOURCE_NAME = tags.RESOURCE_NAME
-const SERVICE_NAME = tags.SERVICE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
 const SPAN_KIND = tags.SPAN_KIND
 const ERROR = tags.ERROR
@@ -105,7 +104,7 @@ const web = {
     }
 
     if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
+      web.plugin.setServiceName(span, config.service)
     }
 
     analyticsSampler.sample(span, config.measured, true)

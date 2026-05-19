@@ -20,6 +20,7 @@ import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
+import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
@@ -383,6 +384,7 @@ export default [
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
+          'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-require-export-exists': eslintRequireExportExists,
@@ -506,6 +508,7 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {

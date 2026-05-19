@@ -18,7 +18,7 @@ describe('TracingPlugin', () => {
     let plugin
 
     beforeEach(() => {
-      startSpanSpy = sinon.spy()
+      startSpanSpy = sinon.stub().returns({})
       plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
