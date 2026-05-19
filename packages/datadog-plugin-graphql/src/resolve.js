@@ -11,7 +11,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
    * @param {{
    *   rootCtx: { source?: string },
    *   args: Record<string, unknown>,
-   *   path: object,
+   *   path: { prev: object | undefined, key: string | number },
    *   pathString: string,
    *   fieldName: string,
    *   returnType: { name: string },
@@ -20,6 +20,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
    * }} fieldCtx
    */
   start (fieldCtx) {
+    if (!shouldInstrument(this.config, fieldCtx.path)) return
+
     const { rootCtx, args, path, pathString, fieldName, returnType, fieldNode, variableValues } = fieldCtx
 
     const parentField = getParentField(rootCtx, path)
@@ -67,8 +69,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.addTraceSub('updateField', (ctx) => {
+      // start short-circuited on the depth gate, so there is no span to advance.
+      if (ctx.currentStore === undefined) return
+
       const { field, error } = ctx
-      const span = ctx?.currentStore?.span || this.activeSpan
+      const span = ctx.currentStore.span
       field.finishTime = span._getTime ? span._getTime() : 0
       field.error = field.error || error
     })
@@ -92,6 +97,25 @@ class GraphQLResolvePlugin extends TracingPlugin {
 }
 
 // helpers
+
+/**
+ * @param {{ depth: number, collapse: boolean }} config
+ * @param {{ prev: object | undefined, key: string | number }} path
+ */
+function shouldInstrument (config, path) {
+  const depth = config.depth
+  if (depth < 0) return true
+
+  let count = 0
+  if (config.collapse) {
+    for (let curr = path; curr; curr = curr.prev) count += 1
+  } else {
+    for (let curr = path; curr; curr = curr.prev) {
+      if (typeof curr.key === 'string') count += 1
+    }
+  }
+  return depth >= count
+}
 
 /**
  * @param {object | undefined} fieldNode

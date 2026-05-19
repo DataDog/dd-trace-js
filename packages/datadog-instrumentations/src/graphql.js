@@ -252,7 +252,7 @@ function wrapResolve (resolve) {
     const field = assertField(ctx, info, args)
 
     if (ctx.abortController.signal.aborted) {
-      if (field !== undefined) publishResolverFinish(field, null)
+      publishResolverFinish(field, null)
       throw new AbortError('Aborted')
     }
 
@@ -261,19 +261,19 @@ function wrapResolve (resolve) {
       if (result !== null && typeof result?.then === 'function') {
         return result.then(
           res => {
-            if (field !== undefined) publishResolverFinish(field, null)
+            publishResolverFinish(field, null)
             return res
           },
           error => {
-            if (field !== undefined) publishResolverFinish(field, error)
+            publishResolverFinish(field, error)
             throw error
           }
         )
       }
-      if (field !== undefined) publishResolverFinish(field, null)
+      publishResolverFinish(field, null)
       return result
     } catch (error) {
-      if (field !== undefined) publishResolverFinish(field, error)
+      publishResolverFinish(field, error)
       throw error
     }
   }
@@ -332,7 +332,6 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
  * @param {{
  *   fields: Map<object, TrackedField>,
  *   collapse: boolean,
- *   depth: number,
  *   collapsedFields?: Map<string, TrackedField>,
  *   pathCache?: Map<PathNode, string>,
  * }} rootCtx
@@ -342,19 +341,6 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
 function assertField (rootCtx, info, args) {
   const path = info.path
   const collapse = rootCtx.collapse
-  const depth = rootCtx.depth
-
-  if (depth >= 0) {
-    let count = 0
-    if (collapse) {
-      for (let curr = path; curr; curr = curr.prev) count += 1
-    } else {
-      for (let curr = path; curr; curr = curr.prev) {
-        if (typeof curr.key === 'string') count += 1
-      }
-    }
-    if (depth < count) return
-  }
 
   const cache = rootCtx.pathCache ??= new Map()
   const prev = path.prev
@@ -386,6 +372,8 @@ function assertField (rootCtx, info, args) {
     fieldNode: info.fieldNodes[0],
     variableValues: info.variableValues,
   }
+  // Depth gating happens in the resolve plugin's start handler, after this
+  // publish, so IAST and AppSec subscribers see every resolver call.
   startResolveCh.publish(fieldCtx)
   const field = { error: null, ctx: fieldCtx }
   rootCtx.fields.set(path, field)
@@ -449,6 +437,10 @@ function wrapFieldType (field) {
 function finishResolvers ({ fields }) {
   for (const field of fields.values()) {
     const fieldCtx = field.ctx
+    // A depth-gated field publishes startResolveCh for IAST/AppSec but the
+    // resolve plugin's start short-circuits before creating a span, so there
+    // is no span here to finish.
+    if (fieldCtx.currentStore === undefined) continue
     fieldCtx.finishTime = field.finishTime
     fieldCtx.field = field
     if (field.error) {

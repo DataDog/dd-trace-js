@@ -1830,6 +1830,51 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source }).catch(done)
         })
+
+        it('publishes apm:graphql:resolve:start for every resolver, including depth-gated ones', async () => {
+          // The depth knob caps span creation, not channel publishes.
+          // IAST taint-tracking and AppSec WAF subscribers run on every resolver
+          // call so user-controlled args at any depth still flow through.
+          const startCh = dc.channel('apm:graphql:resolve:start')
+          const paths = []
+          const handler = (ctx) => {
+            paths.push(ctx.pathString)
+          }
+          startCh.subscribe(handler)
+
+          try {
+            const source = `
+              {
+                human {
+                  name
+                  address {
+                    civicNumber
+                    street
+                  }
+                }
+              }
+            `
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const tracedPaths = spans.map(span => span.meta['graphql.field.path']).sort()
+                assert.deepStrictEqual(tracedPaths, ['human', 'human.address', 'human.name'])
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.deepStrictEqual(paths.sort(), [
+              'human',
+              'human.address',
+              'human.address.civicNumber',
+              'human.address.street',
+              'human.name',
+            ])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
       })
 
       describe('with collapsing disabled', () => {

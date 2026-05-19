@@ -18,7 +18,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const source = this.config.source && document && docSource
 
     ctx.collapse = this.config.collapse
-    ctx.depth = this.config.depth
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
