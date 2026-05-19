@@ -324,6 +324,19 @@ addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
   return smithy
 })
 
+// `@aws-sdk/client-*` >= 3.1046.0 dropped `@smithy/smithy-client` and now
+// extends from `@smithy/core/client` directly. The `Client.send` contract is
+// unchanged, but the host module moved -- patch the new home so the v3 hooks
+// keep firing.
+addHook({
+  name: '@smithy/core',
+  file: 'dist-cjs/submodules/client/index.js',
+  versions: ['>=3.24.0'],
+}, smithyCoreClient => {
+  shimmer.wrap(smithyCoreClient.Client.prototype, 'send', wrapSmithySend)
+  return smithyCoreClient
+})
+
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
   shimmer.wrap(AWS.config, 'setPromisesDependency', setPromisesDependency => {
     return function wrappedSetPromisesDependency (dep) {
