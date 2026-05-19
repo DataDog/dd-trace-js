@@ -281,7 +281,7 @@ describe('process-tags', () => {
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof processor._processTags === 'string')
+      assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
     })
 
@@ -312,7 +312,7 @@ describe('process-tags', () => {
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof processor._processTags === 'string')
+      assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
     })
   })
