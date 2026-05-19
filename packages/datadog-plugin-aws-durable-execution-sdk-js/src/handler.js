@@ -31,7 +31,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:withDurableExecution'
 
-  bindStart(ctx) {
+  bindStart (ctx) {
     const args = ctx.arguments || []
     const event = args[0]
     const durableExecutionMode = args[3]
@@ -103,7 +103,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     terminationManager[kTerminationHookInstalled] = true
   }
 
-  asyncEnd(ctx) {
+  asyncEnd (ctx) {
     const span = ctx?.currentStore?.span
     const status = ctx?.result?.Status
     if (span && typeof status === 'string') {
@@ -117,7 +117,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   }
 }
 
-function finishOpenChildSpans(executeSpan) {
+function finishOpenChildSpans (executeSpan) {
   const trace = executeSpan?._spanContext?._trace
   if (!trace?.started) return
 
