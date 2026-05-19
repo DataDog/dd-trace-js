@@ -224,7 +224,7 @@ class TracingPlugin extends Plugin {
       links: childOf?._links,
     })
 
-    if (serviceSource !== undefined) {
+    if (finalServiceName !== tracer._service) {
       stampIntegrationService(span, finalServiceName)
     }
 
