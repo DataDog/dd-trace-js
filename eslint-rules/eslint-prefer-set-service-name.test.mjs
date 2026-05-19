@@ -16,6 +16,7 @@ ruleTester.run('eslint-prefer-set-service-name', /** @type {import('eslint').Rul
     // Method on something other than setTag/addTags
     "span.set('service.name', 'x')",
     // Template literal containing an expression (can't be statically resolved)
+    // eslint-disable-next-line no-template-curly-in-string
     'span.setTag(`service.${suffix}`, x)',
     // Spread-only object — keys unknown
     'span.addTags({ ...meta })',
