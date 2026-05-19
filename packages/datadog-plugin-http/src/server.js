@@ -31,6 +31,9 @@ class HttpServerPlugin extends ServerPlugin {
   start (ctx) {
     const { req, res } = ctx
     let store = legacyStorage.getStore()
+    if (this.#startConfig === undefined) {
+      this.#refreshStartCache()
+    }
     const span = web.startSpan(
       this.tracer,
       this.#startConfig,
@@ -99,22 +102,23 @@ class HttpServerPlugin extends ServerPlugin {
 
   configure (config) {
     const result = super.configure(web.normalizeConfig(config))
-    // Hoist the per-request service / operation / config lookups out of the
-    // hot path. `serviceName`, `operationName`, and `this.tracer._service`
-    // are stable between `configure` calls, so resolve them once here and
-    // reuse the cached values from `start`.
-    if (this.config?.enabled) {
-      const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
-      const tracerService = this.tracer._service
-      const configService = this.config.service
-      const service = configService || schemaServiceName
-      this.#serviceSource = (configService && service !== tracerService)
-        ? 'opt.plugin'
-        : (service === tracerService ? undefined : schemaServiceSource)
-      this.#operationName = this.operationName()
-      this.#startConfig = { ...this.config, service }
-    }
+    // Invalidate the start-cache; the next `start` refills it. Resolving
+    // service / operation eagerly here would pin nomenclature lookups to
+    // the order plugins and tracer initialise.
+    this.#startConfig = undefined
     return result
+  }
+
+  #refreshStartCache () {
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const tracerService = this.tracer._service
+    const configService = this.config.service
+    const service = configService || schemaServiceName
+    this.#serviceSource = (configService && service !== tracerService)
+      ? 'opt.plugin'
+      : (service === tracerService ? undefined : schemaServiceSource)
+    this.#operationName = this.operationName()
+    this.#startConfig = { ...this.config, service }
   }
 }
 
