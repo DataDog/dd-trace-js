@@ -51,6 +51,7 @@ describe('TextMapPropagator', () => {
   beforeEach(() => {
     log = {
       debug: sinon.spy(),
+      warn: sinon.spy(),
     }
     telemetryMetrics = {
       manager: {
@@ -2110,6 +2111,88 @@ describe('TextMapPropagator', () => {
           'ot-baggage-foo': 'bar',
         }, baggageContext)
         assert.deepStrictEqual(baggageContext._baggageItems, {})
+      })
+    })
+
+    describe('extract dispatch table', () => {
+      it('skips the warn for the silent baggage entry', () => {
+        propagator._config.tracePropagationStyle.extract = ['baggage']
+
+        assert.strictEqual(propagator.extract({}), null)
+        sinon.assert.notCalled(log.warn)
+      })
+
+      it('warns once per unknown style without crashing the extract loop', () => {
+        propagator._config.tracePropagationStyle.extract = ['unknown_style']
+
+        assert.strictEqual(propagator.extract({}), null)
+        sinon.assert.calledOnceWithExactly(log.warn, 'Unknown propagation style:', 'unknown_style')
+      })
+
+      it('continues to the next extractor when one returns undefined', () => {
+        propagator._config.tracePropagationStyle.extract = ['unknown_style', 'datadog']
+
+        const extracted = propagator.extract({
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+        })
+
+        assert.strictEqual(extracted.toTraceId(), '123')
+        assert.strictEqual(extracted.toSpanId(), '456')
+        sinon.assert.calledOnceWithExactly(log.warn, 'Unknown propagation style:', 'unknown_style')
+      })
+    })
+
+    describe('b3-multi empty extraction path', () => {
+      it('returns undefined when an empty b3-sampled value defeats the fast-path guard', () => {
+        const b3 = propagator._extractB3MultipleHeaders({ 'x-b3-sampled': '' })
+
+        assert.strictEqual(b3, undefined)
+      })
+
+      it('returns undefined when invalid trace/span ids pair with a falsy sampled value', () => {
+        const b3 = propagator._extractB3MultipleHeaders({
+          'x-b3-traceid': 'not-hex',
+          'x-b3-spanid': 'not-hex',
+          'x-b3-sampled': '',
+        })
+
+        assert.strictEqual(b3, undefined)
+      })
+
+      it('_extractB3MultiContext returns undefined when the carrier produces no usable b3 fields', () => {
+        const context = propagator._extractB3MultiContext({ 'x-b3-sampled': '' })
+
+        assert.strictEqual(context, undefined)
+      })
+    })
+
+    describe('SQSD carrier with invalid JSON', () => {
+      it('returns undefined from _extractSqsdContext on malformed JSON', () => {
+        const context = propagator._extractSqsdContext({
+          'x-aws-sqsd-attr-_datadog': '{not valid json',
+        })
+
+        assert.strictEqual(context, undefined)
+      })
+
+      it('extract() returns null when the SQSD header carries malformed JSON', () => {
+        const extracted = propagator.extract({
+          'x-aws-sqsd-attr-_datadog': '{not valid json',
+        })
+
+        assert.strictEqual(extracted, null)
+      })
+
+      it('extract() falls back to the live carrier when SQSD JSON is malformed', () => {
+        const extracted = propagator.extract({
+          'x-aws-sqsd-attr-_datadog': '{not valid json',
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+        })
+
+        assert.strictEqual(extracted.toTraceId(), '123')
+        assert.strictEqual(extracted.toSpanId(), '456')
       })
     })
   })

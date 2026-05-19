@@ -90,6 +90,7 @@ class TextMapPropagator {
 
     // v6: `'b3'` is always single-header. v5: `OTEL_PROPAGATORS` callers
     // expect single, legacy `DD_TRACE_PROPAGATION_STYLE` callers expect multi.
+    /* istanbul ignore else: v5 fallback, master ships 6.0.0-pre */
     if (DD_MAJOR >= 6) {
       this.#b3MethodName = '_extractB3SingleContext'
     } else {
