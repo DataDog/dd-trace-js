@@ -106,32 +106,24 @@ class SpanEnrichmentState {
   /**
    * Convert accumulated state to span tags.
    *
-   * @returns {object} Object with ffe_flags_enc, ffe_subjects_enc, and ffe_defaults tags
+   * @returns {object} Object with ffe_flags_enc, ffe_subjects_enc, and ffe_runtime_defaults tags
    */
   toSpanTags () {
     const tags = {}
 
-    // Encode serial IDs
     if (this._serialIds.size > 0) {
       tags.ffe_flags_enc = encodeDeltaVarint([...this._serialIds])
     }
 
-    // Encode subjects (only if there are subjects with doLog=true)
     if (this._subjects.size > 0) {
-      const subjectsObj = {}
-      for (const [hashedKey, serialIds] of this._subjects) {
-        subjectsObj[hashedKey] = encodeDeltaVarint([...serialIds])
-      }
+      const subjectsObj = Object.fromEntries(
+        [...this._subjects].map(([key, ids]) => [key, encodeDeltaVarint([...ids])])
+      )
       tags.ffe_subjects_enc = JSON.stringify(subjectsObj)
     }
 
-    // Encode runtime defaults
     if (this._defaults.size > 0) {
-      const defaultsObj = {}
-      for (const [flagKey, value] of this._defaults) {
-        defaultsObj[flagKey] = value
-      }
-      tags.ffe_runtime_defaults = JSON.stringify(defaultsObj)
+      tags.ffe_runtime_defaults = JSON.stringify(Object.fromEntries(this._defaults))
     }
 
     return tags
