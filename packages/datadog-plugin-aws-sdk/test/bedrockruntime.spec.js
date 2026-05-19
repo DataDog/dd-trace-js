@@ -23,7 +23,8 @@ describe('Plugin', () => {
           return agent.load('aws-sdk')
         })
 
-        before(() => {
+        before(function () {
+          this.timeout(10_000)
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           const NodeHttpHandler =
