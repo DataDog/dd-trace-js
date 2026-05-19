@@ -1,8 +1,9 @@
 'use strict'
 
 const assert = require('node:assert')
-const path = require('path')
-const { spawn } = require('child_process')
+const { spawn } = require('node:child_process')
+const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const { describe, before, after, it } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
@@ -40,6 +41,7 @@ if (NODE_MAJOR >= 22) {
       })
 
       withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '0.2.98', (version) => {
+        let cliPath
         let query
 
         before(async function () {
@@ -50,7 +52,9 @@ if (NODE_MAJOR >= 22) {
               agentlessEnabled: false,
             },
           })
-          query = require('@anthropic-ai/claude-agent-sdk').query
+          const moduleUrl = pathToFileURL(require.resolve('@anthropic-ai/claude-agent-sdk')).href
+          cliPath = path.join(path.dirname(require.resolve('@anthropic-ai/claude-agent-sdk')), 'cli.js')
+          query = (await import(moduleUrl)).query
         })
 
         after(() => agent.close({ ritmReset: false }))
@@ -73,6 +77,7 @@ if (NODE_MAJOR >= 22) {
               options: {
                 maxTurns: 1,
                 abortController,
+                pathToClaudeCodeExecutable: cliPath,
                 spawnClaudeCodeProcess (opts) {
                   const env = {
                     ...opts.env,
