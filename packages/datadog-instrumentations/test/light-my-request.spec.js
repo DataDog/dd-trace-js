@@ -24,7 +24,7 @@ withVersions('light-my-request', 'light-my-request', version => describe('light-
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   beforeEach(() => {

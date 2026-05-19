@@ -6,7 +6,6 @@ const axios = require('axios')
 const { after, before, describe, it } = require('mocha')
 
 const { USER_KEEP } = require('../../../../../ext/priority')
-const tracer = require('../../../../../index')
 const agent = require('../../plugins/agent')
 
 describe('track_event - Integration with the tracer', () => {
@@ -14,6 +13,7 @@ describe('track_event - Integration with the tracer', () => {
   let controller
   let appListener
   let port
+  let tracer
 
   function listener (req, res) {
     if (controller) {
@@ -22,7 +22,7 @@ describe('track_event - Integration with the tracer', () => {
   }
 
   before(async () => {
-    await agent.load('http')
+    tracer = await agent.load('http')
     http = require('http')
   })
 
@@ -37,7 +37,7 @@ describe('track_event - Integration with the tracer', () => {
 
   after(() => {
     appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('trackUserLoginSuccessEvent', () => {

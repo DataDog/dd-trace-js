@@ -176,7 +176,7 @@ function wrapConnection (Connection, version) {
         if (typeof this.onResult === 'function') {
           const onResult = this.onResult
 
-          this.onResult = shimmer.wrapFunction(onResult, onResult => function (error) {
+          this.onResult = shimmer.wrapCallback(onResult, onResult => function (error) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)

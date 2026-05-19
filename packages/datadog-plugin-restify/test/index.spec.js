@@ -36,7 +36,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         before(() => agent.load(['restify', 'find-my-way', 'http'], [{}, {}, { client: false }]))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should do automatic instrumentation', done => {
           const server = restify.createServer()

@@ -400,6 +400,17 @@ function addRequestTags (context, spanType) {
     }
   }
 
+  // Datadog scan/test markers, tagged unconditionally so the API endpoint
+  // reducer can keep scan/test traffic out of the API inventory.
+  const endpointScan = req.headers['x-datadog-endpoint-scan']
+  if (endpointScan !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-endpoint-scan`, endpointScan)
+  }
+  const securityTest = req.headers['x-datadog-security-test']
+  if (securityTest !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-security-test`, securityTest)
+  }
+
   addHeaders(context)
 }
 

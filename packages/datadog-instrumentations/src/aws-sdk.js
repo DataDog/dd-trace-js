@@ -198,7 +198,7 @@ function wrapSmithySend (send) {
       })
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
           handleCompletion(result, ctx, channels)
@@ -270,7 +270,7 @@ function handleCompletion (result, ctx, channels) {
 
 function wrapCb (cb, channels, ctx) {
   // eslint-disable-next-line n/handle-callback-err
-  return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
+  return shimmer.wrapCallback(cb, cb => function wrappedCb (err, response) {
     ctx = { request: ctx.request, response }
     return channels.responseStart.runStores(ctx, () => {
       try {

@@ -125,21 +125,19 @@ addHook({
                     const resolve = args[0]
                     const reject = args[1]
 
-                    args[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve (...args) {
-                      finishCh.publish(ctx)
-
-                      if (resolve) {
+                    if (typeof resolve === 'function') {
+                      args[0] = shimmer.wrapCallback(resolve, resolve => function wrappedResolve (...args) {
+                        finishCh.publish(ctx)
                         return resolve.apply(this, args)
-                      }
-                    })
+                      })
+                    }
 
-                    args[1] = shimmer.wrapFunction(reject, reject => function wrappedReject (...args) {
-                      finishCh.publish(ctx)
-
-                      if (reject) {
+                    if (typeof reject === 'function') {
+                      args[1] = shimmer.wrapCallback(reject, reject => function wrappedReject (...args) {
+                        finishCh.publish(ctx)
                         return reject.apply(this, args)
-                      }
-                    })
+                      })
+                    }
 
                     return originalThen.apply(this, args)
                   }
