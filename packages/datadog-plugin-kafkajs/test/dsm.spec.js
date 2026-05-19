@@ -6,6 +6,8 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { createAndAwaitTopics } = require('./helpers')
+
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -70,14 +72,14 @@ describe('Plugin', () => {
           topicBIn = `topic-b-in-${randomUUID()}`
           topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
-            waitForLeaders: true,
-            topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
+          await createAndAwaitTopics(
+            admin,
+            [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
               topic,
               numPartitions: 1,
               replicationFactor: 1,
-            })),
-          })
+            }))
+          )
           expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
           expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })
