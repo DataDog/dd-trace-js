@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../datadog-instrumentations/src/claude-agent-sdk')
+
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const ClaudeAgentSdkLLMObsPlugins = require('../../dd-trace/src/llmobs/plugins/claude-agent-sdk')
 const ClaudeAgentSdkTracingPlugins = require('./tracing')

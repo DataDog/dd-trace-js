@@ -1,17 +1,61 @@
 'use strict'
 
 const assert = require('node:assert')
-const { spawn } = require('node:child_process')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
+
+const { channel } = require('dc-polyfill')
 const { describe, before, after, it } = require('mocha')
+
 const { withVersions } = require('../../../setup/mocha')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../../../../version')
+const { rewrite } = require('../../../../../datadog-instrumentations/src/helpers/rewriter')
 const agent = require('../../../plugins/agent')
+const { createFakeClaudeCodeProcess } = require('./fake-claude-code-process')
 
-const FETCH_VCR_PROXY = path.join(__dirname, 'fetch-vcr-proxy.js')
-const VCR_URL = 'http://127.0.0.1:9126/vcr/claude-agent-sdk'
+function publishClaudeAgentSdkLoad () {
+  channel('dd-trace:instrumentation:load').publish({ name: '@anthropic-ai/claude-agent-sdk' })
+}
+
+function createSdkImportShim () {
+  const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk')
+  const sdkDir = findSdkPackageDir(sdkEntry)
+  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-claude-agent-sdk-'))
+  const transformedPath = path.join(shimDir, 'sdk.mjs')
+  const transformedSource = rewrite(fs.readFileSync(sdkEntry, 'utf8'), sdkEntry, 'module')
+
+  fs.writeFileSync(transformedPath, transformedSource)
+
+  const shimPath = path.join(shimDir, 'load.mjs')
+  fs.writeFileSync(shimPath, `export { query } from ${JSON.stringify(pathToFileURL(transformedPath).href)}\n`)
+
+  return {
+    cliPath: path.join(sdkDir, 'cli.js'),
+    moduleUrl: pathToFileURL(shimPath).href,
+    shimDir,
+  }
+}
+
+function findSdkPackageDir (entry) {
+  let dir = path.dirname(entry)
+  let parent = path.dirname(dir)
+
+  while (dir !== parent) {
+    const packageJsonPath = path.join(dir, 'package.json')
+    if (fs.existsSync(packageJsonPath)) {
+      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+      if (pkg.name === '@anthropic-ai/claude-agent-sdk') return dir
+    }
+
+    dir = parent
+    parent = path.dirname(dir)
+  }
+
+  throw new Error(`Unable to find @anthropic-ai/claude-agent-sdk package root from ${entry}`)
+}
 
 if (NODE_MAJOR >= 22) {
   describe('Plugin', () => {
@@ -43,6 +87,7 @@ if (NODE_MAJOR >= 22) {
       withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '0.2.98', (version) => {
         let cliPath
         let query
+        let shimDir
 
         before(async function () {
           this.timeout(10000)
@@ -52,12 +97,18 @@ if (NODE_MAJOR >= 22) {
               agentlessEnabled: false,
             },
           })
-          const moduleUrl = pathToFileURL(require.resolve('@anthropic-ai/claude-agent-sdk')).href
-          cliPath = path.join(path.dirname(require.resolve('@anthropic-ai/claude-agent-sdk')), 'cli.js')
+          publishClaudeAgentSdkLoad()
+          const shim = createSdkImportShim()
+          cliPath = shim.cliPath
+          shimDir = shim.shimDir
+          const moduleUrl = shim.moduleUrl
           query = (await import(moduleUrl)).query
         })
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => {
+          if (shimDir) fs.rmSync(shimDir, { recursive: true, force: true })
+          return agent.close({ ritmReset: false })
+        })
 
         it('creates an LLM Obs session span', async function () {
           this.timeout(30000)
@@ -76,33 +127,10 @@ if (NODE_MAJOR >= 22) {
               prompt: 'Say hello',
               options: {
                 maxTurns: 1,
+                model: 'anthropic/claude-3-5-sonnet-20241022',
                 abortController,
                 pathToClaudeCodeExecutable: cliPath,
-                spawnClaudeCodeProcess (opts) {
-                  const env = {
-                    ...opts.env,
-                    NODE_OPTIONS: `--require ${FETCH_VCR_PROXY}`,
-                    _VCR_PROXY_URL: VCR_URL,
-                  }
-                  const proc = spawn(opts.command, opts.args, {
-                    cwd: opts.cwd,
-                    env,
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    signal: opts.signal,
-                    windowsHide: true,
-                  })
-                  proc.stdin.on('error', () => {}) // suppress write-after-end during teardown
-                  return {
-                    stdin: proc.stdin,
-                    stdout: proc.stdout,
-                    get killed () { return proc.killed },
-                    get exitCode () { return proc.exitCode },
-                    kill: proc.kill.bind(proc),
-                    on: proc.on.bind(proc),
-                    once: proc.once.bind(proc),
-                    off: proc.off.bind(proc),
-                  }
-                },
+                spawnClaudeCodeProcess: createFakeClaudeCodeProcess,
               },
             })) {
               if (msg.type === 'result') break
@@ -119,6 +147,9 @@ if (NODE_MAJOR >= 22) {
           const reqs = agent.getLlmObsSpanEventsRequests()
           const spans = reqs.flatMap(r => r).map(r => r.spans[0]).filter(Boolean)
           const turnSpan = spans.find(s => s.name === 'turn')
+          const successfulToolSpan = spans.find(s => s.name === 'Read')
+          const failedToolSpan = spans.find(s => s.name === 'Write')
+          const subagentSpan = spans.find(s => s.name === 'subagent-search')
 
           assert.ok(turnSpan, 'should have an LLM Obs turn span event')
           assert.equal(turnSpan.meta['span.kind'], 'agent', 'should be an agent span')
@@ -131,6 +162,13 @@ if (NODE_MAJOR >= 22) {
             turnSpan.tags.some(t => t.includes('integration:claude-agent-sdk')),
             'should have integration tag'
           )
+
+          assert.ok(successfulToolSpan, 'should have an LLM Obs successful tool span event')
+          assert.equal(successfulToolSpan.meta['span.kind'], 'tool', 'should be a tool span')
+          assert.ok(failedToolSpan, 'should have an LLM Obs failed tool span event')
+          assert.equal(failedToolSpan.meta['span.kind'], 'tool', 'should be a tool span')
+          assert.ok(subagentSpan, 'should have an LLM Obs subagent span event')
+          assert.equal(subagentSpan.meta['span.kind'], 'agent', 'should be an agent span')
         })
       })
     })

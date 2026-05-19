@@ -8,6 +8,8 @@ const turnCh = tracingChannel('apm:claude-agent-sdk:turn')
 const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
 const subagentCh = tracingChannel('apm:claude-agent-sdk:subagent')
 
+let queryChannelSubscribed = false
+
 function mergeHooks (userHooks, tracerHooks) {
   const merged = {}
 
@@ -195,51 +197,56 @@ function finishSession (sessionCtx) {
   sessionCtx.pendingSubagents.clear()
 }
 
+function subscribeQueryChannel () {
+  if (queryChannelSubscribed) return
+
+  queryChannelSubscribed = true
+  queryChannel.subscribe({
+    start (ctx) {
+      const { arguments: args } = ctx
+
+      const queryArg = args[0]
+      if (!queryArg || !turnCh.start.hasSubscribers) return
+
+      const prompt = queryArg.prompt
+      const resolvedOptions = queryArg.options || {}
+
+      const sessionCtx = {
+        prompt: typeof prompt === 'string' ? prompt : '[async iterable]',
+        model: resolvedOptions.model,
+        resume: resolvedOptions.resume,
+        maxTurns: resolvedOptions.maxTurns,
+        permissionMode: resolvedOptions.permissionMode,
+        currentTurn: null,
+        pendingTools: new Map(),
+        pendingSubagents: new Map(),
+      }
+
+      const tracerHooks = buildTracerHooks(sessionCtx)
+
+      args[0] = {
+        ...queryArg,
+        options: {
+          ...resolvedOptions,
+          hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
+        },
+      }
+
+      ctx._sessionCtx = sessionCtx
+    },
+  })
+}
+
 // --- Orchestrion path (primary) ---
 // Subscribe to the orchestrion channel via getHooks/addHook. The rewriter
 // transforms the SDK at compile time, which works on Node 22 for ESM-via-require.
+
+subscribeQueryChannel()
 
 for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
   if (hook.file === 'sdk.mjs') {
     hook.file = null
   }
 
-  addHook(hook, exports => {
-    queryChannel.subscribe({
-      start (ctx) {
-        const { arguments: args } = ctx
-
-        const queryArg = args[0]
-        if (!queryArg || !turnCh.start.hasSubscribers) return
-
-        const prompt = queryArg.prompt
-        const resolvedOptions = queryArg.options || {}
-
-        const sessionCtx = {
-          prompt: typeof prompt === 'string' ? prompt : '[async iterable]',
-          model: resolvedOptions.model,
-          resume: resolvedOptions.resume,
-          maxTurns: resolvedOptions.maxTurns,
-          permissionMode: resolvedOptions.permissionMode,
-          currentTurn: null,
-          pendingTools: new Map(),
-          pendingSubagents: new Map(),
-        }
-
-        const tracerHooks = buildTracerHooks(sessionCtx)
-
-        args[0] = {
-          ...queryArg,
-          options: {
-            ...resolvedOptions,
-            hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
-          },
-        }
-
-        ctx._sessionCtx = sessionCtx
-      },
-    })
-
-    return exports
-  })
+  addHook(hook, exports => exports)
 }

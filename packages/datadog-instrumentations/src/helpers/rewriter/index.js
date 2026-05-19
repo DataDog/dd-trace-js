@@ -52,6 +52,8 @@ function rewrite (content, filename, format) {
   const filePath = moduleParts.slice(splitIndex).join('/')
   const version = getVersion(filename, filePath)
 
+  if (!version) return content
+
   if (disabled.has(moduleName)) return content
 
   const matcher = moduleType === 'esm' ? matcherEsm : matcherCjs

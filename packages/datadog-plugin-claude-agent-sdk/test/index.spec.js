@@ -1,17 +1,81 @@
 'use strict'
 
 const assert = require('node:assert')
-const { spawn } = require('node:child_process')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
+
+const { channel } = require('dc-polyfill')
 const { describe, before, after, it } = require('mocha')
+
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { useEnv } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
 const agent = require('../../dd-trace/test/plugins/agent')
+const {
+  createFakeClaudeCodeProcess,
+} = require('../../dd-trace/test/llmobs/plugins/claude-agent-sdk/fake-claude-code-process')
+const { rewrite } = require('../../datadog-instrumentations/src/helpers/rewriter')
 
-const FETCH_VCR_PROXY = path.join(__dirname, '../../dd-trace/test/llmobs/plugins/claude-agent-sdk/fetch-vcr-proxy.js')
-const VCR_URL = 'http://127.0.0.1:9126/vcr/claude-agent-sdk'
+function publishClaudeAgentSdkLoad () {
+  channel('dd-trace:instrumentation:load').publish({ name: '@anthropic-ai/claude-agent-sdk' })
+}
+
+function assertTraceIncludesSpan (traces, spanName, message) {
+  assert.ok(
+    traces.some(trace => trace.some(span => span.name === spanName)),
+    message
+  )
+}
+
+function createUserHooks () {
+  return {
+    SessionStart: [{
+      hooks: [async () => ({})],
+    }],
+    Notification: [{
+      hooks: [async () => ({})],
+    }],
+  }
+}
+
+function createSdkImportShim () {
+  const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk')
+  const sdkDir = findSdkPackageDir(sdkEntry)
+  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-claude-agent-sdk-'))
+  const transformedPath = path.join(shimDir, 'sdk.mjs')
+  const transformedSource = rewrite(fs.readFileSync(sdkEntry, 'utf8'), sdkEntry, 'module')
+
+  fs.writeFileSync(transformedPath, transformedSource)
+
+  const shimPath = path.join(shimDir, 'load.mjs')
+  fs.writeFileSync(shimPath, `export { query } from ${JSON.stringify(pathToFileURL(transformedPath).href)}\n`)
+
+  return {
+    cliPath: path.join(sdkDir, 'cli.js'),
+    moduleUrl: pathToFileURL(shimPath).href,
+    shimDir,
+  }
+}
+
+function findSdkPackageDir (entry) {
+  let dir = path.dirname(entry)
+  let parent = path.dirname(dir)
+
+  while (dir !== parent) {
+    const packageJsonPath = path.join(dir, 'package.json')
+    if (fs.existsSync(packageJsonPath)) {
+      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+      if (pkg.name === '@anthropic-ai/claude-agent-sdk') return dir
+    }
+
+    dir = parent
+    parent = path.dirname(dir)
+  }
+
+  throw new Error(`Unable to find @anthropic-ai/claude-agent-sdk package root from ${entry}`)
+}
 
 if (NODE_MAJOR >= 22) {
   describe('Plugin', () => {
@@ -39,28 +103,44 @@ if (NODE_MAJOR >= 22) {
         CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
       })
 
-      withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '>=0.2.1', (version) => {
+      withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '0.2.98', (version) => {
         let cliPath
         let query
+        let shimDir
 
         before(async function () {
           this.timeout(10000)
           await agent.load('claude-agent-sdk')
-          const moduleUrl = pathToFileURL(require.resolve('@anthropic-ai/claude-agent-sdk')).href
-          cliPath = path.join(path.dirname(require.resolve('@anthropic-ai/claude-agent-sdk')), 'cli.js')
+          publishClaudeAgentSdkLoad()
+          const shim = createSdkImportShim()
+          cliPath = shim.cliPath
+          shimDir = shim.shimDir
+          const moduleUrl = shim.moduleUrl
           query = (await import(moduleUrl)).query
         })
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => {
+          if (shimDir) fs.rmSync(shimDir, { recursive: true, force: true })
+          return agent.close({ ritmReset: false })
+        })
 
         it('creates a turn span', async function () {
           this.timeout(30000)
 
-          const tracesPromise = agent.assertSomeTraces(traces => {
-            const spans = traces[0]
-            const turnSpan = spans.find(s => s.name === 'turn')
-            assert.ok(turnSpan, 'should have a turn span')
-          })
+          const tracesPromises = [
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'turn', 'should have a turn span')
+            }),
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'Read', 'should have a successful tool span')
+            }),
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'Write', 'should have a failed tool span')
+            }),
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'subagent-search', 'should have a subagent span')
+            }),
+          ]
 
           const abortController = new AbortController()
           const timeout = setTimeout(() => abortController.abort(), 15000)
@@ -70,33 +150,11 @@ if (NODE_MAJOR >= 22) {
               prompt: 'Say hello',
               options: {
                 maxTurns: 1,
+                model: 'anthropic/claude-3-5-sonnet-20241022',
                 abortController,
+                hooks: createUserHooks(),
                 pathToClaudeCodeExecutable: cliPath,
-                spawnClaudeCodeProcess (opts) {
-                  const env = {
-                    ...opts.env,
-                    NODE_OPTIONS: `--require ${FETCH_VCR_PROXY}`,
-                    _VCR_PROXY_URL: VCR_URL,
-                  }
-                  const proc = spawn(opts.command, opts.args, {
-                    cwd: opts.cwd,
-                    env,
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    signal: opts.signal,
-                    windowsHide: true,
-                  })
-                  proc.stdin.on('error', () => {}) // suppress write-after-end during teardown
-                  return {
-                    stdin: proc.stdin,
-                    stdout: proc.stdout,
-                    get killed () { return proc.killed },
-                    get exitCode () { return proc.exitCode },
-                    kill: proc.kill.bind(proc),
-                    on: proc.on.bind(proc),
-                    once: proc.once.bind(proc),
-                    off: proc.off.bind(proc),
-                  }
-                },
+                spawnClaudeCodeProcess: createFakeClaudeCodeProcess,
               },
             })) {
               if (msg.type === 'result') break
@@ -105,7 +163,45 @@ if (NODE_MAJOR >= 22) {
             clearTimeout(timeout)
           }
 
-          await tracesPromise
+          await Promise.all(tracesPromises)
+        })
+
+        it('finishes pending spans when the session ends', async function () {
+          this.timeout(30000)
+
+          const tracesPromises = [
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'turn', 'should have a turn span')
+            }),
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'Read', 'should have a pending tool span')
+            }),
+            agent.assertSomeTraces(traces => {
+              assertTraceIncludesSpan(traces, 'subagent-search', 'should have a pending subagent span')
+            }),
+          ]
+
+          const abortController = new AbortController()
+          const timeout = setTimeout(() => abortController.abort(), 15000)
+
+          try {
+            for await (const msg of query({
+              prompt: 'Leave spans pending',
+              options: {
+                maxTurns: 1,
+                model: 'anthropic/claude-3-5-sonnet-20241022',
+                abortController,
+                pathToClaudeCodeExecutable: cliPath,
+                spawnClaudeCodeProcess: () => createFakeClaudeCodeProcess({ leavePendingSpans: true }),
+              },
+            })) {
+              if (msg.type === 'result') break
+            }
+          } finally {
+            clearTimeout(timeout)
+          }
+
+          await Promise.all(tracesPromises)
         })
       })
     })
