@@ -18,7 +18,7 @@ const configWithStartupLogs = {
   service: 'test',
   hostname: 'example.com',
   port: 4321,
-  debug: true,
+  DD_TRACE_DEBUG: true,
   sampler: {
     sampleRate: 1,
   },

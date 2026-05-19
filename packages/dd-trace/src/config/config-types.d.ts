@@ -8,7 +8,6 @@ export interface ConfigProperties extends GeneratedConfig {
     responsesEnabled: boolean
     rules: PayloadTaggingRules
   }
-  debug: boolean
   instrumentationSource: 'manual' | 'ssi'
   isCiVisibility: boolean
   isServiceNameInferred: boolean
@@ -26,7 +25,6 @@ export interface ConfigProperties extends GeneratedConfig {
   stableConfig: {
     fleetEntries: Record<string, string>
     localEntries: Record<string, string>
-    warnings: string[] | undefined
   }
   tracePropagationStyle: GeneratedConfig['tracePropagationStyle']
 }
