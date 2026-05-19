@@ -247,6 +247,7 @@ function wrapResolve (resolve) {
     // executes that ran with a primitive `contextValue`.
     const ctx = contexts.get(contextValue) ?? executeCtx.getStore()
 
+    /* istanbul ignore if: resolver invoked outside execute(), so no per-execute ctx was registered */
     if (!ctx) return resolve.apply(this, arguments)
 
     const field = assertField(ctx, info, args)
@@ -308,6 +309,7 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
           cb(null, res)
           return res
         },
+        /* istanbul ignore next: graphql.execute() rejects only via custom executors (graphql-yoga / graphql-tools) */
         error => {
           cb(error)
           throw error
