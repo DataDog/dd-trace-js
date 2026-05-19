@@ -186,15 +186,22 @@ module.exports = class CiPlugin extends Plugin {
       if (!this.tracer._exporter?.getSkippableSuites) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
-        if (err) {
-          log.error('Skippable suites could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
-        } else {
-          this.itrCorrelationId = itrCorrelationId
+      this.tracer._exporter.getSkippableSuites(
+        {
+          ...this.testConfiguration,
+          isCodeCoverageEnabled: this.libraryConfig?.isCodeCoverageEnabled,
+        },
+        (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
+          if (err) {
+            log.error('Skippable suites could not be fetched. %s', err.message)
+            this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
+          } else {
+            this.itrCorrelationId = itrCorrelationId
+            this.skippableSuitesCoverage = skippableSuitesCoverage
+          }
+          onDone({ err, skippableSuites, itrCorrelationId, skippableSuitesCoverage })
         }
-        onDone({ err, skippableSuites, itrCorrelationId })
-      })
+      )
     })
 
     this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir }) => {
