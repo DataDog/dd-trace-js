@@ -63,6 +63,13 @@ const BOOLEAN_PREDICATE_METHODS = new Set([
   'equals',
 ])
 
+// Comparison operators we can safely auto-fix by appending a message that interpolates the
+// operand values. `===` and `!==` aren't here on purpose: `eslint-config.mjs` already nudges
+// users toward `assert.strictEqual` / `assert.notStrictEqual` for those, which is the better
+// migration. We keep loose `==` / `!=` because they're typically deliberate `x == null` checks
+// and have no clean built-in replacement under `node:assert/strict`.
+const AUTOFIXABLE_COMPARISON_OPERATORS = new Set(['<', '<=', '>', '>=', '==', '!='])
+
 export default {
   meta: {
     type: 'problem',
@@ -73,6 +80,7 @@ export default {
       recommended: true,
     },
     schema: [],
+    fixable: 'code',
     messages: {
       missingMessage:
         '`{{name}}(...)` with a non-trivial first argument should pass a descriptive message as the ' +
@@ -98,10 +106,33 @@ export default {
 
         if (isTrivialExpression(firstArg)) return
 
+        const sourceCode = context.getSourceCode()
+        const fixMessage = buildAutofixMessage(firstArg, sourceCode)
+
         context.report({
           node,
           messageId: 'missingMessage',
           data: { name: calleeName },
+          ...(fixMessage && {
+            fix (fixer) {
+              // `firstArg.range` excludes any surrounding parens (`assert.ok((x >= 1))`). Walk
+              // forward past balanced `)` tokens before inserting so the message ends up as a
+              // sibling argument, not a comma-sequence operand inside the parens.
+              const tokenAfterFirstArg = sourceCode.getTokenAfter(firstArg)
+              let insertAfterToken = firstArg
+              let token = tokenAfterFirstArg
+              while (token && token.type === 'Punctuator' && token.value === ')') {
+                const tokenBeforeOpen = sourceCode.getTokenBefore(insertAfterToken)
+                if (!tokenBeforeOpen || tokenBeforeOpen.value !== '(') break
+                // Only treat this `)` as wrapping `firstArg` if it sits inside the assert call's
+                // own argument list — stop at the call's closing `)`.
+                if (token.range[1] > node.range[1] - 1) break
+                insertAfterToken = token
+                token = sourceCode.getTokenAfter(token)
+              }
+              return fixer.insertTextAfter(insertAfterToken, `, ${fixMessage}`)
+            },
+          }),
         })
       },
     }
@@ -202,4 +233,88 @@ function isBooleanPredicateCall (callee) {
     target.property.type === 'Identifier' &&
     BOOLEAN_PREDICATE_METHODS.has(target.property.name)
   )
+}
+
+/**
+ * Builds a value-interpolating template-literal message we can safely append as a second argument
+ * to `assert(...)` / `assert.ok(...)`. We only do this for plain comparison binary expressions
+ * whose operands are side-effect-free — interpolating values that came from a function call would
+ * evaluate the call twice. Returns null when an autofix isn't safe.
+ *
+ * @param {Node} firstArg
+ * @param {import('eslint').SourceCode} sourceCode
+ * @returns {string | null}
+ */
+function buildAutofixMessage (firstArg, sourceCode) {
+  if (firstArg.type !== 'BinaryExpression') return null
+  if (!AUTOFIXABLE_COMPARISON_OPERATORS.has(firstArg.operator)) return null
+  if (!isSideEffectFreeForInterpolation(firstArg.left)) return null
+  if (!isSideEffectFreeForInterpolation(firstArg.right)) return null
+
+  const lhsText = sourceCode.getText(firstArg.left)
+  const rhsText = sourceCode.getText(firstArg.right)
+
+  // A backtick anywhere in an operand would break the template literal we're synthesising — bail
+  // rather than try to escape it. The same goes for backslashes that could fall just before a
+  // `${` boundary.
+  if (lhsText.includes('`') || rhsText.includes('`')) return null
+
+  const lhsPart = firstArg.left.type === 'Literal' ? lhsText : '${' + lhsText + '}'
+  const rhsPart = firstArg.right.type === 'Literal' ? rhsText : '${' + rhsText + '}'
+
+  return '`Expected ' + lhsPart + ' ' + firstArg.operator + ' ' + rhsPart + '`'
+}
+
+/**
+ * Conservatively decides whether an expression can be evaluated a second time (inside our message
+ * template) without side effects. Anything that could observe the world or mutate state — calls,
+ * `new`, assignments, `++`/`--`, `delete`, `void`, `await`, `yield`, tagged templates — is unsafe.
+ *
+ * @param {Node | null | undefined} node
+ * @returns {boolean}
+ */
+function isSideEffectFreeForInterpolation (node) {
+  if (!node) return false
+
+  switch (node.type) {
+    case 'Literal':
+    case 'Identifier':
+    case 'ThisExpression':
+    case 'Super':
+      return true
+
+    case 'ChainExpression':
+      return isSideEffectFreeForInterpolation(node.expression)
+
+    case 'MemberExpression':
+      return isSideEffectFreeForInterpolation(node.object) &&
+        (!node.computed || isSideEffectFreeForInterpolation(node.property))
+
+    case 'BinaryExpression':
+    case 'LogicalExpression':
+      return isSideEffectFreeForInterpolation(node.left) &&
+        isSideEffectFreeForInterpolation(node.right)
+
+    case 'UnaryExpression':
+      // `delete` mutates; `void` evaluates its operand only for its side effects.
+      if (node.operator === 'delete' || node.operator === 'void') return false
+      return isSideEffectFreeForInterpolation(node.argument)
+
+    case 'ConditionalExpression':
+      return isSideEffectFreeForInterpolation(node.test) &&
+        isSideEffectFreeForInterpolation(node.consequent) &&
+        isSideEffectFreeForInterpolation(node.alternate)
+
+    case 'TemplateLiteral':
+      return node.expressions.every(isSideEffectFreeForInterpolation)
+
+    case 'ArrayExpression':
+      return node.elements.every((el) => el === null || isSideEffectFreeForInterpolation(el))
+
+    default:
+      // CallExpression, NewExpression, AssignmentExpression, UpdateExpression,
+      // SequenceExpression, AwaitExpression, YieldExpression, TaggedTemplateExpression,
+      // ObjectExpression (computed keys, getters), etc.
+      return false
+  }
 }
