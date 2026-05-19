@@ -206,6 +206,25 @@ describe('fastify instrumentation (unit)', () => {
       assert.strictEqual(errorListener.firstCall.args[0].error, error)
     })
 
+    it('publishes via errorChannel when the user hook reports failure through done(error)', () => {
+      const errorListener = sinon.stub()
+      subscribe(errorChannel, errorListener)
+
+      const { app, registered } = buildWrappedAddHook()
+      const userError = new Error('done(error) boom')
+      const userHook = sinon.stub().callsFake((request, reply, done) => done(userError))
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      const originalDone = sinon.stub()
+      wrapper({}, {}, originalDone)
+
+      sinon.assert.calledOnce(errorListener)
+      assert.strictEqual(errorListener.firstCall.args[0].error, userError)
+      sinon.assert.calledOnce(originalDone)
+      assert.strictEqual(originalDone.firstCall.args[0], userError)
+    })
+
     it('publishes cookies when cookieParserReadCh has subscribers and cookies are present', () => {
       const cookieListener = sinon.stub()
       subscribe(cookieParserReadCh, cookieListener)
@@ -323,6 +342,49 @@ describe('fastify instrumentation (unit)', () => {
       wrapper(request, reply, originalDone)
 
       // runStores publishes the data argument on the channel before running fn.
+      sinon.assert.calledOnce(callbackListener)
+      sinon.assert.calledOnce(originalDone)
+    })
+
+    it('runs the original done inside callbackFinishCh.runStores for preParsing hooks', () => {
+      const callbackListener = sinon.stub()
+      subscribe(callbackFinishCh, callbackListener)
+
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, payload, done) => done())
+      app.addHook('preParsing', userHook)
+      const wrapper = registered[0].fn
+
+      const request = {}
+      const reply = {}
+      const payload = {}
+      const originalDone = sinon.stub()
+      wrapper(request, reply, payload, originalDone)
+
+      sinon.assert.calledOnce(callbackListener)
+      sinon.assert.calledOnce(originalDone)
+    })
+
+    it('publishes on every active channel when all three slow-path channels have subscribers', () => {
+      const errorListener = sinon.stub()
+      const cookieListener = sinon.stub()
+      const callbackListener = sinon.stub()
+      subscribe(errorChannel, errorListener)
+      subscribe(cookieParserReadCh, cookieListener)
+      subscribe(callbackFinishCh, callbackListener)
+
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, done) => done())
+      app.addHook('onRequest', userHook)
+      const wrapper = registered[0].fn
+
+      const request = { cookies: { token: 'abc' } }
+      const reply = { raw: { headers: {} } }
+      const originalDone = sinon.stub()
+      wrapper(request, reply, originalDone)
+
+      sinon.assert.notCalled(errorListener)
+      sinon.assert.calledOnce(cookieListener)
       sinon.assert.calledOnce(callbackListener)
       sinon.assert.calledOnce(originalDone)
     })
