@@ -6,13 +6,14 @@ const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const { describe, before, after, it } = require('mocha')
 
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { useEnv } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
 const agent = require('../../dd-trace/test/plugins/agent')
+const plugins = require('../../dd-trace/src/plugins')
 const {
   createFakeClaudeCodeProcess,
 } = require('../../dd-trace/test/llmobs/plugins/claude-agent-sdk/fake-claude-code-process')
@@ -20,6 +21,12 @@ const { rewrite } = require('../../datadog-instrumentations/src/helpers/rewriter
 
 function publishClaudeAgentSdkLoad () {
   channel('dd-trace:instrumentation:load').publish({ name: '@anthropic-ai/claude-agent-sdk' })
+}
+
+function publishQueryStart (queryArg) {
+  const ctx = { arguments: queryArg ? [queryArg] : [] }
+  tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query').start.publish(ctx)
+  return ctx
 }
 
 function assertTraceIncludesSpan (traces, spanName, message) {
@@ -154,7 +161,7 @@ if (NODE_MAJOR >= 22) {
                 abortController,
                 hooks: createUserHooks(),
                 pathToClaudeCodeExecutable: cliPath,
-                spawnClaudeCodeProcess: createFakeClaudeCodeProcess,
+                spawnClaudeCodeProcess: () => createFakeClaudeCodeProcess({ exerciseEdgeHooks: true }),
               },
             })) {
               if (msg.type === 'result') break
@@ -192,7 +199,10 @@ if (NODE_MAJOR >= 22) {
                 model: 'anthropic/claude-3-5-sonnet-20241022',
                 abortController,
                 pathToClaudeCodeExecutable: cliPath,
-                spawnClaudeCodeProcess: () => createFakeClaudeCodeProcess({ leavePendingSpans: true }),
+                spawnClaudeCodeProcess: () => createFakeClaudeCodeProcess({
+                  leavePendingSpans: true,
+                  skipSessionStart: true,
+                }),
               },
             })) {
               if (msg.type === 'result') break
@@ -202,6 +212,23 @@ if (NODE_MAJOR >= 22) {
           }
 
           await Promise.all(tracesPromises)
+        })
+
+        it('registers both plugin names', () => {
+          assert.strictEqual(
+            plugins['@anthropic-ai/claude-agent-sdk'],
+            plugins['claude-agent-sdk']
+          )
+        })
+
+        it('handles query arguments without SDK options', () => {
+          const ctx = publishQueryStart({ prompt: {} })
+
+          assert.equal(ctx._sessionCtx.prompt, '[async iterable]')
+          assert.ok(ctx.arguments[0].options.hooks.SessionStart)
+
+          const emptyCtx = publishQueryStart()
+          assert.deepStrictEqual(emptyCtx.arguments, [])
         })
       })
     })

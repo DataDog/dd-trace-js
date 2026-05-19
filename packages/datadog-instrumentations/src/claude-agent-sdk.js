@@ -8,9 +8,7 @@ const turnCh = tracingChannel('apm:claude-agent-sdk:turn')
 const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
 const subagentCh = tracingChannel('apm:claude-agent-sdk:subagent')
 
-let queryChannelSubscribed = false
-
-function mergeHooks (userHooks, tracerHooks) {
+const mergeHooks = function mergeHooks (userHooks, tracerHooks) {
   const merged = {}
 
   for (const event of Object.keys(tracerHooks)) {
@@ -31,155 +29,173 @@ function mergeHooks (userHooks, tracerHooks) {
   return merged
 }
 
-function buildTracerHooks (sessionCtx) {
+const buildTracerHooks = function buildTracerHooks (sessionCtx) {
+  const onSessionStart = function onSessionStart (input) {
+    sessionCtx.sessionId = input.session_id
+    sessionCtx.source = input.source
+    sessionCtx.cwd = input.cwd
+    sessionCtx.transcriptPath = input.transcript_path
+    sessionCtx.agentType = input.agent_type
+    sessionCtx.permissionMode = sessionCtx.permissionMode || input.permission_mode
+    return {}
+  }
+
+  const onSessionEnd = function onSessionEnd (input) {
+    sessionCtx.endReason = input.reason
+    finishSession(sessionCtx)
+    return {}
+  }
+
+  const onUserPromptSubmit = function onUserPromptSubmit (input) {
+    if (!sessionCtx.sessionId && input.session_id) {
+      sessionCtx.sessionId = input.session_id
+    }
+
+    const turnCtx = {
+      sessionId: input.session_id,
+      prompt: input.prompt,
+      // Propagate session-level metadata so turn spans carry it
+      model: sessionCtx.model,
+      source: sessionCtx.source,
+      cwd: sessionCtx.cwd,
+      agentType: sessionCtx.agentType,
+      permissionMode: sessionCtx.permissionMode,
+      transcriptPath: sessionCtx.transcriptPath,
+    }
+
+    sessionCtx.currentTurn = turnCtx
+    turnCh.start.runStores(turnCtx, () => {
+      turnCh.end.publish(turnCtx)
+    })
+    return {}
+  }
+
+  const onStop = function onStop (input) {
+    const turnCtx = sessionCtx.currentTurn
+    if (turnCtx) {
+      turnCtx.stopReason = input.stop_reason
+      turnCtx.lastAssistantMessage = input.last_assistant_message
+      turnCh.asyncEnd.publish(turnCtx)
+      sessionCtx.currentTurn = null
+    }
+    sessionCtx.lastAssistantMessage = input.last_assistant_message
+    return {}
+  }
+
+  const onPreToolUse = function onPreToolUse (input, toolUseId) {
+    const id = toolUseId || input.tool_use_id
+    if (!id) return {}
+
+    const toolCtx = {
+      sessionId: input.session_id,
+      toolName: input.tool_name,
+      toolInput: input.tool_input,
+      toolUseId: id,
+    }
+
+    sessionCtx.pendingTools.set(id, toolCtx)
+    toolCh.start.runStores(toolCtx, () => {
+      toolCh.end.publish(toolCtx)
+    })
+    return {}
+  }
+
+  const onPostToolUse = function onPostToolUse (input, toolUseId) {
+    const id = toolUseId || input.tool_use_id
+    const toolCtx = sessionCtx.pendingTools.get(id)
+    if (toolCtx) {
+      toolCtx.toolResponse = input.tool_response
+      toolCtx.toolName = toolCtx.toolName || input.tool_name
+      sessionCtx.pendingTools.delete(id)
+      toolCh.asyncEnd.publish(toolCtx)
+    }
+    return {}
+  }
+
+  const onPostToolUseFailure = function onPostToolUseFailure (input, toolUseId) {
+    const id = toolUseId || input.tool_use_id
+    const toolCtx = sessionCtx.pendingTools.get(id)
+    if (toolCtx) {
+      toolCtx.error = input.error
+      toolCtx.isInterrupt = input.is_interrupt
+      sessionCtx.pendingTools.delete(id)
+      toolCh.error.publish(toolCtx)
+      toolCh.asyncEnd.publish(toolCtx)
+    }
+    return {}
+  }
+
+  const onSubagentStart = function onSubagentStart (input) {
+    const agentId = input.agent_id
+    if (!agentId) return {}
+
+    const subagentCtx = {
+      sessionId: input.session_id,
+      agentId,
+      agentType: input.agent_type,
+    }
+
+    sessionCtx.pendingSubagents.set(agentId, subagentCtx)
+    subagentCh.start.runStores(subagentCtx, () => {
+      subagentCh.end.publish(subagentCtx)
+    })
+    return {}
+  }
+
+  const onSubagentStop = function onSubagentStop (input) {
+    const agentId = input.agent_id
+    const subagentCtx = sessionCtx.pendingSubagents.get(agentId)
+    if (subagentCtx) {
+      subagentCtx.transcriptPath = input.agent_transcript_path
+      subagentCtx.lastAssistantMessage = input.last_assistant_message
+      subagentCtx.agentType = subagentCtx.agentType || input.agent_type
+      sessionCtx.pendingSubagents.delete(agentId)
+      subagentCh.asyncEnd.publish(subagentCtx)
+    }
+    return {}
+  }
+
   return {
     SessionStart: [{
-      hooks: [function onSessionStart (input) {
-        sessionCtx.sessionId = input.session_id
-        sessionCtx.source = input.source
-        sessionCtx.cwd = input.cwd
-        sessionCtx.transcriptPath = input.transcript_path
-        sessionCtx.agentType = input.agent_type
-        sessionCtx.permissionMode = sessionCtx.permissionMode || input.permission_mode
-        return {}
-      }],
+      hooks: [onSessionStart],
     }],
 
     SessionEnd: [{
-      hooks: [function onSessionEnd (input) {
-        sessionCtx.endReason = input.reason
-        finishSession(sessionCtx)
-        return {}
-      }],
+      hooks: [onSessionEnd],
     }],
 
     UserPromptSubmit: [{
-      hooks: [function onUserPromptSubmit (input) {
-        if (!sessionCtx.sessionId && input.session_id) {
-          sessionCtx.sessionId = input.session_id
-        }
-
-        const turnCtx = {
-          sessionId: input.session_id,
-          prompt: input.prompt,
-          // Propagate session-level metadata so turn spans carry it
-          model: sessionCtx.model,
-          source: sessionCtx.source,
-          cwd: sessionCtx.cwd,
-          agentType: sessionCtx.agentType,
-          permissionMode: sessionCtx.permissionMode,
-          transcriptPath: sessionCtx.transcriptPath,
-        }
-
-        sessionCtx.currentTurn = turnCtx
-        turnCh.start.runStores(turnCtx, () => {
-          turnCh.end.publish(turnCtx)
-        })
-        return {}
-      }],
+      hooks: [onUserPromptSubmit],
     }],
 
     Stop: [{
-      hooks: [function onStop (input) {
-        const turnCtx = sessionCtx.currentTurn
-        if (turnCtx) {
-          turnCtx.stopReason = input.stop_reason
-          turnCtx.lastAssistantMessage = input.last_assistant_message
-          turnCh.asyncEnd.publish(turnCtx)
-          sessionCtx.currentTurn = null
-        }
-        sessionCtx.lastAssistantMessage = input.last_assistant_message
-        return {}
-      }],
+      hooks: [onStop],
     }],
 
     PreToolUse: [{
-      hooks: [function onPreToolUse (input, toolUseId) {
-        const id = toolUseId || input.tool_use_id
-        if (!id) return {}
-
-        const toolCtx = {
-          sessionId: input.session_id,
-          toolName: input.tool_name,
-          toolInput: input.tool_input,
-          toolUseId: id,
-        }
-
-        sessionCtx.pendingTools.set(id, toolCtx)
-        toolCh.start.runStores(toolCtx, () => {
-          toolCh.end.publish(toolCtx)
-        })
-        return {}
-      }],
+      hooks: [onPreToolUse],
     }],
 
     PostToolUse: [{
-      hooks: [function onPostToolUse (input, toolUseId) {
-        const id = toolUseId || input.tool_use_id
-        const toolCtx = sessionCtx.pendingTools.get(id)
-        if (toolCtx) {
-          toolCtx.toolResponse = input.tool_response
-          toolCtx.toolName = toolCtx.toolName || input.tool_name
-          sessionCtx.pendingTools.delete(id)
-          toolCh.asyncEnd.publish(toolCtx)
-        }
-        return {}
-      }],
+      hooks: [onPostToolUse],
     }],
 
     PostToolUseFailure: [{
-      hooks: [function onPostToolUseFailure (input, toolUseId) {
-        const id = toolUseId || input.tool_use_id
-        const toolCtx = sessionCtx.pendingTools.get(id)
-        if (toolCtx) {
-          toolCtx.error = input.error
-          toolCtx.isInterrupt = input.is_interrupt
-          sessionCtx.pendingTools.delete(id)
-          toolCh.error.publish(toolCtx)
-          toolCh.asyncEnd.publish(toolCtx)
-        }
-        return {}
-      }],
+      hooks: [onPostToolUseFailure],
     }],
 
     SubagentStart: [{
-      hooks: [function onSubagentStart (input) {
-        const agentId = input.agent_id
-        if (!agentId) return {}
-
-        const subagentCtx = {
-          sessionId: input.session_id,
-          agentId,
-          agentType: input.agent_type,
-        }
-
-        sessionCtx.pendingSubagents.set(agentId, subagentCtx)
-        subagentCh.start.runStores(subagentCtx, () => {
-          subagentCh.end.publish(subagentCtx)
-        })
-        return {}
-      }],
+      hooks: [onSubagentStart],
     }],
 
     SubagentStop: [{
-      hooks: [function onSubagentStop (input) {
-        const agentId = input.agent_id
-        const subagentCtx = sessionCtx.pendingSubagents.get(agentId)
-        if (subagentCtx) {
-          subagentCtx.transcriptPath = input.agent_transcript_path
-          subagentCtx.lastAssistantMessage = input.last_assistant_message
-          subagentCtx.agentType = subagentCtx.agentType || input.agent_type
-          sessionCtx.pendingSubagents.delete(agentId)
-          subagentCh.asyncEnd.publish(subagentCtx)
-        }
-        return {}
-      }],
+      hooks: [onSubagentStop],
     }],
   }
 }
 
 // Close any pending spans when the session ends (iterator exhaustion or abort).
-function finishSession (sessionCtx) {
+const finishSession = function finishSession (sessionCtx) {
   if (sessionCtx._finished) return
   sessionCtx._finished = true
 
@@ -197,56 +213,50 @@ function finishSession (sessionCtx) {
   sessionCtx.pendingSubagents.clear()
 }
 
-function subscribeQueryChannel () {
-  if (queryChannelSubscribed) return
+const onQueryStart = function onQueryStart (ctx) {
+  const { arguments: args } = ctx
 
-  queryChannelSubscribed = true
-  queryChannel.subscribe({
-    start (ctx) {
-      const { arguments: args } = ctx
+  const queryArg = args[0]
+  if (!queryArg || !turnCh.start.hasSubscribers) return
 
-      const queryArg = args[0]
-      if (!queryArg || !turnCh.start.hasSubscribers) return
+  const prompt = queryArg.prompt
+  const sessionPrompt = typeof prompt === 'string' ? prompt : '[async iterable]'
+  const resolvedOptions = queryArg.options || {}
 
-      const prompt = queryArg.prompt
-      const resolvedOptions = queryArg.options || {}
+  const sessionCtx = {
+    prompt: sessionPrompt,
+    model: resolvedOptions.model,
+    resume: resolvedOptions.resume,
+    maxTurns: resolvedOptions.maxTurns,
+    permissionMode: resolvedOptions.permissionMode,
+    currentTurn: null,
+    pendingTools: new Map(),
+    pendingSubagents: new Map(),
+  }
 
-      const sessionCtx = {
-        prompt: typeof prompt === 'string' ? prompt : '[async iterable]',
-        model: resolvedOptions.model,
-        resume: resolvedOptions.resume,
-        maxTurns: resolvedOptions.maxTurns,
-        permissionMode: resolvedOptions.permissionMode,
-        currentTurn: null,
-        pendingTools: new Map(),
-        pendingSubagents: new Map(),
-      }
+  const tracerHooks = buildTracerHooks(sessionCtx)
 
-      const tracerHooks = buildTracerHooks(sessionCtx)
-
-      args[0] = {
-        ...queryArg,
-        options: {
-          ...resolvedOptions,
-          hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
-        },
-      }
-
-      ctx._sessionCtx = sessionCtx
+  args[0] = {
+    ...queryArg,
+    options: {
+      ...resolvedOptions,
+      hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
     },
-  })
+  }
+
+  ctx._sessionCtx = sessionCtx
 }
 
 // --- Orchestrion path (primary) ---
 // Subscribe to the orchestrion channel via getHooks/addHook. The rewriter
 // transforms the SDK at compile time, which works on Node 22 for ESM-via-require.
 
-subscribeQueryChannel()
+queryChannel.subscribe({
+  start: onQueryStart,
+})
 
 for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
-  if (hook.file === 'sdk.mjs') {
-    hook.file = null
-  }
+  hook.file = null
 
   addHook(hook, exports => exports)
 }

@@ -123,14 +123,16 @@ function createFakeClaudeCodeProcess (options = {}) {
       apiKeySource: 'none',
     })
 
-    await callHooks('SessionStart', {
-      session_id: SESSION_ID,
-      source: 'startup',
-      cwd: process.cwd(),
-      transcript_path: '/tmp/test-transcript.jsonl',
-      agent_type: 'main',
-      permission_mode: 'default',
-    })
+    if (!options.skipSessionStart) {
+      await callHooks('SessionStart', {
+        session_id: SESSION_ID,
+        source: 'startup',
+        cwd: process.cwd(),
+        transcript_path: '/tmp/test-transcript.jsonl',
+        agent_type: 'main',
+        permission_mode: 'default',
+      })
+    }
 
     await callHooks('UserPromptSubmit', {
       session_id: SESSION_ID,
@@ -185,12 +187,23 @@ function createFakeClaudeCodeProcess (options = {}) {
         stop_reason: 'end_turn',
         last_assistant_message: 'Hello',
       })
+
+      if (options.exerciseEdgeHooks) {
+        await callEdgeHooks()
+      }
     }
 
     await callHooks('SessionEnd', {
       session_id: SESSION_ID,
       reason: 'clear',
     })
+
+    if (options.exerciseEdgeHooks) {
+      await callHooks('SessionEnd', {
+        session_id: SESSION_ID,
+        reason: 'clear',
+      })
+    }
 
     writeMessage({
       type: 'assistant',
@@ -227,6 +240,71 @@ function createFakeClaudeCodeProcess (options = {}) {
     })
 
     finish()
+  }
+
+  async function callEdgeHooks () {
+    await callHooks('Stop', {
+      session_id: SESSION_ID,
+      stop_reason: 'end_turn',
+      last_assistant_message: 'Hello again',
+    })
+
+    await callHooks('PreToolUse', {
+      session_id: SESSION_ID,
+      tool_name: 'Read',
+      tool_input: { file_path: 'README.md' },
+    })
+
+    await callHooks('PostToolUse', {
+      session_id: SESSION_ID,
+      tool_name: 'Read',
+      tool_response: { content: 'unused' },
+      tool_use_id: 'tool-unknown',
+    })
+
+    await callHooks('PostToolUseFailure', {
+      session_id: SESSION_ID,
+      error: { message: 'unused' },
+      is_interrupt: false,
+      tool_use_id: 'tool-unknown',
+    })
+
+    await callHooks('PreToolUse', {
+      session_id: SESSION_ID,
+      tool_input: { command: 'pwd' },
+      tool_use_id: 'tool-named-late',
+    })
+
+    await callHooks('PostToolUse', {
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_response: { output: process.cwd() },
+      tool_use_id: 'tool-named-late',
+    })
+
+    await callHooks('SubagentStart', {
+      session_id: SESSION_ID,
+    })
+
+    await callHooks('SubagentStop', {
+      session_id: SESSION_ID,
+      agent_id: 'agent-unknown',
+      agent_type: 'search',
+      last_assistant_message: 'unused',
+    })
+
+    await callHooks('SubagentStart', {
+      session_id: SESSION_ID,
+      agent_id: 'agent-2',
+    })
+
+    await callHooks('SubagentStop', {
+      session_id: SESSION_ID,
+      agent_id: 'agent-2',
+      agent_type: 'review',
+      agent_transcript_path: '/tmp/test-subagent-review-transcript.jsonl',
+      last_assistant_message: 'Review done',
+    })
   }
 
   function getPrompt (message) {
