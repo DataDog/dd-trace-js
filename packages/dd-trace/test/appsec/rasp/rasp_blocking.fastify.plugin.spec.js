@@ -100,7 +100,7 @@ describe('RASP - fastify blocking', () => {
     after(async () => {
       await app.server.close()
       appsec.disable()
-      await agent.close({ ritmReset: false })
+      await agent.close()
     })
 
     it('should not block on user error', async () => {

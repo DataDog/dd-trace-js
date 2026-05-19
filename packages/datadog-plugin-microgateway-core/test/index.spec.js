@@ -63,14 +63,12 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          tracer = require('../../dd-trace')
-
-          return agent.load(['microgateway-core', 'http'], [{}, { client: false }])
+        before(async () => {
+          tracer = await agent.load(['microgateway-core', 'http'], [{}, { client: false }])
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {

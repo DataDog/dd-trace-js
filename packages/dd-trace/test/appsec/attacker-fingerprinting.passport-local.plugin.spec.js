@@ -73,7 +73,7 @@ withVersions('passport-local', 'passport-local', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     after(() => {

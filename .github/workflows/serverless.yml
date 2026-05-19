@@ -216,9 +216,6 @@ jobs:
       SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-
       - name: Copy emulator config files
         run: |
           docker cp \
@@ -232,18 +229,9 @@ jobs:
         run: |
           docker restart ${{ job.services.azureeventhubsemulator.id }}
           docker restart ${{ job.services.azureservicebusemulator.id }}
-      - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:integration:plugins:coverage
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/integration-test-newest-lts
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -298,7 +286,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/integration-test
+      - uses: ./.github/actions/plugins/integration-test-newest-lts
+        with:
+          flags: serverless-azure-durable-functions
 
   azure-cosmos:
     runs-on: ubuntu-latest

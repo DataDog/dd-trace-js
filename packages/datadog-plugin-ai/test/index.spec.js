@@ -58,7 +58,7 @@ describe('Plugin', () => {
 
     before(() => agent.load('ai'))
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
@@ -162,7 +162,7 @@ describe('Plugin', () => {
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
-        assert.ok(experimentalTelemetry.tracer === myTracer, 'Tracer should be set when `isEnabled` is true')
+        assert.strictEqual(experimentalTelemetry.tracer, myTracer, 'Tracer should be set when `isEnabled` is true')
 
         await checkTraces
       })
@@ -203,7 +203,7 @@ describe('Plugin', () => {
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
-        assert.ok(experimentalTelemetry.tracer === myTracer, 'Tracer should not override provided tracer')
+        assert.strictEqual(experimentalTelemetry.tracer, myTracer, 'Tracer should not override provided tracer')
 
         await checkTraces
       })

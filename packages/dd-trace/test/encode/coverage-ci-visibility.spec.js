@@ -56,7 +56,7 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assert.ok(form._data[0].startsWith('--'))
+    assert.match(form._data[0], /^--/)
     assertObjectContains(
       form._data,
       [
@@ -117,7 +117,7 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assert.ok(form._data[0].startsWith('--'))
+    assert.match(form._data[0], /^--/)
     assertObjectContains(
       form._data,
       [

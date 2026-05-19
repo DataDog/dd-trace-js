@@ -93,7 +93,7 @@ function createWrapQueryCallback (options) {
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, wrapper)
+        arguments[arguments.length - 1] = shimmer.wrapCallback(cb, wrapper)
       } else {
         arguments.length += 1
         arguments[arguments.length - 1] = wrapper()

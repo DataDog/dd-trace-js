@@ -26,7 +26,7 @@ describe('Push Subscription Plugin', () => {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   beforeEach(() => {
@@ -100,8 +100,8 @@ describe('Push Subscription Plugin', () => {
             })
 
             // Verify delivery_duration_ms
-            assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] !== undefined)
-            assert.ok(typeof pubsubSpan.metrics['pubsub.delivery_duration_ms'] === 'number')
+            assert.notStrictEqual(pubsubSpan.metrics['pubsub.delivery_duration_ms'], undefined)
+            assert.strictEqual(typeof pubsubSpan.metrics['pubsub.delivery_duration_ms'], 'number')
             assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] >= 0)
           })
           .then(done)

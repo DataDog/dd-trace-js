@@ -44,7 +44,7 @@ describeOrSkip('express path-to-regexp dialect across versions', () => {
   after(() => {
     dc.channel('apm:express:middleware:enter').unsubscribe(captureExpress)
     dc.channel('apm:router:middleware:enter').unsubscribe(captureRouter)
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   beforeEach(() => {

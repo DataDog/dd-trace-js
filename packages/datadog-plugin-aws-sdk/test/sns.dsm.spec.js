@@ -119,7 +119,7 @@ describe('Sns', function () {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false, wipe: true })
+        return agent.close()
       })
 
       afterEach(() => {
