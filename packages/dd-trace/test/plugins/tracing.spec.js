@@ -9,6 +9,7 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
+const { INTEGRATION_SERVICE } = require('../../src/service-naming/source-marker')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
@@ -70,6 +71,39 @@ describe('TracingPlugin', () => {
 
       const callArgs = startSpanSpy.firstCall.args[1]
       assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
+    })
+
+    it('stamps the integration marker when service is provided with a source', () => {
+      const span = {}
+      startSpanSpy.returns(span)
+
+      plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
+    })
+
+    it('stamps the integration marker when service is supplied via meta.service', () => {
+      // Regression: inferred-proxy spans (packages/dd-trace/src/plugins/util/inferred_proxy.js)
+      // pass the service through `meta.service`, leaving the top-level `service` undefined.
+      // Without stamping here, resolveServiceSource at finish would misclassify these as manual.
+      const span = {}
+      startSpanSpy.returns(span)
+
+      plugin.startSpan('Test span', { meta: { service: 'inferred-proxy-svc' } })
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'inferred-proxy-svc')
+    })
+
+    it('does not stamp the integration marker when service equals the tracer default', () => {
+      const localStub = sinon.stub().returns({})
+      const localPlugin = new TracingPlugin({ _tracer: { startSpan: localStub, _service: 'app' } })
+      localPlugin.configure({})
+
+      const span = {}
+      localStub.returns(span)
+      localPlugin.startSpan('Test span', { service: 'app' })
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], undefined)
     })
   })
 })
