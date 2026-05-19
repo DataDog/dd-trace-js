@@ -108,6 +108,8 @@ class SpanEnrichmentHook {
 
   /**
    * Get the root span for the current trace context.
+   * The root span is always the first span in trace.started since spans
+   * are added in creation order and the root is created first.
    *
    * @returns {object|null} The root span, or null if no active span
    * @private
@@ -116,22 +118,9 @@ class SpanEnrichmentHook {
     const span = this.#tracer.scope().active()
     if (!span) return null
 
-    // Walk up the parent chain to find the root span
-    const context = span.context()
-    const trace = context._trace
+    const trace = span.context()._trace
 
-    if (!trace || !trace.started) return span
-
-    // Find the span with no parent (root span)
-    for (const s of trace.started) {
-      const ctx = s.context()
-      if (!ctx._parentId) {
-        return s
-      }
-    }
-
-    // Fallback to current span if no root found
-    return span
+    return trace?.started?.[0] ?? span
   }
 
   /**

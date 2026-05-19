@@ -286,21 +286,20 @@ describe('SpanEnrichmentHook', () => {
       assert.strictEqual(result, mockRootSpan)
     })
 
-    it('should return current span if no root found in trace.started', () => {
+    it('should return first span in trace.started as root', () => {
+      const firstSpan = { context: () => ({ _parentId: null }) }
+      const secondSpan = { context: () => ({ _parentId: 'p1' }) }
       mockSpan.context.returns({
         _parentId: 'parent',
         _trace: {
-          started: [
-            { context: () => ({ _parentId: 'p1' }) },
-            { context: () => ({ _parentId: 'p2' }) },
-          ],
+          started: [firstSpan, secondSpan],
         },
       })
       const hook = new SpanEnrichmentHook(mockTracer)
 
       const result = hook._getRootSpan()
 
-      assert.strictEqual(result, mockSpan)
+      assert.strictEqual(result, firstSpan)
     })
   })
 
