@@ -788,6 +788,47 @@ describe('Plugin', () => {
           }
         })
 
+        it('publishes apm:graphql:resolve:start for every sibling of a collapsed list', async () => {
+          // The collapse knob dedupes span creation, not channel publishes. IAST
+          // taint-tracking mutates each call's own args object; if siblings 2..N
+          // skip the publish, those args objects never get tainted and a sink
+          // reached through sibling N misses the vulnerability.
+          const startCh = dc.channel('apm:graphql:resolve:start')
+          const argsByPath = new Map()
+          const handler = (ctx) => {
+            const list = argsByPath.get(ctx.pathString) ?? []
+            list.push(ctx.args)
+            argsByPath.set(ctx.pathString, list)
+          }
+          startCh.subscribe(handler)
+
+          try {
+            const source = '{ friends { name } }'
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const friendsName = spans.find(span => span.meta['graphql.field.path'] === 'friends.*.name')
+                assert.ok(friendsName, 'expected one collapsed friends.*.name span')
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            const nameArgs = argsByPath.get('friends.*.name') ?? []
+            assert.strictEqual(
+              nameArgs.length,
+              2,
+              'expected one startResolveCh publish per sibling of the 2-element friends list',
+            )
+            // graphql-js builds a fresh args object per resolver call; siblings
+            // share content but not identity. IAST mutates the passed object, so
+            // each call needs its own publish.
+            assert.notStrictEqual(nameArgs[0], nameArgs[1])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
+
         it('should instrument list field resolvers', done => {
           const source = `{
             friends {

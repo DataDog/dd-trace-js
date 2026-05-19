@@ -352,16 +352,6 @@ function assertField (rootCtx, info, args) {
     : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
   cache.set(path, pathString)
 
-  let collapsedFields
-  if (collapse) {
-    collapsedFields = rootCtx.collapsedFields ??= new Map()
-    const existing = collapsedFields.get(pathString)
-    // Subsequent siblings of a collapsed list share the first sibling's field
-    // so updateFieldCh fires for every call and the span's finishTime tracks
-    // the last sibling's completion, not the first.
-    if (existing !== undefined) return existing
-  }
-
   const fieldCtx = {
     rootCtx,
     args,
@@ -372,9 +362,21 @@ function assertField (rootCtx, info, args) {
     fieldNode: info.fieldNodes[0],
     variableValues: info.variableValues,
   }
-  // Depth gating happens in the resolve plugin's start handler, after this
-  // publish, so IAST and AppSec subscribers see every resolver call.
+  // Publish per resolver call, before the collapse / depth dedupe below.
+  // IAST mutates each call's own args object; if siblings 2..N skip the
+  // publish, those args objects never get tainted.
   startResolveCh.publish(fieldCtx)
+
+  let collapsedFields
+  if (collapse) {
+    collapsedFields = rootCtx.collapsedFields ??= new Map()
+    const existing = collapsedFields.get(pathString)
+    // Subsequent siblings of a collapsed list share the first sibling's field
+    // so updateFieldCh fires for every call and the span's finishTime tracks
+    // the last sibling's completion, not the first.
+    if (existing !== undefined) return existing
+  }
+
   const field = { error: null, ctx: fieldCtx }
   rootCtx.fields.set(path, field)
   if (collapsedFields !== undefined) collapsedFields.set(pathString, field)
