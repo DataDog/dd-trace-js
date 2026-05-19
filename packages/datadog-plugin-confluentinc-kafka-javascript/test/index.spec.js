@@ -571,4 +571,3 @@ async function sendMessages (kafka, topic, messages) {
   })
   await producer.disconnect()
 }
-

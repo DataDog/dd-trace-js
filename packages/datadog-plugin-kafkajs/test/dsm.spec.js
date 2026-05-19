@@ -8,13 +8,13 @@ const sinon = require('sinon')
 
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { createTopicWithRetry } = require('./helpers')
 
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { createTopicWithRetry } = require('./helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
