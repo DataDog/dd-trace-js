@@ -28,18 +28,11 @@ class OracledbPlugin extends DatabasePlugin {
     // in addition to a plain SQL string. Extract the SQL text either way so we can tag
     // the resource and inject DBM into the statement, then re-wrap if needed to keep
     // the caller's binds.
-    let sql
-    let isObjectForm = false
-    if (typeof query === 'string') {
-      sql = query
-    } else if (typeof query?.statement === 'string') {
-      sql = query.statement
-      isObjectForm = true
-    }
+    const sql = query?.statement ?? query
 
     const span = this.startSpan(this.operationName(), {
       service,
-      resource: sql ?? query,
+      resource: sql,
       type: 'sql',
       kind: 'client',
       meta: {
@@ -52,13 +45,8 @@ class OracledbPlugin extends DatabasePlugin {
       },
     }, ctx)
 
-    ctx.injected = query
-    if (sql !== undefined) {
-      const injected = this.injectDbmQuery(span, sql, service.name)
-      if (injected !== sql) {
-        ctx.injected = isObjectForm ? { ...query, statement: injected } : injected
-      }
-    }
+    const injected = this.injectDbmQuery(span, sql, service.name)
+    ctx.injected = query?.statement ? { ...query, statement: injected } : injected
 
     return ctx.currentStore
   }

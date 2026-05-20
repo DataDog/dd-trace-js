@@ -455,9 +455,8 @@ describe('Plugin', () => {
         const onStart = (ctx) => { injected = ctx.injected }
 
         before(async () => {
-          await agent.load('oracledb')
+          tracer = await agent.load('oracledb')
           oracledb = require(`../../../versions/oracledb@${version}`).get()
-          tracer = require('../../dd-trace')
           dc.subscribe('apm:oracledb:query:start', onStart)
           connection = await oracledb.getConnection(config)
         })
@@ -483,9 +482,8 @@ describe('Plugin', () => {
         const onStart = (ctx) => { injected = ctx.injected }
 
         before(async () => {
-          await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
+          tracer = await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
           oracledb = require(`../../../versions/oracledb@${version}`).get()
-          tracer = require('../../dd-trace')
           dc.subscribe('apm:oracledb:query:start', onStart)
           connection = await oracledb.getConnection(config)
         })
@@ -544,9 +542,8 @@ describe('Plugin', () => {
           const onStart = (ctx) => { injected = ctx.injected }
 
           before(async () => {
-            await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
+            tracer = await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
-            tracer = require('../../dd-trace')
             dc.subscribe('apm:oracledb:query:start', onStart)
             connection = await oracledb.getConnection(config)
           })
@@ -586,9 +583,8 @@ describe('Plugin', () => {
           const onStart = (ctx) => { injected = ctx.injected }
 
           before(async () => {
-            await agent.load('oracledb')
+            tracer = await agent.load('oracledb')
             oracledb = require(`../../../versions/oracledb@${version}`).get()
-            tracer = require('../../dd-trace')
             dc.subscribe('apm:oracledb:query:start', onStart)
             connection = await oracledb.getConnection(config)
           })
@@ -616,9 +612,8 @@ describe('Plugin', () => {
         const onStart = (ctx) => { injected = ctx.injected }
 
         before(async () => {
-          await agent.load('oracledb', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
+          tracer = await agent.load('oracledb', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
           oracledb = require(`../../../versions/oracledb@${version}`).get()
-          tracer = require('../../dd-trace')
           dc.subscribe('apm:oracledb:query:start', onStart)
           connection = await oracledb.getConnection(config)
         })
@@ -657,9 +652,8 @@ describe('Plugin', () => {
         }
 
         before(async () => {
-          await agent.load('oracledb')
+          tracer = await agent.load('oracledb')
           oracledb = require(`../../../versions/oracledb@${version}`).get()
-          tracer = require('../../dd-trace')
           dc.subscribe('apm:oracledb:query:start', onStart)
           connection = await oracledb.getConnection(config)
         })
@@ -717,13 +711,12 @@ describe('Plugin', () => {
         const onStart = (ctx) => { injected = ctx.injected }
 
         before(async () => {
-          await agent.load('oracledb', {
+          tracer = await agent.load('oracledb', {
             appendComment: true,
             dbmPropagationMode: 'service',
             service: () => 'serviced',
           })
           oracledb = require(`../../../versions/oracledb@${version}`).get()
-          tracer = require('../../dd-trace')
           dc.subscribe('apm:oracledb:query:start', onStart)
           connection = await oracledb.getConnection(config)
         })
@@ -754,14 +747,13 @@ describe('Plugin', () => {
       const onStart = (ctx) => { injected = ctx.injected }
 
       before(async () => {
-        await agent.load('oracledb', {
+        tracer = await agent.load('oracledb', {
           appendComment: true,
           service: () => 'serviced',
         }, {
           dbmPropagationMode: 'service',
         })
         oracledb = require('../../../versions/oracledb').get()
-        tracer = require('../../dd-trace')
         dc.subscribe('apm:oracledb:query:start', onStart)
         connection = await oracledb.getConnection(config)
       })
