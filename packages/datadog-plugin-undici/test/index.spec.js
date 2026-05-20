@@ -730,6 +730,88 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with ProxyAgent', () => {
+        let proxyListener
+
+        beforeEach(() => {
+          return agent.load('undici', {
+            service: 'test',
+          })
+            .then(() => {
+              express = require('express')
+              fetch = require(`../../../versions/undici@${version}`, {}).get()
+            })
+        })
+
+        afterEach(() => {
+          if (proxyListener) {
+            proxyListener.close()
+            proxyListener = null
+          }
+          express = null
+        })
+
+        // Regression for the leaked CONNECT span: ProxyAgent emits :create + :bodySent for
+        // the tunnel-setup request, but never :headers/:trailers/:error. Before the fix the
+        // CONNECT span was started and never finished, which kept the parent trace pinned in
+        // span_processor and prevented the surrounding express.request span from exporting.
+        it('finishes the CONNECT tunnel span established via ProxyAgent', function (done) {
+          if (!satisfies(resolvedVersion, '>=5.1.0')) {
+            this.skip()
+            return
+          }
+
+          const http = require('node:http')
+          const net = require('node:net')
+
+          const app = express()
+          app.get('/data', (req, res) => res.status(200).send('OK'))
+
+          appListener = server(app, downstreamPort => {
+            const proxy = http.createServer((_req, res) => {
+              res.writeHead(405)
+              res.end()
+            })
+            proxy.on('connect', (req, clientSocket, head) => {
+              const [hostname, portStr] = req.url.split(':')
+              const upstream = net.connect(Number.parseInt(portStr, 10) || 80, hostname, () => {
+                clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+                upstream.write(head)
+                upstream.pipe(clientSocket)
+                clientSocket.pipe(upstream)
+              })
+              upstream.on('error', () => clientSocket.end())
+              clientSocket.on('error', () => upstream.end())
+            })
+
+            proxy.listen(0, 'localhost', () => {
+              proxyListener = proxy
+              const proxyPort = (/** @type {import('net').AddressInfo} */ (proxy.address())).port
+
+              agent
+                .assertSomeTraces(traces => {
+                  const connectSpan = traces.flat().find(s => s.resource === 'CONNECT')
+                  assert.ok(connectSpan, 'expected a finished CONNECT span to be exported')
+                  assertObjectContains(connectSpan, {
+                    name: 'undici.request',
+                    service: 'test',
+                    type: 'http',
+                    resource: 'CONNECT',
+                    meta: { 'http.method': 'CONNECT' },
+                  })
+                }, { timeoutMs: 3000 })
+                .then(done)
+                .catch(done)
+
+              const dispatcher = new fetch.ProxyAgent(`http://localhost:${proxyPort}`)
+              fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
+                .then(({ body }) => body.text())
+                .catch(done)
+            })
+          })
+        })
+      })
     })
   })
 })
