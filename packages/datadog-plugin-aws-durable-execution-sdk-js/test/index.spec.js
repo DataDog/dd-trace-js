@@ -148,11 +148,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       run: ctx => ctx.parallel('test-parallel', [async () => {}, async () => {}]),
     },
   ]) {
-    // TODO: re-enable when aws/aws-durable-execution-sdk-js#544 is released.
-    // wait_for_callback is the only entry whose resume races against the
-    // TimerScheduler bug fixed there; production is unaffected.
-    const itFn = span === 'aws.durable.wait_for_callback' ? it.skip : it
-    itFn(`${span} (happy path): emits span with expected tags`, async () => {
+    it(`${span} (happy path): emits span with expected tags`, async () => {
       const tracePromise = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
           name: span,
@@ -264,11 +260,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  // TODO: re-enable when aws/aws-durable-execution-sdk-js#544 is released.
-  // Both tests race against the same TimerScheduler bug via the chained-invoke
-  // resume path; production is unaffected.
-  // eslint-disable-next-line mocha/no-pending-tests
-  describe.skip('DurableContextImpl.invoke() - aws.durable.invoke', () => {
+  describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
     it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
       const tracePromise = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
