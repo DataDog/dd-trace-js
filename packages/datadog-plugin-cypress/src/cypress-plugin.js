@@ -457,6 +457,7 @@ class CypressPlugin {
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
   lastFinishedTest = null
+  pendingScreenshotUploads = []
 
   constructor () {
     const {
@@ -543,6 +544,7 @@ class CypressPlugin {
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
     this.lastFinishedTest = null
+    this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
     this.testModuleSpan = null
@@ -1234,7 +1236,7 @@ class CypressPlugin {
    * Uploads failure screenshots as soon as Cypress creates them.
    *
    * @param {object} details - Cypress screenshot details
-   * @returns {Promise<void>|undefined}
+   * @returns {void}
    */
   afterScreenshot (details) {
     const lastFailedTestSpan = this.lastFinishedTest?.testStatus === 'fail'
@@ -1250,10 +1252,13 @@ class CypressPlugin {
       return
     }
 
-    return this.uploadTestScreenshots({
+    const screenshotUploadPromise = this.uploadTestScreenshots({
       screenshots: [details],
       traceId: testSpan.context().toTraceId(),
     })
+    if (screenshotUploadPromise) {
+      this.pendingScreenshotUploads.push(screenshotUploadPromise)
+    }
   }
 
   afterSpec (spec, results) {
@@ -1452,8 +1457,10 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     }
 
-    if (screenshotUploadPromises.length > 0) {
-      return Promise.all(screenshotUploadPromises).then(() => null)
+    if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
+      const pendingScreenshotUploads = this.pendingScreenshotUploads
+      this.pendingScreenshotUploads = []
+      return Promise.all([...pendingScreenshotUploads, ...screenshotUploadPromises]).then(() => null)
     }
   }
 
