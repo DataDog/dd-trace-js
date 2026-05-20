@@ -294,7 +294,7 @@ class NativeWallProfiler {
 
       let webTags
       if (this.#endpointCollectionEnabled) {
-        const tags = context._tags
+        const tags = context.getTags()
         if (isWebServerSpan(tags)) {
           webTags = tags
         } else {
@@ -333,7 +333,7 @@ class NativeWallProfiler {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
     if (profilingContext === undefined || profilingContext.webTags !== undefined) return
-    const tags = span.context()._tags
+    const tags = span.context().getTags()
     if (isWebServerSpan(tags)) {
       profilingContext.webTags = tags
     }

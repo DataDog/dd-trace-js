@@ -152,7 +152,7 @@ module.exports = class Plugin {
     if (!store || !store.span) return
 
     const span = /** @type {import('../opentracing/span')} */ (store.span)
-    if (!span._spanContext._tags.error) {
+    if (!span.context().getTag('error')) {
       span.setTag('error', error || 1)
     }
   }

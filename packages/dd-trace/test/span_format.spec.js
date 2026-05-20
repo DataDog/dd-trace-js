@@ -57,6 +57,10 @@ describe('spanFormat', () => {
       _name: 'operation',
       toTraceId: sinon.stub().returns(spanId),
       toSpanId: sinon.stub().returns(spanId),
+      getTag (key) { return this._tags[key] },
+      getTags () { return this._tags },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags },
     }
 
     span = {
