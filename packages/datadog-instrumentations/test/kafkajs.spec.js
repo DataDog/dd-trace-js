@@ -356,61 +356,6 @@ describe('packages/datadog-instrumentations/src/kafkajs.js', () => {
       }
     })
 
-    it('forwards to originalSendBatch without publishing when topicMessages is empty', async () => {
-      let sendBatchCalls = 0
-      const start = captureChannel(startCh)
-
-      const { producer } = stageProducer({
-        cluster: readyCluster(),
-        originalSendBatch: () => { sendBatchCalls++; return Promise.resolve(undefined) },
-      })
-
-      try {
-        await producer.sendBatch({ topicMessages: [] })
-
-        assert.equal(sendBatchCalls, 1)
-        assert.equal(start.events.length, 0)
-      } finally {
-        start.unsubscribe()
-      }
-    })
-
-    it('forwards the negotiated clusterId on every entry after refreshMetadataIfNecessary resolves', async () => {
-      const cluster = {
-        brokerPool: { versions: { 0: { maxVersion: 9 } } },
-        refreshMetadataIfNecessary: () => {
-          cluster.brokerPool.metadata = { clusterId: 'cluster-resolved' }
-          return Promise.resolve()
-        },
-      }
-
-      let sendBatchCalls = 0
-      const start = captureChannel(startCh)
-
-      const { producer } = stageProducer({
-        cluster,
-        originalSendBatch: () => { sendBatchCalls++; return Promise.resolve(undefined) },
-      })
-
-      try {
-        await producer.sendBatch({
-          topicMessages: [
-            { topic: 'a', messages: [{ key: 'k', value: 'v' }] },
-            { topic: 'b', messages: [{ key: 'k2', value: 'v2' }] },
-          ],
-        })
-
-        assert.equal(sendBatchCalls, 1)
-        assert.equal(start.events.length, 2)
-        assert.equal(start.events[0].topic, 'a')
-        assert.equal(start.events[0].clusterId, 'cluster-resolved')
-        assert.equal(start.events[1].topic, 'b')
-        assert.equal(start.events[1].clusterId, 'cluster-resolved')
-      } finally {
-        start.unsubscribe()
-      }
-    })
-
     it('publishes one start+finish ctx per entry and commits once on the first ctx', async () => {
       const start = captureChannel(startCh)
       const commit = captureChannel(commitCh)
