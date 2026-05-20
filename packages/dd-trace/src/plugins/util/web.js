@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
+const { setServiceName } = require('../../service-naming/source-marker')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
@@ -104,7 +105,7 @@ const web = {
     }
 
     if (config.service) {
-      web.plugin.setServiceName(span, config.service)
+      setServiceName(span, config.service, context.tracer._service)
     }
 
     analyticsSampler.sample(span, config.measured, true)

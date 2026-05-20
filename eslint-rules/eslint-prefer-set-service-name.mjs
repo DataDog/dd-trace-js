@@ -43,8 +43,9 @@ export default {
     schema: [],
     messages: {
       preferSetServiceName:
-        'Use `Plugin#setServiceName(span, name)` instead of writing `{{key}}` via `{{method}}` ' +
-        'directly. Direct writes bypass integration-source tracking and make user overrides ' +
+        'Use `setServiceName(span, name, tracerService)` from ' +
+        '`service-naming/source-marker` instead of writing `{{key}}` via `{{method}}` directly. ' +
+        'Direct writes bypass integration-source tracking and make user overrides ' +
         'indistinguishable from integration values.',
     },
   },

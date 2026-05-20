@@ -226,7 +226,7 @@ class TracingPlugin extends Plugin {
       links: childOf?._links,
     })
 
-    stampIntegrationService(span, finalServiceName)
+    stampIntegrationService(span, serviceName, tracer._service)
 
     analyticsSampler.sample(span, config.measured)
 
