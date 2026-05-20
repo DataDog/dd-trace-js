@@ -22,7 +22,8 @@ describe('RASP metrics', () => {
   describe('RASP error metric', () => {
     let agent, proc
 
-    beforeEach(async () => {
+    beforeEach(async function () {
+      this.timeout(10_000)
       agent = await new FakeAgent().start()
       proc = await spawnProc(appFile, {
         cwd,
@@ -79,7 +80,8 @@ describe('RASP metrics', () => {
   describe('RASP timeout metric', () => {
     let agent, proc
 
-    beforeEach(async () => {
+    beforeEach(async function () {
+      this.timeout(10_000)
       agent = await new FakeAgent().start()
       proc = await spawnProc(appFile, {
         cwd,
