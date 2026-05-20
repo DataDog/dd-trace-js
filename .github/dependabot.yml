@@ -143,7 +143,9 @@ updates:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 1
+    # One slot per cohort group below plus headroom; with the cohort design a
+    # single blocked group otherwise stalls every other group.
+    open-pull-requests-limit: 10
     cooldown:
       default-days: 3
       exclude:
@@ -157,7 +159,68 @@ updates:
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
+    # Cohort-based groups so a single breaking bump only blocks its own PR.
     groups:
+      ai-and-llm:
+        patterns:
+          - "@ai-sdk/*"
+          - "@anthropic-ai/sdk"
+          - "@google-cloud/vertexai"
+          - "@google/genai"
+          - "@langchain/*"
+          - "@modelcontextprotocol/sdk"
+          - "@openai/*"
+          - "ai"
+          - "langchain"
+          - "openai"
+      serverless:
+        patterns:
+          - "@aws-sdk/*"
+          - "@azure/*"
+          - "@smithy/*"
+          - "aws-sdk"
+          - "azure-functions-core-tools"
+          - "durable-functions"
+      opentelemetry:
+        patterns:
+          - "@opentelemetry/*"
+          - "opentracing"
+      test-optimization:
+        patterns:
+          - "@fast-check/jest"
+          - "@happy-dom/jest-environment"
+          - "@jest/*"
+          - "@playwright/test"
+          - "@vitest/*"
+          - "babel-jest"
+          - "jest-*"
+          - "jest"
+          - "mocha-each"
+          - "mocha"
+          - "nyc"
+          - "playwright-core"
+          - "playwright"
+          - "tinypool"
+          - "vitest"
+      databases:
+        patterns:
+          - "@node-redis/client"
+          - "@prisma/*"
+          - "@redis/client"
+          - "ioredis"
+          - "mongodb-core"
+          - "mongodb"
+          - "mongoose"
+          - "mysql"
+          - "mysql2"
+          - "pg-cursor"
+          - "pg-native"
+          - "pg-query-stream"
+          - "pg"
+          - "prisma"
+          - "redis"
+          - "sqlite3"
+          - "tedious"
       test-versions:
         patterns:
           - "*"
