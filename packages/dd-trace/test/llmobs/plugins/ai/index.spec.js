@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
@@ -28,6 +30,15 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
   } else {
     return '@ai-sdk/openai@1.3.23'
   }
+}
+
+function getAiSdkBedrockPackage (vercelAiVersion) {
+  if (semifies(vercelAiVersion, '>=6.0.0')) {
+    return '@ai-sdk/amazon-bedrock'
+  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
+    return '@ai-sdk/amazon-bedrock@3.0.0'
+  }
+  return null
 }
 
 const MOCK_TELEMETRY_METADATA = {
@@ -1026,6 +1037,98 @@ describe('Plugin', () => {
           metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
           tags: { ml_app: 'test', integration: 'ai' },
         })
+      })
+    })
+  })
+
+  describe('Bedrock prompt cache token capture', () => {
+    // @ai-sdk/amazon-bedrock uses globalThis.fetch (not node:http), so nock
+    // cannot intercept it. Both bedrock@3 and bedrock@4 accept an options.fetch
+    // parameter in createAmazonBedrock(), so we pass a mock fetch directly
+    // rather than patching globalThis.fetch — this avoids both the nock
+    // limitation and timing issues around when globalThis.fetch is captured.
+    function makeMockFetch (scenario) {
+      const fixture = require(`../../../../../datadog-plugin-ai/test/resources/${scenario}.json`)
+      return () => new Response(JSON.stringify(fixture), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    useEnv({
+      AWS_ACCESS_KEY_ID: 'test-access-key',
+      AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+      AWS_REGION: 'us-east-1',
+    })
+
+    // @ai-sdk/amazon-bedrock signs requests with aws4fetch, which calls
+    // globalThis.crypto for SHA256/HMAC. Node 19+ exposes crypto as a global;
+    // on Node 18 (still supported and used in CI) we polyfill it from
+    // node:crypto.webcrypto.
+    before(() => {
+      if (typeof globalThis.crypto === 'undefined') {
+        globalThis.crypto = require('node:crypto').webcrypto
+      }
+    })
+
+    withVersions('ai', 'ai', '>=5.0.0', (version, _, realVersion) => {
+      const bedrockPkg = getAiSdkBedrockPackage(realVersion)
+      if (!bedrockPkg) return
+
+      let ai
+      let BedrockModule
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+        BedrockModule = require(`../../../../../../versions/${bedrockPkg}`)
+      })
+
+      // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
+      // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
+      // count through unchanged. Both fixtures use the raw Bedrock shape
+      // (inputTokens = fresh only).
+      const isV6 = semifies(realVersion, '>=6.0.0')
+
+      // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
+      // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
+      // For those older versions our fix correctly no-ops at the doGenerate scope
+      // because the SDK never exposes the attribute there.
+      const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
+
+      it('surfaces cache_read_input_tokens when Bedrock returns cacheReadInputTokens', async () => {
+        const { createAmazonBedrock } = BedrockModule.get()
+        const model = createAmazonBedrock({
+          region: 'us-east-1',
+          fetch: makeMockFetch('bedrock-cache-read'),
+        })('anthropic.claude-3-haiku-20240307-v1:0')
+
+        await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+        const { llmobsSpans } = await getEvents()
+        const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+        assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
+        assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, cacheReadOnDoGenerate ? 4425 : undefined)
+        // cache_write is 0 in this scenario; we filter zero values, so the metric is absent.
+        assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, undefined)
+      })
+
+      it('surfaces cache_write_input_tokens when Bedrock returns cacheWriteInputTokens', async () => {
+        const { createAmazonBedrock } = BedrockModule.get()
+        const model = createAmazonBedrock({
+          region: 'us-east-1',
+          fetch: makeMockFetch('bedrock-cache-write'),
+        })('anthropic.claude-3-haiku-20240307-v1:0')
+
+        await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+        const { llmobsSpans } = await getEvents()
+        const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+        assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
+        assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, 4425)
+        // cache_read is 0 in this scenario; we filter zero values, so the metric is absent.
+        assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, undefined)
       })
     })
   })
