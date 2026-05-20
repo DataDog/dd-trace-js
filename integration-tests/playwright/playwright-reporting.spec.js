@@ -38,6 +38,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_HAS_IMAGES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -705,6 +706,54 @@ versions.forEach((version) => {
           ])
         })
       })
+    })
+
+    const itWithScreenshots = version === 'latest' ? it : it.skip
+    itWithScreenshots('tags test spans with test.has_images when a failure screenshot is taken', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const testEvents = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+
+          const failedTest = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'fails and triggers a screenshot'
+          )
+          const passedTest = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'passes without a screenshot'
+          )
+
+          assert.ok(failedTest, 'failed test span should exist')
+          assert.strictEqual(
+            failedTest.content.meta[TEST_HAS_IMAGES],
+            'true',
+            'failed test with screenshot should be tagged with test.has_images'
+          )
+
+          assert.ok(passedTest, 'passed test span should exist')
+          assert.ok(
+            !passedTest.content.meta[TEST_HAS_IMAGES],
+            'passed test without screenshot should not have test.has_images tag'
+          )
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+            PW_SCREENSHOT: 'only-on-failure',
+          },
+        }
+      )
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
     })
   })
 })

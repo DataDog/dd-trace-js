@@ -48,4 +48,8 @@ if (process.env.MAX_FAILURES) {
   config.maxFailures = Number(process.env.MAX_FAILURES)
 }
 
+if (process.env.PW_SCREENSHOT) {
+  config.use = { screenshot: process.env.PW_SCREENSHOT }
+}
+
 module.exports = config
