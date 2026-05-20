@@ -19,7 +19,8 @@ describe('esm', () => {
 
   withVersions('confluentinc-kafka-javascript', '@confluentinc/kafka-javascript', version => {
     useSandbox([`'@confluentinc/kafka-javascript@${version}'`], false, [
-      './packages/datadog-plugin-confluentinc-kafka-javascript/test/integration-test/*'])
+      './packages/datadog-plugin-confluentinc-kafka-javascript/test/integration-test/*',
+      './packages/datadog-plugin-confluentinc-kafka-javascript/test/helpers.js'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
