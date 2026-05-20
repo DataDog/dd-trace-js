@@ -10,6 +10,7 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
 const { DD_MAJOR } = require('../../../../version')
 const SpanContext = require('./span_context')
@@ -275,6 +276,8 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
     this._spanContext._tags['_dd.integration'] = this._integrationName
+
+    resolveServiceSource(this, this.#parentTracer._service)
 
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
