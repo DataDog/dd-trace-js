@@ -2076,7 +2076,7 @@ moduleTypes.forEach(({
       ])
     })
 
-    over12It.only('tags test spans with test.has_images when a failure screenshot is taken', async () => {
+    over12It('tags test spans with test.has_images when a failure screenshot is taken', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
       childProcess = exec(
