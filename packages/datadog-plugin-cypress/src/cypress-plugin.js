@@ -49,6 +49,7 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_HAS_IMAGES,
   getLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
   getPullRequestDiff,
@@ -1031,6 +1032,12 @@ class CypressPlugin {
         finishAfterRun()
       }
     })
+  }
+
+  afterScreenshot () {
+    if (this.activeTestSpan) {
+      this.activeTestSpan.setTag(TEST_HAS_IMAGES, 'true')
+    }
   }
 
   afterSpec (spec, results) {
