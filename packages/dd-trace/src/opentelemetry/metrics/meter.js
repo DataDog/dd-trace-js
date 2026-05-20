@@ -1,7 +1,6 @@
 'use strict'
 
 const { VERSION: packageVersion } = require('../../../../../version')
-const log = require('../../log')
 const {
   Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter,
 } = require('./instruments')
@@ -148,23 +147,21 @@ class Meter {
   }
 
   /**
-   * Adds a batch observable callback (not implemented).
+   * Registers a batch observable callback for the given observables.
    *
-   * @param {Function} callback - Batch observable callback
-   * @param {Array} observables - Array of observable instruments
+   * @param {Function} callback
+   * @param {Array} observables
    */
   addBatchObservableCallback (callback, observables) {
-    log.warn('addBatchObservableCallback is not implemented')
+    this.meterProvider.reader?.addBatchObservableCallback?.(callback, observables)
   }
 
   /**
-   * Removes a batch observable callback (not implemented).
-   *
-   * @param {Function} callback - Batch observable callback
-   * @param {Array} observables - Array of observable instruments
+   * @param {Function} callback
+   * @param {Array} observables
    */
   removeBatchObservableCallback (callback, observables) {
-    log.warn('removeBatchObservableCallback is not implemented')
+    this.meterProvider.reader?.removeBatchObservableCallback?.(callback, observables)
   }
 }
 

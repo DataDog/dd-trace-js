@@ -179,6 +179,18 @@ class ObservableInstrument extends Instrument {
 
     return observations
   }
+
+  /**
+   * Builds a measurement for this instrument's type. Used by the reader for
+   * batch observable callbacks where the type is otherwise inaccessible.
+   *
+   * @param {number} value
+   * @param {Attributes} attributes
+   * @returns {Measurement}
+   */
+  _recordObservation (value, attributes) {
+    return this.createMeasurement(this.#type, value, attributes)
+  }
 }
 
 /**
