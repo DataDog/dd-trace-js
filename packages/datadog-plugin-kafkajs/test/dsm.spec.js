@@ -15,6 +15,8 @@ const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+const { createAndAwaitTopics } = require('./helpers')
+
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
@@ -70,14 +72,14 @@ describe('Plugin', () => {
           topicBIn = `topic-b-in-${randomUUID()}`
           topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
-            waitForLeaders: true,
-            topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
+          await createAndAwaitTopics(
+            admin,
+            [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
               topic,
               numPartitions: 1,
               replicationFactor: 1,
-            })),
-          })
+            }))
+          )
           expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
           expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })

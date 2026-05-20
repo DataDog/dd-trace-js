@@ -15,6 +15,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { clientToCluster } = require('../../datadog-instrumentations/src/helpers/kafka')
 const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
+const { createAndAwaitTopics } = require('./helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
@@ -50,14 +51,11 @@ describe('Plugin', () => {
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
-            waitForLeaders: true,
-            topics: [{
-              topic: testTopic,
-              numPartitions: 1,
-              replicationFactor: 1,
-            }],
-          })
+          await createAndAwaitTopics(admin, [{
+            topic: testTopic,
+            numPartitions: 1,
+            replicationFactor: 1,
+          }])
         })
 
         describe('producer', () => {
