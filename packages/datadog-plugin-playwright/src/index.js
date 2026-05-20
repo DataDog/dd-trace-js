@@ -16,6 +16,7 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_HAS_IMAGES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -323,6 +324,7 @@ class PlaywrightPlugin extends CiPlugin {
       finalStatus,
       earlyFlakeAbortReason,
       onDone,
+      hasImages,
     }) => {
       if (!span) return
 
@@ -387,6 +389,9 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (earlyFlakeAbortReason) {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+      }
+      if (hasImages) {
+        span.setTag(TEST_HAS_IMAGES, 'true')
       }
       for (const step of steps) {
         const stepStartTime = step.startTime.getTime()

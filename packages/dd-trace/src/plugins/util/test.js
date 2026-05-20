@@ -87,6 +87,7 @@ const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
+const TEST_HAS_IMAGES = 'test.has_images'
 const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
@@ -388,6 +389,7 @@ module.exports = {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_HAS_IMAGES,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   getTestEnvironmentMetadata,
