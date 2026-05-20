@@ -4,7 +4,6 @@
 
 const dc = require('dc-polyfill')
 const logger = require('../log')
-const { stampIntegrationService } = require('../service-naming/source-marker')
 const { storage } = require('../../../datadog-core')
 
 const legacyStorage = storage('legacy')
@@ -137,20 +136,6 @@ module.exports = class Plugin {
    */
   addBind (channelName, transform) {
     this._bindings.push(new StoreBinding(channelName, transform))
-  }
-
-  /**
-   * Set the `service.name` tag on a span on behalf of an integration. Records
-   * the intended value as the integration's claim, so later overrides by user
-   * code are detected at finish and reflected in `_dd.svc_src`.
-   *
-   * @param {object} span Internal DatadogSpan instance.
-   * @param {string} name Service name the integration is claiming.
-   * @returns {void}
-   */
-  setServiceName (span, name) {
-    span._spanContext._tags['service.name'] = name
-    stampIntegrationService(span, name)
   }
 
   /**

@@ -9,7 +9,7 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
-const { INTEGRATION_SERVICE } = require('../../src/service-naming/source-marker')
+const { MANUAL, resolveServiceSource } = require('../../src/service-naming/source-marker')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
@@ -19,10 +19,13 @@ describe('TracingPlugin', () => {
     let plugin
 
     beforeEach(() => {
-      startSpanSpy = sinon.stub().returns({})
+      startSpanSpy = sinon.stub().callsFake((_name, opts) => ({
+        _spanContext: { _tags: { ...opts.tags } },
+      }))
       plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
+          _service: 'tracer-default',
         },
       })
       plugin.configure({})
@@ -73,39 +76,33 @@ describe('TracingPlugin', () => {
       assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
     })
 
-    it('stamps the integration marker when service is provided with a source', () => {
-      const span = {}
-      startSpanSpy.returns(span)
+    it('records the integration claim so a user override is detected at finish', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
 
-      plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+      span._spanContext._tags['service.name'] = 'user-svc'
+      resolveServiceSource(span, 'tracer-default')
 
-      assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], MANUAL)
     })
 
-    it('stamps the integration marker when service is supplied via meta.service', () => {
+    it('records the integration claim when service is supplied via meta.service', () => {
       // Regression: inferred-proxy spans (packages/dd-trace/src/plugins/util/inferred_proxy.js)
       // pass the service through `meta.service`, leaving the top-level `service` undefined.
-      // Without stamping here, resolveServiceSource at finish would misclassify these as manual.
-      const span = {}
-      startSpanSpy.returns(span)
+      // Without recording the claim, a later override would be indistinguishable from a manual write.
+      const span = plugin.startSpan('Test span', { meta: { service: 'inferred-proxy-svc' } })
 
-      plugin.startSpan('Test span', { meta: { service: 'inferred-proxy-svc' } })
+      span._spanContext._tags['service.name'] = 'user-svc'
+      resolveServiceSource(span, 'tracer-default')
 
-      assert.strictEqual(span[INTEGRATION_SERVICE], 'inferred-proxy-svc')
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], MANUAL)
     })
 
-    it('stamps the integration marker when service equals the tracer default', () => {
-      // resolveServiceSource handles the equal-to-tracer-default case at finish time,
-      // so we unconditionally stamp here and let finish reconcile.
-      const localStub = sinon.stub().returns({})
-      const localPlugin = new TracingPlugin({ _tracer: { startSpan: localStub, _service: 'app' } })
-      localPlugin.configure({})
+    it('keeps the integration source when the user does not override service.name', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
 
-      const span = {}
-      localStub.returns(span)
-      localPlugin.startSpan('Test span', { service: 'app' })
+      resolveServiceSource(span, 'tracer-default')
 
-      assert.strictEqual(span[INTEGRATION_SERVICE], 'app')
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
     })
   })
 })

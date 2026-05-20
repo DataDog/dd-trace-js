@@ -617,6 +617,15 @@ export default [
     },
   },
   {
+    // source-marker.js is the single approved write site for service.name tags;
+    // suppress the rule that otherwise guards against untracked direct writes.
+    name: 'dd-trace/service-naming/source-marker',
+    files: ['packages/dd-trace/src/service-naming/source-marker.js'],
+    rules: {
+      'eslint-rules/eslint-prefer-set-service-name': 'off',
+    },
+  },
+  {
     name: 'dd-trace/config-sync',
     files: [
       'eslint.config.mjs',
