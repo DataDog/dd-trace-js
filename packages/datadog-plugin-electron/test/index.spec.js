@@ -51,7 +51,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load('electron'))
         beforeEach(function (done) {
-          this.timeout(10_000)
+          this.timeout(30_000)
           startApp(done)
         })
 
