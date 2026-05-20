@@ -44,6 +44,7 @@ class CypressPlugin extends Plugin {
       }
 
       on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
+      on('after:screenshot', () => cypressPlugin.afterScreenshot())
 
       on('after:spec', (spec, results) => {
         const chain = userAfterSpecHandlers.reduce(
