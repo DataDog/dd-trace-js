@@ -3,6 +3,7 @@
 const { LOG } = require('../../../ext/formats')
 const { storage } = require('../../datadog-core')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
+const { messageProxy } = LogPlugin
 
 const legacyStorage = storage('legacy')
 
@@ -10,12 +11,18 @@ class PinoPlugin extends LogPlugin {
   static id = 'pino'
 
   /**
-   * Inject `dd` by splicing the trace-correlation fields into the JSON line
-   * pino just produced, rather than wrapping the caller-owned message in a
-   * `Proxy`. Pino's instrumentation publishes the JSON line once `asJson`
-   * has run, so the caller's message object is never observed -- a downstream
-   * user `Proxy` (or any custom serializer) cannot see our mutation because
-   * there is no mutation to see.
+   * Two subscribers split the work:
+   *
+   *  - `apm:pino:log:json` is the hot path. Pino publishes the JSON line it
+   *    just produced, and we splice `,"dd":<json>` in before the closing
+   *    brace. The caller-owned message object is never observed, so a
+   *    user `Proxy` (or custom serializer) cannot see our mutation -- there
+   *    is no mutation to see.
+   *  - `apm:pino:log` is the pretty-print path. `pino-pretty` (bundled with
+   *    pino 5/7, separate package on >=8) reads the original message object
+   *    rather than the JSON line, so the splice above is invisible to it.
+   *    Wrap the object in a `Proxy` that exposes a virtual `dd` field so
+   *    `pino-pretty`'s `Object.keys` walk renders it.
    *
    * @override
    */
@@ -39,6 +46,12 @@ class PinoPlugin extends LogPlugin {
       const ddJson = JSON.stringify(dd)
       const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
       payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
+    })
+
+    this.addSub('apm:pino:log', (payload) => {
+      const holder = {}
+      this.tracer.inject(legacyStorage.getStore()?.span, LOG, holder)
+      payload.message = messageProxy(payload.message, holder)
     })
   }
 }

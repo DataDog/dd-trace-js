@@ -12,6 +12,7 @@ const Tracer = require('../../dd-trace/src/tracer')
 const getConfig = require('../../dd-trace/src/config')
 
 const jsonCh = channel('apm:pino:log:json')
+const messageCh = channel('apm:pino:log')
 
 const tracer = new Tracer(getConfig({
   enabled: true,
@@ -45,7 +46,7 @@ describe('PinoPlugin', () => {
     const data = { line: '{"level":30,"msg":"hi"}\n' }
     jsonCh.publish(data)
     // The splice happens before the closing `}`; the trailing newline stays.
-    assert.ok(data.line.endsWith('}\n'))
+    assert.match(data.line, /\}\n$/)
     const parsed = JSON.parse(data.line)
     assert.strictEqual(parsed.dd.service, 'my-service')
   })
@@ -73,5 +74,38 @@ describe('PinoPlugin', () => {
     const data = { line: 'malformed' }
     jsonCh.publish(data)
     assert.strictEqual(data.line, 'malformed')
+  })
+
+  describe('apm:pino:log (pino-pretty path)', () => {
+    it('exposes dd as a virtual field on the message proxy', () => {
+      const original = { level: 30, msg: 'hello' }
+      const data = { message: original }
+      messageCh.publish(data)
+      assert.notStrictEqual(data.message, original)
+      assert.deepStrictEqual(data.message.dd, {
+        service: 'my-service',
+        version: '1.2.3',
+        env: 'my-env',
+      })
+      assert.strictEqual(data.message.msg, 'hello')
+      assert.ok(Object.keys(data.message).includes('dd'))
+    })
+
+    it('includes trace_id and span_id when a span is active', () => {
+      const span = tracer.startSpan('test')
+      storage('legacy').run({ span }, () => {
+        const data = { message: { msg: 'hello' } }
+        messageCh.publish(data)
+        assert.strictEqual(data.message.dd.trace_id, span.context().toTraceId(true))
+        assert.strictEqual(data.message.dd.span_id, span.context().toSpanId())
+      })
+    })
+
+    it('keeps the caller-set dd visible without overriding it', () => {
+      const original = { msg: 'hello', dd: { trace_id: 'user-supplied' } }
+      const data = { message: original }
+      messageCh.publish(data)
+      assert.strictEqual(data.message.dd.trace_id, 'user-supplied')
+    })
   })
 })
