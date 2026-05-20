@@ -9,7 +9,11 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
-const { MANUAL, resolveServiceSource } = require('../../src/service-naming/source-marker')
+const {
+  INTEGRATION_SERVICE,
+  MANUAL,
+  resolveServiceSource,
+} = require('../../src/service-naming/source-resolver')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
@@ -103,6 +107,59 @@ describe('TracingPlugin', () => {
       resolveServiceSource(span, 'tracer-default')
 
       assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
+    })
+  })
+
+  describe('stampIntegrationService method', () => {
+    let plugin
+
+    beforeEach(() => {
+      plugin = new TracingPlugin({ _tracer: { _service: 'tracer-default' } })
+      plugin.configure({})
+    })
+
+    it('records the integration claim using the tracer service', () => {
+      const span = { _spanContext: { _tags: {} } }
+
+      plugin.stampIntegrationService(span, 'kafka-broker')
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
+    })
+
+    it('does not record a claim when service matches the tracer default', () => {
+      const span = { _spanContext: { _tags: {} } }
+
+      plugin.stampIntegrationService(span, 'tracer-default')
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], undefined)
+    })
+  })
+
+  describe('setServiceName method', () => {
+    let plugin
+
+    beforeEach(() => {
+      plugin = new TracingPlugin({ _tracer: { _service: 'tracer-default' } })
+      plugin.configure({})
+    })
+
+    it('sets service.name and stamps the integration claim', () => {
+      const span = { _spanContext: { _tags: {} } }
+
+      plugin.setServiceName(span, 'express-app')
+
+      assert.deepStrictEqual(span._spanContext._tags, { 'service.name': 'express-app' })
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'express-app')
+    })
+
+    it('detects user override at finish when service.name is later mutated', () => {
+      const span = { _spanContext: { _tags: { [SVC_SRC_KEY]: 'opt.plugin' } } }
+      plugin.setServiceName(span, 'express-app')
+
+      span._spanContext._tags['service.name'] = 'user-svc'
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], MANUAL)
     })
   })
 })
