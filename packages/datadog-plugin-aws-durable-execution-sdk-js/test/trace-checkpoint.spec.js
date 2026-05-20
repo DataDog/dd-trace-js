@@ -2,6 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const id = require('../../dd-trace/src/id')
+const SpanContext = require('../../dd-trace/src/opentracing/span_context')
+const { getConfigFresh } = require('../../dd-trace/test/helpers/config')
+
 const { saveTraceContextCheckpointIfUpdated } = require('../src/trace-checkpoint')
 
 describe('trace-checkpoint', () => {
@@ -102,5 +106,45 @@ describe('trace-checkpoint', () => {
     )
 
     assert.deepEqual(recordedActions, [])
+  })
+
+  it('does not leak ot-baggage-* headers into the checkpoint payload', async () => {
+    const recordedUpdates = []
+    const checkpointManager = {
+      checkpoint (_stepId, update) {
+        recordedUpdates.push(update)
+        return Promise.resolve()
+      },
+    }
+
+    const config = getConfigFresh()
+    config.legacyBaggageEnabled = true
+
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      baggageItems: { secret: 'do-not-propagate' },
+      trace: { started: [], finished: [], tags: {} },
+    })
+
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: config },
+      { context: () => spanContext },
+      { checkpoint: checkpointManager },
+      '999',
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: { Operations: [] },
+      },
+    )
+
+    const succeed = recordedUpdates.find(update => update.Action === 'SUCCEED')
+    assert.ok(succeed, 'expected SUCCEED checkpoint to be recorded')
+    const payload = JSON.parse(succeed.Payload)
+    for (const key of Object.keys(payload)) {
+      assert.doesNotMatch(key, /^ot-baggage-/, `unexpected baggage header in checkpoint payload: ${key}`)
+    }
+    assert.equal(payload['x-datadog-trace-id'], '123')
   })
 })

@@ -18,12 +18,15 @@ function getDatadogOnlyPropagator (tracer) {
   const cached = datadogOnlyPropagatorCache.get(config)
   if (cached) return cached
   // Shadow `tracePropagationStyle.inject` while inheriting every other field
-  // (baggage limits, x-datadog-tags length cap, etc.) from the live config.
+  // (x-datadog-tags length cap, etc.) from the live config. Force-disable
+  // `legacyBaggageEnabled` too: it injects `ot-baggage-*` headers independently
+  // of the inject style, which would leak baggage into the checkpoint payload.
   const shadowConfig = Object.create(config)
   shadowConfig.tracePropagationStyle = {
     ...config.tracePropagationStyle,
     inject: ['datadog'],
   }
+  shadowConfig.legacyBaggageEnabled = false
   const propagator = new TextMapPropagator(shadowConfig)
   datadogOnlyPropagatorCache.set(config, propagator)
   return propagator
