@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 
@@ -365,7 +366,7 @@ describe('Plugin', () => {
                   assert.strictEqual(spans[0].resource, 'GET /user/:id')
                   assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
 
-                  assert.ok(Object.hasOwn(spans[1], 'resource'))
+                  assert.ok(Object.hasOwn(spans[1], 'resource'), `Available keys: ${inspect(Object.keys(spans[1]))}`)
                   assert.match(spans[1].resource, /^(dispatch|bound)/)
 
                   assert.strictEqual(spans[2].resource, 'handle')
@@ -672,7 +673,7 @@ describe('Plugin', () => {
                   assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
                   assert.strictEqual(spans[0].error, 1)
 
-                  assert.ok(Object.hasOwn(spans[1], 'resource'))
+                  assert.ok(Object.hasOwn(spans[1], 'resource'), `Available keys: ${inspect(Object.keys(spans[1]))}`)
                   assert.match(spans[1].resource, /^(dispatch|bound)/)
                   assertObjectContains(spans[1].meta, {
                     [ERROR_TYPE]: error.name,

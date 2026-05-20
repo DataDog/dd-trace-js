@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { pollInterval, setup } = require('./utils')
@@ -239,7 +240,7 @@ describe('Dynamic Instrumentation', function () {
             assertUUID(diagnostics.runtimeId)
 
             if (diagnostics.status === 'ERROR') {
-              assert.ok(Object.hasOwn(diagnostics, 'exception'))
+              assert.ok(Object.hasOwn(diagnostics, 'exception'), `Available keys: ${inspect(Object.keys(diagnostics))}`)
               assert.deepStrictEqual(['message', 'stacktrace'], Object.keys(diagnostics.exception).sort())
               assert.strictEqual(typeof diagnostics.exception.message, 'string')
               assert.strictEqual(typeof diagnostics.exception.stacktrace, 'string')

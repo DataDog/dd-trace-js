@@ -30,12 +30,12 @@ describe('Histogram', () => {
     assert.strictEqual(typeof histogram.median, 'number')
     assert.strictEqual(histogram.count, 99)
     assert.strictEqual(typeof histogram.p95, 'number')
-    assert.ok(median >= 49)
-    assert.ok(median <= 51)
-    assert.ok(p50 >= 49)
-    assert.ok(p50 <= 51)
-    assert.ok(p95 >= 94)
-    assert.ok(p95 <= 96)
+    assert.ok(median >= 49, `Expected ${median} >= 49`)
+    assert.ok(median <= 51, `Expected ${median} <= 51`)
+    assert.ok(p50 >= 49, `Expected ${p50} >= 49`)
+    assert.ok(p50 <= 51, `Expected ${p50} <= 51`)
+    assert.ok(p95 >= 94, `Expected ${p95} >= 94`)
+    assert.ok(p95 <= 96, `Expected ${p95} <= 96`)
   })
 
   it('should reset all stats', () => {

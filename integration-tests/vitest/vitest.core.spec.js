@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec } = require('child_process')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -128,9 +129,15 @@ versions.forEach((version) => {
             const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
             const testEvents = events.filter(event => event.type === 'test')
 
-            assert.ok(testSessionEvent.content.resource.includes('test_session.vitest run'))
+            assert.ok(
+              testSessionEvent.content.resource.includes('test_session.vitest run'),
+              `Got: ${inspect(testSessionEvent.content.resource)}`
+            )
             assert.strictEqual(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-            assert.ok(testModuleEvent.content.resource.includes('test_module.vitest run'))
+            assert.ok(
+              testModuleEvent.content.resource.includes('test_module.vitest run'),
+              `Got: ${inspect(testModuleEvent.content.resource)}`
+            )
             assert.strictEqual(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'test')
             assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'test')
@@ -541,7 +548,7 @@ versions.forEach((version) => {
 
         Promise.all([eventsPromise, once(childProcess, 'exit')]).then(() => {
           if (version !== '1.6.0') {
-            assert.ok(childStdout.includes(CUSTOM_SEQUENCER_MARKER))
+            assert.ok(childStdout.includes(CUSTOM_SEQUENCER_MARKER), `Got: ${inspect(childStdout)}`)
           }
           done()
         }).catch(done)

@@ -6,6 +6,7 @@ const { once } = require('node:events')
 const { fork, exec } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -3576,8 +3577,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ddsource: 'dd_debugger',
             level: 'error',
           })
-          assert.ok(diLog.ddtags.includes('git.repository_url:'))
-          assert.ok(diLog.ddtags.includes('git.commit.sha:'))
+          assert.ok(diLog.ddtags.includes('git.repository_url:'), `Got: ${inspect(diLog.ddtags)}`)
+          assert.ok(diLog.ddtags.includes('git.commit.sha:'), `Got: ${inspect(diLog.ddtags)}`)
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
           assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {

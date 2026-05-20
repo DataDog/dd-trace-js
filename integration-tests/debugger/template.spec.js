@@ -203,7 +203,7 @@ describe('Dynamic Instrumentation', function () {
 
         const { evaluationErrors } = payload.debugger.snapshot
 
-        assert.ok(Array.isArray(evaluationErrors))
+        assert.ok(Array.isArray(evaluationErrors), `Expected array, got ${inspect(evaluationErrors)}`)
         assert.strictEqual(evaluationErrors.length, 2)
         assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
         assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')

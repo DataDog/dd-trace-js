@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { execSync } = require('child_process')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -59,7 +60,7 @@ describe('esm', () => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         }, undefined, undefined, true)
       }).timeout(300 * 1000)

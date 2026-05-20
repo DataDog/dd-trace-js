@@ -538,7 +538,7 @@ moduleTypes.forEach(({
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.ok(tests.length > 0)
+          assert.ok(tests.length > 0, `Expected ${tests.length} > 0`)
           tests.forEach(test => {
             assert.strictEqual(test.itr_correlation_id, itrCorrelationId)
           })
@@ -621,7 +621,7 @@ moduleTypes.forEach(({
 
         const testEvents = events.filter(event => event.type === 'test')
         const testModuleEvent = events.find(event => event.type === 'test_module_end')
-        assert.ok(testEvents.length > 0)
+        assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
         assert.ok(testModuleEvent)
 
         testEvents.forEach(testEvent => {

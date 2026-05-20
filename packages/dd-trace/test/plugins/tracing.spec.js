@@ -158,7 +158,7 @@ describe('common Plugin behaviour', () => {
         done, 'commonPlugin', {},
         span => {
           assert.strictEqual(span.service, 'test')
-          assert.ok(!('_dd.base_service' in span.meta) || span.meta['_dd.base_service'] !== 'test')
+          assert.notStrictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })
