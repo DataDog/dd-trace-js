@@ -1293,6 +1293,13 @@
         "default": null
       }
     ],
+    "DD_POC_SITE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null
+      }
+    ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
       {
         "implementation": "A",
