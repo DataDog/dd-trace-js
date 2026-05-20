@@ -2592,6 +2592,22 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_FILTER_OWN_FRAMES": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "description": "Opt out of the dd-trace `Error.prepareStackTrace` frame filter once it ships on by default. Set to `false` to disable filtering."
+      }
+    ],
+    "DD_TRACE_FILTER_OWN_FRAMES_EXPERIMENTAL": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "description": "Experimental: opt in to the dd-trace `Error.prepareStackTrace` frame filter while it is off by default."
+      }
+    ],
     "DD_TRACE_FIND_MY_WAY_ENABLED": [
       {
         "implementation": "A",
@@ -2803,6 +2819,14 @@
         "configurationNames": [
           "inferredProxyServicesEnabled"
         ]
+      }
+    ],
+    "DD_TRACE_INTERNAL_TEST_HARNESS": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "description": "Internal: set to disable the dd-trace `Error.prepareStackTrace` frame filter so dd-trace's own test suite sees unfiltered stacks."
       }
     ],
     "DD_TRACE_IOREDIS_ENABLED": [

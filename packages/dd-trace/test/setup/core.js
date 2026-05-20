@@ -14,6 +14,7 @@ if (process.env.CI) {
 }
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+process.env.DD_TRACE_INTERNAL_TEST_HARNESS = '1'
 
 // If this is a release PR, set the SSI variables.
 if (/^v\d+\.x$/.test(process.env.GITHUB_BASE_REF || '')) {

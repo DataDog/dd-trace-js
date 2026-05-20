@@ -254,6 +254,8 @@ export interface GeneratedConfig {
   DD_TRACE_EXPRESS_SESSION_ENABLED: boolean;
   DD_TRACE_FASTIFY_ENABLED: boolean;
   DD_TRACE_FETCH_ENABLED: boolean;
+  DD_TRACE_FILTER_OWN_FRAMES: boolean | undefined;
+  DD_TRACE_FILTER_OWN_FRAMES_EXPERIMENTAL: boolean | undefined;
   DD_TRACE_FIND_MY_WAY_ENABLED: boolean;
   DD_TRACE_FS_ENABLED: boolean;
   DD_TRACE_GCP_PUBSUB_PUSH_ENABLED: boolean;
@@ -280,6 +282,7 @@ export interface GeneratedConfig {
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP2_ENABLED: boolean;
   DD_TRACE_HTTPS_ENABLED: boolean;
+  DD_TRACE_INTERNAL_TEST_HARNESS: boolean | undefined;
   DD_TRACE_IOREDIS_ENABLED: boolean;
   DD_TRACE_IOVALKEY_ENABLED: boolean;
   DD_TRACE_JEST_CIRCUS_ENABLED: boolean;
