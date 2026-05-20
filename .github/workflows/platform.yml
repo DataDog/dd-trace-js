@@ -42,7 +42,12 @@ jobs:
           - name: yarn
             install: yarn add
           - name: yarn-berry
-            install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
+            install: >-
+              (command -v corepack >/dev/null 2>&1 || npm install -g corepack)
+              && yarn set version stable
+              && yarn config set nodeLinker node-modules
+              && yarn config set --json npmPreapprovedPackages '["@datadog/*"]'
+              && yarn add
           - name: bun
             install: bun add --linker=hoisted
     runs-on: ubuntu-latest
