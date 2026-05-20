@@ -113,6 +113,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.main.receive')
+              assert.ok(span, 'expected electron.main.receive span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -135,6 +136,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.main.handle')
+              assert.ok(span, 'expected electron.main.handle span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -156,6 +158,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.main.send')
+              assert.ok(span, 'expected electron.main.send span')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.main.send')
@@ -176,6 +179,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.renderer.receive')
+              assert.ok(span, 'expected electron.renderer.receive span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -198,6 +202,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.renderer.send')
+              assert.ok(span, 'expected electron.renderer.send span')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.renderer.send')
