@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:

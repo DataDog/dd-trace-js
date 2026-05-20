@@ -110,7 +110,8 @@ describe('Sfn', () => {
             input: JSON.stringify({ moduleName }),
           }
           const expectSpanPromise = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+            const span = traces.flat().find(s => s.resource === 'startExecution')
+            assert.ok(span, 'expected startExecution span')
             assert.strictEqual(span.resource, 'startExecution')
             assert.strictEqual(span.meta.statemachinearn, stateMachineArn)
           })
