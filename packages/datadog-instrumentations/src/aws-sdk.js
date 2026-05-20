@@ -233,13 +233,14 @@ function wrapSmithySend (send) {
 }
 
 function handleCompletion (result, ctx, channels) {
-  const iterator = result?.body?.[Symbol.asyncIterator]
+  const streamable = result?.body ?? result?.stream
+  const iterator = streamable?.[Symbol.asyncIterator]
   if (!iterator) {
     channels.complete.publish(ctx)
     return
   }
 
-  shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
+  shimmer.wrap(streamable, Symbol.asyncIterator, function (asyncIterator) {
     return function (...args) {
       const iterator = asyncIterator.apply(this, args)
       shimmer.wrap(iterator, 'next', function (next) {

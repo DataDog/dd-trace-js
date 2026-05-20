@@ -299,6 +299,46 @@ bedrockruntime.modelConfig = {
   maxTokens,
 }
 
+const converseUserPrompt = 'Explain the concept of distributed tracing in a simple way'
+const converseSystemPrompt = 'You are an expert swe that is to use the tool fetch_concept'
+bedrockruntime.converseRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+  systemPrompt: converseSystemPrompt,
+  userPrompt: converseUserPrompt,
+  request: {
+    system: [{ text: converseSystemPrompt }],
+    messages: [{ role: 'user', content: [{ text: converseUserPrompt }] }],
+    inferenceConfig: { temperature, maxTokens },
+    toolConfig: {
+      tools: [{
+        toolSpec: {
+          name: 'fetch_concept',
+          description: 'Fetch an expert explanation for a concept',
+          inputSchema: {
+            json: {
+              type: 'object',
+              properties: { concept: { type: 'string', description: 'The concept to explain' } },
+              required: ['concept'],
+            },
+          },
+        },
+      }],
+    },
+  },
+  response: {
+    role: 'assistant',
+    stopReason: 'tool_use',
+    toolCall: { name: 'fetch_concept', arguments: { concept: 'distributed tracing' } },
+    inputTokens: 364,
+    outputTokens: 55,
+  },
+  streamedResponse: {
+    inputTokens: 364,
+    outputTokens: 41,
+  },
+}
+
 bedrockruntime.cacheWriteRequest = {
   provider: PROVIDER.ANTHROPIC,
   modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
