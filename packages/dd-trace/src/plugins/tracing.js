@@ -206,13 +206,12 @@ class TracingPlugin extends Plugin {
       serviceSource = undefined
     }
 
-    const finalServiceName = serviceName || tracer._service
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': finalServiceName,
+        'service.name': serviceName || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
