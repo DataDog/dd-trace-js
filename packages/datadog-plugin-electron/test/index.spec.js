@@ -33,7 +33,11 @@ describe('Plugin', () => {
     const startApp = done => {
       const electron = require(`../../../versions/electron@${version}`).get()
 
-      child = proc.spawn(electron, [join(__dirname, 'app', 'main')], {
+      const args = [join(__dirname, 'app', 'main')]
+      if (process.platform === 'linux') {
+        args.push('--no-sandbox', '--disable-gpu')
+      }
+      child = proc.spawn(electron, args, {
         env: {
           ...process.env,
           NODE_OPTIONS: `-r ${join(__dirname, 'tracer')}`,
@@ -51,7 +55,6 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load('electron'))
         beforeEach(function (done) {
-          this.timeout(30_000)
           startApp(done)
         })
 
