@@ -41,11 +41,16 @@ function getFormattedJestTestParameters (testParameters) {
   return formattedParameters
 }
 
-// Support for `@fast-check/jest`: this library modifies the test name to include the seed
-// A test name that keeps changing breaks some Test Optimization's features.
+// @fast-check/jest appends a random seed to the reported test name. A test name that keeps changing
+// breaks some Test Optimization features, so normalize this narrow suffix regardless of import style.
 const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
+
+function removeSeedSuffixFromTestName (testName) {
+  return testName.replace(SEED_SUFFIX_RE, '')
+}
+
 // https://github.com/facebook/jest/blob/3e38157ad5f23fb7d24669d24fae8ded06a7ab75/packages/jest-circus/src/utils.ts#L396
-function getJestTestName (test, shouldStripSeed = false) {
+function getJestTestName (test) {
   const titles = []
   let parent = test
   do {
@@ -55,10 +60,7 @@ function getJestTestName (test, shouldStripSeed = false) {
   titles.shift() // remove TOP_DESCRIBE_BLOCK_NAME
 
   const testName = titles.join(' ')
-  if (shouldStripSeed) {
-    return testName.replace(SEED_SUFFIX_RE, '')
-  }
-  return testName
+  return removeSeedSuffixFromTestName(testName)
 }
 
 const globalDocblockRegExp = /^\s*(\/\*\*?(.|\r?\n)*?\*\/)/
@@ -172,4 +174,5 @@ module.exports = {
   getJestTestName,
   getJestSuitesToRun,
   isMarkedAsUnskippable,
+  removeSeedSuffixFromTestName,
 }

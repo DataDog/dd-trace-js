@@ -5,7 +5,36 @@ const path = require('node:path')
 
 const { describe, it } = require('mocha')
 
-const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
+const {
+  getFormattedJestTestParameters,
+  getJestSuitesToRun,
+  removeSeedSuffixFromTestName,
+} = require('../src/util')
+
+describe('removeSeedSuffixFromTestName', () => {
+  it('removes seed suffixes', () => {
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property passes (with seed=1234)'),
+      'property passes'
+    )
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property passes (with seed=-1234)'),
+      'property passes'
+    )
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property passes (with seed=1234) '),
+      'property passes'
+    )
+  })
+
+  it('only removes the seed suffix at the end of the name', () => {
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property (with seed=1234) keeps running'),
+      'property (with seed=1234) keeps running'
+    )
+  })
+})
+
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])
