@@ -60,4 +60,25 @@ describe('WinstonPlugin', () => {
     logCh.publish(payload)
     assert.strictEqual(payload.message, null)
   })
+
+  it('wraps non-extensible messages in a proxy and leaves the original untouched', () => {
+    const info = Object.preventExtensions({ level: 'info', message: 'hello' })
+    const payload = { message: info }
+    logCh.publish(payload)
+    assert.notStrictEqual(payload.message, info)
+    // `messageProxy` cannot expose `dd` on a non-extensible target -- the
+    // `ownKeys` and `get` traps both bail out -- but the original record
+    // stays unmutated.
+    assert.ok(!Object.hasOwn(info, 'dd'))
+    assert.strictEqual(payload.message.dd, undefined)
+  })
+
+  it('wraps Error instances in a proxy that exposes the dd field', () => {
+    const error = new Error('boom')
+    const payload = { message: error }
+    logCh.publish(payload)
+    assert.notStrictEqual(payload.message, error)
+    assert.ok(!Object.hasOwn(error, 'dd'))
+    assert.strictEqual(payload.message.dd.service, 'my-service')
+  })
 })
