@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
@@ -15,9 +16,11 @@ const defaultMeta = {
 }
 
 function assertSpanByName (traces, expected) {
-  const allSpans = traces.flat()
-  const span = allSpans.find(s => s.name === expected.name)
-  assert.ok(span, `expected span "${expected.name}", got: ${allSpans.map(s => s.name).join(', ')}`)
+  const byName = traces.flat().filter(s => s.name === expected.name)
+  const span = byName.find(s =>
+    Object.entries(expected.meta ?? {}).every(([k, v]) => s.meta?.[k] === v)
+  )
+  assert.ok(span, `expected span matching ${inspect(expected)}, got: ${inspect(byName)}`)
   assertObjectContains(span, expected)
   return span
 }
