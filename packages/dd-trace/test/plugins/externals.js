@@ -3,6 +3,12 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  aerospike: [
+    {
+      name: 'aerospike',
+      versions: ['4', '5', '>=6'],
+    },
+  ],
   ai: [
     {
       name: 'ai',
@@ -614,6 +620,10 @@ module.exports = {
     },
   ],
   stripe: [
+    {
+      name: 'stripe',
+      versions: ['9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '>=20.0.0 <22'],
+    },
     {
       name: 'express',
       versions: ['^4'],
