@@ -9,10 +9,15 @@ const util = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
+const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
+const OtlpTransformer = require('../src/opentelemetry/metrics/otlp_transformer')
+const otlpRuntimeMetrics = require('../src/runtime_metrics/otlp_runtime_metrics')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -885,5 +890,372 @@ function createGarbage (count = 50) {
         })
       })
     })
+  })
+})
+
+// OTel-native runtime metrics path. Names/types/units come from
+// open-telemetry/semantic-conventions: model/{v8js,nodejs}/metrics.yaml.
+describe('otlp_runtime_metrics', () => {
+  const SPEC = {
+    'v8js.memory.heap.used': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.limit': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.space.available_size': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.space.physical_size': { type: 'updowncounter', unit: 'By' },
+    'v8js.memory.heap.space.size': { type: 'updowncounter', unit: 'By' },
+    'v8js.gc.duration': { type: 'histogram', unit: 's' },
+    'v8js.resource.active': { type: 'gauge', unit: '{resource}' },
+    'nodejs.eventloop.delay.min': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.max': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.mean': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.stddev': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.p50': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.p90': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.delay.p99': { type: 'gauge', unit: 's' },
+    'nodejs.eventloop.time': { type: 'observable-counter', unit: 's' },
+    'nodejs.eventloop.utilization': { type: 'gauge', unit: '1' },
+  }
+
+  // Captures the GC observer instance so tests can fire fake entries instead of waiting on real GC.
+  class FakePerformanceObserver {
+    constructor (callback) {
+      this.callback = callback
+      FakePerformanceObserver.instances.push(this)
+    }
+
+    observe () {}
+    disconnect () {}
+  }
+  FakePerformanceObserver.instances = []
+
+  let otlpMetrics
+  let createdInstruments
+  let callbacks
+  let records
+  let batchCallbacks
+
+  beforeEach(() => {
+    createdInstruments = {}
+    callbacks = {}
+    records = {}
+    batchCallbacks = []
+    FakePerformanceObserver.instances = []
+
+    function makeFactory (type) {
+      return (name, opts) => {
+        const instrument = {
+          name,
+          type,
+          opts,
+          addCallback (cb) {
+            if (!callbacks[name]) callbacks[name] = []
+            callbacks[name].push(cb)
+          },
+          removeCallback (cb) {
+            const list = callbacks[name]
+            if (!list) return
+            const idx = list.indexOf(cb)
+            if (idx !== -1) list.splice(idx, 1)
+          },
+          record (value, attrs) {
+            if (!records[name]) records[name] = []
+            records[name].push({ v: value, a: attrs })
+          },
+        }
+        createdInstruments[name] = instrument
+        return instrument
+      }
+    }
+
+    const mockMeter = {
+      createObservableGauge: makeFactory('gauge'),
+      createObservableUpDownCounter: makeFactory('updowncounter'),
+      createObservableCounter: makeFactory('observable-counter'),
+      createHistogram: makeFactory('histogram'),
+      addBatchObservableCallback (cb, observables) {
+        batchCallbacks.push({ cb, observables })
+      },
+      removeBatchObservableCallback (cb) {
+        const idx = batchCallbacks.findIndex(r => r.cb === cb)
+        if (idx !== -1) batchCallbacks.splice(idx, 1)
+      },
+    }
+
+    const realPerfHooks = require('node:perf_hooks')
+
+    otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+      '@opentelemetry/api': {
+        metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
+      },
+      '../log': { debug () {}, error () {} },
+      'node:perf_hooks': {
+        performance: realPerfHooks.performance,
+        monitorEventLoopDelay: realPerfHooks.monitorEventLoopDelay,
+        PerformanceObserver: FakePerformanceObserver,
+        constants: realPerfHooks.constants,
+      },
+    })
+  })
+
+  // Drives every registered batch callback and returns a Map<instrument, [{v, a}]>.
+  function fireBatchCallbacks () {
+    const observed = new Map()
+    for (const { cb, observables } of batchCallbacks) {
+      const allowed = new Set(observables)
+      cb({
+        observe: (instrument, value, attrs = {}) => {
+          if (!allowed.has(instrument)) return
+          if (!observed.has(instrument)) observed.set(instrument, [])
+          observed.get(instrument).push({ v: value, a: attrs })
+        },
+      })
+    }
+    return observed
+  }
+
+  afterEach(() => {
+    otlpMetrics.stop()
+  })
+
+  const BATCH_OBSERVED = new Set([
+    'v8js.memory.heap.used', 'v8js.memory.heap.limit',
+    'v8js.memory.heap.space.available_size', 'v8js.memory.heap.space.physical_size', 'v8js.memory.heap.space.size',
+  ])
+
+  it('registers all OTel-native metrics with spec-correct types and units', () => {
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    assert.deepStrictEqual(Object.keys(createdInstruments).sort(), Object.keys(SPEC).slice().sort())
+    assert.strictEqual(batchCallbacks.length, 1, 'heap stats should register exactly one batch callback')
+
+    for (const [name, { type, unit }] of Object.entries(SPEC)) {
+      const inst = createdInstruments[name]
+      assert.strictEqual(inst.type, type, `${name} should be ${type}`)
+      assert.strictEqual(inst.opts.unit, unit, `${name} unit should be ${unit}`)
+      if (type === 'histogram' || BATCH_OBSERVED.has(name)) {
+        assert.strictEqual(callbacks[name], undefined,
+          `${name} should not register a per-instrument observable callback`)
+      } else {
+        assert.ok(callbacks[name]?.length, `${name} should register a per-instrument callback`)
+      }
+      assert.doesNotMatch(name, /^runtime\.node\./, `${name} should not use DD-proprietary naming`)
+    }
+  })
+
+  it('observes positive values and emits required attributes', () => {
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    const observed = fireBatchCallbacks()
+
+    const heapUsed = observed.get(createdInstruments['v8js.memory.heap.used']) ?? []
+    assert.ok(heapUsed.reduce((sum, e) => sum + e.v, 0) > 0, 'heap used should be positive')
+    assert.ok(heapUsed.every(e => typeof e.a?.['v8js.heap.space.name'] === 'string'),
+      'heap.used should carry v8js.heap.space.name')
+
+    const heapLimit = observed.get(createdInstruments['v8js.memory.heap.limit']) ?? []
+    assert.ok(heapLimit[0]?.v > 0, 'heap limit should be positive')
+
+    const spaceSizes = observed.get(createdInstruments['v8js.memory.heap.space.size']) ?? []
+    assert.ok(spaceSizes.some(e => e.v > 0 && typeof e.a?.['v8js.heap.space.name'] === 'string'),
+      'heap.space.size should observe per-space values with a space name attribute')
+
+    const spaces = (observed.get(createdInstruments['v8js.memory.heap.space.available_size']) ?? [])
+      .map(e => e.a?.['v8js.heap.space.name'])
+    assert.ok(spaces.includes('new_space') && spaces.includes('old_space'),
+      'heap space metrics should carry v8js.heap.space.name')
+
+    const eluTimePoints = []
+    callbacks['nodejs.eventloop.time'][0]({
+      observe: (v, a) => eluTimePoints.push({ v, state: a?.['nodejs.eventloop.state'] }),
+    })
+    assert.deepStrictEqual(eluTimePoints.map(e => e.state).sort(), ['active', 'idle'])
+
+    for (const name of [
+      'nodejs.eventloop.delay.min', 'nodejs.eventloop.delay.max', 'nodejs.eventloop.delay.mean',
+    ]) {
+      const points = []
+      callbacks[name][0]({ observe: v => points.push(v) })
+      assert.strictEqual(typeof points[0], 'number', `${name} should record a numeric value`)
+    }
+
+    const resourceCounts = []
+    callbacks['v8js.resource.active'][0]({
+      observe: (v, a) => resourceCounts.push({ v, type: a?.['v8js.resource.type'] }),
+    })
+    assert.ok(resourceCounts.length > 0, 'v8js.resource.active should observe at least one resource type')
+    assert.ok(resourceCounts.every(e => e.v > 0 && typeof e.type === 'string'),
+      'every v8js.resource.active observation should have a positive count and a type attribute')
+  })
+
+  it('records v8js.gc.duration in seconds with mapped v8js.gc.type attribute', () => {
+    const { constants: perfConstants } = require('node:perf_hooks')
+    otlpMetrics.start({ runtimeMetrics: { gc: true } })
+
+    assert.strictEqual(FakePerformanceObserver.instances.length, 1, 'GC observer should be installed')
+    const observer = FakePerformanceObserver.instances[0]
+
+    // Covers every value of v8js.gc.type plus an unknown kind that should be dropped.
+    // kind=2 is V8 MinorMarkSweep (Node 20+) — V8-internal, not in perf_hooks.constants.
+    observer.callback({
+      getEntries: () => [
+        { duration: 5, kind: perfConstants.NODE_PERFORMANCE_GC_MINOR },
+        { duration: 3, kind: 2 },
+        { duration: 10, kind: perfConstants.NODE_PERFORMANCE_GC_MAJOR },
+        { duration: 2, kind: perfConstants.NODE_PERFORMANCE_GC_INCREMENTAL },
+        { duration: 1, kind: perfConstants.NODE_PERFORMANCE_GC_WEAKCB },
+        { duration: 99, kind: 999 },
+      ],
+    })
+
+    assert.deepStrictEqual(records['v8js.gc.duration'], [
+      { v: 0.005, a: { 'v8js.gc.type': 'minor' } },
+      { v: 0.003, a: { 'v8js.gc.type': 'minor' } },
+      { v: 0.01, a: { 'v8js.gc.type': 'major' } },
+      { v: 0.002, a: { 'v8js.gc.type': 'incremental' } },
+      { v: 0.001, a: { 'v8js.gc.type': 'weakcb' } },
+    ])
+  })
+
+  it('skips gc.duration when runtimeMetrics.gc is false', () => {
+    otlpMetrics.start({ runtimeMetrics: { gc: false } })
+    assert.ok(!createdInstruments['v8js.gc.duration'], 'gc.duration should not be created when disabled')
+    assert.strictEqual(FakePerformanceObserver.instances.length, 0, 'no GC observer should be installed')
+  })
+
+  it('fully unwinds partial initialization when an instrument factory throws', () => {
+    let createdBeforeFailure = 0
+    const throwingMeter = {
+      createObservableGauge: (name, opts) => {
+        createdBeforeFailure++
+        if (name === 'v8js.resource.active') throw new Error('boom')
+        return { name, opts, addCallback () {}, removeCallback () {} }
+      },
+      createObservableUpDownCounter: (name, opts) => {
+        createdBeforeFailure++
+        return { name, opts, addCallback () {}, removeCallback () {} }
+      },
+      createObservableCounter: (name, opts) => {
+        createdBeforeFailure++
+        return { name, opts, addCallback () {}, removeCallback () {} }
+      },
+      createHistogram: (name, opts) => ({ name, opts, addCallback () {}, removeCallback () {}, record () {} }),
+      addBatchObservableCallback () {},
+      removeBatchObservableCallback () {},
+    }
+    const errorLog = sinon.spy()
+    const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+      '@opentelemetry/api': {
+        metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
+      },
+      '../log': { debug () {}, error: errorLog },
+    })
+
+    otlpMetricsFailing.start({ runtimeMetrics: {} })
+
+    assert.ok(createdBeforeFailure > 0, 'sanity: some instruments were registered before the throw')
+    assert.ok(errorLog.calledOnce, 'failure should be logged via log.error')
+    assert.match(errorLog.firstCall.args[0], /Failed to start OTLP runtime metrics/)
+    otlpMetricsFailing.stop()
+  })
+
+  it('skips event loop metrics when disabled and is restartable', () => {
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: false } })
+    for (const name of Object.keys(SPEC)) {
+      if (name.startsWith('nodejs.eventloop.')) {
+        assert.ok(!createdInstruments[name], `${name} should not be created`)
+      }
+    }
+
+    otlpMetrics.stop()
+    for (const k of Object.keys(createdInstruments)) delete createdInstruments[k]
+    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    assert.strictEqual(Object.keys(createdInstruments).length, Object.keys(SPEC).length,
+      'should register every metric again after stop')
+  })
+})
+
+// End-to-end through a real MeterProvider + PeriodicMetricReader + OtlpTransformer,
+// asserting the wire shape (sum vs gauge) of every observable runtime metric.
+describe('OTLP runtime metrics — pipeline flow', () => {
+  const SUM_NONMONOTONIC = new Set([
+    'v8js.memory.heap.used', 'v8js.memory.heap.limit',
+    'v8js.memory.heap.space.available_size', 'v8js.memory.heap.space.physical_size',
+    'v8js.memory.heap.space.size',
+  ])
+  const SUM_MONOTONIC = new Set([
+    'nodejs.eventloop.time',
+  ])
+  const GAUGE_METRICS = new Set([
+    'v8js.resource.active',
+    'nodejs.eventloop.delay.min', 'nodejs.eventloop.delay.max', 'nodejs.eventloop.delay.mean',
+    'nodejs.eventloop.delay.stddev', 'nodejs.eventloop.delay.p50',
+    'nodejs.eventloop.delay.p90', 'nodejs.eventloop.delay.p99',
+    'nodejs.eventloop.utilization',
+  ])
+  const OBSERVABLE_EXPECTED = [...SUM_NONMONOTONIC, ...SUM_MONOTONIC, ...GAUGE_METRICS]
+
+  class CapturingExporter {
+    constructor () { this.exports = [] }
+    export (metricsMap, callback) {
+      this.exports.push([...metricsMap.values()])
+      if (typeof callback === 'function') callback()
+    }
+  }
+
+  function collectWire () {
+    const transformer = new OtlpTransformer({}, 'http/json')
+    const wire = {}
+    let scopeName
+    for (const batch of exporter.exports) {
+      const json = JSON.parse(transformer.transformMetrics(batch).toString())
+      for (const rm of json.resourceMetrics) {
+        for (const sm of rm.scopeMetrics) {
+          scopeName = scopeName || sm.scope?.name
+          for (const m of sm.metrics) {
+            wire[m.name] = m
+          }
+        }
+      }
+    }
+    return { wire, scopeName }
+  }
+
+  let reader
+  let exporter
+
+  beforeEach(() => {
+    exporter = new CapturingExporter()
+    reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+    metrics.setGlobalMeterProvider(new MeterProvider({ reader }))
+  })
+
+  afterEach(() => {
+    otlpRuntimeMetrics.stop()
+    reader?.shutdown()
+    metrics.disable()
+  })
+
+  // gc.duration histogram wire shape is covered by opentelemetry/metrics.spec.js;
+  // the GC observer wiring + kind→type mapping is covered in the mock describe above.
+  it('flushes every observable metric with correct wire shape (sum vs gauge) and scope name', () => {
+    otlpRuntimeMetrics.start({ runtimeMetrics: { enabled: true, eventLoop: true, gc: false } })
+    reader.forceFlush()
+
+    const { wire, scopeName } = collectWire()
+
+    assert.deepStrictEqual(Object.keys(wire).sort(), OBSERVABLE_EXPECTED.slice().sort())
+    assert.strictEqual(scopeName, 'datadog.runtime_metrics')
+
+    for (const name of OBSERVABLE_EXPECTED) {
+      const m = wire[name]
+      if (SUM_NONMONOTONIC.has(name)) {
+        assert.ok('sum' in m, `${name} should serialize as sum`)
+        assert.strictEqual(m.sum.isMonotonic, false, `${name} should be non-monotonic`)
+      } else if (SUM_MONOTONIC.has(name)) {
+        assert.ok('sum' in m, `${name} should serialize as sum`)
+        assert.strictEqual(m.sum.isMonotonic, true, `${name} should be monotonic`)
+      } else {
+        assert.ok('gauge' in m, `${name} should serialize as gauge`)
+      }
+    }
   })
 })

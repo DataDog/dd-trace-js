@@ -20,7 +20,9 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    runtimeMetrics = require('./runtime_metrics')
+    runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
+      ? require('./otlp_runtime_metrics')
+      : require('./runtime_metrics')
 
     Object.setPrototypeOf(module.exports, runtimeMetrics)
 
