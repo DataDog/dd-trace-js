@@ -65,7 +65,7 @@ jest-worker,jest,28.0.0,30.4.1,True
 kafkajs,kafkajs,1.4.0,2.2.4,True
 koa,koa,2.0.0,3.2.0,True
 koa-router,koa,7.0.0,14.0.0,True
-mariadb,mariadb,2.0.4,3.4.5,True
+mariadb,mariadb,2.0.4,3.5.2,True
 memcached,memcached,2.2.0,2.2.2,True
 microgateway-core,microgateway-core,2.1.0,3.3.7,True
 mocha,mocha,8.0.0,11.7.5,True
