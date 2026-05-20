@@ -449,6 +449,10 @@ export default [
           'packages/dd-trace/test/llmobs/tagger.spec.js',
           'packages/dd-trace/test/llmobs/span_processor.spec.js',
           'packages/dd-trace/test/profiling/profilers/wall.spec.js',
+          // Benchmark stubs that mock the `_tags` field shape on a fake span
+          // context (their `getTag`/`getTags` mocks read from `_tags`).
+          'benchmark/stubs/span.js',
+          'benchmark/sirun/exporting-pipeline/index.js',
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
