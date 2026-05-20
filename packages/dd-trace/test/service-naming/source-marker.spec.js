@@ -6,7 +6,9 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const {
+  INTEGRATION_SERVICE,
   MANUAL,
+  setServiceName,
   stampIntegrationService,
   resolveServiceSource,
 } = require('../../src/service-naming/source-marker')
@@ -19,6 +21,45 @@ function makeSpan (tags = {}) {
 }
 
 describe('service-naming/source-marker', () => {
+  describe('stampIntegrationService', () => {
+    it('records an integration service claim', () => {
+      const span = makeSpan()
+
+      stampIntegrationService(span, 'kafka-broker', TRACER_SERVICE)
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
+    })
+
+    it('does not record a claim when no service is provided', () => {
+      const span = makeSpan()
+
+      stampIntegrationService(span, undefined, TRACER_SERVICE)
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], undefined)
+    })
+
+    it('does not record a claim when service matches the tracer default', () => {
+      const span = makeSpan()
+
+      stampIntegrationService(span, TRACER_SERVICE, TRACER_SERVICE)
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], undefined)
+    })
+  })
+
+  describe('setServiceName', () => {
+    it('sets service.name and records the integration service claim', () => {
+      const span = makeSpan()
+
+      setServiceName(span, 'express-app', TRACER_SERVICE)
+
+      assert.deepStrictEqual(span._spanContext._tags, {
+        'service.name': 'express-app',
+      })
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'express-app')
+    })
+  })
+
   describe('resolveServiceSource', () => {
     it('clears _dd.svc_src when service.name equals the tracer default', () => {
       const span = makeSpan({ 'service.name': TRACER_SERVICE, [SVC_SRC_KEY]: 'opt.plugin' })
