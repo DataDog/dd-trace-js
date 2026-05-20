@@ -63,7 +63,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should do automatic instrumentation', done => {
             agent.assertSomeTraces(traces => {
@@ -117,7 +117,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -159,7 +159,7 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          afterEach(() => agent.close({ ritmReset: false }))
+          afterEach(() => agent.close())
 
           withPeerService(
             () => tracer,
@@ -244,7 +244,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -277,7 +277,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate context', async () => {
           let spanId
@@ -345,7 +345,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate context', async () => {
           let spanId
@@ -411,7 +411,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate meta from child to parent', async () => {
           const result = await broker.call('test.first')

@@ -3,5 +3,16 @@ coverage:
   round: down
   precision: 2
   status:
+    # The coverage action only attaches `master-coverage` on PRs targeting
+    # master; other PRs auto-pass codecov/patch via the rule below.
+    default_rules:
+      flag_coverage_not_uploaded_behavior: pass
     project: off
-    patch: off
+    patch:
+      default:
+        target: 95%
+        if_not_found: success
+        if_ci_failed: success
+        only_pulls: true
+        flags:
+          - master-coverage

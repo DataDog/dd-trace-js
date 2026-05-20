@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
@@ -20,173 +20,18 @@ describe('Plugin', () => {
     let tracer
     let collection
 
-    before(() => {
-      tracer = global.tracer = require('../../dd-trace')
-    })
-
-    withVersions('couchbase', 'couchbase', '<3.0.0', version => {
-      let N1qlQuery
-      // skipping tests due to bug with couchbase integration that is blocking CI.
-      // TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
-      describe.skip('without configuration', () => {
-        beforeEach(done => {
-          agent.load('couchbase').then(() => {
-            couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
-            N1qlQuery = couchbase.N1qlQuery
-            cluster = new couchbase.Cluster('localhost:8091')
-            cluster.authenticate('Administrator', 'password')
-            cluster.enableCbas('localhost:8095')
-            bucket = cluster.openBucket('datadog-test', (err) => done(err))
-          })
-        })
-
-        afterEach(() => {
-          bucket.disconnect()
-        })
-
-        after(() => {
-          return agent.close({ ritmReset: false })
-        })
-
-        withNamingSchema(
-          done => cluster.query(N1qlQuery.fromString('SELECT 1+1'), err => err && done(err)),
-          rawExpectedSchema.query
-        )
-
-        it('should run the Query callback in the parent context', done => {
-          const query = 'SELECT 1+1'
-          const span = tracer.startSpan('test.query.cb')
-
-          tracer.scope().activate(span, () => {
-            const n1qlQuery = N1qlQuery.fromString(query)
-            cluster.query(n1qlQuery, (err, rows) => {
-              assert.strictEqual(tracer.scope().active(), span)
-              done(err)
-            })
-          })
-        })
-
-        it('should run any Bucket operations in the parent context', done => {
-          const span = tracer.startSpan('test')
-
-          tracer.scope().activate(span, () => {
-            bucket.get('1', () => {
-              assert.strictEqual(tracer.scope().active(), span)
-              done()
-            })
-          })
-        })
-
-        describe('queries on cluster', () => {
-          it('should handle N1QL queries', done => {
-            const query = 'SELECT 1+1'
-
-            agent
-              .assertFirstTraceSpan({
-                name: expectedSchema.query.opName,
-                service: expectedSchema.query.serviceName,
-                resource: query,
-                type: 'sql',
-                meta: {
-                  'span.kind': 'client',
-                  'couchbase.bucket.name': 'datadog-test',
-                  component: 'couchbase',
-                  '_dd.integration': 'couchbase',
-                },
-              })
-              .then(done)
-              .catch(done)
-
-            const n1qlQuery = N1qlQuery.fromString(query)
-            cluster.query(n1qlQuery, (err) => {
-              if (err) done(err)
-            })
-
-            if (semver.intersects(version, '2.4.0 - 2.5.0')) {
-              // Due to bug JSCBC-491 in Couchbase, we have to reconnect to dispatch waiting queries
-              const triggerBucket = cluster.openBucket('datadog-test', (err) => {
-                if (err) done(err)
-              })
-              triggerBucket.on('connect', () => triggerBucket.disconnect())
-            }
-          })
-
-          it('should handle storage queries', done => {
-            agent
-              .assertFirstTraceSpan({
-                name: expectedSchema.upsert.opName,
-                service: expectedSchema.upsert.serviceName,
-                resource: 'couchbase.upsert',
-                meta: {
-                  'span.kind': 'client',
-                  'couchbase.bucket.name': 'datadog-test',
-                  component: 'couchbase',
-                },
-              })
-              .then(done)
-              .catch(done)
-
-            bucket.upsert('testdoc', { name: 'Frank' }, (err, result) => {
-              if (err) done(err)
-            })
-          })
-
-          it('should skip instrumentation for invalid arguments', (done) => {
-            try {
-              bucket.upsert('testdoc', { name: 'Frank' })
-            } catch (e) {
-              assert.strictEqual(e.message, 'Third argument needs to be an object or callback.')
-              done()
-            }
-          })
-        })
-
-        describe('queries on buckets', () => {
-          it('should handle N1QL queries', done => {
-            const query = 'SELECT 1+2'
-
-            agent
-              .assertFirstTraceSpan({
-                name: expectedSchema.query.opName,
-                service: expectedSchema.query.serviceName,
-                resource: query,
-                type: 'sql',
-                meta: {
-                  'span.kind': 'client',
-                  'couchbase.bucket.name': 'datadog-test',
-                  component: 'couchbase',
-                },
-              })
-              .then(done)
-              .catch(done)
-
-            const n1qlQuery = N1qlQuery.fromString(query)
-            bucket.query(n1qlQuery, (err) => {
-              if (err) done(err)
-            })
-          })
-        })
-      })
-    })
-
     withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
-      beforeEach(() => {
-        tracer = global.tracer = require('../../dd-trace')
-      })
-
       describe('without configuration', () => {
-        beforeEach(done => {
-          agent.load('couchbase').then(() => {
-            couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
-            couchbase.connect('couchbase://localhost', {
-              username: 'Administrator',
-              password: 'password',
-            }).then(_cluster => {
-              cluster = _cluster
-              bucket = cluster.bucket('datadog-test')
-              collection = bucket.defaultCollection()
-            }).then(done).catch(done)
+        beforeEach(async function () {
+          this.timeout(10_000)
+          tracer = global.tracer = await agent.load('couchbase')
+          couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
+          cluster = await couchbase.connect('couchbase://localhost', {
+            username: 'Administrator',
+            password: 'password',
           })
+          bucket = cluster.bucket('datadog-test')
+          collection = bucket.defaultCollection()
         })
 
         afterEach(async () => {
@@ -194,7 +39,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withNamingSchema(

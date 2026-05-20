@@ -2,8 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
-
-let tools
+const { getSignature } = require('../../../datadog-plugin-graphql/src/utils')
 
 const OPERATION_DEFINITION = 'OperationDefinition'
 const FRAGMENT_DEFINITION = 'FragmentDefinition'
@@ -98,25 +97,6 @@ function buildOperationContext (schema, operationDocument, operationName) {
     operation,
     fragments,
   }
-}
-
-function getSignature (document, operationName, operationType, calculate) {
-  if (calculate !== false && tools !== false) {
-    try {
-      try {
-        tools = tools || require('../../../datadog-plugin-graphql/src/tools')
-      } catch (e) {
-        tools = false
-        throw e
-      }
-
-      return tools.defaultEngineReportingSignature(document, operationName)
-    } catch {
-      // safety net
-    }
-  }
-
-  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = ApolloGatewayRequestPlugin

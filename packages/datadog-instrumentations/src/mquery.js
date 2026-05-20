@@ -42,22 +42,22 @@ addHook({
     if (!(methodName in Query.prototype)) continue
 
     shimmer.wrap(Query.prototype, methodName, method => {
-      return function () {
+      return function (...args) {
         if (prepareCh.hasSubscribers) {
-          const filters = getFilters(arguments, methodName)
+          const filters = getFilters(args, methodName)
           if (filters?.length) {
             prepareCh.publish({ filters })
           }
         }
 
-        return method.apply(this, arguments)
+        return method.apply(this, args)
       }
     })
   }
 
   shimmer.wrap(Query.prototype, 'exec', originalExec => {
-    return function wrappedExec () {
-      return tracingCh.tracePromise(originalExec, {}, this, arguments)
+    return function wrappedExec (...args) {
+      return tracingCh.tracePromise(originalExec, {}, this, args)
     }
   })
 

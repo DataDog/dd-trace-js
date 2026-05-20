@@ -11,6 +11,7 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
+const { DD_MAJOR } = require('../../../../version')
 const SpanContext = require('./span_context')
 
 const dateNow = Date.now
@@ -215,8 +216,9 @@ class DatadogSpan {
   logEvent () {}
 
   addLink (link, attrs) {
-    // TODO: Remove this once we remove addLink(context, attrs) in v6.0.0
-    if (link instanceof SpanContext) {
+    // v5 still accepts the legacy `addLink(spanContext, attrs)` shape; v6 only takes
+    // `addLink({ context, attributes })`.
+    if (DD_MAJOR < 6 && link instanceof SpanContext) {
       link = { context: link, attributes: attrs ?? {} }
     }
 

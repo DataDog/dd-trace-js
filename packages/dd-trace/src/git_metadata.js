@@ -12,19 +12,21 @@ const {
   resolveGitHeadSHA,
 } = require('./config/git_properties')
 
-/** @type {{ commitSHA: string | undefined, repositoryUrl: string | undefined } | undefined} */
-let cached
+/**
+ * @typedef {{ commitSHA: string | undefined, repositoryUrl: string | undefined }} GitMetadata
+ * @type {{ enabled?: GitMetadata, disabled?: GitMetadata }}
+ */
+const cache = {}
 
 /**
  * @param {import('./config/config-types').ConfigProperties} config
  */
 function getGitMetadata (config) {
-  if (cached) return cached
-
   if (!config.DD_TRACE_GIT_METADATA_ENABLED) {
-    cached = { commitSHA: undefined, repositoryUrl: undefined }
-    return cached
+    cache.disabled ??= { commitSHA: undefined, repositoryUrl: undefined }
+    return cache.disabled
   }
+  if (cache.enabled) return cache.enabled
 
   let repositoryUrl = removeUserSensitiveInfo(config.DD_GIT_REPOSITORY_URL ?? config.tags[GIT_REPOSITORY_URL])
   let commitSHA = config.DD_GIT_COMMIT_SHA ?? config.tags[GIT_COMMIT_SHA]
@@ -59,8 +61,8 @@ function getGitMetadata (config) {
 
   commitSHA ??= resolveGitHeadSHA(gitFolderPath)
 
-  cached = { commitSHA, repositoryUrl }
-  return cached
+  cache.enabled = { commitSHA, repositoryUrl }
+  return cache.enabled
 }
 
 module.exports = getGitMetadata

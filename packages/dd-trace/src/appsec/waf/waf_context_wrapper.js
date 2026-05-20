@@ -119,7 +119,7 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
-      metrics.durationExt = Number.parseInt(end - start) / 1e3
+      metrics.durationExt = Number(end - start) / 1e3
 
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         const error = new Error('WAF code error')

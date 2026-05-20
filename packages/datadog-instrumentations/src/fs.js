@@ -165,13 +165,13 @@ function initDirAsyncIteratorProperties (iterator) {
 
 function createWrapDirAsyncIterator () {
   return function wrapDirAsyncIterator (asyncIterator) {
-    return function wrappedAsyncIterator () {
+    return function wrappedAsyncIterator (...args) {
       if (!kDirReadPromisified || !kDirClosePromisified) {
         initDirAsyncIteratorProperties(this)
       }
       wrap(this, kDirReadPromisified, createWrapFunction('dir.', 'read'))
       wrap(this, kDirClosePromisified, createWrapFunction('dir.', 'close'))
-      return asyncIterator.apply(this, arguments)
+      return asyncIterator.apply(this, args)
     }
   }
 }
@@ -231,12 +231,12 @@ function createWatchWrapFunction (override = '') {
     const name = override || original.name
     const method = name
     const operation = name
-    return function () {
-      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
-      const ctx = getMessage(method, watchMethods[operation], arguments, this)
+    return function (...args) {
+      if (!startChannel.hasSubscribers) return original.apply(this, args)
+      const ctx = getMessage(method, watchMethods[operation], args, this)
       return startChannel.runStores(ctx, () => {
         try {
-          const result = original.apply(this, arguments)
+          const result = original.apply(this, args)
           finishChannel.runStores(ctx, () => {})
           return result
         } catch (error) {
@@ -256,14 +256,14 @@ function createWrapFunction (prefix = '', override = '') {
     const method = `${prefix}${name}`
     const operation = name.match(/^(.+?)(Sync)?(\.native)?$/)[1]
 
-    return function () {
-      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
+    return function (...args) {
+      if (!startChannel.hasSubscribers) return original.apply(this, args)
 
-      const lastIndex = arguments.length - 1
-      const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
+      const lastIndex = args.length - 1
+      const cb = typeof args[lastIndex] === 'function' && args[lastIndex]
       const params = getMethodParamsRelationByPrefix(prefix)[operation]
       const abortController = new AbortController()
-      const ctx = { ...getMessage(method, params, arguments, this), abortController }
+      const ctx = { ...getMessage(method, params, args, this), abortController }
 
       const finish = function (error, cb = () => {}) {
         if (error !== null && typeof error === 'object') { // fs.exists receives a boolean
@@ -274,7 +274,7 @@ function createWrapFunction (prefix = '', override = '') {
       }
 
       if (cb) {
-        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (e) {
+        args[lastIndex] = shimmer.wrapFunction(cb, cb => function (e) {
           return finish(e, () => cb.apply(this, arguments))
         })
       }
@@ -290,13 +290,13 @@ function createWrapFunction (prefix = '', override = '') {
             finish(error)
             throw error
           } else if (cb) {
-            arguments[lastIndex](error)
+            args[lastIndex](error)
             return
           }
         }
 
         try {
-          const result = original.apply(this, arguments)
+          const result = original.apply(this, args)
           if (cb) return result
           if (result && typeof result.then === 'function') {
             // TODO method open returning promise and filehandle prototype not initialized, initialize it

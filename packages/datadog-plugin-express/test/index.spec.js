@@ -48,7 +48,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -102,7 +102,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1438,12 +1438,12 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             try {
               assert.strictEqual(storage.getStore(), store)
+              res.status(200).send()
               done()
             } catch (e) {
+              res.status(200).send()
               done(e)
             }
-
-            res.status(200).send()
           })
 
           appListener = app.listen(0, 'localhost', () => {
@@ -1578,7 +1578,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1703,7 +1703,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

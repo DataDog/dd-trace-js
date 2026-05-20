@@ -13,9 +13,9 @@ const requestChannel = dc.tracingChannel('datadog:apollo:request')
 let HeaderMap
 
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
-  return function executeHTTPGraphQLRequest () {
+  return function executeHTTPGraphQLRequest (...args) {
     if (!HeaderMap || !requestChannel.start.hasSubscribers) {
-      return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
+      return originalExecuteHTTPGraphQLRequest.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -25,7 +25,7 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
       originalExecuteHTTPGraphQLRequest,
       { abortController, abortData },
       this,
-      ...arguments)
+      ...args)
 
     const abortPromise = new Promise((resolve, reject) => {
       abortController.signal.addEventListener('abort', (event) => {
@@ -89,10 +89,10 @@ function wrapEmit (emit) {
 }
 
 function wrapListen (originalListen) {
-  return function wrappedListen () {
+  return function wrappedListen (...args) {
     shimmer.wrap(this, 'emit', wrapEmit)
 
-    return originalListen.apply(this, arguments)
+    return originalListen.apply(this, args)
   }
 }
 

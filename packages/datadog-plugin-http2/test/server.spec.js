@@ -68,7 +68,7 @@ describe('Plugin', () => {
       afterEach(() => {
         appListener && appListener.close()
         app = null
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('cancelled request', () => {
@@ -99,14 +99,14 @@ describe('Plugin', () => {
 
             // Server-side safeguard: if something tries to send a response, record it.
             const writeHead = res.writeHead
-            res.writeHead = function () {
+            res.writeHead = function (...args) {
               responseSent = true
-              return writeHead.apply(this, arguments)
+              return writeHead.apply(this, args)
             }
             const end = res.end
-            res.end = function () {
+            res.end = function (...args) {
               responseSent = true
-              return end.apply(this, arguments)
+              return end.apply(this, args)
             }
 
             allowHandler.then(() => {

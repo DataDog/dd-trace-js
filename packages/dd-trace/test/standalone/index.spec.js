@@ -36,7 +36,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       apmTracingEnabled: false,
 
       tracePropagationStyle: {
-        inject: ['datadog', 'tracecontext', 'b3'],
+        inject: ['datadog', 'tracecontext', 'b3multi'],
         extract: ['datadog'],
       },
     }

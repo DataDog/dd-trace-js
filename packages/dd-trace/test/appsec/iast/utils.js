@@ -61,7 +61,7 @@ function testInRequest (app, tests) {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   tests(config)
@@ -73,16 +73,14 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
     await agent.load(plugins)
   })
   afterEach(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
   beforeEach(() => {
     const tracer = require('../../..')
     const config = getConfigFresh({
-      experimental: {
-        iast: {
-          enabled: true,
-          requestSampling: 100,
-        },
+      iast: {
+        enabled: true,
+        requestSampling: 100,
       },
     })
     iast.enable(config, tracer)
@@ -288,7 +286,7 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
 
     after(() => {
       appListener && appListener.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     function testThatRequestHasVulnerability (
@@ -315,6 +313,50 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
     }
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
   })
+}
+
+function createIastVulnerabilityHelpers (config, setApp) {
+  function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
+    let testDescription
+    if (fn !== null && typeof fn === 'object') {
+      const obj = fn
+      fn = obj.fn
+      vulnerability = obj.vulnerability
+      occurrencesAndLocation = obj.occurrencesAndLocation || obj.occurrences
+      cb = obj.cb
+      makeRequest = obj.makeRequest
+      testDescription = obj.testDescription || testDescription
+    }
+
+    testDescription = testDescription || `should have ${vulnerability} vulnerability`
+
+    it(testDescription, function (done) {
+      this.timeout(5000)
+      setApp(fn)
+
+      checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config, done)
+    })
+  }
+
+  function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
+    let testDescription
+    if (fn !== null && typeof fn === 'object') {
+      const obj = fn
+      fn = obj.fn
+      vulnerability = obj.vulnerability
+      makeRequest = obj.makeRequest
+      testDescription = obj.testDescription || testDescription
+    }
+
+    testDescription = testDescription || `should not have ${vulnerability} vulnerability`
+
+    it(testDescription, function (done) {
+      setApp(fn)
+      checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
+    })
+  }
+
+  return { testThatRequestHasVulnerability, testThatRequestHasNoVulnerability }
 }
 
 function prepareTestServerForIastInExpress (
@@ -379,50 +421,11 @@ function prepareTestServerForIastInExpress (
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
-      let testDescription
-      if (fn !== null && typeof fn === 'object') {
-        const obj = fn
-        fn = obj.fn
-        vulnerability = obj.vulnerability
-        occurrencesAndLocation = obj.occurrencesAndLocation || obj.occurrences
-        cb = obj.cb
-        makeRequest = obj.makeRequest
-        testDescription = obj.testDescription || testDescription
-      }
-
-      testDescription = testDescription || `should have ${vulnerability} vulnerability`
-
-      it(testDescription, function (done) {
-        this.timeout(5000)
-        app = fn
-
-        checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config, done)
-      })
-    }
-
-    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
-      let testDescription
-      if (fn !== null && typeof fn === 'object') {
-        const obj = fn
-        fn = obj.fn
-        vulnerability = obj.vulnerability
-        makeRequest = obj.makeRequest
-        testDescription = obj.testDescription || testDescription
-      }
-
-      testDescription = testDescription || `should not have ${vulnerability} vulnerability`
-
-      it(testDescription, function (done) {
-        app = fn
-        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
-      })
-    }
-
-    tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
+    const helpers = createIastVulnerabilityHelpers(config, (a) => { app = a })
+    tests(helpers.testThatRequestHasVulnerability, helpers.testThatRequestHasNoVulnerability, config)
   })
 }
 
@@ -487,50 +490,11 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
 
     after(() => {
       server?.close()
-      return agent?.close({ ritmReset: false })
+      return agent?.close()
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
-      let testDescription
-      if (fn !== null && typeof fn === 'object') {
-        const obj = fn
-        fn = obj.fn
-        vulnerability = obj.vulnerability
-        occurrencesAndLocation = obj.occurrencesAndLocation || obj.occurrences
-        cb = obj.cb
-        makeRequest = obj.makeRequest
-        testDescription = obj.testDescription || testDescription
-      }
-
-      testDescription = testDescription || `should have ${vulnerability} vulnerability`
-
-      it(testDescription, function (done) {
-        this.timeout(5000)
-        app = fn
-
-        checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config, done)
-      })
-    }
-
-    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
-      let testDescription
-      if (fn !== null && typeof fn === 'object') {
-        const obj = fn
-        fn = obj.fn
-        vulnerability = obj.vulnerability
-        makeRequest = obj.makeRequest
-        testDescription = obj.testDescription || testDescription
-      }
-
-      testDescription = testDescription || `should not have ${vulnerability} vulnerability`
-
-      it(testDescription, function (done) {
-        app = fn
-        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
-      })
-    }
-
-    tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
+    const helpers = createIastVulnerabilityHelpers(config, (a) => { app = a })
+    tests(helpers.testThatRequestHasVulnerability, helpers.testThatRequestHasNoVulnerability, config)
   })
 }
 

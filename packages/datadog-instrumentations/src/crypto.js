@@ -47,12 +47,12 @@ addHook({ name: 'crypto' }, crypto => {
 
 function wrapCryptoMethod (channel) {
   function wrapMethod (cryptoMethod) {
-    return function () {
-      if (channel.hasSubscribers && arguments.length > 0) {
-        const algorithm = arguments[0]
+    return function (...args) {
+      if (channel.hasSubscribers && args.length > 0) {
+        const algorithm = args[0]
         channel.publish({ algorithm })
       }
-      return cryptoMethod.apply(this, arguments)
+      return cryptoMethod.apply(this, args)
     }
   }
   return wrapMethod

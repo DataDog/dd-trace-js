@@ -52,11 +52,9 @@ describe('IAST Index', () => {
 
         beforeEach(() => {
           iast.enable(getConfigFresh({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100,
-              },
+            iast: {
+              enabled: true,
+              requestSampling: 100,
             },
           }))
         })
@@ -125,11 +123,9 @@ describe('IAST Index', () => {
     let analyzers
 
     const config = getConfigFresh({
-      experimental: {
-        iast: {
-          enabled: true,
-          requestSampling: 100,
-        },
+      iast: {
+        enabled: true,
+        requestSampling: 100,
       },
     })
 

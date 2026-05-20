@@ -2,10 +2,12 @@
 
 const { storage } = require('../../datadog-core')
 
+const legacyStorage = storage('legacy')
+
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 class Scope {
   active () {
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
 
     return store?.span ?? null
   }
@@ -13,10 +15,10 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    const oldStore = storage('legacy').getStore()
-    const newStore = span ? storage('legacy').getStore(span._store) : oldStore
+    const oldStore = legacyStorage.getStore()
+    const newStore = span ? legacyStorage.getStore(span._store) : oldStore
 
-    storage('legacy').enterWith({ ...newStore, span })
+    legacyStorage.enterWith({ ...newStore, span })
 
     try {
       return callback()
@@ -27,7 +29,7 @@ class Scope {
 
       throw e
     } finally {
-      storage('legacy').enterWith(oldStore)
+      legacyStorage.enterWith(oldStore)
     }
   }
 
@@ -37,9 +39,9 @@ class Scope {
     const scope = this
     const spanOrActive = this._spanOrActive(span)
 
-    return function () {
+    return function (...args) {
       return scope.activate(spanOrActive, () => {
-        return fn.apply(this, arguments)
+        return fn.apply(this, args)
       })
     }
   }

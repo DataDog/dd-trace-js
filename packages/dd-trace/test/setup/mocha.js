@@ -57,7 +57,11 @@ function withNamingSchema (
   describe(testTitle, () => {
     ['v0', 'v1'].forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        before(() => {
+        // `beforeEach` / `afterEach`: every outer `agent.load` runs
+        // `tracer.init` → `pluginManager.configure` → resets
+        // `Nomenclature.config` back to defaults. The override has
+        // to land after that, per test.
+        beforeEach(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
@@ -66,7 +70,7 @@ function withNamingSchema (
           })
         })
 
-        after(() => {
+        afterEach(() => {
           Nomenclature.configure(fullConfig)
         })
 
@@ -75,6 +79,7 @@ function withNamingSchema (
         const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
+          // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
           this.retries(3)
           this.timeout(25000)
 
@@ -118,7 +123,7 @@ function withNamingSchema (
     })
 
     describe('service naming short-circuit in v0', () => {
-      before(() => {
+      beforeEach(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
@@ -127,7 +132,7 @@ function withNamingSchema (
         })
       })
 
-      after(() => {
+      afterEach(() => {
         Nomenclature.configure(fullConfig)
       })
 
@@ -136,6 +141,7 @@ function withNamingSchema (
       const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
+        // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
         this.retries(3)
         this.timeout(15000)
 
@@ -179,7 +185,9 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     let computePeerServiceSpy
 
     beforeEach(() => {
-      const plugin = tracer()._pluginManager._pluginsByName[pluginName]
+      // Read the plugin off the live `TracerProxy`; a closure-captured
+      // `tracer()` may point at a torn-down proxy after a gate-fired rebuild.
+      const plugin = global._ddtrace._pluginManager._pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
 
@@ -200,10 +208,10 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
         })
         : spanGenerationFn()
 
-      assert.ok(
-        typeof spanGenerationPromise?.then === 'function',
+      assert.strictEqual(
+        typeof spanGenerationPromise?.then, 'function',
         'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-        util.inspect(spanGenerationPromise, { depth: 1 })
+          util.inspect(spanGenerationPromise, { depth: 1 }),
       )
 
       await Promise.all([

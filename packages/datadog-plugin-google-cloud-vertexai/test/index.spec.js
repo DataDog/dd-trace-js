@@ -92,7 +92,7 @@ describe('Plugin', () => {
 
       after(() => {
         authStub.restore()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('generateContent', () => {

@@ -67,11 +67,11 @@ describe('Remote config client id', () => {
 
           // Verify entrypoint.type has the expected value
           assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'))
+          agent.removeListener('remote-config-request', handleRemoteConfigRequest)
           done()
         } catch (err) {
-          done(err)
-        } finally {
           agent.removeListener('remote-config-request', handleRemoteConfigRequest)
+          done(err)
         }
       }
 

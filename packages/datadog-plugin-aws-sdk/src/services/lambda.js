@@ -7,7 +7,7 @@ class Lambda extends BaseAwsSdkPlugin {
   static id = 'lambda'
 
   generateTags (params, operation, response) {
-    if (!params?.FunctionName) return {}
+    if (!params?.FunctionName) return
 
     return {
       'resource.name': `${operation} ${params.FunctionName}`,

@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
-env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-
 jobs:
   unit:
     strategy:
@@ -103,8 +100,6 @@ jobs:
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
-        with:
-          cache: "true"
       - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node-crash-report
         if: failure()

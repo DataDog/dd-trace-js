@@ -28,7 +28,7 @@ class Stepfunctions extends BaseAwsSdkPlugin {
   //   }
 
   generateTags (params, operation, response) {
-    if (!params) return {}
+    if (!params) return
     const tags = { 'resource.name': params.name ? `${operation} ${params.name}` : `${operation}` }
     if (operation === 'startExecution' || operation === 'startSyncExecution') {
       tags.statemachinearn = `${params.stateMachineArn}`
@@ -41,10 +41,14 @@ class Stepfunctions extends BaseAwsSdkPlugin {
     if ((operation !== 'startExecution' && operation !== 'startSyncExecution') || !request.params?.input) return
 
     const input = request.params.input
-    // Cheap object-shape gate: only inject into JSON object payloads,
-    // matching the prior `typeof inputObj === 'object'` check without the
-    // round-trip parse.
-    if (typeof input !== 'string' || input.length < 2 || input[input.length - 1] !== '}') return
+    if (typeof input !== 'string' || input.length < 2) return
+
+    // Skip non-object payloads up front to avoid a `JSON.parse` round-trip.
+    // `trimEnd` is the identity on payloads with no trailing whitespace;
+    // for the rare whitespace-suffixed object the slow path inside
+    // `injectFieldIntoJsonObject` handles the parse + restringify.
+    const trimmed = input.trimEnd()
+    if (trimmed.length < 2 || trimmed.charCodeAt(trimmed.length - 1) !== 0x7D) return
 
     const injected = {}
     this.tracer.inject(span, 'text_map', injected)

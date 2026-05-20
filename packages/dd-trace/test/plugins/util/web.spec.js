@@ -309,4 +309,78 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
     })
   })
+
+  describe('security testing headers', () => {
+    const SCAN_TAG = 'http.request.headers.x-datadog-endpoint-scan'
+    const TEST_TAG = 'http.request.headers.x-datadog-security-test'
+
+    beforeEach(() => {
+      span = tracer.startSpan('test.request')
+      tags = span.context()._tags
+
+      req.url = '/'
+
+      web.patch(req)
+      const context = web.getContext(req)
+      context.span = span
+      context.req = req
+      context.res = res
+      context.config = config
+    })
+
+    it('should tag x-datadog-endpoint-scan and x-datadog-security-test on the entry span', () => {
+      req.headers['x-datadog-endpoint-scan'] = 'scan-uuid-1'
+      req.headers['x-datadog-security-test'] = 'test-uuid-2'
+      req.headers['x-other-header'] = 'ignored'
+
+      web.finishAll(web.getContext(req))
+
+      assert.deepStrictEqual(
+        { scan: tags[SCAN_TAG], test: tags[TEST_TAG], other: tags['http.request.headers.x-other-header'] },
+        { scan: 'scan-uuid-1', test: 'test-uuid-2', other: undefined }
+      )
+    })
+
+    it('should not set tags when the headers are not in the request', () => {
+      web.finishAll(web.getContext(req))
+
+      assert.deepStrictEqual(
+        { scan: tags[SCAN_TAG], test: tags[TEST_TAG] },
+        { scan: undefined, test: undefined }
+      )
+    })
+
+    it('should tag the headers even when DD_TRACE_HEADER_TAGS is set to unrelated headers', () => {
+      config = web.normalizeConfig({ headers: ['x-other-header'] })
+      const context = web.getContext(req)
+      context.config = config
+
+      req.headers['x-datadog-endpoint-scan'] = 'scan-uuid'
+      req.headers['x-datadog-security-test'] = 'test-uuid'
+      req.headers['x-other-header'] = 'other'
+
+      web.finishAll(context)
+
+      assert.deepStrictEqual(
+        {
+          scan: tags[SCAN_TAG],
+          test: tags[TEST_TAG],
+          other: tags['http.request.headers.x-other-header'],
+        },
+        { scan: 'scan-uuid', test: 'test-uuid', other: 'other' }
+      )
+    })
+
+    it('should tag the headers even when their value is an empty string', () => {
+      req.headers['x-datadog-endpoint-scan'] = ''
+      req.headers['x-datadog-security-test'] = 'ok'
+
+      web.finishAll(web.getContext(req))
+
+      assert.deepStrictEqual(
+        { scan: tags[SCAN_TAG], test: tags[TEST_TAG] },
+        { scan: '', test: 'ok' }
+      )
+    })
+  })
 })

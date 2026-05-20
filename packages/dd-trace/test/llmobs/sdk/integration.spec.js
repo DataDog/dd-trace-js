@@ -19,7 +19,10 @@ describe('end to end sdk integration tests', () => {
   const { getEvents, getEvaluationMetrics } = useLlmObs()
 
   before(() => {
-    tracer = require('../../../../dd-trace')
+    // `useLlmObs()` ran `agent.load` in a `before` registered above
+    // this one, so by the time we get here `global._ddtrace` is the
+    // live `TracerProxy`.
+    tracer = global._ddtrace
     llmobs = tracer.llmobs
   })
 
@@ -341,7 +344,12 @@ describe('end to end sdk integration tests', () => {
 
       beforeEach(() => {
         llmobs.registerProcessor(processor)
-        agent.reset() // make sure llmobs requests are cleared
+        // Clear pending agent state so this test's race against a
+        // 100 ms timeout doesn't see a previous test's still-pending
+        // `assertSomeTraces` handler — that handler keeps draining
+        // `llmobsSpanEventsRequests` on every setImmediate and
+        // starves this test's poll loop.
+        agent.reset()
       })
 
       it('does not submit the span', async () => {

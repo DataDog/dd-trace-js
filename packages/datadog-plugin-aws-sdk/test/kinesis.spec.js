@@ -5,10 +5,10 @@ const assert = require('node:assert/strict')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
@@ -16,7 +16,7 @@ describe('Kinesis', function () {
   this.timeout(10000)
   setup()
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let AWS
     let kinesis
 
@@ -173,7 +173,6 @@ describe('Kinesis', function () {
         before(() => {
           savedKinesisEnv = process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
           process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
-          agent.wipe()
         })
 
         after(() => {
@@ -182,7 +181,6 @@ describe('Kinesis', function () {
           } else {
             process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = savedKinesisEnv
           }
-          agent.wipe()
         })
 
         it('skip injects trace context to Kinesis putRecord when disabled', done => {

@@ -44,6 +44,7 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webAppServer
 
+    // eslint-disable-next-line sonarjs/stable-tests -- chromium download is flaky in CI
     this.retries(2)
     this.timeout(80000)
 

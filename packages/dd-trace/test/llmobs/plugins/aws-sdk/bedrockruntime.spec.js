@@ -2,9 +2,8 @@
 
 const { describe, it, before } = require('mocha')
 
-const { withVersions } = require('../../../setup/mocha')
-
 const { assertLlmObsSpanEvent, useLlmObs } = require('../../util')
+const { withAwsSdkVersions } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
 const {
   models,
   modelConfig,
@@ -24,7 +23,7 @@ describe('Plugin', () => {
 
     const { getEvents } = useLlmObs({ plugin: 'aws-sdk' })
 
-    withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
+    withAwsSdkVersions('>=3', (version, moduleName) => {
       let AWS
       let bedrockRuntimeClient
 

@@ -45,17 +45,17 @@ function createWrapRouterMethod (name, compile) {
   function wrapLayerHandle (layer, original) {
     original._name = original._name || layer.name
 
-    return shimmer.wrapFunction(original, original => function () {
-      if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
+    return shimmer.wrapFunction(original, original => function (...args) {
+      if (!enterChannel.hasSubscribers) return original.apply(this, args)
 
       const matchers = getLayerMatchers(layer)
-      const lastIndex = arguments.length - 1
+      const lastIndex = args.length - 1
       const name = original._name || original.name
-      const req = arguments[arguments.length > 3 ? 1 : 0]
-      const next = arguments[lastIndex]
+      const req = args[args.length > 3 ? 1 : 0]
+      const next = args[lastIndex]
 
       if (typeof next === 'function') {
-        arguments[lastIndex] = wrapNext(req, next)
+        args[lastIndex] = wrapNext(req, next)
       }
 
       let route
@@ -77,7 +77,7 @@ function createWrapRouterMethod (name, compile) {
       enterChannel.publish({ name, req, route, layer })
 
       try {
-        return original.apply(this, arguments)
+        return original.apply(this, args)
       } catch (error) {
         errorChannel.publish({ req, error })
         nextChannel.publish({ req })
@@ -112,8 +112,10 @@ function createWrapRouterMethod (name, compile) {
     }
   }
 
-  function wrapNext (req, next) {
-    return shimmer.wrapFunction(next, next => function (error) {
+  function wrapNext (req, originalNext) {
+    // Per layer dispatch, N per request. `shimmer.wrapCallback` preserves
+    // only `name` + `length`; see its JSDoc for the full contract.
+    return shimmer.wrapCallback(originalNext, next => function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -251,8 +253,8 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
   const wrapRouterMethod = createWrapRouterMethod('router', getCompileToRegexp())
 
   const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
-    return function wrappedMethod () {
-      const router = originalRouter.apply(this, arguments)
+    return function wrappedMethod (...args) {
+      const router = originalRouter.apply(this, args)
 
       shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
         return function wrappedHandle (req, res, next) {
@@ -310,8 +312,8 @@ addHook({
 })
 
 function wrapParam (original) {
-  return function wrappedProcessParams () {
-    arguments[1] = shimmer.wrapFunction(arguments[1], (originalFn) => {
+  return function wrappedProcessParams (...args) {
+    args[1] = shimmer.wrapFunction(args[1], (originalFn) => {
       return function wrappedFn (req, res) {
         if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)
@@ -332,7 +334,7 @@ function wrapParam (original) {
       }
     })
 
-    return original.apply(this, arguments)
+    return original.apply(this, args)
   }
 }
 

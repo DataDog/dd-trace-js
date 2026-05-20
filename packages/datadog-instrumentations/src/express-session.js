@@ -8,7 +8,7 @@ const sessionMiddlewareFinishCh = channel('datadog:express-session:middleware:fi
 function wrapSessionMiddleware (sessionMiddleware) {
   return function wrappedSessionMiddleware (req, res, next) {
     shimmer.wrap(arguments, 2, function wrapNext (next) {
-      return function wrappedNext () {
+      return function wrappedNext (...args) {
         if (sessionMiddlewareFinishCh.hasSubscribers) {
           const abortController = new AbortController()
 
@@ -17,7 +17,7 @@ function wrapSessionMiddleware (sessionMiddleware) {
           if (abortController.signal.aborted) return
         }
 
-        return next.apply(this, arguments)
+        return next.apply(this, args)
       }
     })
 
@@ -26,8 +26,8 @@ function wrapSessionMiddleware (sessionMiddleware) {
 }
 
 function wrapSession (session) {
-  return function wrappedSession () {
-    const sessionMiddleware = session.apply(this, arguments)
+  return function wrappedSession (...args) {
+    const sessionMiddleware = session.apply(this, args)
 
     return shimmer.wrapFunction(sessionMiddleware, wrapSessionMiddleware)
   }

@@ -86,7 +86,7 @@ withVersions('hono', 'hono', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should publish to handleChannel on request', async () => {

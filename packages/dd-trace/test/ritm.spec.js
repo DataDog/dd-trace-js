@@ -124,4 +124,29 @@ describe('Ritm', () => {
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
   })
+
+  it('should use moduleId as cache key for node:-prefixed built-ins', () => {
+    // Populate RITM cache keyed by normalized moduleId 'util'
+    require('util')
+
+    // Simulate require.cache having an entry for the node:-prefixed filename.
+    // In Node.js 18+, Module._resolveFilename('node:util') returns 'node:util',
+    // so filename differs from moduleId ('util'). Before the fix, the cache
+    // comparison accessed cache[filename] ('node:util') which was undefined,
+    // causing: TypeError: undefined is not an object (evaluating 'cache[filename].original')
+    const prefixedKey = 'node:util'
+    const saved = require.cache[prefixedKey]
+    require.cache[prefixedKey] = { exports: { patched: true } }
+
+    try {
+      const result = require('node:util')
+      assert.deepStrictEqual(result, { patched: true })
+    } finally {
+      if (saved) {
+        require.cache[prefixedKey] = saved
+      } else {
+        delete require.cache[prefixedKey]
+      }
+    }
+  })
 })

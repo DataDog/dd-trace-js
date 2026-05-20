@@ -35,7 +35,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(() => {
@@ -338,12 +338,12 @@ describe('Plugin', () => {
             app.get('/user', (request, reply) => {
               try {
                 assert.strictEqual(storage.getStore(), store)
+                reply.send()
                 done()
               } catch (e) {
+                reply.send()
                 done(e)
               }
-
-              reply.send()
             })
 
             app.listen({ host, port: 0 }, () => {

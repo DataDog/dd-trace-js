@@ -107,8 +107,8 @@ function setupResponseInstrumentation (ctx, res) {
       // For 'readable' events, wrap the read() method
       if (eventName === 'readable' && !originalRead && !dataListenerAdded && typeof res.read === 'function') {
         originalRead = res.read
-        res.read = function () {
-          const chunk = originalRead.apply(this, arguments)
+        res.read = function (...args) {
+          const chunk = originalRead.apply(this, args)
           if (!dataListenerAdded) {
             dataReadStarted = true
             collectChunk(chunk)
@@ -188,10 +188,10 @@ function patch (http, methodName) {
         let finished = false
         let callback = args.callback
 
-        if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function () {
+        if (typeof callback === 'function') {
+          callback = shimmer.wrapCallback(args.callback, cb => function (...args) {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return cb.apply(this, args)
             })
           })
         }
@@ -214,9 +214,9 @@ function patch (http, methodName) {
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-          req.setTimeout = function () {
+          req.setTimeout = function (...args) {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return setTimeout.apply(this, args)
           }
 
           req.emit = function (eventName, arg) {

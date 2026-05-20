@@ -6,16 +6,16 @@ const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let sns
     let sqs
     let subParams
@@ -92,7 +92,7 @@ describe('Sns', function () {
     describe('with payload tagging', () => {
       before(async () => {
         await agent.load('aws-sdk')
-        await agent.close({ ritmReset: false, wipe: true })
+        await agent.close()
         await agent.load('aws-sdk', {}, {
           cloudPayloadTagging: {
             request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
@@ -102,7 +102,7 @@ describe('Sns', function () {
         })
       })
 
-      after(() => agent.close({ ritmReset: false, wipe: true }))
+      after(() => agent.close())
 
       before(done => {
         createResources('TestQueue', 'TestTopic', done)
@@ -349,7 +349,7 @@ describe('Sns', function () {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       withPeerService(

@@ -183,6 +183,35 @@ describe('git metadata', () => {
     assert.strictEqual(getGitMetadata(config), getGitMetadata(config))
   })
 
+  // Regression: a single shared cache slot returned the disabled-branch
+  // empty result for any subsequent call once the first call had run with
+  // `DD_TRACE_GIT_METADATA_ENABLED=false`, even when the next caller passed
+  // a fresh `Config` with the flag flipped on and the env populated.
+  it('caches the disabled-branch result independently from the enabled-branch result', () => {
+    const getGitMetadata = proxyquire.noPreserveCache()('../src/git_metadata', {})
+
+    const disabledConfig = { DD_TRACE_GIT_METADATA_ENABLED: false, tags: {} }
+    const enabledConfig = {
+      DD_TRACE_GIT_METADATA_ENABLED: true,
+      DD_GIT_COMMIT_SHA: DUMMY_COMMIT_SHA,
+      DD_GIT_REPOSITORY_URL: DUMMY_REPOSITORY_URL,
+      tags: {},
+    }
+
+    assert.deepStrictEqual(getGitMetadata(disabledConfig), {
+      commitSHA: undefined,
+      repositoryUrl: undefined,
+    })
+    assert.deepStrictEqual(getGitMetadata(enabledConfig), {
+      commitSHA: DUMMY_COMMIT_SHA,
+      repositoryUrl: DUMMY_REPOSITORY_URL,
+    })
+    assert.deepStrictEqual(getGitMetadata({ DD_TRACE_GIT_METADATA_ENABLED: false, tags: {} }), {
+      commitSHA: undefined,
+      repositoryUrl: undefined,
+    })
+  })
+
   it('returns undefined when no git source is configured and cwd has no git', () => {
     const originalCwd = process.cwd()
     const tempDir = fs.mkdtempSync(path.join(TMP_DIR, 'dd-trace-no-git-'))

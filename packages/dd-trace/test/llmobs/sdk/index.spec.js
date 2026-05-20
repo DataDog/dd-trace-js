@@ -10,9 +10,9 @@ const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
-const agent = require('../../plugins/agent')
 const { removeDestroyHandler } = require('../util')
 
 const injectCh = channel('dd-trace:span:inject')
@@ -24,14 +24,10 @@ describe('sdk', () => {
   let tracer
   let clock
 
-  before(() => {
-    tracer = require('../../../../dd-trace')
-    tracer.init({
+  before(async () => {
+    tracer = await agent.load(null, [], {
       service: 'service',
-      llmobs: {
-        mlApp: 'mlApp',
-        agentlessEnabled: false,
-      },
+      llmobs: { mlApp: 'mlApp', agentlessEnabled: false },
     })
     llmobs = tracer.llmobs
 
@@ -72,10 +68,10 @@ describe('sdk', () => {
     removeDestroyHandler()
   })
 
-  after(() => {
+  after(async () => {
     sinon.restore()
     llmobsModule.disable()
-    agent.wipe() // clear the require cache
+    await agent.close()
   })
 
   describe('enabled', () => {
@@ -1619,7 +1615,7 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      assert.strictEqual(carrier['x-datadog-tags'], `,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      assert.strictEqual(carrier['x-datadog-tags'], `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
     })
   })
 })

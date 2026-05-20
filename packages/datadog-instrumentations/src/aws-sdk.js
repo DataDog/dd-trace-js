@@ -137,13 +137,13 @@ function wrapRequest (send) {
 }
 
 function wrapDeserialize (deserialize, headersCh, responseIndex = 0) {
-  return function () {
-    const response = arguments[responseIndex]
+  return function (...args) {
+    const response = args[responseIndex]
     if (headersCh.hasSubscribers) {
       headersCh.publish({ headers: response.headers })
     }
 
-    return deserialize.apply(this, arguments)
+    return deserialize.apply(this, args)
   }
 }
 
@@ -198,7 +198,7 @@ function wrapSmithySend (send) {
       })
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
           handleCompletion(result, ctx, channels)
@@ -240,11 +240,11 @@ function handleCompletion (result, ctx, channels) {
   }
 
   shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
-    return function () {
-      const iterator = asyncIterator.apply(this, arguments)
+    return function (...args) {
+      const iterator = asyncIterator.apply(this, args)
       shimmer.wrap(iterator, 'next', function (next) {
-        return function () {
-          return next.apply(this, arguments)
+        return function (...args) {
+          return next.apply(this, args)
             .then(result => {
               const { done, value: chunk } = result
               channels.streamedChunk.publish({ ctx, chunk, done })
@@ -270,7 +270,7 @@ function handleCompletion (result, ctx, channels) {
 
 function wrapCb (cb, channels, ctx) {
   // eslint-disable-next-line n/handle-callback-err
-  return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
+  return shimmer.wrapCallback(cb, cb => function wrappedCb (err, response) {
     ctx = { request: ctx.request, response }
     return channels.responseStart.runStores(ctx, () => {
       try {

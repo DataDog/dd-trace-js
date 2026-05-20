@@ -471,7 +471,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     processor.trackTransaction('tx-001', 'ingested')
     assert.strictEqual(processor.buckets.size, 1)
     const bucket = processor.buckets.values().next().value
-    assert.ok(bucket.transactions !== null)
+    assert.notStrictEqual(bucket.transactions, null)
   })
 
   it('encodes correct binary wire format', () => {

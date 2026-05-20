@@ -167,17 +167,17 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
    * Flow: message.ack() -> store context -> acknowledge() API -> retrieve context
    */
   if (Message?.prototype?.ack) {
-    shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
+    shimmer.wrap(Message.prototype, 'ack', originalAck => function (...args) {
       if (this.ackId) {
         const ctx = {
           message: this,
           ackId: this.ackId,
         }
 
-        return messageAckStoreCh.runStores(ctx, originalAck, this, ...arguments)
+        return messageAckStoreCh.runStores(ctx, originalAck, this, ...args)
       }
 
-      return originalAck.apply(this, arguments)
+      return originalAck.apply(this, args)
     })
   }
 
@@ -212,7 +212,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     return receiveFinishCh.runStores(ctx || { message }, remove, this, ...arguments)
   })
 
-  shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
+  shimmer.wrap(LeaseManager.prototype, 'clear', clear => function (...args) {
     if (this._messages) {
       for (const message of this._messages.values()) {
         const ctx = messageContexts.get(message)
@@ -222,7 +222,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
         }
       }
     }
-    return clear.apply(this, arguments)
+    return clear.apply(this, args)
   })
 })
 

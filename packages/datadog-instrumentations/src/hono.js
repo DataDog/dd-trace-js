@@ -56,10 +56,10 @@ function wrapNext (req, route, next) {
   return shimmer.wrapFunction(
     next,
     (next) =>
-      function () {
+      function (...args) {
         nextChannel.publish({ req, route })
 
-        return next.apply(this, arguments)
+        return next.apply(this, args)
       }
   )
 }

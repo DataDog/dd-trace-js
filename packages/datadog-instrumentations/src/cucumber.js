@@ -15,10 +15,12 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
+  getMaxEfdRetryCount,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
@@ -51,6 +53,8 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
+const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
@@ -67,7 +71,7 @@ const atrStatusesByScenarioKey = new Map()
 const numRetriesByPickleId = new Map()
 const efdRetryCountByPickleId = new Map()
 const efdSlowAbortedPickleIds = new Set()
-const testCaseStartedTimesById = new Map()
+const finishedParallelSuites = new Set()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 const attemptToFixTestsByTestFullname = new Map()
@@ -115,6 +119,68 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
     return 'skip'
   }
   return 'pass'
+}
+
+function getConfiguredEfdRetryCount () {
+  const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  return maxSlowTestRetryCount || earlyFlakeDetectionNumRetries
+}
+
+function publishWorkerEfdRetryCount (pickle, retryCount) {
+  if (typeof process.send !== 'function') return
+
+  try {
+    process.send({
+      [DD_EFD_RETRY_COUNT_MESSAGE]: {
+        pickleId: pickle.id,
+        retryCount,
+        testFileAbsolutePath: pickle.uri,
+        testName: pickle.name,
+      },
+    })
+  } catch {
+    // ignore IPC errors
+  }
+}
+
+function finishParallelSuiteIfDone (testFileAbsolutePath) {
+  const finished = pickleResultByFile[testFileAbsolutePath]
+  const expectedPickles = pickleByFile[testFileAbsolutePath]
+
+  if (!finished || !expectedPickles || finished.length !== expectedPickles.length) return
+  if (finishedParallelSuites.has(testFileAbsolutePath)) return
+
+  finishedParallelSuites.add(testFileAbsolutePath)
+  testSuiteFinishCh.publish({
+    status: getSuiteStatusFromTestStatuses(finished),
+    testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
+  })
+}
+
+function maybeRecordFinalParallelEfdStatus ({ pickleId, testFileAbsolutePath, testFullname }) {
+  const efdRetryCount = efdRetryCountByPickleId.get(pickleId)
+  const testStatuses = newTestsByTestFullname.get(testFullname)
+  const finished = pickleResultByFile[testFileAbsolutePath]
+
+  if (efdRetryCount === undefined || !testStatuses || !finished) return
+  if (testStatuses.length !== efdRetryCount + 1) return
+
+  finished.push(getTestStatusFromRetries(testStatuses))
+  newTestsByTestFullname.delete(testFullname)
+  finishParallelSuiteIfDone(testFileAbsolutePath)
+}
+
+function handleEfdRetryCountMessage (message) {
+  const { pickleId, retryCount, testFileAbsolutePath, testName } = message
+
+  if (!pickleId || typeof retryCount !== 'number' || !testFileAbsolutePath || !testName) return
+
+  efdRetryCountByPickleId.set(pickleId, retryCount)
+  maybeRecordFinalParallelEfdStatus({
+    pickleId,
+    testFileAbsolutePath,
+    testFullname: `${testFileAbsolutePath}:${testName}`,
+  })
 }
 
 function getStatusFromResult (result) {
@@ -297,9 +363,9 @@ function wrapRun (pl, isLatestVersion, version) {
 
   patched.add(pl)
 
-  shimmer.wrap(pl.prototype, 'run', run => function () {
+  shimmer.wrap(pl.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     let numAttempt = 0
@@ -370,7 +436,7 @@ function wrapRun (pl, isLatestVersion, version) {
       const executionStart = performance.now()
 
       testFnCh.runStores(ctx, () => {
-        promise = run.apply(this, arguments)
+        promise = run.apply(this, args)
       })
       promise.finally(async () => {
         this.eventBroadcaster.removeListener('envelope', onEnvelope)
@@ -551,11 +617,11 @@ function wrapRun (pl, isLatestVersion, version) {
       })
     }
   })
-  shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
+  shimmer.wrap(pl.prototype, 'runStep', runStep => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return runStep.apply(this, arguments)
+      return runStep.apply(this, args)
     }
-    const testStep = arguments[0]
+    const testStep = args[0]
     let resource
 
     if (isLatestVersion) {
@@ -567,7 +633,7 @@ function wrapRun (pl, isLatestVersion, version) {
     const ctx = { resource }
     return testStepStartCh.runStores(ctx, () => {
       try {
-        const promise = runStep.apply(this, arguments)
+        const promise = runStep.apply(this, args)
 
         promise.then((result) => {
           const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
@@ -639,21 +705,34 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
     isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
 
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+      skippableSuitesResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled,
+      isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled,
+      getKnownTests: () => getChannelPromise(knownTestsCh),
+      getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+      getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+    })
+
     if (isKnownTestsEnabled) {
-      const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (knownTestsResponse.err) {
+      const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
+      if (currentKnownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
       } else {
-        knownTests = knownTestsResponse.knownTests
+        knownTests = currentKnownTestsResponse.knownTests
       }
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableResponse = await getChannelPromise(skippableSuitesCh)
+      const skippableResponse = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
 
       errorSkippableRequest = skippableResponse.err
-      skippableSuites = skippableResponse.skippableSuites
+      skippableSuites = skippableResponse.skippableSuites ?? []
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator
@@ -694,11 +773,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isTestManagementTestsEnabled) {
-      const testManagementTestsResponse = await getChannelPromise(testManagementTestsCh)
-      if (testManagementTestsResponse.err) {
+      const currentTestManagementTestsResponse =
+        testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
+      if (currentTestManagementTestsResponse.err) {
         isTestManagementTestsEnabled = false
       } else {
-        testManagementTests = testManagementTestsResponse.testManagementTests
+        testManagementTests = currentTestManagementTestsResponse.testManagementTests
       }
     }
 
@@ -720,7 +800,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     attemptToFixTestsByTestFullname.clear()
     efdRetryCountByPickleId.clear()
     efdSlowAbortedPickleIds.clear()
-    testCaseStartedTimesById.clear()
+    finishedParallelSuites.clear()
     newTestsByTestFullname.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
@@ -875,6 +955,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
           efdSlowAbortedPickleIds.add(pickle.id)
         }
       }
+      if (isWorker) {
+        publishWorkerEfdRetryCount(pickle, efdRetryCount)
+      }
       for (let retryIndex = 0; retryIndex < efdRetryCount; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
         // eslint-disable-next-line no-await-in-loop
@@ -973,6 +1056,10 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         return
       }
     }
+    if (message[DD_EFD_RETRY_COUNT_MESSAGE]) {
+      handleEfdRetryCountMessage(message[DD_EFD_RETRY_COUNT_MESSAGE])
+      return
+    }
 
     const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
@@ -989,12 +1076,13 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         return parseWorkerMessageFunction.apply(this, arguments)
       }
     }
+    if (parsed[DD_EFD_RETRY_COUNT_MESSAGE]) {
+      handleEfdRetryCountMessage(parsed[DD_EFD_RETRY_COUNT_MESSAGE])
+      return
+    }
     let pickle
 
     if (parsed.testCaseStarted) {
-      if (parsed.testCaseStarted.id) {
-        testCaseStartedTimesById.set(parsed.testCaseStarted.id, performance.now())
-      }
       if (isNewVersion) {
         pickle = this.inProgress[worker.id].pickle
       } else {
@@ -1016,10 +1104,6 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
 
     // after calling `parseWorkerMessageFunction`, the test status can already be read
     if (parsed.testCaseFinished) {
-      const testCaseStartedId = parsed.testCaseFinished.testCaseStartedId
-      const testCaseStartedAt = testCaseStartedTimesById.get(testCaseStartedId)
-      testCaseStartedTimesById.delete(testCaseStartedId)
-
       let worstTestStepResult
       if (isNewVersion && eventDataCollector) {
         pickle = this.inProgress[worker.id].pickle
@@ -1052,21 +1136,15 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         }
         let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
         if (efdRetryCount === undefined) {
-          const firstExecutionDurationMs = testCaseStartedAt === undefined ? 0 : performance.now() - testCaseStartedAt
           efdRetryCount = status === 'skip'
             ? 0
-            : getEfdRetryCount(firstExecutionDurationMs, earlyFlakeDetectionSlowTestRetries)
+            : getConfiguredEfdRetryCount()
           efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
           if (efdRetryCount === 0 && status !== 'skip') {
             efdSlowAbortedPickleIds.add(pickle.id)
           }
         }
-        // We have finished all retries
-        if (testStatuses.length === efdRetryCount + 1) {
-          const newTestFinalStatus = getTestStatusFromRetries(testStatuses)
-          // we only push to `finished` if the retries have finished
-          finished.push(newTestFinalStatus)
-        }
+        maybeRecordFinalParallelEfdStatus({ pickleId: pickle.id, testFileAbsolutePath, testFullname })
       } else if (
         isTestManagementTestsEnabled &&
         getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
@@ -1090,12 +1168,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         finished.push(status)
       }
 
-      if (finished.length === pickleByFile[testFileAbsolutePath].length) {
-        testSuiteFinishCh.publish({
-          status: getSuiteStatusFromTestStatuses(finished),
-          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
-        })
-      }
+      finishParallelSuiteIfDone(testFileAbsolutePath)
     }
 
     return parseWorkerResponse
@@ -1201,9 +1274,9 @@ addHook({
   versions: ['>=11.0.0'],
   file: 'lib/formatter/helpers/event_data_collector.js',
 }, (eventDataCollectorPackage) => {
-  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
+  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function (...args) {
     eventDataCollector = this
-    return parseEnvelope.apply(this, arguments)
+    return parseEnvelope.apply(this, args)
   })
   return eventDataCollectorPackage
 })
@@ -1222,7 +1295,7 @@ addHook({
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
   )
   // EFD in parallel mode only supported in >=11.0.0
-  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
+  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function (...args) {
     if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
       this.options.worldParameters._ddIsKnownTestsEnabled = true
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
@@ -1252,7 +1325,7 @@ addHook({
       this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
     }
 
-    return startWorker.apply(this, arguments)
+    return startWorker.apply(this, args)
   })
   return adapterPackage
 })

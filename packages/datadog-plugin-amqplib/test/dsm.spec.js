@@ -56,7 +56,7 @@ describe('Plugin', () => {
         })
 
         afterEach(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -308,11 +308,11 @@ describe('Plugin', () => {
                 assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
                 assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
                 assert.deepStrictEqual(produceB.args[2].hash, consumeB.returnValue.hash)
+                setCheckpointSpy.restore()
                 done()
               } catch (e) {
-                done(e)
-              } finally {
                 setCheckpointSpy.restore()
+                done(e)
               }
             }
 

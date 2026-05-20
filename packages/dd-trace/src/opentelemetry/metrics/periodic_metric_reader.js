@@ -228,7 +228,8 @@ class PeriodicMetricReader {
 
     this.#timer = setInterval(() => {
       this.#collectAndExport()
-    }, this.#exportInterval).unref()
+    }, this.#exportInterval)
+    this.#timer.unref?.()
   }
 
   /**
@@ -407,7 +408,7 @@ class MetricAggregator {
       }
     }
 
-    this.#applyDeltaTemporality(metricsMap, lastExportedState)
+    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState)
     return metricsMap
   }
 

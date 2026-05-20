@@ -66,8 +66,8 @@ function getFilteredCsiFn (cb, filter, getContext) {
   }
 }
 
-function notString () {
-  return Array.prototype.some.call(arguments, (p) => typeof p !== 'string')
+function notString (...args) {
+  return Array.prototype.some.call(args, (p) => typeof p !== 'string')
 }
 
 function isValidCsiMethod (fn, protos) {

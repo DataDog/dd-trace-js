@@ -1,5 +1,10 @@
 'use strict'
 
+// Each `it` block declares its own inline http2 stream handler so the test
+// reads top-to-bottom. Hoisting them into shared helpers obscures what each
+// test exercises (status codes, header assertions, per-`done` flow).
+/* eslint-disable sonarjs/no-identical-functions */
+
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -51,7 +56,7 @@ describe('Plugin', () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without configuration', () => {

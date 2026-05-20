@@ -37,7 +37,7 @@ withVersions('fastify', 'fastify', fastifyVersion => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

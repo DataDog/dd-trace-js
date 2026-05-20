@@ -2,10 +2,13 @@
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
-const TestWorkerCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/test-worker')
+const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/test-worker', {
+  '../../../config': () => proxyquire.noPreserveCache()('../../../../src/config', {})(),
+})
 
 const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,

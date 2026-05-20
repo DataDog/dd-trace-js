@@ -10,9 +10,9 @@ class Sns extends BaseAwsSdkPlugin {
   static isPayloadReporter = true
 
   generateTags (params, operation, response) {
-    if (!params) return {}
+    if (!params) return
 
-    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
+    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return
     const TopicArn = params.TopicArn || response.data.TopicArn
 
     // Get the topic name from the last `:`-delimited segment of the ARN
