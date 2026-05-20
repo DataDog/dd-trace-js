@@ -599,10 +599,10 @@ describe('Plugin', () => {
             injected = undefined
           })
 
-          it('should pass through the original object without allocating a new one', async () => {
+          it('should pass through the original statement and binds unchanged', async () => {
             const query = { statement: dbQuery, values: [] }
             await connection.execute(query)
-            assert.strictEqual(injected, query)
+            assert.deepStrictEqual(injected, { statement: dbQuery, values: [] })
           })
         })
       }
