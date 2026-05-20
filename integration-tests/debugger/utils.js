@@ -356,7 +356,7 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
 
   const expected = {
     ddsource: 'dd_debugger',
-    hostname: os.hostname(),
+    host: os.hostname(),
     service: 'node',
     message: 'Hello World!',
     logger: {
