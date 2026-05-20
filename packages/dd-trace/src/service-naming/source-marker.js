@@ -49,6 +49,8 @@ function setServiceName (span, name, tracerService) {
  * - service.name equals the tracer default → clear any svc_src
  * - integration marker exists and equals current service.name → integration
  *   owns the value; leave the source label the integration set
+ * - no marker but svc_src already exists → preserve legacy integration
+ *   attribution from callers that set both tags directly
  * - otherwise → user wrote (no marker) or overrode the integration value;
  *   stamp 'm'
  *
@@ -69,7 +71,7 @@ function resolveServiceSource (span, tracerService) {
     return
   }
 
-  if (marker !== undefined && marker === currentService) {
+  if (marker === currentService || (marker === undefined && tags[SVC_SRC_KEY] !== undefined)) {
     return
   }
 
