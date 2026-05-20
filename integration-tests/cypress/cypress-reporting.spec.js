@@ -2117,6 +2117,7 @@ moduleTypes.forEach(({
           assertObjectContains(screenshotPayload, {
             headers: {
               'dd-api-key': '1',
+              'test-drive-test-failure-media-bucket': '1',
             },
             media: {
               traceId: expectedTraceId,

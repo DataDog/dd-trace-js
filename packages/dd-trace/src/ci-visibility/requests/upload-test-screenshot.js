@@ -66,11 +66,14 @@ function uploadTestScreenshot (
     return callback(new Error(`Screenshot at ${filePath} is empty`))
   }
 
+  const contentType = getContentType(filePath)
   const options = {
     method: 'POST',
     headers: {
-      'Content-Type': getContentType(filePath),
+      'Content-Type': contentType,
       'DD-API-KEY': apiKey,
+      // Required by the temporary test-drive media endpoint during the PoC.
+      'test-drive-test-failure-media-bucket': '1',
     },
     path: `${TEST_SCREENSHOT_ENDPOINT_PREFIX}${traceId}${TEST_SCREENSHOT_ENDPOINT_SUFFIX}`,
     timeout: UPLOAD_TIMEOUT_MS,
