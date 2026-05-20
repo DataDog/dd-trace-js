@@ -130,10 +130,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const mode = requestContext.client?.connectionPolicy?.connectionMode
     if (mode === 0) {
       return 'gateway'
-    } else if (mode === 1) {
-      return 'direct'
     }
-    return 'other'
+    return 'direct'
   }
 
   getHttpInfo (requestContext) {
