@@ -10,7 +10,13 @@ const guard = require('../startup-guard')
 if (process.env.WITH_TRACER) {
   const tracer = require('../../..').init()
 
-  if (process.env.WITH_DEPTH) {
+  if (process.env.GRAPHQL_DISABLED) {
+    // Baseline variant: dd-trace fully loaded (orchestrion rewrites graphql,
+    // instrumentation modules registered) but graphql plugin explicitly off.
+    // Comparing other tracer-on variants against this isolates graphql-plugin-
+    // specific overhead from dd-trace's shared startup/init cost.
+    tracer.use('graphql', false)
+  } else if (process.env.WITH_DEPTH) {
     tracer.use('graphql', { depth: Number(process.env.WITH_DEPTH) })
   } else if (process.env.WITH_DEPTH_AND_COLLAPSE) {
     const [depth, collapse] = process.env.WITH_DEPTH_AND_COLLAPSE.split(',')

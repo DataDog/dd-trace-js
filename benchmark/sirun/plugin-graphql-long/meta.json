@@ -6,6 +6,15 @@
   "iterations": 10,
   "instructions": true,
   "variants": {
+    "control": {},
+    "with-async-hooks": {
+      "baseline": "control",
+      "env": { "WITH_ASYNC_HOOKS": "1" }
+    },
+    "with-tracer-graphql-disabled": {
+      "baseline": "control",
+      "env": { "WITH_TRACER": "1", "GRAPHQL_DISABLED": "1" }
+    },
     "with-depth-off": {
       "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "1100" }
     },
