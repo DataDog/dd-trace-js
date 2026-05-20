@@ -140,6 +140,11 @@ function getScreenshotFilePath (screenshot) {
   return typeof screenshot === 'string' ? screenshot : screenshot?.path
 }
 
+function isFailureScreenshotForUpload (screenshot) {
+  const screenshotFilePath = getScreenshotFilePath(screenshot)
+  return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
+}
+
 function isFailureScreenshot (screenshot) {
   return !!getScreenshotFilePath(screenshot) && screenshot?.testFailure !== false
 }
@@ -450,6 +455,8 @@ class CypressPlugin {
   newTestsWithDynamicNames = new Set()
   attemptToFixExecutions = new Map()
   loggedAttemptToFixTests = new Set()
+  uploadedScreenshotPaths = new Set()
+  lastFinishedTest = null
 
   constructor () {
     const {
@@ -534,6 +541,8 @@ class CypressPlugin {
     this.modifiedFiles = []
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
+    this.uploadedScreenshotPaths = new Set()
+    this.lastFinishedTest = null
     this.activeTestSpan = null
     this.testSuiteSpan = null
     this.testModuleSpan = null
@@ -1221,6 +1230,32 @@ class CypressPlugin {
     })
   }
 
+  /**
+   * Uploads failure screenshots as soon as Cypress creates them.
+   *
+   * @param {object} details - Cypress screenshot details
+   * @returns {Promise<void>|undefined}
+   */
+  afterScreenshot (details) {
+    const lastFailedTestSpan = this.lastFinishedTest?.testStatus === 'fail'
+      ? this.lastFinishedTest.testSpan
+      : undefined
+    const testSpan = this.activeTestSpan || lastFailedTestSpan
+
+    if (!testSpan) {
+      return
+    }
+
+    if (!isFailureScreenshotForUpload(details)) {
+      return
+    }
+
+    return this.uploadTestScreenshots({
+      screenshots: [details],
+      traceId: testSpan.context().toTraceId(),
+    })
+  }
+
   afterSpec (spec, results) {
     const { tests, stats, screenshots } = results || {}
     const cypressTests = tests || []
@@ -1438,15 +1473,14 @@ class CypressPlugin {
       return
     }
 
-    const uploadedFilePaths = new Set()
     const uploadPromises = []
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
-      if (!filePath || uploadedFilePaths.has(filePath)) {
+      if (!filePath || this.uploadedScreenshotPaths.has(filePath)) {
         continue
       }
-      uploadedFilePaths.add(filePath)
+      this.uploadedScreenshotPaths.add(filePath)
       uploadPromises.push(new Promise(resolve => {
         exporter.uploadTestScreenshot({
           filePath,
@@ -1736,6 +1770,7 @@ class CypressPlugin {
         } else {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
+        this.lastFinishedTest = finishedTest
         // test spans are finished at after:spec
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
