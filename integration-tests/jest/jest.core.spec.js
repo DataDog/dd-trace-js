@@ -50,6 +50,8 @@ const {
   TEST_SESSION_ID,
   TEST_MODULE,
   TEST_COMMAND,
+  getLineCoverageBitmap,
+  hashCoverageFilePath,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -65,6 +67,14 @@ const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+
+function getLinesBitmapBase64 (startLine, endLine) {
+  const lineCoverage = {}
+  for (let line = startLine; line <= endLine; line++) {
+    lineCoverage[line] = 1
+  }
+  return getLineCoverageBitmap(lineCoverage, true).toString('base64')
+}
 
 // TODO: add ESM tests
 describe(`jest@${JEST_VERSION} commonJS`, () => {
@@ -697,6 +707,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   // --shard was added in jest@28
   onlyLatestIt('works when sharding', (done) => {
+    const coveredSkippedLines = getLinesBitmapBase64(1, 8)
     receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
       const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.strictEqual(testSuiteEvents.length, 3)
@@ -719,12 +730,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/sharding-test/sharding-test-2.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/sharding-test/sharding-test-2.js')]: coveredSkippedLines,
+            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/sharding-test/sharding-test-3.js',
+            coverage: {
+              [hashCoverageFilePath('ci-visibility/sharding-test/sharding-test-3.js')]: coveredSkippedLines,
+            },
           },
         },
       ])
@@ -761,8 +778,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
         done()
-      })
-    })
+      }).catch(done)
+    }).catch(done)
     childProcess = exec(
       runTestsCommand,
       {

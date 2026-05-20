@@ -1,8 +1,8 @@
 'use strict'
 
-const { writeFileSync } = require('node:fs')
-const { tmpdir } = require('node:os')
 const { randomUUID } = require('node:crypto')
+const { readFileSync, writeFileSync } = require('node:fs')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const { getValueFromEnvSources } = require('../config/helper')
@@ -14,6 +14,16 @@ const log = require('../log')
  */
 function getSettingsCachePath () {
   return getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE')
+}
+
+/**
+ * Gets the coverage backfill cache path derived from the settings cache path.
+ * @returns {string|undefined} The coverage backfill cache file path,
+ *   or undefined if settings cache is not configured.
+ */
+function getCoverageBackfillCachePath () {
+  const settingsCachePath = getSettingsCachePath()
+  return settingsCachePath ? `${settingsCachePath}.coverage-backfill.json` : undefined
 }
 
 /**
@@ -54,8 +64,43 @@ function writeSettingsToCache (settings) {
   }
 }
 
+/**
+ * Writes backend coverage for actually skipped suites to the shared coverage backfill cache.
+ * @param {object} coverageBackfill - Backend coverage bitmap data keyed by hashed or relative file path.
+ */
+function writeCoverageBackfillToCache (coverageBackfill) {
+  const coverageBackfillCachePath = getCoverageBackfillCachePath()
+  if (!coverageBackfillCachePath) {
+    return
+  }
+
+  try {
+    writeFileSync(coverageBackfillCachePath, JSON.stringify(coverageBackfill || {}), 'utf8')
+  } catch (err) {
+    log.error('Failed to write coverage backfill cache file', err)
+  }
+}
+
+/**
+ * Reads backend coverage for actually skipped suites from the shared coverage backfill cache.
+ * @returns {object|undefined} Coverage bitmap data keyed by hashed or relative file path.
+ */
+function readCoverageBackfillFromCache () {
+  const coverageBackfillCachePath = getCoverageBackfillCachePath()
+  if (!coverageBackfillCachePath) {
+    return
+  }
+
+  try {
+    return JSON.parse(readFileSync(coverageBackfillCachePath, 'utf8'))
+  } catch {}
+}
+
 module.exports = {
+  getCoverageBackfillCachePath,
   getSettingsCachePath,
+  readCoverageBackfillFromCache,
   setupSettingsCachePath,
+  writeCoverageBackfillToCache,
   writeSettingsToCache,
 }

@@ -75,6 +75,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
+  getLineCoverageBitmap,
+  hashCoverageFilePath,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -91,6 +93,26 @@ function assertItrSkippingEnabledTags (events, expected) {
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
   const test = events.find(event => event.type === 'test').content
   assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
+function getLinesBitmapBase64 (startLine, endLine) {
+  const lineCoverage = {}
+  for (let line = startLine; line <= endLine; line++) {
+    lineCoverage[line] = 1
+  }
+  return getLineCoverageBitmap(lineCoverage, true).toString('base64')
+}
+
+function getSkippableSuite (suite) {
+  return {
+    type: 'suite',
+    attributes: {
+      suite,
+      coverage: {
+        [hashCoverageFilePath(suite)]: getLinesBitmapBase64(1, 20),
+      },
+    },
+  }
 }
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
@@ -2023,12 +2045,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js',
-        },
-      }])
+      receiver.setSuitesToSkip([
+        getSkippableSuite('ci-visibility/test/ci-visibility-test.js'),
+      ])
 
       const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
       const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
@@ -2089,18 +2108,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     it('marks the test session as skipped if every suite is skipped', (done) => {
       receiver.setSuitesToSkip(
         [
-          {
-            type: 'suite',
-            attributes: {
-              suite: 'ci-visibility/test/ci-visibility-test.js',
-            },
-          },
-          {
-            type: 'suite',
-            attributes: {
-              suite: 'ci-visibility/test/ci-visibility-test-2.js',
-            },
-          },
+          getSkippableSuite('ci-visibility/test/ci-visibility-test.js'),
+          getSkippableSuite('ci-visibility/test/ci-visibility-test-2.js'),
         ]
       )
 
@@ -2209,18 +2218,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
     it('does not skip suites if suite is marked as unskippable', (done) => {
       receiver.setSuitesToSkip([
-        {
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/unskippable-test/test-to-skip.js',
-          },
-        },
-        {
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/unskippable-test/test-unskippable.js',
-          },
-        },
+        getSkippableSuite('ci-visibility/unskippable-test/test-to-skip.js'),
+        getSkippableSuite('ci-visibility/unskippable-test/test-unskippable.js'),
       ])
 
       const eventsPromise = receiver
@@ -2284,12 +2283,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
     it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
       receiver.setSuitesToSkip([
-        {
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/unskippable-test/test-to-skip.js',
-          },
-        },
+        getSkippableSuite('ci-visibility/unskippable-test/test-to-skip.js'),
       ])
 
       const eventsPromise = receiver
@@ -2450,12 +2444,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     onlyLatestIt('can skip suites in parallel mode', async () => {
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js',
-        },
-      }])
+      receiver.setSuitesToSkip([
+        getSkippableSuite('ci-visibility/test/ci-visibility-test.js'),
+      ])
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

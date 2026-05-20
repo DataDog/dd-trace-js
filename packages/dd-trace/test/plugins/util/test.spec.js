@@ -17,6 +17,12 @@ const {
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
   getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getLineCoverageBitmap,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  hashCoverageFilePath,
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
@@ -895,6 +901,87 @@ describe('coverage utils', () => {
     it('returns an empty list if coverage is empty', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})
       assert.deepStrictEqual(coverageFiles, [])
+    })
+  })
+
+  describe('getCoveredFilesFromCoverage', () => {
+    const partialCoverage = {
+      'file.js': {
+        path: 'file.js',
+        statementMap: {
+          0: { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } },
+          1: { start: { line: 2, column: 0 }, end: { line: 2, column: 1 } },
+          2: { start: { line: 3, column: 0 }, end: { line: 3, column: 1 } },
+          3: { start: { line: 4, column: 0 }, end: { line: 4, column: 1 } },
+        },
+        s: {
+          0: 1,
+          1: 0,
+          2: 0,
+          3: 0,
+        },
+        fnMap: {},
+        f: {},
+        branchMap: {},
+        b: {},
+      },
+    }
+
+    it('returns a bitmap for covered lines', () => {
+      const lineCoverage = {
+        30: 1,
+        32: 1,
+        45: 1,
+        46: 1,
+      }
+      const bitmap = getLineCoverageBitmap(lineCoverage, true)
+
+      assert.strictEqual(bitmap.toString('base64'), 'AAAAQAFg')
+    })
+
+    it('returns covered and executable files with bitmaps', () => {
+      const coveredFiles = getCoveredFilesFromCoverage(coverage)
+      const executableFiles = getExecutableFilesFromCoverage(coverage)
+
+      assert.deepStrictEqual(coveredFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
+      assert.deepStrictEqual(executableFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
+      assert.ok(coveredFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)))
+      assert.ok(executableFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)))
+    })
+
+    it('calculates total coverage using skipped-suite coverage bitmaps', () => {
+      const skippedCoverage = {
+        [hashCoverageFilePath('file.js')]: getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
+    })
+
+    it('calculates total coverage using skipped-suite coverage keyed by filename', () => {
+      const skippedCoverage = {
+        '/file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
+    })
+
+    it('applies skipped-suite coverage to an Istanbul coverage map', () => {
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        [hashCoverageFilePath('file.js')]: getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
     })
   })
 
