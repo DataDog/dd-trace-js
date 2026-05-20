@@ -15,6 +15,6 @@ runs:
 
     - shell: bash
       run: |
-        yarn install --frozen-lockfile || (sleep 30 && yarn install --frozen-lockfile)
+        yarn install --frozen-lockfile || (sleep 60 && yarn install --frozen-lockfile)
         echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
       working-directory: ${{ github.workspace }}/.github/actions/datadog-ci
