@@ -4,8 +4,8 @@
 // (default 100) so the fixed startup cost doesn't dominate the measurement.
 // See ./README.md.
 
+const tracer = require('../../..').init()
 if (process.env.WITH_TRACER) {
-  const tracer = require('../../..').init()
 
   if (process.env.WITH_DEPTH) {
     tracer.use('graphql', { depth: Number(process.env.WITH_DEPTH) })
