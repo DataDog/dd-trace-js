@@ -8,6 +8,7 @@ const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detectio
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
+const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -415,6 +416,35 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._codeCoverageReportUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
+    }, callback)
+  }
+
+  /**
+   * Returns whether the exporter can upload test screenshots.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestScreenshots () {
+    return !!this._testScreenshotUploadUrl
+  }
+
+  /**
+   * Uploads a single test screenshot to the CI intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the screenshot file
+   * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadTestScreenshot ({ filePath, traceId }, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test screenshot upload URL not configured'))
+    }
+
+    uploadTestScreenshotRequest({
+      filePath,
+      traceId,
+      url: this._testScreenshotUploadUrl,
     }, callback)
   }
 }

@@ -1,11 +1,14 @@
 'use strict'
 
+const URL = require('url').URL
+
 const AgentWriter = require('../../../exporters/agent/writer')
 const AgentlessWriter = require('../agentless/writer')
 const CoverageWriter = require('../agentless/coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 const { fetchAgentInfo } = require('../../../agent/info')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
+const { getEnvironmentVariable } = require('../../../config/helper')
 
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
@@ -30,9 +33,15 @@ function getCanForwardDebuggerLogs (err, agentInfo) {
   return !err && agentInfo.endpoints.includes(DEBUGGER_INPUT_V1)
 }
 
+function getTestScreenshotUploadUrl () {
+  const pocSite = getEnvironmentVariable('DD_POC_SITE')
+  return pocSite ? new URL(`https://api.${pocSite}`) : undefined
+}
+
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
+    this._testScreenshotUploadUrl = getTestScreenshotUploadUrl()
 
     const {
       tags,

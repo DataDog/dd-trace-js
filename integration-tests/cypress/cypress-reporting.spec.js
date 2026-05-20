@@ -2074,5 +2074,70 @@ moduleTypes.forEach(({
         receiverPromise,
       ])
     })
+
+    it('uploads screenshots for failed tests using the test trace id', async function () {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const command = version === '6.7.0'
+        ? './node_modules/.bin/cypress run ' +
+          '--config-file cypress-config.json ' +
+          '--config screenshotOnRunFailure=true --spec "cypress/e2e/basic-fail.js"'
+        : `${testCommand} --config screenshotOnRunFailure=true`
+      let testOutput = ''
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_SCREENSHOT_ON_RUN_FAILURE: 'true',
+            SPEC_PATTERN: 'cypress/e2e/basic-fail.js',
+          },
+        }
+      )
+      childProcess.stdout.on('data', data => { testOutput += data.toString() })
+      childProcess.stderr.on('data', data => { testOutput += data.toString() })
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url === '/api/v2/citestcycle',
+        payloads => {
+          const screenshotPayload = payloads.find(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+          const events = payloads
+            .filter(({ url }) => url === '/api/v2/citestcycle')
+            .flatMap(({ payload }) => payload.events)
+          const failedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
+          )
+          assert.ok(screenshotPayload)
+          assert.ok(failedTest)
+          const expectedTraceId = failedTest.content.trace_id.toString()
+
+          assertObjectContains(screenshotPayload, {
+            headers: {
+              'dd-api-key': '1',
+              'test-drive-test-failure-media-bucket': '1',
+            },
+            media: {
+              traceId: expectedTraceId,
+            },
+            url: `/api/unstable/ci/test-runs/${expectedTraceId}/media`,
+          })
+          assert.deepStrictEqual(
+            [...screenshotPayload.media.content.subarray(0, 8)],
+            [137, 80, 78, 71, 13, 10, 26, 10]
+          )
+        }, { hardTimeout: 60000 })
+        .catch(error => {
+          error.message += `\nCypress output:\n${testOutput}`
+          throw error
+        })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
   })
 })
