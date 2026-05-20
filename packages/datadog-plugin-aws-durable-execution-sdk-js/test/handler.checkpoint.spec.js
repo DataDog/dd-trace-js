@@ -39,7 +39,7 @@ function buildPlugin (Plugin, tracer) {
   plugin.startSpan = (_name, _options, ctx) => {
     const span = {
       context () {
-        return { _parentId: 123n }
+        return { toSpanId: () => '123' }
       },
     }
     if (ctx && typeof ctx === 'object') {

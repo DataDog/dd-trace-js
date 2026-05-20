@@ -158,9 +158,12 @@ async function saveCheckpoint (checkpointManager, executionArn, number, headers)
  * Save a new trace-context checkpoint when the current context differs from
  * the most recent `_datadog_{N}` operation already in the event.
  *
- * - First checkpoint (no previous): uses number 0, parent_id = checkpointAnchorSpanId.
- * - Subsequent: picks max number + 1, reuses the previous checkpoint's parent_id,
- *   and saves only if trace context changed (ignoring parent-context fields).
+ * Every checkpoint across the durable execution carries the same
+ * `x-datadog-parent-id` so all resumed invocations attach to the same anchor:
+ * - First checkpoint (no previous): anchor at `firstExecutionSpanId`.
+ * - Subsequent: reuse the prior checkpoint's `x-datadog-parent-id` verbatim —
+ *   that value originated from the first save and is the anchor we've been
+ *   carrying forward.
  *
  * Caller is responsible for invoking this only when a save is appropriate — i.e.
  * the SDK is about to return Status: PENDING (see PENDING_TERMINATION_REASONS in
@@ -169,12 +172,17 @@ async function saveCheckpoint (checkpointManager, executionArn, number, headers)
  * @param {object} tracer
  * @param {object} span - aws.durable.execute span
  * @param {object} durableContext - SDK's DurableContextImpl
- * @param {string | undefined} checkpointAnchorSpanId
+ * @param {string | undefined} firstExecutionSpanId - span id of the first
+ *   invocation's `aws.durable.execute` span. Only consulted on the very
+ *   first save; ignored once a prior `_datadog_{N}` exists. We anchor at
+ *   this span (which this integration owns) rather than its parent so the
+ *   anchor doesn't depend on whatever upstream context happens to be
+ *   active when `bindStart` fires.
  * @param {unknown} event - raw invocation event (has InitialExecutionState)
  * @returns {Promise<void>}
  */
 async function saveTraceContextCheckpointIfUpdated (
-  tracer, span, durableContext, checkpointAnchorSpanId, event,
+  tracer, span, durableContext, firstExecutionSpanId, event,
 ) {
   try {
     const checkpointManager = durableContext.checkpoint ?? durableContext.checkpointManager
@@ -193,16 +201,16 @@ async function saveTraceContextCheckpointIfUpdated (
       // Compare trace contexts ignoring x-datadog-parent-id, which always changes
       // since it reflects the active span at save time. The propagator emits keys
       // in a deterministic order, so JSON.stringify is a stable equality check.
-      const latestParentId = latestHeaders['x-datadog-parent-id']
+      const anchoredSpanId = latestHeaders['x-datadog-parent-id']
       delete currentHeaders['x-datadog-parent-id']
       delete latestHeaders['x-datadog-parent-id']
       if (JSON.stringify(currentHeaders) === JSON.stringify(latestHeaders)) return
 
       newNumber = latest.number + 1
-      overrideParentId(currentHeaders, latestParentId)
+      overrideParentId(currentHeaders, anchoredSpanId)
     } else {
       newNumber = 0
-      if (checkpointAnchorSpanId) overrideParentId(currentHeaders, checkpointAnchorSpanId)
+      if (firstExecutionSpanId) overrideParentId(currentHeaders, firstExecutionSpanId)
     }
 
     const executionArn = event?.DurableExecutionArn || ''
