@@ -171,7 +171,7 @@ function wrapExecute (execute) {
         args,
         docSource: source,
         source,
-        fields: Object.create(null),
+        fields: new Map(),
         abortController: new AbortController(),
       }
 
@@ -213,12 +213,31 @@ function wrapResolve (resolve) {
 
     const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
-      field.ctx.error = err
-      field.ctx.info = info
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
-    })
+    if (ctx.abortController.signal.aborted) {
+      publishResolverFinish(field, null)
+      throw new AbortError('Aborted')
+    }
+
+    try {
+      const result = resolve.call(this, source, args, contextValue, info)
+      if (result !== null && typeof result?.then === 'function') {
+        return result.then(
+          res => {
+            publishResolverFinish(field, null)
+            return res
+          },
+          error => {
+            publishResolverFinish(field, error)
+            throw error
+          }
+        )
+      }
+      publishResolverFinish(field, null)
+      return result
+    } catch (error) {
+      publishResolverFinish(field, error)
+      throw error
+    }
   }
 
   patchedResolvers.add(resolveAsync)
@@ -226,70 +245,127 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb = cb || (() => {})
+/**
+ * @param {{ ctx: object, error: unknown }} field
+ * @param {unknown} error
+ */
+function publishResolverFinish (field, error) {
+  const fieldCtx = field.ctx
+  fieldCtx.error = error
+  fieldCtx.field = field
+  updateFieldCh.publish(fieldCtx)
+}
 
-  if (abortController?.signal.aborted) {
+function callInAsyncScope (fn, thisArg, args, abortController, cb) {
+  if (abortController.signal.aborted) {
     cb(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
     const result = fn.apply(thisArg, args)
-    if (result && typeof result.then === 'function') {
+    if (result !== null && typeof result?.then === 'function') {
       return result.then(
         res => {
           cb(null, res)
           return res
         },
-        err => {
-          cb(err)
-          throw err
+        error => {
+          cb(error)
+          throw error
         }
       )
     }
     cb(null, result)
     return result
-  } catch (err) {
-    cb(err)
-    throw err
+  } catch (error) {
+    cb(error)
+    throw error
   }
 }
 
-function pathToArray (path) {
-  let length = 0
-  for (let curr = path; curr; curr = curr.prev) {
-    length += 1
-  }
+/**
+ * @typedef {{ prev: PathNode | undefined, key: string | number }} PathNode
+ *
+ * @typedef {{ error: unknown, ctx: object }} TrackedField
+ */
 
-  const flattened = new Array(length)
-  let index = length
-  for (let curr = path; curr; curr = curr.prev) {
-    flattened[--index] = curr.key
-  }
-  return flattened
-}
-
+/**
+ * @param {{
+ *   fields: Map<object, TrackedField>,
+ *   collapse: boolean,
+ *   collapsedFields?: Map<string, TrackedField>,
+ *   pathCache?: Map<PathNode, string>,
+ * }} rootCtx
+ * @param {import('graphql').GraphQLResolveInfo} info
+ * @param {Record<string, unknown>} args
+ */
 function assertField (rootCtx, info, args) {
-  const pathInfo = info && info.path
+  const path = info.path
+  const collapse = rootCtx.collapse
 
-  const path = pathToArray(pathInfo)
+  const cache = rootCtx.pathCache ??= new Map()
+  const prev = path.prev
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
 
-  const pathString = path.join('.')
-  const fields = rootCtx.fields
+  const pathString = prev === undefined
+    ? String(segment)
+    : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
+  cache.set(path, pathString)
 
-  let field = fields[pathString]
+  const fieldCtx = {
+    rootCtx,
+    args,
+    path,
+    pathString,
+    fieldName: info.fieldName,
+    returnType: info.returnType,
+    fieldNode: info.fieldNodes[0],
+    variableValues: info.variableValues,
+  }
+  // Publish per resolver call, before the collapse / depth dedupe below.
+  // IAST mutates each call's own args object; if siblings 2..N skip the
+  // publish, those args objects never get tainted.
+  startResolveCh.publish(fieldCtx)
 
-  if (!field) {
-    const fieldCtx = { info, rootCtx, args, path, pathString }
-    startResolveCh.publish(fieldCtx)
-    field = fields[pathString] = {
-      error: null,
-      ctx: fieldCtx,
-    }
+  let collapsedFields
+  if (collapse) {
+    collapsedFields = rootCtx.collapsedFields ??= new Map()
+    const existing = collapsedFields.get(pathString)
+    // Subsequent siblings of a collapsed list share the first sibling's field
+    // so updateFieldCh fires for every call and the span's finishTime tracks
+    // the last sibling's completion, not the first.
+    if (existing !== undefined) return existing
   }
 
+  const field = { error: null, ctx: fieldCtx }
+  rootCtx.fields.set(path, field)
+  if (collapsedFields !== undefined) collapsedFields.set(pathString, field)
   return field
+}
+
+/**
+ * Cold path for assertField. graphql-js inserts a synthetic array-index
+ * node between a list field and its items, and that node never reaches a
+ * resolver — so assertField has no chance to cache it. The first child of
+ * the list item that hits the path cache lands here to walk and populate
+ * back to a cached ancestor.
+ *
+ * @param {PathNode} path
+ * @param {Map<PathNode, string>} cache
+ * @param {boolean} collapse
+ */
+function buildCachedPathString (path, cache, collapse) {
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
+  const prev = path.prev
+
+  const pathString = prev === undefined
+    ? String(segment)
+    : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
+  cache.set(path, pathString)
+  return pathString
 }
 
 function wrapFields (type) {
@@ -323,14 +399,19 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  for (const field of Object.values(fields)) {
-    field.ctx.finishTime = field.finishTime
-    field.ctx.field = field
+  for (const field of fields.values()) {
+    const fieldCtx = field.ctx
+    // A depth-gated field publishes startResolveCh for IAST/AppSec but the
+    // resolve plugin's start short-circuits before creating a span, so there
+    // is no span here to finish.
+    if (fieldCtx.currentStore === undefined) continue
+    fieldCtx.finishTime = field.finishTime
+    fieldCtx.field = field
     if (field.error) {
-      field.ctx.error = field.error
-      resolveErrorCh.publish(field.ctx)
+      fieldCtx.error = field.error
+      resolveErrorCh.publish(fieldCtx)
     }
-    finishResolveCh.publish(field.ctx)
+    finishResolveCh.publish(fieldCtx)
   }
 }
 
