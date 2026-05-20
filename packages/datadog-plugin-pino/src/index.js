@@ -3,7 +3,6 @@
 const { LOG } = require('../../../ext/formats')
 const { storage } = require('../../datadog-core')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
-const { messageProxy } = LogPlugin
 
 const legacyStorage = storage('legacy')
 
@@ -21,8 +20,9 @@ class PinoPlugin extends LogPlugin {
    *  - `apm:pino:log` is the pretty-print path. `pino-pretty` (bundled with
    *    pino 5/7, separate package on >=8) reads the original message object
    *    rather than the JSON line, so the splice above is invisible to it.
-   *    Wrap the object in a `Proxy` that exposes a virtual `dd` field so
-   *    `pino-pretty`'s `Object.keys` walk renders it.
+   *    The base `LogPlugin._addLogSubs` already wires this channel to wrap
+   *    the object in a `Proxy` that exposes a virtual `dd` field, so reuse
+   *    it via `super._addLogSubs()`.
    *
    * @override
    */
@@ -48,11 +48,7 @@ class PinoPlugin extends LogPlugin {
       payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
     })
 
-    this.addSub('apm:pino:log', (payload) => {
-      const holder = {}
-      this.tracer.inject(legacyStorage.getStore()?.span, LOG, holder)
-      payload.message = messageProxy(payload.message, holder)
-    })
+    super._addLogSubs()
   }
 }
 
