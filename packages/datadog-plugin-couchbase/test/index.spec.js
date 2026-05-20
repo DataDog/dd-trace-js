@@ -22,7 +22,8 @@ describe('Plugin', () => {
 
     withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
       describe('without configuration', () => {
-        beforeEach(async () => {
+        beforeEach(async function () {
+          this.timeout(10_000)
           tracer = global.tracer = await agent.load('couchbase')
           couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
           cluster = await couchbase.connect('couchbase://localhost', {

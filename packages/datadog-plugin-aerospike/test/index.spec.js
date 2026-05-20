@@ -48,7 +48,8 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(function () {
+          this.timeout(10_000)
           return agent.load('aerospike')
         })
 
@@ -303,7 +304,8 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => {
+        before(function () {
+          this.timeout(10_000)
           return agent.load('aerospike', { service: 'custom' })
         })
 
