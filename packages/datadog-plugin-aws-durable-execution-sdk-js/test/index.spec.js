@@ -1,5 +1,10 @@
 'use strict'
 
+const { NODE_MAJOR } = require('../../../version')
+
+// @aws/durable-execution-sdk-js >=1.1.0 (our minimum supported version) requires Node.js >=22.
+if (NODE_MAJOR < 22) return
+
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
