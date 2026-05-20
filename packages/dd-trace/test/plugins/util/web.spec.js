@@ -319,7 +319,7 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
