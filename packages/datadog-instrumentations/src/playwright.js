@@ -1691,7 +1691,10 @@ addHook({
     })
     await res
 
-    const { status, error, annotations, retry, testId } = testInfo
+    const { status, error, annotations, retry, testId, attachments } = testInfo
+    const screenshotPaths = attachments
+      ?.filter(a => a.contentType?.startsWith('image/') && a.path)
+      .map(a => a.path) ?? []
     const testEfdKey = getTestEfdKey(test)
     const isEfdManagedTest = isTestEfdManaged(test)
     if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
@@ -1777,6 +1780,7 @@ addHook({
       onDone,
       finalStatus,
       earlyFlakeAbortReason: test._ddEarlyFlakeAbortReason,
+      screenshotPaths,
       ...testCtx.currentStore,
     })
 

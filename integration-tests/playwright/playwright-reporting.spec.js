@@ -103,6 +103,69 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
+    it.only('uploads screenshots for failed tests using the test trace id', async function () {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+            PW_SCREENSHOT_ON_FAILURE: 'true',
+          },
+        }
+      )
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/ci/tests/screenshots' || url === '/api/v2/citestcycle',
+        payloads => {
+          const screenshotPayload = payloads.find(({ url }) => url === '/api/v2/ci/tests/screenshots')
+          const events = payloads
+            .filter(({ url }) => url === '/api/v2/citestcycle')
+            .flatMap(({ payload }) => payload.events)
+
+          const failedTest = events.find(event =>
+            event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail'
+          )
+
+          assert.ok(screenshotPayload, 'screenshot payload should exist')
+          assert.ok(failedTest, 'failed test event should exist')
+
+          const expectedTraceId = failedTest.content.trace_id.toString()
+
+          assertObjectContains(screenshotPayload, {
+            screenshotFile: {
+              name: 'screenshot',
+              filename: `${expectedTraceId}.png`,
+              type: 'image/png',
+            },
+            eventFile: {
+              name: 'event',
+              content: {
+                type: 'test_screenshot',
+                trace_id: expectedTraceId,
+                test_name: failedTest.content.meta[TEST_NAME],
+                filename: `${expectedTraceId}.png`,
+                content_type: 'image/png',
+              },
+            },
+          })
+          assert.deepStrictEqual(
+            [...screenshotPayload.screenshotFile.content.subarray(0, 8)],
+            [137, 80, 78, 71, 13, 10, 26, 10],
+            'screenshot should start with PNG magic bytes'
+          )
+        },
+        { hardTimeout: 60000 }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), receiverPromise])
+    })
+
     const reportMethods = ['agentless', 'evp proxy']
 
     reportMethods.forEach((reportMethod) => {

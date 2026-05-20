@@ -22,6 +22,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     this._codeCoverageReportUrl = url || new URL(`https://ci-intake.${site}`)
+    this._testScreenshotUploadUrl = url || new URL(`https://ci-intake.${site}`)
 
     if (isTestDynamicInstrumentationEnabled) {
       const DynamicInstrumentationLogsWriter = require('./di-logs-writer')
