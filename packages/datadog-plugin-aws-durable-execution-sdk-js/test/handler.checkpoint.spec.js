@@ -138,24 +138,6 @@ describe('handler checkpoint hook', () => {
     assert.equal(checkpointSaveCalls.length, 1)
   })
 
-  it('does not install the termination hook twice across invocations sharing a terminationManager', () => {
-    const Plugin = loadHandlerPlugin([])
-    const plugin = buildPlugin(Plugin, {})
-
-    const executionContext = {
-      terminationManager: { terminate () {} },
-    }
-    const { ctx } = buildCtx(executionContext, async () => {})
-
-    plugin.bindStart(ctx)
-    const firstTerminate = executionContext.terminationManager.terminate
-
-    const { ctx: ctx2 } = buildCtx(executionContext, async () => {})
-    plugin.bindStart(ctx2)
-
-    assert.strictEqual(executionContext.terminationManager.terminate, firstTerminate)
-  })
-
   describe('DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED', () => {
     const ENV_KEY = 'DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED'
     let originalEnv

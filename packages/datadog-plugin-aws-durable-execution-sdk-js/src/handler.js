@@ -18,10 +18,8 @@ const PENDING_TERMINATION_REASONS = new Set([
 
 const DEFAULT_TERMINATION_REASON = 'OPERATION_TERMINATED'
 
-const kTerminationHookInstalled = Symbol('dd-trace:aws-durable-execution-sdk-js:termination-hook-installed')
-
 // Default on; users opt out by setting to false.
-function isCrossInvocationTracingEnabled() {
+function isCrossInvocationTracingEnabled () {
   return !isFalse(getEnvironmentVariable('DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED'))
 }
 
@@ -61,7 +59,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   // suspends (PENDING) we persist the current trace context as a `_datadog`
   // checkpoint, which subsequent invocations consume to extract the parent
   // trace context.
-  _installTerminationCheckpointHook(ctx, event) {
+  _installTerminationCheckpointHook (ctx, event) {
     if (!isCrossInvocationTracingEnabled()) return
 
     const args = ctx.arguments || []
@@ -70,7 +68,6 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     const executionContext = args[2]
     const terminationManager = executionContext?.terminationManager
     if (!terminationManager || typeof terminationManager.terminate !== 'function') return
-    if (terminationManager[kTerminationHookInstalled]) return
 
     const span = ctx.currentStore?.span
     if (!span) return
@@ -100,7 +97,6 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       }
       return originalTerminate.apply(this, terminateArgs)
     }
-    terminationManager[kTerminationHookInstalled] = true
   }
 
   asyncEnd (ctx) {
@@ -130,7 +126,7 @@ function finishOpenChildSpans (executeSpan) {
   }
 }
 
-function getParentSpanId(span) {
+function getParentSpanId (span) {
   try {
     const parentId = span?.context?.()?._parentId
     if (parentId) return parentId.toString()
@@ -139,7 +135,7 @@ function getParentSpanId(span) {
   }
 }
 
-function maybeSaveCheckpoint(state) {
+function maybeSaveCheckpoint (state) {
   if (!state || state.saved || state.savePromise) return state.savePromise
   if (!state.tracer || !state.span || !state.durableContext) return null
 
