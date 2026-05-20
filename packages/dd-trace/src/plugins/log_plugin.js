@@ -6,6 +6,10 @@ const Plugin = require('./plugin')
 
 const legacyStorage = storage('legacy')
 
+/**
+ * @param {object} message Caller-owned log record; never mutated.
+ * @param {{ dd?: object }} holder Holds the `dd` fields injected by the tracer.
+ */
 function messageProxy (message, holder) {
   return new Proxy(message, {
     get (target, key) {
@@ -31,14 +35,27 @@ function messageProxy (message, holder) {
   })
 }
 
+/**
+ * @param {object} target
+ * @param {string | symbol} p
+ */
 function shouldOverride (target, p) {
   return p === 'dd' && !Object.hasOwn(target, p) && Reflect.isExtensible(target)
 }
 
-module.exports = class LogPlugin extends Plugin {
+class LogPlugin extends Plugin {
   constructor (...args) {
     super(...args)
+    this._addLogSubs()
+  }
 
+  /**
+   * Wire the log-injection subscriber. Subclasses (PinoPlugin) override this
+   * to subscribe to a different channel and inject `dd` without the Proxy
+   * round-trip when the underlying logger lets us splice the output JSON
+   * string directly.
+   */
+  _addLogSubs () {
     this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
       const span = legacyStorage.getStore()?.span
 
@@ -57,3 +74,6 @@ module.exports = class LogPlugin extends Plugin {
     })
   }
 }
+
+module.exports = LogPlugin
+module.exports.messageProxy = messageProxy
