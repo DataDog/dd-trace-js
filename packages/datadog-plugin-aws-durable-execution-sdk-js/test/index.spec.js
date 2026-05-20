@@ -1,12 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
+
 const { NODE_MAJOR } = require('../../../version')
 
 // @aws/durable-execution-sdk-js >=1.1.0 (our minimum supported version) requires Node.js >=22.
 if (NODE_MAJOR < 22) return
-
-const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
@@ -67,7 +67,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       }))
 
       const result = await invokeHandler(async () => {})
-      assert.ok(result !== undefined, 'withDurableExecution should return a result')
+      assert.notStrictEqual(result, undefined, 'withDurableExecution should return a result')
 
       return tracePromise
     })
@@ -281,7 +281,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),
         { invokeTarget: async () => {} }
       )
-      assert.ok(result !== undefined, 'invoke should return a result')
+      assert.notStrictEqual(result, undefined, 'invoke should return a result')
 
       return tracePromise
     })
