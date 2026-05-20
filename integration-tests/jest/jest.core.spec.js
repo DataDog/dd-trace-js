@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { fork, exec } = require('child_process')
 const path = require('path')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -838,7 +839,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSpans.length, 2)
         const spanTypes = testSpans.map(span => span.type)
         assertObjectContains(spanTypes, ['test'])
-        assert.ok(!spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)))
+        assert.ok(
+          !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
+          `Got: ${inspect(spanTypes)}`
+        )
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
         done()
       }).catch(done)
@@ -1193,7 +1197,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           assert.strictEqual(failedTestSuite.content.meta[TEST_STATUS], 'fail')
           assert.ok(
-            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code')
+            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code'),
+            `Got: ${inspect(failedTestSuite.content.meta[ERROR_MESSAGE])}`
           )
           assert.strictEqual(failedTestSuite.content.meta[ERROR_TYPE], 'Error')
 
@@ -1235,13 +1240,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           // jest still reports the test suite as passing
           assert.strictEqual(badImportTestSuite.content.meta[TEST_STATUS], 'pass')
+          const errorMessage = badImportTestSuite.content.meta[ERROR_MESSAGE]
           assert.ok(
-            badImportTestSuite.content.meta[ERROR_MESSAGE]
-              .includes('a file after the Jest environment has been torn down')
+            errorMessage.includes('a file after the Jest environment has been torn down'),
+            `Got: ${inspect(errorMessage)}`
           )
           assert.ok(
-            badImportTestSuite.content.meta[ERROR_MESSAGE]
-              .includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js')
+            errorMessage.includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'),
+            `Got: ${inspect(errorMessage)}`
           )
           // This is the error message that jest should show. We check that we don't mess it up.
           assert.match(badImportTestSuite.content.meta[ERROR_MESSAGE], /off-timing-import/)

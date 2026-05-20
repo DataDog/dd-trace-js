@@ -5,6 +5,7 @@ process.env.K_SERVICE = 'test-service'
 
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
@@ -131,7 +132,7 @@ describe('Push Subscription Plugin', () => {
 
             if (pubsubSpan.meta['_dd.span_links']) {
               const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
-              assert.ok(Array.isArray(spanLinks))
+              assert.ok(Array.isArray(spanLinks), `Expected array, got ${inspect(spanLinks)}`)
               const hasProducerLink = spanLinks.some(link => link.trace_id && link.span_id)
               assert.strictEqual(hasProducerLink, true)
             }

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 const { exec, execSync } = require('child_process')
 const satisfies = require('semifies')
 
@@ -213,9 +214,10 @@ versions.forEach((version) => {
 
               if (isDisabled && !isAttemptingToFix) {
                 assert.strictEqual(attemptedToFixTests.length, 2)
-                assert.ok(attemptedToFixTests.every(test =>
-                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
-                ))
+                assert.ok(
+                  attemptedToFixTests.every(test => test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'),
+                  `Got: ${inspect(attemptedToFixTests.map(t => t.meta[TEST_MANAGEMENT_IS_DISABLED]))}`
+                )
                 // if the test is disabled and not attempting to fix, there will be no retries
                 return
               }

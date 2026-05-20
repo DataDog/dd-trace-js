@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 
@@ -136,10 +137,22 @@ describe('NoopFlaggingProvider', () => {
       const numberResult = noopProvider.resolveNumberEvaluation('test', 42, {}, {})
       const objectResult = noopProvider.resolveObjectEvaluation('test', {}, {}, {})
 
-      assert.ok(booleanResult && typeof booleanResult.then === 'function')
-      assert.ok(stringResult && typeof stringResult.then === 'function')
-      assert.ok(numberResult && typeof numberResult.then === 'function')
-      assert.ok(objectResult && typeof objectResult.then === 'function')
+      assert.ok(
+        booleanResult && typeof booleanResult.then === 'function',
+        `Expected a thenable, got: ${inspect(booleanResult)}`
+      )
+      assert.ok(
+        stringResult && typeof stringResult.then === 'function',
+        `Expected a thenable, got: ${inspect(stringResult)}`
+      )
+      assert.ok(
+        numberResult && typeof numberResult.then === 'function',
+        `Expected a thenable, got: ${inspect(numberResult)}`
+      )
+      assert.ok(
+        objectResult && typeof objectResult.then === 'function',
+        `Expected a thenable, got: ${inspect(objectResult)}`
+      )
     })
 
     it('should resolve promises immediately', async () => {

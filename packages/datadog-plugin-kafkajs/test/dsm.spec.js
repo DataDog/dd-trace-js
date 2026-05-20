@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('crypto')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -141,7 +142,10 @@ describe('Plugin', () => {
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+            assert.ok(
+              Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
             recordCheckpointSpy.restore()
           })
 
@@ -154,7 +158,10 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             await consumer.run({
               eachMessage: async () => {
-                assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+                assert.ok(
+                  Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+                  `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+                )
                 recordCheckpointSpy.restore()
               },
             })

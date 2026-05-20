@@ -5,6 +5,7 @@ const os = require('os')
 const { basename, join } = require('path')
 const { readFileSync } = require('fs')
 const { randomUUID } = require('crypto')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 
@@ -321,7 +322,10 @@ function setupAssertionListeners (t, done, probe) {
     assertBasicInputPayload(t, payload, probe)
 
     payload = payload[0]
-    assert.ok(typeof payload.dd === 'object' && payload.dd !== null)
+    assert.ok(
+      typeof payload.dd === 'object' && payload.dd !== null,
+      `Expected non-null object, got ${inspect(payload.dd)}`
+    )
     assert.deepStrictEqual(['span_id', 'trace_id'], Object.keys(payload.dd).sort())
     assert.strictEqual(typeof payload.dd.trace_id, 'string')
     assert.strictEqual(typeof payload.dd.span_id, 'string')
@@ -350,7 +354,7 @@ function setupAssertionListeners (t, done, probe) {
  *   config to use instead of t.rcConfig.config.
  */
 function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
-  assert.ok(Array.isArray(payload))
+  assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
   assert.strictEqual(payload.length, 1)
   const data = payload[0]
 
@@ -383,13 +387,19 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
 
   assertUUID(data.debugger.snapshot.id)
   assert.strictEqual(typeof data.debugger.snapshot.timestamp, 'number')
-  assert.ok(data.debugger.snapshot.timestamp > Date.now() - 1000 * 60)
-  assert.ok(data.debugger.snapshot.timestamp <= Date.now())
+  assert.ok(
+    data.debugger.snapshot.timestamp > Date.now() - 1000 * 60,
+    `Expected ${data.debugger.snapshot.timestamp} > ${Date.now() - 1000 * 60}`
+  )
+  assert.ok(
+    data.debugger.snapshot.timestamp <= Date.now(),
+    `Expected ${data.debugger.snapshot.timestamp} <= ${Date.now()}`
+  )
 
-  assert.ok(Array.isArray(data.debugger.snapshot.stack))
+  assert.ok(Array.isArray(data.debugger.snapshot.stack), `Expected array, got ${inspect(data.debugger.snapshot.stack)}`)
   assert.ok(data.debugger.snapshot.stack.length > 0, `Expected ${data.debugger.snapshot.stack.length} > 0`)
   for (const frame of data.debugger.snapshot.stack) {
-    assert.ok(typeof frame === 'object' && frame !== null)
+    assert.ok(typeof frame === 'object' && frame !== null, `Expected non-null object, got ${inspect(frame)}`)
     assert.deepStrictEqual(['columnNumber', 'fileName', 'function', 'lineNumber'], Object.keys(frame).sort())
     assert.strictEqual(typeof frame.fileName, 'string')
     assert.strictEqual(typeof frame.function, 'string')

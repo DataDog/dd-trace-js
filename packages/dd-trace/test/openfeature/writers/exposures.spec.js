@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { format } = require('node:util')
+const { format, inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -230,9 +230,12 @@ describe('OpenFeature Exposures Writer', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
 
-      assert.ok(payload !== null && typeof payload === 'object' && !Array.isArray(payload))
-      assert.ok(Object.hasOwn(payload, 'context'))
-      assert.ok(Object.hasOwn(payload, 'exposures'))
+      assert.ok(
+        payload !== null && typeof payload === 'object' && !Array.isArray(payload),
+        `Expected a non-null non-array object, got: ${inspect(payload)}`
+      )
+      assert.ok(Object.hasOwn(payload, 'context'), `Available keys: ${inspect(Object.keys(payload))}`)
+      assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
       assert.strictEqual(payload.exposures?.length, 1)
     })
 
@@ -278,8 +281,11 @@ describe('OpenFeature Exposures Writer', () => {
       assert.deepStrictEqual(payload.context, {
         service: 'test-service',
       })
-      assert.ok(!(Object.hasOwn(payload.context, 'version')))
-      assert.ok(!(Object.hasOwn(payload.context, 'env')))
+      assert.ok(
+        !(Object.hasOwn(payload.context, 'version')),
+        `Available keys: ${inspect(Object.keys(payload.context))}`
+      )
+      assert.ok(!(Object.hasOwn(payload.context, 'env')), `Available keys: ${inspect(Object.keys(payload.context))}`)
     })
 
     it('should handle flat format with dot notation', () => {
@@ -347,9 +353,12 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
 
       const parsedPayload = JSON.parse(payload)
-      assert.ok(parsedPayload !== null && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload))
-      assert.ok(Object.hasOwn(parsedPayload, 'context'))
-      assert.ok(Object.hasOwn(parsedPayload, 'exposures'))
+      assert.ok(
+        parsedPayload !== null && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload),
+        `Expected non-null non-array object, got ${inspect(parsedPayload)}`
+      )
+      assert.ok(Object.hasOwn(parsedPayload, 'context'), `Available keys: ${inspect(Object.keys(parsedPayload))}`)
+      assert.ok(Object.hasOwn(parsedPayload, 'exposures'), `Available keys: ${inspect(Object.keys(parsedPayload))}`)
       assert.strictEqual(parsedPayload.exposures?.length, 1)
       assert.ok(parsedPayload.exposures[0].timestamp)
       assert.strictEqual(parsedPayload.context.service, 'test-service')
@@ -442,7 +451,11 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
-      assert(log.warn.getCalls().some(call => /dropped 5 events/.test(format(...call.args))))
+      const warnCalls = log.warn.getCalls()
+      assert(
+        warnCalls.some(call => /dropped 5 events/.test(format(...call.args))),
+        `Got warn calls: ${inspect(warnCalls.map(c => c.args))}`
+      )
     })
 
     it('should prevent multiple destruction', () => {

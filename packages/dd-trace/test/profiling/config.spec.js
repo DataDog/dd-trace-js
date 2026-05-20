@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -443,8 +444,14 @@ describe('config', () => {
   })
 
   function assertOomExportCommand (config) {
-    assert.ok(config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`))
-    assert.ok(config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'))
+    assert.ok(
+      config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`),
+      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
+    )
+    assert.ok(
+      config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'),
+      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
+    )
   }
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {

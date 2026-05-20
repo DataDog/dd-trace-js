@@ -9,6 +9,7 @@ const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 const { Profile } = require('../../vendor/dist/pprof-format')
 const {
@@ -58,7 +59,7 @@ function expectProfileMessagePromise (agent, timeout,
       assert.strictEqual(typeof event.info.profiler.activation, 'string')
       assert.strictEqual(typeof event.info.profiler.ssi.mechanism, 'string')
       const attachments = event.attachments
-      assert.ok(Array.isArray(attachments))
+      assert.ok(Array.isArray(attachments), `Expected array, got ${inspect(attachments)}`)
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
       assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {

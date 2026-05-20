@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -138,14 +139,20 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(
+              recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(
+                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+              )
             })
           })
         })

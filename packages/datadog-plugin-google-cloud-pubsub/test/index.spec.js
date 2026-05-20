@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -234,7 +235,10 @@ describe('Plugin', () => {
               const activeSpan = tracer.scope().active()
               if (activeSpan) {
                 const receiverSpanContext = activeSpan.context()
-                assert.ok(typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null)
+                assert.ok(
+                  typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null,
+                  `Expected non-null object, got ${inspect(receiverSpanContext._parentId)}`
+                )
               }
               msg.ack()
             })
@@ -517,14 +521,20 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(
+              recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(
+                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+              )
             })
           })
         })

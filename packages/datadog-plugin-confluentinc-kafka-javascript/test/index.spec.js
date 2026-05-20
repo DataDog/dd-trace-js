@@ -206,7 +206,8 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                assert.ok(parseInt(span.parent_id.toString()) > 0)
+                const parentId = parseInt(span.parent_id.toString())
+                assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
 
               let consumerReceiveMessagePromise
@@ -532,7 +533,8 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                assert.ok(parseInt(span.parent_id.toString()) > 0)
+                const parentId = parseInt(span.parent_id.toString())
+                assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])

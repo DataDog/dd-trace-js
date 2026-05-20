@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -226,7 +227,10 @@ describe('Plugin', () => {
             it('should not extract bootstrap servers when initialized with a function', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.ok(!((['messaging.kafka.bootstrap.servers']).some(k => Object.hasOwn((span.meta), k))))
+                assert.ok(
+                  !((['messaging.kafka.bootstrap.servers']).some(k => Object.hasOwn((span.meta), k))),
+                  `Got: ${inspect(['messaging.kafka.bootstrap.servers'])}`
+                )
               })
 
               kafka = new Kafka({
@@ -294,7 +298,10 @@ describe('Plugin', () => {
 
                 // The first send injects trace headers into the cloned
                 // batch that kafkajs serializes.
-                assert.ok(Object.hasOwn(sentMessageBatches[0][0].headers, 'x-datadog-trace-id'))
+                assert.ok(
+                  Object.hasOwn(sentMessageBatches[0][0].headers, 'x-datadog-trace-id'),
+                  `Available keys: ${inspect(Object.keys(sentMessageBatches[0][0].headers))}`
+                )
 
                 sendRequestStub.restore()
 
@@ -387,7 +394,8 @@ describe('Plugin', () => {
                 resource: testTopic,
               })
 
-              assert.ok(parseInt(span.parent_id.toString()) > 0)
+              const parentId = parseInt(span.parent_id.toString())
+              assert.ok(parentId > 0, `Expected ${parentId} > 0`)
             })
 
             await consumer.run({ eachMessage: () => {} })

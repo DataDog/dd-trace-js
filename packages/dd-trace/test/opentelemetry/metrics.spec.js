@@ -2,7 +2,7 @@
 
 const assert = require('assert')
 const http = require('http')
-const { format } = require('util')
+const { format, inspect } = require('util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -724,7 +724,11 @@ describe('OpenTelemetry Meter Provider', () => {
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
       const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
-      assert(warnSpy.getCalls().some(call => format(...call.args) === expectedMsg))
+      const warnCalls = warnSpy.getCalls()
+      assert(
+        warnCalls.some(call => format(...call.args) === expectedMsg),
+        `Expected warn call ${inspect(expectedMsg)}, got: ${inspect(warnCalls.map(c => format(...c.args)))}`
+      )
       warnSpy.restore()
     })
   })
@@ -910,10 +914,18 @@ describe('OpenTelemetry Meter Provider', () => {
       obsGauge.addCallback(() => {})
       obsGauge.addCallback('not a function')
       provider.reader.forceFlush()
-      assert(warnSpy.getCalls().some(call =>
-        format(...call.args) === 'PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'))
+      let warnCalls = warnSpy.getCalls()
+      const expectedShutdownMsg = 'PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'
+      assert(
+        warnCalls.some(call => format(...call.args) === expectedShutdownMsg),
+        `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+      )
       provider.reader.shutdown()
-      assert(warnSpy.getCalls().some(call => format(...call.args) === 'PeriodicMetricReader is already shutdown'))
+      warnCalls = warnSpy.getCalls()
+      assert(
+        warnCalls.some(call => format(...call.args) === 'PeriodicMetricReader is already shutdown'),
+        `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+      )
       warnSpy.restore()
     })
   })
@@ -927,9 +939,11 @@ describe('OpenTelemetry Meter Provider', () => {
       const warnSpy = sinon.spy(log, 'warn')
       const validator = mockOtlpExport((metrics) => {
         assert.strictEqual(countMetrics(metrics), 3)
-        assert(warnSpy.getCalls().some(call =>
-          format(...call.args).includes('Metric queue exceeded limit (max: 3)')
-        ))
+        const warnCalls = warnSpy.getCalls()
+        assert(
+          warnCalls.some(call => format(...call.args).includes('Metric queue exceeded limit (max: 3)')),
+          `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+        )
       })
 
       setupMetrics(
@@ -952,7 +966,11 @@ describe('OpenTelemetry Meter Provider', () => {
       const validator = mockOtlpExport((metrics) => {
         if (++callCount === 1) {
           assert.strictEqual(countMetrics(metrics), 3)
-          assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
+          const warnCalls = warnSpy.getCalls()
+          assert(
+            warnCalls.some(call => format(...call.args).includes('Metric queue exceeded limit')),
+            `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+          )
         }
       })
 
@@ -977,7 +995,11 @@ describe('OpenTelemetry Meter Provider', () => {
         if (!firstExport) return
         firstExport = false
         assert.strictEqual(countMetrics(metrics), 3)
-        assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
+        const warnCalls = warnSpy.getCalls()
+        assert(
+          warnCalls.some(call => format(...call.args).includes('Metric queue exceeded limit')),
+          `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+        )
       })
 
       setupMetrics(
@@ -1010,12 +1032,16 @@ describe('OpenTelemetry Meter Provider', () => {
         const counter1Metric = exportedMetrics.find(m => m.name === 'counter.sync')
         assert(counter1Metric, 'counter.sync should be exported')
         assert.strictEqual(counter1Metric.sum.dataPoints.length, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE)
-        assert(warnSpy.getCalls().some(call => {
-          const formatted = format(...call.args)
-          return formatted.includes('Metric queue exceeded limit') &&
-            formatted.includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
-            formatted.includes('Dropping 2 measurements')
-        }))
+        const warnCalls = warnSpy.getCalls()
+        assert(
+          warnCalls.some(call => {
+            const formatted = format(...call.args)
+            return formatted.includes('Metric queue exceeded limit') &&
+              formatted.includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
+              formatted.includes('Dropping 2 measurements')
+          }),
+          `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+        )
       })
 
       setupMetrics({ DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '30000' }, false)

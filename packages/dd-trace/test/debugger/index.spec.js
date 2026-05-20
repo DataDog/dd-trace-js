@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -471,8 +472,11 @@ describe('debugger/index', () => {
       const error3 = ackCallback3.firstCall.args[0]
 
       assert.ok(error1 instanceof Error)
-      assert.ok(error1.message.includes('Dynamic Instrumentation worker thread exited unexpectedly'))
-      assert.ok(error1.message.includes('code 1'))
+      assert.ok(
+        error1.message.includes('Dynamic Instrumentation worker thread exited unexpectedly'),
+        `Got: ${inspect(error1.message)}`
+      )
+      assert.ok(error1.message.includes('code 1'), `Got: ${inspect(error1.message)}`)
 
       // All callbacks should receive the same error instance
       assert.strictEqual(error2, error1)

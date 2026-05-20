@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -110,8 +111,8 @@ describe('Multi-Tenant Routing', () => {
     writer.flush()
 
     const payload = request.getCall(0).args[0]
-    assert.ok(!payload.includes('secret-tenant-key'))
-    assert.ok(!payload.includes('default-key'))
+    assert.ok(!payload.includes('secret-tenant-key'), `Got: ${inspect(payload)}`)
+    assert.ok(!payload.includes('default-key'), `Got: ${inspect(payload)}`)
   })
 
   describe('routing context behavior', () => {

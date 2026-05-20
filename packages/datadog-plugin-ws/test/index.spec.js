@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
@@ -401,7 +402,7 @@ describe('Plugin', () => {
           const messageHandled = new Promise((resolve, reject) => {
             wsServer.on('connection', (ws) => {
               ws.on('message', (data) => {
-                assert.ok(Buffer.isBuffer(data))
+                assert.ok(Buffer.isBuffer(data), `Expected Buffer, got ${inspect(data)}`)
                 assert.strictEqual(data.toString(), payload.toString())
                 resolve()
               })
@@ -820,7 +821,7 @@ describe('Plugin', () => {
             didFindPointerLink = true
 
             const { attributes } = pointerLink
-            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'), `Available keys: ${inspect(Object.keys(attributes))}`)
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
             assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
             assert.strictEqual(attributes['ptr.hash'].length, 57)
@@ -866,7 +867,7 @@ describe('Plugin', () => {
             didFindPointerLink = true
 
             const { attributes } = pointerLink
-            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'), `Available keys: ${inspect(Object.keys(attributes))}`)
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
             assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
             assert.strictEqual(attributes['ptr.hash'].length, 57)

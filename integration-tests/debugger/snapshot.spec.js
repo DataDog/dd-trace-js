@@ -206,7 +206,10 @@ describe('Dynamic Instrumentation', function () {
               assert.strictEqual(Object.keys(prop.fields).length, maxFieldCount)
               assert.ok(prop.size > maxFieldCount, `Expected ${prop.size} > ${maxFieldCount}`)
             } else {
-              assert.ok(Object.keys(prop.fields).length < maxFieldCount)
+              assert.ok(
+                Object.keys(prop.fields).length < maxFieldCount,
+                `Expected ${Object.keys(prop.fields).length} < ${maxFieldCount}`
+              )
             }
           }
 

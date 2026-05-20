@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
 const {
@@ -179,7 +180,10 @@ versions.forEach((version) => {
                   [TEST_STATUS]: 'pass',
                   [TEST_IS_RUM_ACTIVE]: 'true',
                 })
-                assert.ok(Object.hasOwn(test.meta, TEST_BROWSER_VERSION))
+                assert.ok(
+                  Object.hasOwn(test.meta, TEST_BROWSER_VERSION),
+                  `Available keys: ${inspect(Object.keys(test.meta))}`
+                )
               }
             })
           })
@@ -224,8 +228,8 @@ versions.forEach((version) => {
               .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
             eventFinishedTestEvents.forEach(({ tags }) => {
-              assert.ok(tags.includes('is_rum'))
-              assert.ok(tags.includes('test_framework:playwright'))
+              assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+              assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
             })
           })
 
