@@ -67,6 +67,14 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
+
+        // MLOS-591 regression: the default `LLMObsPlugin.start` registration
+        // path must emit OTel bridge tags onto the local trace so dd-go can
+        // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
+        const apmMeta = apmSpans[0].meta
+        assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+        assert.ok(apmMeta.llmobs_parent_id)
+        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
       })
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {

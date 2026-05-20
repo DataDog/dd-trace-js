@@ -1,7 +1,11 @@
 'use strict'
 
 const log = require('../log')
-const { SPAN_KINDS } = require('./constants/tags')
+const {
+  LLMOBS_PARENT_ID_BRIDGE_KEY,
+  LLMOBS_TRACE_ID_BRIDGE_KEY,
+  SPAN_KINDS,
+} = require('./constants/tags')
 
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
 // looking for the first non-ASCII char; if there is none, hand the input
@@ -248,11 +252,70 @@ function safeJsonParse (value, fallback) {
   }
 }
 
+// Bridge tags read by the trace-indexer to pull OTel `gen_ai.*` spans into
+// the same LLMObs trace. Written once per local trace (first-writer wins on
+// `_trace.tags`). Pass `includeParentId: false` when the span sits below an
+// OTel `gen_ai.*` ancestor — without it the indexer treats this span as the
+// LLMObs root and hoists the gen_ai ancestors under it, inverting the trace.
+/**
+ * @param {import('../opentracing/span')} span
+ * @param {{ includeParentId?: boolean }} [opts]
+ */
+function writeBridgeTags (span, { includeParentId = true } = {}) {
+  const traceTags = span?.context?.()._trace?.tags
+  if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
+  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+  if (includeParentId) {
+    traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+  }
+}
+
+// Walks the APM parent chain for the nearest ancestor with any `gen_ai.*`
+// tag. Lets an auto-instrumented LLMObs span nested under a manual OTel
+// workflow point its `parent_id` at the OTel parent so the SDK-emitted
+// event renders under it instead of as a parallel root.
+/**
+ * @param {import('../opentracing/span')} span
+ * @returns {string | null}
+ */
+function findGenAIAncestorSpanId (span) {
+  const ctx = span?.context?.()
+  let parentId = ctx?._parentId?.toString(10)
+  if (!parentId || parentId === '0') return null
+
+  const started = ctx._trace?.started
+  if (!started || started.length === 0) return null
+
+  // Linear scan per hop — parent chains are short, avoids a per-call Map.
+  while (parentId && parentId !== '0') {
+    let parent = null
+    for (const s of started) {
+      if (s.context()._spanId.toString(10) === parentId) {
+        parent = s
+        break
+      }
+    }
+    if (!parent) return null
+
+    const tags = parent.context()._tags
+    if (tags) {
+      for (const key of Object.keys(tags)) {
+        if (key.startsWith('gen_ai.')) return parentId
+      }
+    }
+
+    parentId = parent.context()._parentId?.toString(10)
+  }
+  return null
+}
+
 module.exports = {
   encodeUnicode,
+  findGenAIAncestorSpanId,
   validateCostTags,
   validateKind,
   getFunctionArguments,
   safeJsonParse,
   spanHasError,
+  writeBridgeTags,
 }
