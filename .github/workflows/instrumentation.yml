@@ -118,17 +118,19 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  # The couchbase native binding ships libcouchbase; the 3.x line only builds
-  # on Node 18 and the 4.2+ line only builds on Node 20+. Pin one Node version
-  # per range instead of using the composite action that runs both oldest+latest.
+  # The couchbase native binding ships libcouchbase: the 3.x line has no
+  # prebuilt binary for Node 18+ and its bundled sources do not compile under
+  # modern gcc (missing <cstdint> for std::uint8_t). Pin one Node version per
+  # range instead of using the composite action that runs both oldest+latest,
+  # mirroring the existing plugin job's matrix.
   instrumentation-couchbase:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - node-version: 18
+          - node-version: eol
             range: "^3.0.7"
-          - node-version: 20
+          - node-version: 18
             range: ">=4.2.0"
     runs-on: ubuntu-latest
     permissions:
