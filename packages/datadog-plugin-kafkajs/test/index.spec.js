@@ -17,6 +17,7 @@ const { clientToCluster } = require('../../datadog-instrumentations/src/helpers/
 const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { createTopicWithRetry } = require('./helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -51,7 +52,7 @@ describe('Plugin', () => {
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
+          await createTopicWithRetry(admin, {
             waitForLeaders: true,
             topics: [{
               topic: testTopic,
@@ -59,6 +60,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
+          await admin.disconnect()
         })
 
         describe('producer', () => {

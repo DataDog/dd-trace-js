@@ -15,6 +15,7 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { createTopicWithRetry } = require('./helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -71,7 +72,7 @@ describe('Plugin', () => {
           topicBIn = `topic-b-in-${randomUUID()}`
           topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
+          await createTopicWithRetry(admin, {
             waitForLeaders: true,
             topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
               topic,
@@ -79,6 +80,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             })),
           })
+          await admin.disconnect()
           expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
           expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })
