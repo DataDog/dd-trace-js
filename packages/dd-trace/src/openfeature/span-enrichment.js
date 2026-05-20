@@ -52,7 +52,6 @@ class SpanEnrichmentState {
     const hashedKey = hashTargetingKey(targetingKey)
 
     if (this._subjects.has(hashedKey)) {
-      // Subject already tracked, just add the serial ID
       this._subjects.get(hashedKey).add(serialId)
       return true
     }
@@ -75,7 +74,7 @@ class SpanEnrichmentState {
    */
   addDefault (flagKey, defaultValue) {
     if (this._defaults.has(flagKey)) {
-      return true // Already tracked
+      return true
     }
 
     if (this._defaults.size >= MAX_DEFAULTS) {
@@ -83,7 +82,6 @@ class SpanEnrichmentState {
       return false
     }
 
-    // Store value as string, truncated to 64 chars
     let valueStr = String(defaultValue)
 
     if (valueStr.length > MAX_DEFAULT_VALUE_LENGTH) {

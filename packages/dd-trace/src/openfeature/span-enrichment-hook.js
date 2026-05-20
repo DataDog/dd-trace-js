@@ -81,24 +81,17 @@ class SpanEnrichmentHook {
       const { flagKey, context } = hookContext || {}
       const { flagMetadata, reason, value } = evaluationDetails || {}
 
-      // Extract serial ID and doLog from flagMetadata (set by provider)
       const serialId = flagMetadata?.__dd_split_serial_id
       const doLog = flagMetadata?.__dd_do_log ?? false
-      // targetingKey is in hookContext.context (OpenFeature evaluation context)
       const targetingKey = context?.targetingKey
 
       if (serialId != null) {
-        // Flag found in UFC - add serial ID
         state.addSerialId(serialId)
 
-        // If doLog is true and we have a targeting key, track the subject
         if (doLog && targetingKey) {
           state.addSubject(targetingKey, serialId)
         }
       } else if (reason === 'DEFAULT' || reason === 'ERROR') {
-        // Flag not found in UFC, fell back to default value
-        // Reason is 'DEFAULT' when provider explicitly returns default
-        // Reason is 'ERROR' when flag is not found and provider throws
         state.addDefault(flagKey, value)
       }
     } catch (err) {
