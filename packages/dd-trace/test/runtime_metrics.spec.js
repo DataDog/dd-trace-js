@@ -1036,7 +1036,7 @@ describe('otlp_runtime_metrics', () => {
       } else {
         assert.ok(callbacks[name]?.length, `${name} should register a per-instrument callback`)
       }
-      assert.ok(!name.startsWith('runtime.node.'), `${name} should not use DD-proprietary naming`)
+      assert.doesNotMatch(name, /^runtime\.node\./, `${name} should not use DD-proprietary naming`)
     }
   })
 
@@ -1073,7 +1073,7 @@ describe('otlp_runtime_metrics', () => {
     ]) {
       const points = []
       callbacks[name][0]({ observe: v => points.push(v) })
-      assert.ok(typeof points[0] === 'number', `${name} should record a numeric value`)
+      assert.strictEqual(typeof points[0], 'number', `${name} should record a numeric value`)
     }
 
     const resourceCounts = []
