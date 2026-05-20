@@ -3612,6 +3612,16 @@
         "transform": "toCamelCase"
       }
     ],
+    "DD_TRACE_SECURE_RANDOM": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "configurationNames": [
+          "secureRandom"
+        ]
+      }
+    ],
     "DD_TRACE_SCOPE": [
       {
         "implementation": "A",

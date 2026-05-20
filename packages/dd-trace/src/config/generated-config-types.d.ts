@@ -529,6 +529,7 @@ export interface GeneratedConfig {
   sampleRate: number | undefined;
   samplingRules: import('../../../../index').SamplingRule[];
   scope: string | undefined;
+  secureRandom: boolean;
   service: string;
   serviceMapping: Record<string, string>;
   site: string;

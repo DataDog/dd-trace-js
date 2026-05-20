@@ -156,3 +156,49 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(10), '43981')
   })
 })
+
+describe('id with DD_TRACE_SECURE_RANDOM=true', () => {
+  let id
+
+  beforeEach(() => {
+    process.env.DD_TRACE_SECURE_RANDOM = 'true'
+    delete require.cache[require.resolve('../src/id')]
+    id = require('../src/id')
+  })
+
+  afterEach(() => {
+    delete process.env.DD_TRACE_SECURE_RANDOM
+    delete require.cache[require.resolve('../src/id')]
+  })
+
+  it('should generate non-zero IDs', () => {
+    for (let i = 0; i < 10; i++) {
+      const spanId = id()
+      assert.notStrictEqual(spanId.toString(), '0000000000000000')
+    }
+  })
+
+  it('should generate varied IDs', () => {
+    const seen = new Set()
+    for (let i = 0; i < 100; i++) {
+      seen.add(id().toString())
+    }
+    assert.ok(seen.size > 90, `expected >90 unique IDs, got ${seen.size}`)
+  })
+
+  it('should generate IDs with the high bit of the first byte clear', () => {
+    for (let i = 0; i < 100; i++) {
+      const spanId = id()
+      const hex = spanId.toString()
+      const firstByte = Number.parseInt(hex.slice(0, 2), 16)
+      assert.ok((firstByte & 0x80) === 0, `expected high bit clear, got 0x${firstByte.toString(16)}`)
+    }
+  })
+
+  it('should generate IDs with hex length of 16 characters', () => {
+    for (let i = 0; i < 10; i++) {
+      const spanId = id()
+      assert.strictEqual(spanId.toString().length, 16)
+    }
+  })
+})
