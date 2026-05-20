@@ -35,6 +35,7 @@ if (process.env.ADD_DUPLICATE_PLAYWRIGHT_PROJECT) {
 const config = {
   baseURL: process.env.PW_BASE_URL,
   testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',
+  use: process.env.PW_SCREENSHOT_ON_FAILURE === 'true' ? { screenshot: 'only-on-failure' } : {},
   timeout: Number(process.env.TEST_TIMEOUT) || 30000,
   fullyParallel: process.env.FULLY_PARALLEL === 'true',
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
