@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -201,7 +202,6 @@ describe('SpanProcessor', () => {
   it('should add span tags to first span in a chunk', () => {
     config.flushMinSpans = 2
     config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
-    config.propagateProcessTags = { enabled: true }
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan, finishedSpan, finishedSpan]
@@ -215,7 +215,10 @@ describe('SpanProcessor', () => {
         if (key !== 'entrypoint.basedir') return
         // The exact basedir varies depending on the test runner location
         // (e.g. "test" in source tree vs "bin" when run via node_modules/.bin/mocha).
-        assert.ok(typeof value === 'string' && value.length > 0)
+        assert.ok(
+          typeof value === 'string' && value.length > 0,
+          `entrypoint.basedir value: ${inspect(value)}`
+        )
         foundATag = true
       })
       assert.ok(foundATag)

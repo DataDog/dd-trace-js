@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
+const getConfig = require('../../src/config')
 const standalone = require('../../src/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 
@@ -41,7 +42,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       },
     }
 
-    tracer = { _config: config }
+    tracer = { _config: getConfig() }
     processor = {}
     prioritySampler = {}
   })

@@ -40,28 +40,31 @@ describe('SpanContext', () => {
     }
     const spanContext = new SpanContext(props)
 
-    // Check individual properties; also explicitly verify the tags map is wired.
-    assert.strictEqual(spanContext._traceId, '123')
-    assert.strictEqual(spanContext._spanId, '456')
-    assert.strictEqual(spanContext._parentId, '789')
-    assert.strictEqual(spanContext._isRemote, false)
-    assert.strictEqual(spanContext._name, 'test')
-    assert.strictEqual(spanContext._isFinished, true)
-    assert.deepStrictEqual(spanContext.getTags(), { testTag: 'testValue' })
-    assert.deepStrictEqual(spanContext._sampling, { priority: 2 })
-    assert.strictEqual(spanContext._spanSampling, undefined)
-    assert.deepStrictEqual(spanContext._links, [])
-    assert.deepStrictEqual(spanContext._baggageItems, { foo: 'bar' })
-    assert.strictEqual(spanContext._noop, noop)
-    assert.deepStrictEqual(spanContext._trace, {
-      started: ['span1', 'span2'],
-      finished: ['span1'],
-      tags: { foo: 'bar' },
-    })
-    assert.strictEqual(spanContext._traceparent, '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
-    assert.deepStrictEqual(spanContext._tracestate, TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'))
-    assert.strictEqual(spanContext._otelSpanContext, undefined)
-    assert.strictEqual(spanContext._otelActiveSpan, undefined)
+    const expected = {
+      _traceId: '123',
+      _spanId: '456',
+      _parentId: '789',
+      _isRemote: false,
+      _name: 'test',
+      _isFinished: true,
+      _tags: { testTag: 'testValue' },
+      _sampling: { priority: 2 },
+      _spanSampling: undefined,
+      _links: [],
+      _baggageItems: { foo: 'bar' },
+      _noop: noop,
+      _trace: {
+        started: ['span1', 'span2'],
+        finished: ['span1'],
+        tags: { foo: 'bar' },
+      },
+      _traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
+      _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'),
+      _otelSpanContext: undefined,
+      _otelActiveSpan: undefined,
+    }
+    Object.setPrototypeOf(expected, SpanContext.prototype)
+    assert.deepStrictEqual(spanContext, expected)
   })
 
   it('should have the correct default values', () => {
@@ -70,28 +73,31 @@ describe('SpanContext', () => {
       spanId: '456',
     })
 
-    // Check individual properties; also explicitly verify the tags map is wired.
-    assert.strictEqual(spanContext._traceId, '123')
-    assert.strictEqual(spanContext._spanId, '456')
-    assert.strictEqual(spanContext._parentId, null)
-    assert.strictEqual(spanContext._isRemote, true)
-    assert.strictEqual(spanContext._name, undefined)
-    assert.strictEqual(spanContext._isFinished, false)
-    assert.deepStrictEqual(spanContext.getTags(), {})
-    assert.deepStrictEqual(spanContext._sampling, {})
-    assert.strictEqual(spanContext._spanSampling, undefined)
-    assert.deepStrictEqual(spanContext._links, [])
-    assert.deepStrictEqual(spanContext._baggageItems, {})
-    assert.strictEqual(spanContext._noop, null)
-    assert.deepStrictEqual(spanContext._trace, {
-      started: [],
-      finished: [],
-      tags: {},
-    })
-    assert.strictEqual(spanContext._traceparent, undefined)
-    assert.strictEqual(spanContext._tracestate, undefined)
-    assert.strictEqual(spanContext._otelSpanContext, undefined)
-    assert.strictEqual(spanContext._otelActiveSpan, undefined)
+    const expected = {
+      _traceId: '123',
+      _spanId: '456',
+      _parentId: null,
+      _isRemote: true,
+      _name: undefined,
+      _isFinished: false,
+      _tags: {},
+      _sampling: {},
+      _spanSampling: undefined,
+      _links: [],
+      _baggageItems: {},
+      _noop: null,
+      _trace: {
+        started: [],
+        finished: [],
+        tags: {},
+      },
+      _traceparent: undefined,
+      _tracestate: undefined,
+      _otelSpanContext: undefined,
+      _otelActiveSpan: undefined,
+    }
+    Object.setPrototypeOf(expected, SpanContext.prototype)
+    assert.deepStrictEqual(spanContext, expected)
   })
 
   it('should share sampling object between contexts', () => {
