@@ -153,7 +153,15 @@ function normalizeScriptGlob (raw, opts = {}) {
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
   // we need to preserve them so they can be expanded with the provided env.
-  if (!preserveEnv) {
+  if (preserveEnv) {
+    // Unwrap extglob constructs that wrap a single env var so the env-aware expansion
+    // below still sees the variable. Without this, every glob of the form
+    // `@(${PLUGINS}).spec.js` would degrade to `*.spec.js` and a single-plugin CI job
+    // (e.g. `PLUGINS=bluebird`) would falsely appear to exercise every spec in the
+    // same directory.
+    p = p.replaceAll(/@\((\$\{[^}]+\})\)/g, '$1')
+    p = p.replaceAll(/@\((\$[A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
+  } else {
     // Replace shell variable expansion with a wildcard for our analysis.
     // Examples:
     // - ${PLUGINS} -> *
@@ -163,8 +171,8 @@ function normalizeScriptGlob (raw, opts = {}) {
     p = p.replaceAll(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*')
   }
 
-  // Replace bash extglob constructs with a conservative wildcard to avoid parsing issues.
-  // Examples: @(...), +(...), ?(...), !(...)
+  // Replace remaining bash extglob constructs with a conservative wildcard to avoid
+  // parsing issues. Examples: @(...), +(...), ?(...), !(...).
   p = p.replaceAll(/[@+?!]\([^)]*\)/g, '*')
 
   // Normalize leading './' which appears sometimes in scripts.
@@ -749,6 +757,28 @@ function collectWorkflowRuns (repoRoot) {
             out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
           }
         }
+
+        // Third-party retry wrappers run their `with.command` like an inline `run:`.
+        // Without unwrapping it, the joint check below cannot see that `instrumentation-http`
+        // exercises `test:instrumentations:ci` with `PLUGINS=http`.
+        if (typeof step.uses === 'string' && /^nick-fields\/retry@/.test(step.uses)) {
+          const command = isPlainObject(step.with) && typeof step.with.command === 'string'
+            ? step.with.command
+            : null
+          if (command) {
+            const stepEnv = { ...env }
+            const exports = parseExportAssignments(command)
+            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
+            const idxYarn = command.indexOf('yarn ')
+            const idxNpm = command.indexOf('npm ')
+            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+            if (idx > 0) {
+              const assigns = parseInlineAssignments(command.slice(0, idx))
+              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
+            }
+            out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
+          }
+        }
       }
     }
   }
@@ -1099,6 +1129,13 @@ function main () {
 
   // Detect CI steps that will match no tests due to env/script mismatches.
   const testFileSet = new Set(testFiles)
+  // Spec files reached by at least one CI invocation. Paired with the per-step
+  // `matchedTestCount` check below to flag the inverse failure: a spec that is matched
+  // by some script glob but no workflow ever sets the env (typically PLUGINS) that
+  // would expand the glob to reach it. Without this, a new `<name>.spec.js` under
+  // `packages/datadog-instrumentations/test/` looks covered by `test:instrumentations`'
+  // glob and slips into the tree with no CI job actually running it.
+  const ciExercisedFiles = new Set()
   for (const i of invoked) {
     if (!i.script.startsWith('test:')) continue
 
@@ -1116,7 +1153,10 @@ function main () {
     if (invokedGlobs.length) {
       let matchedTestCount = 0
       for (const f of files) {
-        if (testFileSet.has(f)) matchedTestCount++
+        if (testFileSet.has(f)) {
+          matchedTestCount++
+          ciExercisedFiles.add(f)
+        }
       }
 
       if (matchedTestCount === 0) {
@@ -1204,6 +1244,21 @@ function main () {
             `which is single-plugin; use "${i.script}:multi" instead`
         )
       }
+    }
+  }
+
+  // Spec files that pass the "matched by some script glob" check but no CI invocation
+  // actually expands to reach them. Common cause: a `<name>.spec.js` added under
+  // `packages/datadog-instrumentations/test/` (or any other PLUGINS-templated location)
+  // without a matching `PLUGINS=<name>` job in the corresponding workflow.
+  /** @type {string[]} */
+  const ciOrphans = []
+  for (const file of testFiles) {
+    if (!ciExercisedFiles.has(file)) ciOrphans.push(file)
+  }
+  if (ciOrphans.length) {
+    for (const file of ciOrphans) {
+      pushError(`No CI workflow invocation expands a glob to exercise ${file}`)
     }
   }
 

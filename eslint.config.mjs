@@ -803,6 +803,15 @@ export default [
     },
   },
   {
+    // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
+    // JSDoc type to `jsdoc/valid-types`. The shape is required by the plugin.
+    name: 'dd-trace/datadog-plugin-jest/fixtures',
+    files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
+    rules: {
+      'jsdoc/valid-types': 'off',
+    },
+  },
+  {
     // CI-visibility retry fixtures intentionally call `this.retries(N)` to
     // exercise the dd-trace test-optimization retry code paths. The fixtures
     // ARE the flaky tests that the plugin watches.
