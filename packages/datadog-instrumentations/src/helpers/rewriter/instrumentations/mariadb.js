@@ -348,4 +348,104 @@ module.exports = [
     },
     channelName: 'PrepareResultPacket_execute',
   },
+
+  // -------------------------------------------------------------------------
+  // Command-level lifecycle hooks.
+  //
+  // The user-facing API hooks above own context propagation (their
+  // `wrapCallback`-generated `asyncStart.runStores` is what restores the
+  // parent store inside user callbacks), but they cannot reliably emit a
+  // finish signal for every call shape: `kind: 'Auto'` falls back to the
+  // promise-wrapper body when no callback was passed, and that body silently
+  // exits when the function returns a non-thenable (e.g. v3
+  // `connection.query(sql)` returning a Query EventEmitter), leaving the
+  // span unfinished.
+  //
+  // The mariadb lib gives us deterministic protocol-level signals on the
+  // base `Command` class — every query/execute (callback or promise,
+  // pooled or direct, prepared or ad-hoc) ends at either
+  // `Command.prototype.successEnd` or `Command.prototype.throwError`. We
+  // hook the Query/Execute constructors for span CREATION and those two
+  // base methods for span FINISH. The Command instance is the join key
+  // (carried as `ctx.self` on every channel).
+  // -------------------------------------------------------------------------
+
+  // v>=3 Query Command constructor — `(resolve, reject, connOpts, cmdParam)`.
+  // After super() runs, the instance has `this.sql` and `this.opts` (which
+  // already merges connOpts).
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=3',
+      filePath: 'lib/cmd/query.js',
+    },
+    functionQuery: {
+      className: 'Query',
+    },
+    channelName: 'Query_construct',
+  },
+
+  // v>=3 Execute Command constructor —
+  // `(resolve, reject, connOpts, cmdParam, prepare)`.
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=3',
+      filePath: 'lib/cmd/execute.js',
+    },
+    functionQuery: {
+      className: 'Execute',
+    },
+    channelName: 'Execute_construct',
+  },
+
+  // v<3 Query Command constructor —
+  // `(resolve, reject, cmdOpts, connOpts, sql, values)`.
+  // v2's `configAssign` strips host/user/database/port from `this.opts`, so
+  // the plugin reads connOpts directly from the constructor arguments.
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=2.0.4 <3',
+      filePath: 'lib/cmd/query.js',
+    },
+    functionQuery: {
+      className: 'Query',
+    },
+    channelName: 'v2Query_construct',
+  },
+
+  // Command.prototype.successEnd — protocol-level success completion. Called
+  // exactly once per Command on the success path (parser/resultset code
+  // invokes it after the final response packet). Hooked on the base class
+  // so v2 and v3 share the channel.
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=2.0.4',
+      filePath: 'lib/cmd/command.js',
+    },
+    functionQuery: {
+      methodName: 'successEnd',
+      className: 'Command',
+      kind: 'Sync',
+    },
+    channelName: 'Command_successEnd',
+  },
+
+  // Command.prototype.throwError — protocol-level error completion. `ctx.arguments[0]`
+  // is the error.
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=2.0.4',
+      filePath: 'lib/cmd/command.js',
+    },
+    functionQuery: {
+      methodName: 'throwError',
+      className: 'Command',
+      kind: 'Sync',
+    },
+    channelName: 'Command_throwError',
+  },
 ]

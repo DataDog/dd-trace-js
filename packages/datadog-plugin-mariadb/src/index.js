@@ -27,6 +27,11 @@ const [
   V2ConnectionQueryCallbackPlugin,
   V2PoolBaseQueryPlugin,
   PreparedStatementCallbackExecutePlugin,
+  QueryCommandPlugin,
+  ExecuteCommandPlugin,
+  V2QueryCommandPlugin,
+  CommandSuccessEndPlugin,
+  CommandThrowErrorPlugin,
 ] = queryPlugins
 
 class MariadbPlugin extends CompositePlugin {
@@ -51,6 +56,11 @@ class MariadbPlugin extends CompositePlugin {
     v2ConnQueryCallback: V2ConnectionQueryCallbackPlugin,
     v2PoolQuery: V2PoolBaseQueryPlugin,
     preparedStmtExecute: PreparedStatementCallbackExecutePlugin,
+    queryCommand: QueryCommandPlugin,
+    executeCommand: ExecuteCommandPlugin,
+    v2QueryCommand: V2QueryCommandPlugin,
+    commandSuccessEnd: CommandSuccessEndPlugin,
+    commandThrowError: CommandThrowErrorPlugin,
   }
 }
 

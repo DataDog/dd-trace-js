@@ -1,7 +1,27 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+
+/**
+ * Symbol key used to attach the in-flight DB span to a mariadb `Command`
+ * instance. The constructor :end handler sets it; the `successEnd` /
+ * `throwError` channel handlers read and clear it. Symbol-keyed so it
+ * doesn't collide with anything the lib enumerates.
+ */
+const DD_SPAN = Symbol('dd-mariadb-span')
+
+// ---------------------------------------------------------------------------
+// Method-level context-propagation plugins.
+//
+// The user-facing API hooks (`ConnectionCallback.query`, `PoolCallback.execute`,
+// `PrepareResultPacket.execute`, etc.) keep their orchestrion entries so that
+// `wrapCallback`'s `asyncStart.runStores` can rebind the parent store inside
+// user callbacks. The plugin captures `parentStore` at `:start` and returns
+// it at `:asyncStart`; it deliberately does NOT create or finish spans —
+// span lifecycle is owned by the Command-level plugins below.
+// ---------------------------------------------------------------------------
 
 class MariadbQueryPlugin extends DatabasePlugin {
   static id = 'mariadb'
@@ -9,66 +29,27 @@ class MariadbQueryPlugin extends DatabasePlugin {
   static operation = 'query'
 
   /**
-   * Extract connection config from the connection/pool instance.
-   * The createConnection/createPool channel handlers store the raw opts on
-   * the instance as `__ddConf`.
-   *
-   * @param {object} self - The connection or pool instance (ctx.self)
-   * @returns {{ host?: string, user?: string, database?: string, port?: number }}
-   */
-  getConf (self) {
-    return self?.__ddConf || {}
-  }
-
-  bindStart (ctx) {
-    const conf = this.getConf(ctx.self)
-    const sql = ctx.arguments?.[0]
-    const service = this.serviceName({ pluginConfig: this.config, dbConfig: conf, system: this.system })
-
-    const span = this.startSpan(this.operationName(), {
-      service,
-      resource: sql,
-      type: 'sql',
-      kind: 'client',
-      meta: {
-        'db.type': this.system,
-        'db.user': conf.user,
-        'db.name': conf.database,
-        'out.host': conf.host,
-        [CLIENT_PORT_KEY]: conf.port,
-      },
-    }, ctx)
-
-    ctx.sql = this.injectDbmQuery(span, sql, service)
-
-    return ctx.currentStore
-  }
-
-  /**
-   * Restore the parent async context when the callback/promise result arrives,
-   * so that user code inside the callback sees the same active span as before
-   * the query was called (rather than the DB span context).
+   * Capture the user's active store so `bindAsyncStart` can restore it when
+   * the user callback fires. Returning the same store leaves the active
+   * context unchanged for the wrapped function body.
    *
    * @param {object} ctx - Orchestrion channel context
-   * @returns {object} parentStore - the store active when bindStart ran
+   * @returns {object | undefined}
    */
-  bindAsyncStart (ctx) {
+  bindStart (ctx) {
+    ctx.parentStore = storage('legacy').getStore()
     return ctx.parentStore
   }
 
   /**
-   * Finish the span when the async operation completes.
-   * Tag peer.service before finishing since the orchestrion wrappers never
-   * fire the 'finish' channel that OutboundPlugin.finish() listens to.
+   * Restore the parent async context inside the user callback so that user
+   * code sees the same active span as before the query was called.
    *
    * @param {object} ctx - Orchestrion channel context
+   * @returns {object | undefined}
    */
-  asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    if (span) {
-      this.tagPeerService(span)
-      span.finish()
-    }
+  bindAsyncStart (ctx) {
+    return ctx.parentStore
   }
 }
 
@@ -112,10 +93,6 @@ class PoolPromiseExecutePlugin extends MariadbQueryPlugin {
   static prefix = 'tracing:orchestrion:mariadb:PoolPromise_execute'
 }
 
-// -------------------------------------------------------------------------
-// v<3 query plugins — channels from thisPropertyName orchestrion entries
-// -------------------------------------------------------------------------
-
 class V2ConnectionQueryPromisePlugin extends MariadbQueryPlugin {
   static id = 'mariadb'
   static prefix = 'tracing:orchestrion:mariadb:v2Connection_queryPromise'
@@ -136,37 +113,54 @@ class V2PoolBaseQueryPlugin extends MariadbQueryPlugin {
   static prefix = 'tracing:orchestrion:mariadb:v2PoolBase_query'
 }
 
-// -------------------------------------------------------------------------
-// PreparedStatement execute — statement.execute(values, [opts], [cb])
-// ctx.self is PrepareWrapper: .query = SQL, .conn.opts = connection options
-// -------------------------------------------------------------------------
-
-class PreparedStatementExecutePlugin extends MariadbQueryPlugin {
+class PreparedStatementCallbackExecutePlugin extends MariadbQueryPlugin {
   static id = 'mariadb'
+  static prefix = 'tracing:orchestrion:mariadb:PrepareResultPacket_execute'
+}
 
-  /**
-   * For prepared statement execution, connection options live on the
-   * internal connection object. Two layouts across v3 minor versions:
-   *   v3.4.x+: ctx.self is PrepareWrapper  → self.conn.opts
-   *   v3.0.x:  ctx.self is PrepareResultPacket → self.emitter.opts
-   *
-   * @param {object} self - PrepareWrapper or PrepareResultPacket (ctx.self)
-   * @returns {{ host?: string, user?: string, database?: string, port?: number }}
-   */
-  getConf (self) {
-    const opts = self?.conn?.opts ?? self?.emitter?.opts
-    if (!opts) return {}
-    return {
-      host: opts.host,
-      user: opts.user,
-      database: opts.database,
-      port: opts.port,
-    }
+// ---------------------------------------------------------------------------
+// Command-level span lifecycle.
+//
+// `Query` / `Execute` constructors → span creation (orchestrion 0.13 rewrites
+// the `super()`-calling constructor correctly; the wrapper's runStores binds
+// the span store for the synchronous constructor body).
+//
+// `Command.prototype.successEnd` / `Command.prototype.throwError` → span
+// finish. These are class methods on the base `Command` class, called
+// exactly once per command on the success / error path respectively,
+// regardless of whether the user invoked the callback API, the promise API,
+// or fire-and-forget.
+//
+// The span travels on the Command instance via a Symbol-keyed property so
+// the construct and finish channels can find it on the same `ctx.self`.
+// ---------------------------------------------------------------------------
+
+class MariadbCommandPlugin extends DatabasePlugin {
+  static id = 'mariadb'
+  static system = 'mariadb'
+  static operation = 'query'
+
+  constructor () {
+    super(...arguments)
+
+    const prefix = this.constructor.prefix
+
+    // Wire span creation to `:end` rather than `:start` because the constructor
+    // signature differs across mariadb versions (v2 and v3.0.x take
+    // `(resolve, reject, cmdOpts, connOpts, sql, values)`; v3.4+ takes
+    // `(resolve, reject, connOpts, cmdParam)`), but every version ends up
+    // populating `this.sql` and `this.opts` by the time super() returns —
+    // and `ctx.self` is set in the wrapper's finally block, just before
+    // :end fires. Reading from `ctx.self` keeps a single code path.
+    this.addSub(`${prefix}:end`, ctx => this.startSpanFromCommand(ctx))
   }
 
-  bindStart (ctx) {
-    const conf = this.getConf(ctx.self)
-    const sql = ctx.self?.query
+  startSpanFromCommand (ctx) {
+    const cmd = ctx.self
+    if (!cmd) return
+
+    const conf = cmd.opts || {}
+    const sql = cmd.sql
     const service = this.serviceName({ pluginConfig: this.config, dbConfig: conf, system: this.system })
 
     const span = this.startSpan(this.operationName(), {
@@ -181,16 +175,79 @@ class PreparedStatementExecutePlugin extends MariadbQueryPlugin {
         'out.host': conf.host,
         [CLIENT_PORT_KEY]: conf.port,
       },
+      childOf: this.activeSpan,
     }, ctx)
 
-    ctx.sql = this.injectDbmQuery(span, sql, service)
-    return ctx.currentStore
+    this.injectDbmQuery(span, sql, service)
+
+    cmd[DD_SPAN] = span
   }
 }
 
-class PreparedStatementCallbackExecutePlugin extends PreparedStatementExecutePlugin {
+class QueryCommandPlugin extends MariadbCommandPlugin {
   static id = 'mariadb'
-  static prefix = 'tracing:orchestrion:mariadb:PrepareResultPacket_execute'
+  static prefix = 'tracing:orchestrion:mariadb:Query_construct'
+}
+
+class ExecuteCommandPlugin extends MariadbCommandPlugin {
+  static id = 'mariadb'
+  static prefix = 'tracing:orchestrion:mariadb:Execute_construct'
+}
+
+class V2QueryCommandPlugin extends MariadbCommandPlugin {
+  static id = 'mariadb'
+  static prefix = 'tracing:orchestrion:mariadb:v2Query_construct'
+}
+
+/**
+ * Base class for the protocol-level completion plugins. Listens on the
+ * `:start` channel of either `Command.successEnd` or `Command.throwError`,
+ * pulls the span off `ctx.self`, tags an error if applicable, and finishes.
+ *
+ * Extends `DatabasePlugin` so we inherit `tagPeerService` (used by
+ * `withPeerService` tests) without reimplementing it.
+ */
+class MariadbCommandCompletionPlugin extends DatabasePlugin {
+  static id = 'mariadb'
+  static system = 'mariadb'
+  static operation = 'query'
+
+  constructor () {
+    super(...arguments)
+
+    const prefix = this.constructor.prefix
+    this.addSub(`${prefix}:start`, ctx => this.finishSpan(ctx))
+  }
+
+  /**
+   * @param {object} ctx - Orchestrion channel context for the completion call
+   */
+  finishSpan (ctx) {
+    const cmd = ctx.self
+    if (!cmd) return
+    const span = cmd[DD_SPAN]
+    if (!span) return
+    cmd[DD_SPAN] = undefined
+
+    if (this.constructor.isError && ctx.arguments && ctx.arguments[0]) {
+      this.addError(ctx.arguments[0], span)
+    }
+
+    this.tagPeerService(span)
+    span.finish()
+  }
+}
+
+class CommandSuccessEndPlugin extends MariadbCommandCompletionPlugin {
+  static id = 'mariadb'
+  static prefix = 'tracing:orchestrion:mariadb:Command_successEnd'
+  static isError = false
+}
+
+class CommandThrowErrorPlugin extends MariadbCommandCompletionPlugin {
+  static id = 'mariadb'
+  static prefix = 'tracing:orchestrion:mariadb:Command_throwError'
+  static isError = true
 }
 
 module.exports = [
@@ -207,4 +264,9 @@ module.exports = [
   V2ConnectionQueryCallbackPlugin,
   V2PoolBaseQueryPlugin,
   PreparedStatementCallbackExecutePlugin,
+  QueryCommandPlugin,
+  ExecuteCommandPlugin,
+  V2QueryCommandPlugin,
+  CommandSuccessEndPlugin,
+  CommandThrowErrorPlugin,
 ]
