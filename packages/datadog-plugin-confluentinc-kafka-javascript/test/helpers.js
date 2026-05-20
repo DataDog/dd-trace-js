@@ -15,8 +15,17 @@ async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
           partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
         return
       }
-    } catch {
-      // Topic creation is async; metadata/leader errors can be transient.
+    } catch (err) {
+      // Rethrow unexpected errors immediately so they surface rather than masking as a timeout.
+      const transient = new Set([
+        'ERR_UNKNOWN_TOPIC_OR_PART',
+        'ERR_LEADER_NOT_AVAILABLE',
+        'ERR__TIMED_OUT',
+        'ERR__TIMED_OUT_QUEUE',
+        'ERR__TRANSPORT',
+        'ERR__ALL_BROKERS_DOWN',
+      ])
+      if (!transient.has(err?.type)) throw err
     }
 
     await new Promise(resolve => setTimeout(resolve, 50))

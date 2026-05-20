@@ -1,5 +1,8 @@
 import 'dd-trace/init.js'
 import kafkaLib from '@confluentinc/kafka-javascript'
+import helpersModule from './helpers.js'
+
+const { waitForTopicReady } = helpersModule
 const { Kafka } = kafkaLib.KafkaJS
 
 const kafka = new Kafka({
@@ -8,26 +11,6 @@ const kafka = new Kafka({
     brokers: ['127.0.0.1:9092'],
   },
 })
-
-async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
-  if (typeof admin?.fetchTopicMetadata !== 'function') return
-  const start = Date.now()
-  while ((Date.now() - start) < timeoutMs) {
-    try {
-      const meta = await admin.fetchTopicMetadata({ topics: [topic], timeout: 1000 })
-      const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
-      const partitions = topicMeta?.partitions
-      if (Array.isArray(partitions) && partitions.length > 0 &&
-          partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
-        return
-      }
-    } catch {
-      // transient — topic not yet visible
-    }
-    await new Promise(resolve => setTimeout(resolve, 50))
-  }
-  throw new Error(`Timeout: topic "${topic}" not ready within ${timeoutMs}ms`)
-}
 
 const admin = kafka.admin()
 await admin.connect()
