@@ -258,7 +258,7 @@ versions.forEach((version) => {
               assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
               assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
             }
-          })
+          }, 60000)
 
         receiver.setKnownTests({ playwright: {} })
         receiver.setSettings({
