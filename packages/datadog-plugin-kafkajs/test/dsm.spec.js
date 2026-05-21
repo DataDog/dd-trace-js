@@ -108,6 +108,25 @@ describe('Plugin', () => {
             assert.strictEqual(setDataStreamsContextSpy.args[0][0].hash, expectedProducerHash)
           })
 
+          it('Should set one checkpoint per topic on sendBatch', async () => {
+            const expectedAHash = getDsmPathwayHash(topicAOut, true, ENTRY_PARENT_HASH)
+            const expectedBHash = getDsmPathwayHash(topicBOut, true, ENTRY_PARENT_HASH)
+
+            const producer = kafka.producer()
+            await producer.connect()
+            await producer.sendBatch({
+              topicMessages: [
+                { topic: topicAOut, messages: [{ key: 'a', value: 'va' }] },
+                { topic: topicBOut, messages: [{ key: 'b', value: 'vb' }] },
+              ],
+            })
+            await producer.disconnect()
+
+            const hashes = setDataStreamsContextSpy.getCalls().map(call => call.args[0].hash)
+            assert.ok(hashes.includes(expectedAHash), `missing DSM checkpoint for ${topicAOut}`)
+            assert.ok(hashes.includes(expectedBHash), `missing DSM checkpoint for ${topicBOut}`)
+          })
+
           it('Should set a checkpoint on consume (eachMessage)', async () => {
             const runArgs = []
             await consumer.run({
@@ -317,6 +336,23 @@ describe('Plugin', () => {
             const runArg = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(runArg.topic, testTopic)
             assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
+          })
+
+          it('Should add one backlog per response item on sendBatch (no N x M duplication)', async () => {
+            const producer = kafka.producer()
+            await producer.connect()
+            await producer.sendBatch({
+              topicMessages: [
+                { topic: topicAOut, messages: [{ key: 'a', value: 'va' }] },
+                { topic: topicBOut, messages: [{ key: 'b', value: 'vb' }] },
+              ],
+            })
+            await producer.disconnect()
+
+            const produceCalls = setOffsetSpy.getCalls()
+              .filter(call => call.args[0]?.type === 'kafka_produce')
+            const topics = produceCalls.map(call => call.args[0].topic).sort()
+            assert.deepStrictEqual(topics, [topicAOut, topicBOut].sort())
           })
         })
       })
