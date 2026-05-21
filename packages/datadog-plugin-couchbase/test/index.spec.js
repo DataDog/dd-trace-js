@@ -1,8 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
@@ -20,28 +21,18 @@ describe('Plugin', () => {
     let tracer
     let collection
 
-    before(() => {
-      tracer = global.tracer = require('../../dd-trace')
-    })
-
     withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
-      beforeEach(() => {
-        tracer = global.tracer = require('../../dd-trace')
-      })
-
       describe('without configuration', () => {
-        beforeEach(done => {
-          agent.load('couchbase').then(() => {
-            couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
-            couchbase.connect('couchbase://localhost', {
-              username: 'Administrator',
-              password: 'password',
-            }).then(_cluster => {
-              cluster = _cluster
-              bucket = cluster.bucket('datadog-test')
-              collection = bucket.defaultCollection()
-            }).then(done).catch(done)
+        beforeEach(async function () {
+          this.timeout(10_000)
+          tracer = global.tracer = await agent.load('couchbase')
+          couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
+          cluster = await couchbase.connect('couchbase://localhost', {
+            username: 'Administrator',
+            password: 'password',
           })
+          bucket = cluster.bucket('datadog-test')
+          collection = bucket.defaultCollection()
         })
 
         afterEach(async () => {
@@ -49,7 +40,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withNamingSchema(
@@ -120,12 +111,16 @@ describe('Plugin', () => {
 
           it('should skip instrumentation for invalid arguments', (done) => {
             const checkError = (e) => {
-              assert.ok([
+              const expectedMessages = [
                 // depending on version of node
                 'Cannot read property \'toString\' of undefined',
                 'Cannot read properties of undefined (reading \'toString\')',
                 'parsing failure', // sdk 4
-              ].includes(e.message))
+              ]
+              assert.ok(
+                expectedMessages.includes(e.message),
+                `Expected error message in ${inspect(expectedMessages)}, got ${inspect(e.message)}`
+              )
               done()
             }
             try {

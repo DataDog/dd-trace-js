@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -81,21 +82,21 @@ describe('electron/preload', () => {
     it('includes location.hostname when no config is provided', () => {
       const bridge = loadPreload(null)
       const hosts = JSON.parse(bridge.getAllowedWebViewHosts())
-      assert.ok(hosts.includes('test.example.com'))
+      assert.ok(hosts.includes('test.example.com'), `Got: ${inspect(hosts)}`)
     })
 
     it('includes both location.hostname and configured hosts', () => {
       const bridge = loadPreload({ allowedWebViewHosts: ['allowed.example.com'] })
       const hosts = JSON.parse(bridge.getAllowedWebViewHosts())
-      assert.ok(hosts.includes('test.example.com'))
-      assert.ok(hosts.includes('allowed.example.com'))
+      assert.ok(hosts.includes('test.example.com'), `Got: ${inspect(hosts)}`)
+      assert.ok(hosts.includes('allowed.example.com'), `Got: ${inspect(hosts)}`)
     })
 
     it('deduplicates hosts when location.hostname is also in configured hosts', () => {
       const bridge = loadPreload({ allowedWebViewHosts: ['test.example.com', 'other.example.com'] })
       const hosts = JSON.parse(bridge.getAllowedWebViewHosts())
       assert.strictEqual(hosts.filter(h => h === 'test.example.com').length, 1)
-      assert.ok(hosts.includes('other.example.com'))
+      assert.ok(hosts.includes('other.example.com'), `Got: ${inspect(hosts)}`)
     })
   })
 

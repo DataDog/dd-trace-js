@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const EventEmitter = require('node:events')
 const net = require('node:net')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 
@@ -39,7 +40,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(done => {
@@ -87,7 +88,10 @@ describe('Plugin', () => {
               })
 
               if (implementation !== 'pg.native') {
-                assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
+                assert.ok(
+                  Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                  `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                )
               }
             }, { spanResourceMatch: /^SELECT \$1::text as message$/ })
               .then(done)
@@ -140,7 +144,10 @@ describe('Plugin', () => {
                 })
 
                 if (implementation !== 'pg.native') {
-                  assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                  )
                 }
               })
                 .then(done)
@@ -314,7 +321,7 @@ describe('Plugin', () => {
 
                   const readPromise = (async () => {
                     for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'))
+                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
                     }
                   })()
 
@@ -350,7 +357,7 @@ describe('Plugin', () => {
                   const rejectedRead = assert.rejects(async () => {
                     // eslint-disable-next-line no-unreachable-loop
                     for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'))
+                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
                       throw new Error('Test error')
                     }
                   }, {
@@ -371,7 +378,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -428,7 +435,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -484,7 +491,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -551,7 +558,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -592,13 +599,13 @@ describe('Plugin', () => {
       })
 
       describe('with DBM propagation enabled with full using tracer configurations', () => {
-        const tracer = require('../../dd-trace')
+        let tracer
         let seenTraceParent
         let seenTraceId
         let seenSpanId
         const originalWrite = net.Socket.prototype.write
 
-        before(() => {
+        before(async () => {
           net.Socket.prototype.write = function (buffer) {
             let strBuf = buffer.toString()
             if (strBuf.includes('traceparent=\'')) {
@@ -609,13 +616,12 @@ describe('Plugin', () => {
             }
             return originalWrite.apply(this, arguments)
           }
-          return agent.load('pg')
+          tracer = await agent.load('pg')
         })
 
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
           })
@@ -685,17 +691,16 @@ describe('Plugin', () => {
       })
 
       describe('DBM propagation enabled with full should handle query config objects', () => {
-        const tracer = require('../../dd-trace')
         let queryQueueName
+        let tracer
 
-        before(() => {
-          return agent.load('pg')
+        before(async () => {
+          tracer = await agent.load('pg')
         })
 
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
             service: 'post',
@@ -716,7 +721,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           client.end(done)
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         it('query config objects should be handled', async () => {
@@ -741,7 +746,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', async () => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           const query = {
             text: 'SELECT $1::text as message',
           }
@@ -904,7 +909,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach((done) => {
@@ -944,7 +949,6 @@ describe('Plugin', () => {
         // Tracer-level config (third arg) only takes effect if the global
         // tracer is wiped first; tracer.init() short-circuits once the
         // process-wide singleton has been initialized by an earlier load.
-        agent.wipe()
         await agent.load('pg', {
           appendComment: true,
           service: () => 'serviced',
@@ -955,7 +959,7 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false, wipe: true })
+        return agent.close()
       })
 
       beforeEach((done) => {

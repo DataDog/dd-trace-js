@@ -82,6 +82,8 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('./util/test')
 
+const legacyStorage = storage('legacy')
+
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
   mocha: 'mocha',
@@ -147,7 +149,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
       const { onDone, frameworkVersion } = ctx
-      ctx.currentStore = storage('legacy').getStore()
+      ctx.currentStore = legacyStorage.getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -249,18 +251,6 @@ module.exports = class CiPlugin extends Plugin {
         integrationName: this.constructor.id,
       })
       setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
-      // only for vitest
-      // These are added for the worker threads to use
-      if (this.constructor.id === 'vitest') {
-        // TODO: Figure out alternative ways to pass this information to the worker threads
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
-      }
-
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -92,8 +93,11 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            assert.ok(Object.hasOwn(data, '_datadog'))
-            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
+            assert.ok(Object.hasOwn(data, '_datadog'), `Available keys: ${inspect(Object.keys(data))}`)
+            assert.ok(
+              Object.hasOwn(data._datadog, 'x-datadog-trace-id'),
+              `Available keys: ${inspect(Object.keys(data._datadog))}`
+            )
 
             done()
           })
@@ -109,8 +113,11 @@ describe('Kinesis', function () {
 
             for (const record in data.Records) {
               const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
-              assert.ok(Object.hasOwn(recordData, '_datadog'))
-              assert.ok(Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'))
+              assert.ok(Object.hasOwn(recordData, '_datadog'), `Available keys: ${inspect(Object.keys(recordData))}`)
+              assert.ok(
+                Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'),
+                `Available keys: ${inspect(Object.keys(recordData._datadog))}`
+              )
             }
 
             done()
@@ -125,8 +132,11 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            assert.ok(Object.hasOwn(data, '_datadog'))
-            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
+            assert.ok(Object.hasOwn(data, '_datadog'), `Available keys: ${inspect(Object.keys(data))}`)
+            assert.ok(
+              Object.hasOwn(data._datadog, 'x-datadog-trace-id'),
+              `Available keys: ${inspect(Object.keys(data._datadog))}`
+            )
 
             done()
           })
@@ -173,7 +183,6 @@ describe('Kinesis', function () {
         before(() => {
           savedKinesisEnv = process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
           process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
-          agent.wipe()
         })
 
         after(() => {
@@ -182,7 +191,6 @@ describe('Kinesis', function () {
           } else {
             process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = savedKinesisEnv
           }
-          agent.wipe()
         })
 
         it('skip injects trace context to Kinesis putRecord when disabled', done => {

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -39,6 +40,7 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'init')
     sinon.stub(binding, 'updateConfig')
     sinon.stub(binding, 'updateMetadata')
+    sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       '../log': log,
@@ -46,9 +48,11 @@ describeNotWindows('crashtracker', () => {
   })
 
   afterEach(() => {
+    process.removeAllListeners('uncaughtExceptionMonitor')
     binding.init.restore()
     binding.updateConfig.restore()
     binding.updateMetadata.restore()
+    binding.reportUncaughtExceptionMonitor.restore()
   })
 
   describe('start', () => {
@@ -77,7 +81,12 @@ describeNotWindows('crashtracker', () => {
     it('should handle errors', () => {
       crashtracker.start(null)
 
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+
       crashtracker.start(config)
+
+      sinon.assert.calledOnce(binding.init)
     })
 
     it('should handle unix sockets', () => {
@@ -114,6 +123,40 @@ describeNotWindows('crashtracker', () => {
     })
   })
 
+  describe('uncaughtExceptionMonitor', () => {
+    it('should register a listener on start', () => {
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+      crashtracker.start(config)
+
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
+    })
+
+    it('should not register a listener when start is called multiple times', () => {
+      crashtracker.start(config)
+      crashtracker.start(config)
+
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 1)
+    })
+
+    it('should forward the error and origin to the binding', () => {
+      crashtracker.start(config)
+
+      const error = new Error('boom')
+      process.emit('uncaughtExceptionMonitor', error, 'uncaughtException')
+
+      sinon.assert.calledOnceWithExactly(binding.reportUncaughtExceptionMonitor, error, 'uncaughtException')
+    })
+
+    it('should not register a listener when init fails', () => {
+      binding.init.throws(new Error('init failed'))
+
+      crashtracker.start(config)
+
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+    })
+  })
+
   describe('process tags', () => {
     it('should include process tags in metadata', () => {
       crashtracker.start(config)
@@ -122,7 +165,7 @@ describeNotWindows('crashtracker', () => {
       const metadata = binding.init.firstCall.args[2]
 
       assert.ok(metadata)
-      assert.ok(Array.isArray(metadata.tags))
+      assert.ok(Array.isArray(metadata.tags), `Expected array, got ${inspect(metadata.tags)}`)
 
       // Check that process tags are included
       const hasEntrypointType = metadata.tags.some(tag => tag.startsWith('entrypoint.type:'))
@@ -158,7 +201,7 @@ describeNotWindows('crashtracker', () => {
       const metadata = binding.updateMetadata.firstCall.args[0]
 
       assert.ok(metadata)
-      assert.ok(Array.isArray(metadata.tags))
+      assert.ok(Array.isArray(metadata.tags), `Expected array, got ${inspect(metadata.tags)}`)
 
       // Verify process tags are in the updated metadata
       const hasProcessTags = metadata.tags.some(tag => tag.startsWith('entrypoint.'))

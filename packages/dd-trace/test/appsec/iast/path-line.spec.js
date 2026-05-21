@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const os = require('os')
 const path = require('path')
+const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire')
 
@@ -114,7 +115,7 @@ describe('path-line', function () {
         const results = pathLine.getCallSiteFramesForLocation(callsites)
 
         assert.strictEqual(results.length, 3)
-        assert.ok(results.every(r => r.path && typeof r.isInternal === 'boolean'))
+        assert.ok(results.every(r => r.path && typeof r.isInternal === 'boolean'), `Got: ${inspect(results)}`)
       })
 
       EXCLUDED_TEST_PATHS.forEach((dcPath) => {

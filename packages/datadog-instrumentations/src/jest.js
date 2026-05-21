@@ -30,6 +30,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getEfdRetryCount,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -1173,6 +1174,12 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
+function getChannelPromise (channelToPublishTo, payload = {}) {
+  return new Promise(resolve => {
+    channelToPublishTo.publish({ ...payload, onDone: resolve })
+  })
+}
+
 function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
   const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
@@ -1234,17 +1241,14 @@ function getCliWrapper (isNewJestVersion) {
     }
     return shimmer.wrap(cli, 'runCLI', runCLI => async function () {
       let onDone
-      const configurationPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
       if (!libraryConfigurationCh.hasSubscribers) {
         return runCLI.apply(this, arguments)
       }
 
-      libraryConfigurationCh.publish({ onDone, frameworkVersion: jestVersion })
-
       try {
-        const { err, libraryConfig } = await configurationPromise
+        const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
+          frameworkVersion: jestVersion,
+        })
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
@@ -1263,15 +1267,22 @@ function getCliWrapper (isNewJestVersion) {
         log.error('Jest library configuration error', err)
       }
 
+      const {
+        knownTestsResponse,
+        testManagementTestsResponse,
+        skippableSuitesResponse,
+      } = await getTestOptimizationRequestResults({
+        isKnownTestsEnabled,
+        isTestManagementTestsEnabled,
+        isSuitesSkippingEnabled,
+        getKnownTests: () => getChannelPromise(knownTestsCh),
+        getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+        getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+      })
+
       if (isKnownTestsEnabled) {
-        const knownTestsPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        knownTestsCh.publish({ onDone })
-
         try {
-          const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+          const { err, knownTests: receivedKnownTests } = knownTestsResponse || await getChannelPromise(knownTestsCh)
           if (err) {
             // We disable EFD if there has been an error in the known tests request
             isEarlyFlakeDetectionEnabled = false
@@ -1285,14 +1296,9 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       if (isSuitesSkippingEnabled) {
-        const skippableSuitesPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        skippableSuitesCh.publish({ onDone })
-
         try {
-          const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
+          const { err, skippableSuites: receivedSkippableSuites } =
+            skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (!err) {
             skippableSuites = receivedSkippableSuites
           }
@@ -1302,14 +1308,9 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       if (isTestManagementTestsEnabled) {
-        const testManagementTestsPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        testManagementTestsCh.publish({ onDone })
-
         try {
-          const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
+          const { err, testManagementTests: receivedTestManagementTests } =
+            testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
           if (err) {
             isTestManagementTestsEnabled = false
             testManagementTests = {}
@@ -1323,14 +1324,8 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       if (isImpactedTestsEnabled) {
-        const impactedTestsPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        modifiedFilesCh.publish({ onDone })
-
         try {
-          const { err, modifiedFiles: receivedModifiedFiles } = await impactedTestsPromise
+          const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
           if (!err) {
             modifiedFiles = receivedModifiedFiles
           }
@@ -2047,10 +2042,12 @@ function getStaticMockedFiles (suiteFilePath) {
 
 function getMockedFiles (suiteFilePath) {
   const mockedFiles = testSuiteMockedFiles.get(suiteFilePath)
+  const staticMockedFiles = getStaticMockedFiles(suiteFilePath)
+
   if (mockedFiles?.length) {
-    return mockedFiles
+    return [...new Set([...mockedFiles, ...staticMockedFiles])]
   }
-  return getStaticMockedFiles(suiteFilePath)
+  return staticMockedFiles
 }
 
 function wrapJestObject (jestObject, suiteFilePath) {

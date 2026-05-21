@@ -267,6 +267,87 @@ function getSessionItrSkippingEnabledTags (sessionSpan) {
   return {}
 }
 
+/**
+ * Starts supported test optimization requests together when each feature is enabled.
+ *
+ * @param {{
+ *   isKnownTestsEnabled: boolean,
+ *   isTestManagementTestsEnabled: boolean,
+ *   isSuitesSkippingEnabled?: boolean,
+ *   getKnownTests: () => Promise<object>,
+ *   getTestManagementTests: () => Promise<object>,
+ *   getSkippableSuites?: () => Promise<object>
+ * }} options - Test optimization request factories.
+ * @returns {Promise<{
+ *   knownTestsResponse?: object,
+ *   testManagementTestsResponse?: object,
+ *   skippableSuitesResponse?: object
+ * }>}
+ */
+function getTestOptimizationRequestResults ({
+  isKnownTestsEnabled,
+  isTestManagementTestsEnabled,
+  isSuitesSkippingEnabled,
+  getKnownTests,
+  getTestManagementTests,
+  getSkippableSuites,
+}) {
+  const requestPromises = []
+  const responseNames = []
+
+  if (isKnownTestsEnabled) {
+    addTestOptimizationRequest(requestPromises, responseNames, 'knownTestsResponse', getKnownTests)
+  }
+
+  if (isTestManagementTestsEnabled) {
+    addTestOptimizationRequest(
+      requestPromises,
+      responseNames,
+      'testManagementTestsResponse',
+      getTestManagementTests
+    )
+  }
+
+  if (isSuitesSkippingEnabled && getSkippableSuites) {
+    addTestOptimizationRequest(requestPromises, responseNames, 'skippableSuitesResponse', getSkippableSuites)
+  }
+
+  if (!requestPromises.length) {
+    return Promise.resolve({})
+  }
+
+  return Promise.allSettled(requestPromises).then(requestResults => {
+    const responses = {}
+
+    for (let index = 0; index < requestResults.length; index++) {
+      const requestResult = requestResults[index]
+      responses[responseNames[index]] = requestResult.status === 'fulfilled'
+        ? requestResult.value
+        : { err: requestResult.reason }
+    }
+
+    return responses
+  })
+}
+
+/**
+ * Starts a test optimization request.
+ *
+ * @param {Promise<object>[]} requestPromises - Test optimization request promises.
+ * @param {string[]} responseNames - Response keys matching request promises.
+ * @param {string} responseName - Response key for this request.
+ * @param {() => Promise<object>} getRequest - Test optimization request factory.
+ */
+function addTestOptimizationRequest (requestPromises, responseNames, responseName, getRequest) {
+  responseNames.push(responseName)
+
+  try {
+    requestPromises.push(Promise.resolve(getRequest()))
+  } catch (err) {
+    requestPromises.push(Promise.reject(err))
+  }
+}
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -383,6 +464,7 @@ module.exports = {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   getSessionItrSkippingEnabledTags,
+  getTestOptimizationRequestResults,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,

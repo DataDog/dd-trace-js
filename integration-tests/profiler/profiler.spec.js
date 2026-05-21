@@ -9,6 +9,7 @@ const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 const { Profile } = require('../../vendor/dist/pprof-format')
 const {
@@ -58,7 +59,7 @@ function expectProfileMessagePromise (agent, timeout,
       assert.strictEqual(typeof event.info.profiler.activation, 'string')
       assert.strictEqual(typeof event.info.profiler.ssi.mechanism, 'string')
       const attachments = event.attachments
-      assert.ok(Array.isArray(attachments))
+      assert.ok(Array.isArray(attachments), `Expected array, got ${inspect(attachments)}`)
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
       assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {
@@ -67,7 +68,7 @@ function expectProfileMessagePromise (agent, timeout,
         })
       }
       if (expectSeq) {
-        assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
+        assert.notStrictEqual(event.tags_profiler.indexOf(',profile_seq:'), -1)
       }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
@@ -162,7 +163,7 @@ class NetworkEventProcessor extends TimelineEventProcessor {
 
   decorateEvent (ev, pl) {
     // Exactly one of these is defined
-    assert.ok(!!pl.address !== !!pl.host, this.encoded)
+    assert.notStrictEqual(!!pl.address, !!pl.host, this.encoded)
     if (pl.address) {
       ev.address = this.strings.strings[pl.address]
     } else {
@@ -797,8 +798,8 @@ describe('profiler', () => {
           // There's a race between the periodic uploader and the on-shutdown
           // upload, so the count can include up to one extra request.
           requestCount = requests.points[0][1]
-          assert.ok(requestCount >= 1)
-          assert.ok(requestCount <= 4)
+          assert.ok(requestCount >= 1, `Expected ${requestCount} >= 1`)
+          assert.ok(requestCount <= 4, `Expected ${requestCount} <= 4`)
 
           const responses = series.find(s => s.metric === 'profile_api.responses')
           assert.strictEqual(responses.type, 'count')
@@ -862,7 +863,7 @@ describe('profiler', () => {
             const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
             assert.notStrictEqual(sampleContexts, undefined)
             assert.strictEqual(sampleContexts.type, 'gauge')
-            assert.ok(sampleContexts.points[0][1] >= 1)
+            assert.ok(sampleContexts.points[0][1] >= 1, `Expected ${sampleContexts.points[0][1]} >= 1`)
           })
         },
         requestType: 'generate-metrics',
