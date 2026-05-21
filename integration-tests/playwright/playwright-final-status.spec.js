@@ -289,7 +289,7 @@ versions.forEach((version) => {
               const eventuallyPassingTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
               )
-              assert.ok(eventuallyPassingTests.length > 1)
+              assert.ok(eventuallyPassingTests.length > 1, `Expected ${eventuallyPassingTests.length} > 1`)
 
               const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
               assert.strictEqual(finalRuns.length, 1,

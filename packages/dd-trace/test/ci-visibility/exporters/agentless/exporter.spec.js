@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const cp = require('node:child_process')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const context = describe
@@ -188,9 +189,8 @@ describe('CI Visibility Agentless Exporter', () => {
       agentlessExporter.getLibraryConfiguration({}, (err) => {
         assert.notStrictEqual(scope.isDone(), true)
         assert.ok(
-          err.message.includes(
-            'Request to settings endpoint was not done because Datadog API key is not defined'
-          )
+          err.message.includes('Request to settings endpoint was not done because Datadog API key is not defined'),
+          `Got: ${inspect(err.message)}`
         )
         assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), false)
         done()

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 
 const { describe, it, beforeEach } = require('mocha')
@@ -71,9 +72,9 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
 
       assert.ok(decoded.traces)
-      assert.ok(Array.isArray(decoded.traces))
+      assert.ok(Array.isArray(decoded.traces), `Expected array, got ${inspect(decoded.traces)}`)
       assert.strictEqual(decoded.traces.length, 1)
-      assert.ok(Array.isArray(decoded.traces[0].spans))
+      assert.ok(Array.isArray(decoded.traces[0].spans), `Expected array, got ${inspect(decoded.traces[0].spans)}`)
       assert.strictEqual(decoded.traces[0].spans.length, 1)
     })
 
@@ -375,7 +376,7 @@ describe('AgentlessJSONEncoder', () => {
       encoder.encode(data)
       const buffer = encoder.makePayload()
 
-      assert.ok(Buffer.isBuffer(buffer))
+      assert.ok(Buffer.isBuffer(buffer), `Expected Buffer, got ${inspect(buffer)}`)
     })
 
     it('should reset after making payload', () => {
@@ -388,7 +389,7 @@ describe('AgentlessJSONEncoder', () => {
     it('should return empty buffer when no spans encoded', () => {
       const buffer = encoder.makePayload()
 
-      assert.ok(Buffer.isBuffer(buffer))
+      assert.ok(Buffer.isBuffer(buffer), `Expected Buffer, got ${inspect(buffer)}`)
       assert.strictEqual(buffer.length, 0)
     })
 

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { fork, exec } = require('child_process')
 const path = require('path')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -565,15 +566,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testSessionEvent[TEST_SESSION_ID])
             assert.ok(testSessionEvent.meta[TEST_COMMAND])
-            assert.ok(testSessionEvent[TEST_SUITE_ID] == null)
-            assert.ok(testSessionEvent[TEST_MODULE_ID] == null)
+            assert.ok(testSessionEvent[TEST_SUITE_ID] == null, `Expected ${testSessionEvent[TEST_SUITE_ID]} == null`)
+            assert.ok(testSessionEvent[TEST_MODULE_ID] == null, `Expected ${testSessionEvent[TEST_MODULE_ID]} == null`)
 
             assert.ok(testModuleEvent)
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testModuleEvent[TEST_SESSION_ID])
             assert.ok(testModuleEvent[TEST_MODULE_ID])
             assert.ok(testModuleEvent.meta[TEST_COMMAND])
-            assert.ok(testModuleEvent[TEST_SUITE_ID] == null)
+            assert.ok(testModuleEvent[TEST_SUITE_ID] == null, `Expected ${testModuleEvent[TEST_SUITE_ID]} == null`)
 
             assert.ok(testSuiteEvent)
             assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
@@ -855,7 +856,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSpans.length, 2)
         const spanTypes = testSpans.map(span => span.type)
         assertObjectContains(spanTypes, ['test'])
-        assert.ok(!spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)))
+        assert.ok(
+          !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
+          `Got: ${inspect(spanTypes)}`
+        )
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
         done()
       }).catch(done)
@@ -1069,7 +1073,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        assert.ok(tests.length >= 2)
+        assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
         tests.forEach(testEvent => {
           assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
         })
@@ -1210,7 +1214,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           assert.strictEqual(failedTestSuite.content.meta[TEST_STATUS], 'fail')
           assert.ok(
-            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code')
+            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code'),
+            `Got: ${inspect(failedTestSuite.content.meta[ERROR_MESSAGE])}`
           )
           assert.strictEqual(failedTestSuite.content.meta[ERROR_TYPE], 'Error')
 
@@ -1252,13 +1257,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           // jest still reports the test suite as passing
           assert.strictEqual(badImportTestSuite.content.meta[TEST_STATUS], 'pass')
+          const errorMessage = badImportTestSuite.content.meta[ERROR_MESSAGE]
           assert.ok(
-            badImportTestSuite.content.meta[ERROR_MESSAGE]
-              .includes('a file after the Jest environment has been torn down')
+            errorMessage.includes('a file after the Jest environment has been torn down'),
+            `Got: ${inspect(errorMessage)}`
           )
           assert.ok(
-            badImportTestSuite.content.meta[ERROR_MESSAGE]
-              .includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js')
+            errorMessage.includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'),
+            `Got: ${inspect(errorMessage)}`
           )
           // This is the error message that jest should show. We check that we don't mess it up.
           assert.match(badImportTestSuite.content.meta[ERROR_MESSAGE], /off-timing-import/)
@@ -1532,7 +1538,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
 
-        assert.ok(testEvents.length > 0)
+        assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
       })
 
     childProcess = exec(

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -763,7 +764,7 @@ describe('integrations', () => {
         })
 
         for await (const part of stream) {
-          assert.ok(Object.hasOwn(part, 'type'))
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()

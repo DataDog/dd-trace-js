@@ -77,7 +77,7 @@ describe('Dynamic Instrumentation', function () {
           //   [Symbol(trigger_async_id_symbol)]: 204,
           //   [Symbol(kResourceStore)]: {}
           // }
-          assert.ok(messages.shift().startsWith('Promise { 42, '))
+          assert.match(messages.shift(), /^Promise \{ 42, /)
         }
         assert.strictEqual(messages.shift(), '[Function: arrowFn]')
         assert.strictEqual(messages.shift(), '[Function: fn]')
@@ -96,7 +96,7 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), 'WeakSet { <items unknown> }')
         assert.strictEqual(messages.shift(), 'WeakMap { <items unknown> }')
         assert.strictEqual(messages.shift(), 'Buffer(6) [Uint8Array] [ 102, 111, 111, ... 3 more items ]')
-        assert.ok(messages.shift().startsWith('Error: foo\n    at'))
+        assert.match(messages.shift(), /^Error: foo\n {4}at/)
         assert.strictEqual(
           messages.shift(),
           'ArrayBuffer { ' +
@@ -203,7 +203,7 @@ describe('Dynamic Instrumentation', function () {
 
         const { evaluationErrors } = payload.debugger.snapshot
 
-        assert.ok(Array.isArray(evaluationErrors))
+        assert.ok(Array.isArray(evaluationErrors), `Expected array, got ${inspect(evaluationErrors)}`)
         assert.strictEqual(evaluationErrors.length, 2)
         assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
         assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')

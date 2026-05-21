@@ -19,7 +19,9 @@ import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
+import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
@@ -381,8 +383,10 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
         },
@@ -734,6 +738,8 @@ export default [
       n: eslintPluginN,
     },
     rules: {
+      'eslint-rules/eslint-prefer-assert-match': 'error',
+      'eslint-rules/eslint-require-boolean-assert-message': 'error',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
