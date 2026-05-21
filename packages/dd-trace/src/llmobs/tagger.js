@@ -43,8 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { findGenAIAncestorSpanId, writeBridgeTags } = require('./util')
-const { validateCostTags } = require('./util')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
