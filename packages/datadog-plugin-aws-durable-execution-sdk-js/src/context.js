@@ -63,15 +63,37 @@ class BaseContextPlugin extends TracingPlugin {
 
   settle (ctx) {
     if (ctx._ddSuppressed) return
+    const span = ctx.currentStore?.span
     if (ctx.error !== undefined) {
       const errCtx = unwrapDurableError(ctx)
-      ctx.currentStore?.span?.setTag('error', errCtx.error)
+      span?.setTag('error', errCtx.error)
+    } else if (span) {
+      maybeApplyBatchFailure(span, ctx._ddResolved)
     }
     this.finish(ctx)
   }
 
   error (ctxOrError) {
     this.settle(ctxOrError)
+  }
+}
+
+// `map` and `parallel` resolve with a BatchResult even when branches throw —
+// the DurablePromise itself never rejects. Detect partial failure on the
+// resolved value and surface the first error on the parent span.
+function maybeApplyBatchFailure (span, resolved) {
+  if (resolved?.hasFailure !== true) return
+  const errors = typeof resolved.getErrors === 'function' ? resolved.getErrors() : []
+  const { error } = unwrapDurableError({ error: errors[0] })
+  span.setTag('error', error ?? true)
+  if (typeof resolved.failureCount === 'number') {
+    span.setTag('aws.durable.batch.failure_count', String(resolved.failureCount))
+  }
+  if (typeof resolved.totalCount === 'number') {
+    span.setTag('aws.durable.batch.total_count', String(resolved.totalCount))
+  }
+  if (typeof resolved.completionReason === 'string') {
+    span.setTag('aws.durable.batch.completion_reason', resolved.completionReason)
   }
 }
 

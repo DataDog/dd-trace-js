@@ -26,8 +26,12 @@ for (const method of LAZY_DURABLE_PROMISE_METHODS) {
 
   orchestrionCh.end.subscribe(ctx => {
     if (!settleCh.hasSubscribers) return
-    observeDurablePromise(ctx.result, error => {
+    observeDurablePromise(ctx.result, (error, value) => {
       if (error !== undefined) ctx.error = error
+      // Stash the resolved value so plugin `settle` handlers can inspect aggregate
+      // results (e.g. parallel/map BatchResult) for partial failures that don't
+      // surface as a rejection.
+      ctx._ddResolved = value
       settleCh.publish(ctx)
     })
   })
@@ -39,8 +43,9 @@ for (const method of LAZY_DURABLE_PROMISE_METHODS) {
  * Callers pair `kind: 'Sync'` with this helper so `onSettle` only fires after user code first
  * awaits / chains, preserving the SDK's lazy semantics.
  * @param {object} dp - The returned DurablePromise instance.
- * @param {(err: unknown) => void} onSettle - Called once with `undefined` on success or the
- *   rejection reason on failure.
+ * @param {(err: unknown, value?: unknown) => void} onSettle - Called once. On rejection, the
+ *   first argument is the rejection reason. On fulfillment, the first argument is `undefined`
+ *   and the second is the resolved value.
  * @returns {void}
  */
 function observeDurablePromise (dp, onSettle) {
@@ -54,7 +59,7 @@ function observeDurablePromise (dp, onSettle) {
   const attachSpy = () => {
     if (attached) return
     attached = true
-    proto.then.call(dp, () => onSettle(), err => onSettle(err))
+    proto.then.call(dp, value => onSettle(undefined, value), err => onSettle(err))
   }
 
   shimmer.massWrap(dp, ['then', 'catch', 'finally'], original => function (...args) {
