@@ -507,7 +507,7 @@
     "dependency": "mongodb",
     "integration": "mongodb-core",
     "minimum_tracer_supported": "3.3.0",
-    "max_tracer_supported": "7.0.0",
+    "max_tracer_supported": "7.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -521,7 +521,7 @@
     "dependency": "mongoose",
     "integration": "mongoose",
     "minimum_tracer_supported": "4.6.4",
-    "max_tracer_supported": "9.1.4",
+    "max_tracer_supported": "9.6.2",
     "auto-instrumented": "True"
   },
   {
