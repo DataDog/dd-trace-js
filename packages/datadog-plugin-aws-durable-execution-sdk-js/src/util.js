@@ -1,0 +1,48 @@
+'use strict'
+
+const { createHash } = require('node:crypto')
+
+/**
+ * Returns true if the op the DurableContextImpl is about to run will be served
+ * from the SDK's checkpoint (i.e. the next stepId already has a SUCCEEDED entry).
+ * @param {object} [ctxImpl]
+ * @returns {boolean}
+ */
+function isReplayedOp (ctxImpl) {
+  const stepId = ctxImpl?.getNextStepId?.()
+  if (!stepId) return false
+  const stepData = ctxImpl?._executionContext?.getStepData?.(stepId)
+  return stepData?.Status === 'SUCCEEDED'
+}
+
+/**
+ * Returns the operation_id (16-hex-char MD5 of the next stepId) for the op the
+ * DurableContextImpl is about to run, or undefined if unavailable. Mirrors the
+ * SDK's internal calculations
+ * @param {object} [ctxImpl]
+ * @returns {string|undefined}
+ */
+function getOperationId (ctxImpl) {
+  const stepId = ctxImpl?.getNextStepId?.()
+  if (!stepId) return
+  return createHash('md5').update(stepId).digest('hex').slice(0, 16)
+}
+
+/**
+ * The SDK wraps user errors in typed classes (StepError, ChildContextError, etc.); we follow the
+ * `.cause` chain to recover the user's original Error. SDK wrappers expose a string `errorType`
+ * field, so the loop stops once we leave the wrapper hierarchy.
+ * @param {{ error?: unknown } | unknown} ctxOrError
+ * @returns {{ error?: unknown } | unknown}
+ */
+function unwrapDurableError (ctxOrError) {
+  let err = ctxOrError?.error
+  if (!(err instanceof Error)) return ctxOrError
+
+  while (typeof err.errorType === 'string' && err.cause instanceof Error) {
+    err = err.cause
+  }
+  return { ...ctxOrError, error: err }
+}
+
+module.exports = { isReplayedOp, getOperationId, unwrapDurableError }
