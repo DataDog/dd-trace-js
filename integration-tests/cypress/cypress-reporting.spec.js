@@ -305,7 +305,7 @@ moduleTypes.forEach(({
       })
     }
 
-    it('creates cypress.step spans for each command', async () => {
+    it.only('creates cypress.step spans for each command', async () => {
       const envVars = getCiVisEvpProxyConfig(receiver.port)
       const specToRun = 'cypress/e2e/commands.cy.js'
 
@@ -329,35 +329,35 @@ moduleTypes.forEach(({
         childProcess,
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
-          const allSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+          const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const testSpan = allSpans.find(span => span.name === 'cypress.test')
-          assert.ok(testSpan, 'cypress.test span exists')
+          const testEvent = events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'cypress.test event exists')
 
-          const stepSpans = allSpans.filter(span => span.name === 'cypress.step')
-          assert.ok(stepSpans.length > 0, 'cypress.step spans exist')
+          const stepEvents = events.filter(event => event.type === 'span' && event.content.name === 'cypress.step')
+          assert.ok(stepEvents.length > 0, 'cypress.step spans exist')
 
-          const visitStep = stepSpans.find(span => span.meta['cypress.command'] === 'visit')
+          const visitStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'visit')
           assert.ok(visitStep, 'visit step span exists')
-          assertObjectContains(visitStep, {
+          assertObjectContains(visitStep.content, {
             name: 'cypress.step',
             resource: 'visit',
             meta: { 'cypress.command': 'visit' },
           })
 
-          const getStep = stepSpans.find(span => span.meta['cypress.command'] === 'get')
+          const getStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'get')
           assert.ok(getStep, 'get step span exists')
-          assertObjectContains(getStep, {
+          assertObjectContains(getStep.content, {
             name: 'cypress.step',
             resource: 'get',
             meta: { 'cypress.command': 'get' },
           })
 
-          const containsStep = stepSpans.find(span => span.meta['cypress.command'] === 'contains')
+          const containsStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'contains')
           assert.ok(containsStep, 'contains step span exists')
 
-          for (const stepSpan of stepSpans) {
-            assert.strictEqual(stepSpan.trace_id.toString(), testSpan.trace_id.toString())
+          for (const stepEvent of stepEvents) {
+            assert.strictEqual(stepEvent.content.trace_id.toString(), testEvent.content.trace_id.toString())
           }
         },
         { hardTimeout: 60000 }
