@@ -168,7 +168,7 @@
   "optionalDependencies": {
     "@datadog/libdatadog": "0.9.3",
     "@datadog/native-appsec": "11.0.1",
-    "@datadog/native-iast-taint-tracking": "4.1.0",
+    "@datadog/native-iast-taint-tracking": "4.2.0",
     "@datadog/native-metrics": "3.1.2",
     "@datadog/openfeature-node-server": "1.2.1",
     "@datadog/pprof": "5.14.1",

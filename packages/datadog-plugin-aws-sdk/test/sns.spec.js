@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
@@ -199,7 +200,10 @@ describe('Sns', function () {
               },
             })
 
-            assert.ok(Object.hasOwn(span.meta, 'aws.response.body.MessageId'))
+            assert.ok(
+              Object.hasOwn(span.meta, 'aws.response.body.MessageId'),
+              `Available keys: ${inspect(Object.keys(span.meta))}`
+            )
           }, { timeoutMs: 20000 }).then(done, done)
 
           sns.publish({
@@ -426,10 +430,16 @@ describe('Sns', function () {
 
               for (const message in data.Messages) {
                 const recordData = JSON.parse(data.Messages[message].Body)
-                assert.ok(Object.hasOwn(recordData.MessageAttributes, '_datadog'))
+                assert.ok(
+                  Object.hasOwn(recordData.MessageAttributes, '_datadog'),
+                  `Available keys: ${inspect(Object.keys(recordData.MessageAttributes))}`
+                )
 
                 const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))
-                assert.ok(Object.hasOwn(attributes, 'x-datadog-trace-id'))
+                assert.ok(
+                  Object.hasOwn(attributes, 'x-datadog-trace-id'),
+                  `Available keys: ${inspect(Object.keys(attributes))}`
+                )
               }
             })
             sns.publishBatch({

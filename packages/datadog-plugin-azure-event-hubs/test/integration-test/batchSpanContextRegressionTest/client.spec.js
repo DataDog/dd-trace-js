@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   sandboxCwd,
@@ -32,7 +33,7 @@ describe('esm', () => {
 
     it('tryAdd does not set context in the Azure eventDataBatch._spanContext', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 3)
         // Verify we got the expected spans from the test
         assert.strictEqual(payload[0][0].name, 'azure.eventhubs.create')

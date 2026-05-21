@@ -2,6 +2,7 @@
 
 const util = require('node:util')
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { before, beforeEach, after } = require('mocha')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
@@ -504,9 +505,12 @@ function assertPromptTracking (
 
   // Verify tags
   assert(spanEvent.tags, 'Span event should include tags')
-  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
+  assert(
+    spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`),
+    `Got: ${inspect(spanEvent.tags)}`
+  )
   if (promptMultimodal) {
-    assert(spanEvent.tags.includes('prompt_multimodal:true'))
+    assert(spanEvent.tags.includes('prompt_multimodal:true'), `Got: ${inspect(spanEvent.tags)}`)
   }
 }
 

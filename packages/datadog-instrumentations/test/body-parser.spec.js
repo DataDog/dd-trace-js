@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const dc = require('dc-polyfill')
@@ -91,7 +92,7 @@ withVersions('body-parser', 'body-parser', version => {
 
       assert.ok(payload.req)
       assert.ok(payload.res)
-      assert.ok(Object.hasOwn(store, 'span'))
+      assert.ok(Object.hasOwn(store, 'span'), `Available keys: ${inspect(Object.keys(store))}`)
 
       sinon.assert.calledOnce(middlewareProcessBodyStub)
       assert.strictEqual(res.data, 'DONE')

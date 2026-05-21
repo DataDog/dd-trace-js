@@ -6,6 +6,7 @@ const { once } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -1177,7 +1178,7 @@ moduleTypes.forEach(({
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
             assert.ok(testSessionEvent)
             const testEvents = events.filter(event => event.type === 'test')
-            assert.ok(testEvents.length > 0)
+            assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
           }, { hardTimeout: 30000 })
 
       await Promise.all([
@@ -2122,10 +2123,10 @@ moduleTypes.forEach(({
             .flatMap(content => content.coverages)
 
           coverages.forEach(coverage => {
-            assert.ok(Object.hasOwn(coverage, 'test_session_id'))
-            assert.ok(Object.hasOwn(coverage, 'test_suite_id'))
-            assert.ok(Object.hasOwn(coverage, 'span_id'))
-            assert.ok(Object.hasOwn(coverage, 'files'))
+            assert.ok(Object.hasOwn(coverage, 'test_session_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+            assert.ok(Object.hasOwn(coverage, 'test_suite_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+            assert.ok(Object.hasOwn(coverage, 'span_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+            assert.ok(Object.hasOwn(coverage, 'files'), `Available keys: ${inspect(Object.keys(coverage))}`)
           })
 
           const fileNames = coverages

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
@@ -83,7 +84,7 @@ describe('LogPlugin', () => {
     assert.deepStrictEqual(JSON.parse(JSON.stringify(data.message)), {
       dd: override,
     })
-    assert.ok(Object.hasOwn(data.message, 'dd'))
+    assert.ok(Object.hasOwn(data.message, 'dd'), `Available keys: ${inspect(Object.keys(data.message))}`)
   })
 
   it('should allow defining dd after injection', () => {
@@ -103,6 +104,6 @@ describe('LogPlugin', () => {
     })
 
     assert.strictEqual(data.message.dd, override)
-    assert.ok(Object.hasOwn(data.message, 'dd'))
+    assert.ok(Object.hasOwn(data.message, 'dd'), `Available keys: ${inspect(Object.keys(data.message))}`)
   })
 })

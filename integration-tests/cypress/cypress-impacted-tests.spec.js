@@ -159,7 +159,7 @@ moduleTypes.forEach(({
                 .filter(({ payload }) => payload.metadata?.test)
                 .flatMap(({ payload }) => payload.metadata)
 
-              assert.ok(metadataDicts.length > 0)
+              assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
               metadataDicts.forEach(metadata => {
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
