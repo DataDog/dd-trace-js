@@ -94,9 +94,11 @@ jobs:
           LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
           OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
           DOCKER_HASH=$(sha256sum .github/playwright/Dockerfile | cut -c1-8)
+          LATEST_TAG="${LATEST}-${DOCKER_HASH}"
+          OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
-          IMAGES=$(printf '{"latest":"%s:%s-%s","oldest":"%s:%s-%s"}' "$BASE" "$LATEST" "$DOCKER_HASH" "$BASE" "$OLDEST" "$DOCKER_HASH")
-          VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
+          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
+          VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Log in to GHCR
