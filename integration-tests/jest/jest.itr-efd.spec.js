@@ -104,7 +104,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     'office-addin-mock',
     'winston',
     'jest-image-snapshot',
-    '@fast-check/jest',
   ].filter(Boolean), true)
 
   before(function () {

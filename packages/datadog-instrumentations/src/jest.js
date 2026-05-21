@@ -39,10 +39,11 @@ const {
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
-  SEED_SUFFIX_RE,
   getFormattedJestTestParameters,
   getJestTestName,
+  getRawJestTestName,
   getJestSuitesToRun,
+  removeSeedSuffixFromTestName,
 } = require('../../datadog-plugin-jest/src/util')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -137,8 +138,6 @@ const efdSlowAbortedTests = new Set()
 const efdNewTestCandidates = new Set()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
-const testSuiteAbsolutePathsWithFastCheck = new Set()
-const testSuiteFastCheckUsage = new Map()
 const testSuiteJestObjects = new Map()
 const wrappedJestGlobals = new WeakSet()
 const wrappedJestObjects = new WeakSet()
@@ -301,9 +300,7 @@ function getAttemptToFixExecutionsFromJestResults (result) {
     if (!testManagementTestsForSuite) continue
 
     for (const { fullName, status } of testResults) {
-      const testName = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
-        ? fullName.replace(SEED_SUFFIX_RE, '')
-        : fullName
+      const testName = removeSeedSuffixFromTestName(fullName)
       const testStatus = getTestStatusFromJestResult(status)
       if (!testStatus) continue
 
@@ -550,14 +547,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
-    getShouldStripSeedFromTestName () {
-      return doesTestSuiteUseFastCheck(this.testSuiteAbsolutePath)
-    }
-
     // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
-      const describeSuffix = getJestTestName(state.currentDescribeBlock, this.getShouldStripSeedFromTestName())
-      return describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
+      const describeSuffix = getRawJestTestName(state.currentDescribeBlock)
+      const testName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
+      return removeSeedSuffixFromTestName(testName)
     }
 
     async handleTestEvent (event, state) {
@@ -579,7 +573,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'test_start') {
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
+        const testName = getJestTestName(event.test)
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're retrying tests with the same name
           this.resetSnapshotState()
@@ -783,7 +777,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let attemptToFixFailed = false
         let failedAllTests = false
         let isAttemptToFix = false
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
+        const testName = getJestTestName(event.test)
         if (this.isTestManagementTestsEnabled) {
           isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
@@ -963,7 +957,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
           const ctx = testContexts.get(test)
           if (ctx?.isQuarantined && !ctx.isAttemptToFix) {
-            const testName = getJestTestName(test, this.getShouldStripSeedFromTestName())
+            const testName = getJestTestName(test)
             quarantinedFailingTests.add(`${ctx.suite} › ${testName}`)
           } else {
             test.errors = errors
@@ -987,7 +981,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         testsToBeRetried.clear()
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
+        const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {
             name: testName,
@@ -1485,9 +1479,7 @@ function getCliWrapper (isNewJestVersion) {
       for (const { testResults, testFilePath } of result.results.testResults) {
         const suite = getTestSuitePath(testFilePath, result.globalConfig.rootDir)
         for (const { fullName } of testResults) {
-          const name = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
-            ? fullName.replace(SEED_SUFFIX_RE, '')
-            : fullName
+          const name = removeSeedSuffixFromTestName(fullName)
           fullNameToSuite.set(name, suite)
         }
       }
@@ -1526,10 +1518,8 @@ function getCliWrapper (isNewJestVersion) {
           .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
             testResults.map(({ fullName: testName, status }) => (
               {
-                // Strip @fast-check/jest seed suffix so the name matches what was reported via TEST_NAME
-                testName: testSuiteAbsolutePathsWithFastCheck.has(testSuiteAbsolutePath)
-                  ? testName.replace(SEED_SUFFIX_RE, '')
-                  : testName,
+                // Strip seed suffix so the name matches what was reported via TEST_NAME.
+                testName: removeSeedSuffixFromTestName(testName),
                 testSuiteAbsolutePath,
                 status,
               }
@@ -1707,7 +1697,6 @@ function publishTestSuiteFinish (payload, waitForFinish) {
 
 function cleanupTestSuiteState (testSuiteAbsolutePath) {
   testSuiteMockedFiles.delete(testSuiteAbsolutePath)
-  testSuiteFastCheckUsage.delete(testSuiteAbsolutePath)
   testSuiteJestObjects.delete(testSuiteAbsolutePath)
 }
 
@@ -2158,38 +2147,6 @@ function wrapJestGlobalsForRuntime (runtime) {
   })
 }
 
-function recordFastCheckUsage (runtime, from, moduleName) {
-  if (moduleName !== '@fast-check/jest') return
-
-  if (from) {
-    testSuiteAbsolutePathsWithFastCheck.add(from)
-    testSuiteFastCheckUsage.set(from, true)
-  }
-  if (runtime?._testPath) {
-    testSuiteAbsolutePathsWithFastCheck.add(runtime._testPath)
-    testSuiteFastCheckUsage.set(runtime._testPath, true)
-  }
-}
-
-function doesTestSuiteUseFastCheck (testSuiteAbsolutePath) {
-  if (!testSuiteAbsolutePath) return false
-  if (testSuiteFastCheckUsage.has(testSuiteAbsolutePath)) {
-    return testSuiteFastCheckUsage.get(testSuiteAbsolutePath)
-  }
-
-  try {
-    const usesFastCheck = readFileSync(testSuiteAbsolutePath, 'utf8').includes('@fast-check/jest')
-    testSuiteFastCheckUsage.set(testSuiteAbsolutePath, usesFastCheck)
-    if (usesFastCheck) {
-      testSuiteAbsolutePathsWithFastCheck.add(testSuiteAbsolutePath)
-    }
-    return usesFastCheck
-  } catch {
-    testSuiteFastCheckUsage.set(testSuiteAbsolutePath, false)
-    return false
-  }
-}
-
 function getLastLoggedReferenceError (runtime) {
   const loggedReferenceErrors = runtime?.loggedReferenceErrors
   if (!loggedReferenceErrors?.size) return
@@ -2298,8 +2255,6 @@ addHook({
         // To bypass jest's own require engine
         return requireOutsideJestRequireEngine(this, moduleName)
       }
-      // This means that `@fast-check/jest` is used in the test file.
-      recordFastCheckUsage(this, from, moduleName)
       let returnedValue
       try {
         returnedValue = requireModuleOrMock.apply(this, arguments)
