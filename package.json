@@ -177,6 +177,9 @@
     "@opentelemetry/api-logs": "<1.0.0",
     "oxc-parser": "^0.130.0"
   },
+  "resolutions": {
+    "node-gyp-build": "^4.8.4"
+  },
   "devDependencies": {
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
