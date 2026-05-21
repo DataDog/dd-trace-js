@@ -98,9 +98,11 @@ jobs:
           OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
           IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
-          VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
+          PW_VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
+          IMAGE_TAG=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
+          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
@@ -109,13 +111,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Ensure image
         env:
-          VERSION: ${{ steps.versions.outputs.version }}
+          PW_VERSION: ${{ steps.versions.outputs.pw-version }}
+          IMAGE_TAG: ${{ steps.versions.outputs.image-tag }}
         run: |
-          IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${VERSION}"
+          IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${IMAGE_TAG}"
           if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
             echo "Image ${IMAGE} already exists, skipping build"
           else
-            docker build --build-arg PLAYWRIGHT_VERSION="${VERSION}" \
+            docker build --build-arg PLAYWRIGHT_VERSION="${PW_VERSION}" \
               -t "${IMAGE}" .github/playwright
             docker push "${IMAGE}"
           fi
