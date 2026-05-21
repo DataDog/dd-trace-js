@@ -91,8 +91,8 @@ jobs:
       - name: Determine versions
         id: versions
         run: |
-          LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
-          OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
+          LATEST=$(node -p "require('./integration-tests/playwright/versions').tag(require('./integration-tests/playwright/versions').latest)")
+          OLDEST=$(node -p "require('./integration-tests/playwright/versions').tag(require('./integration-tests/playwright/versions').oldest)")
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
           IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST" "$BASE" "$OLDEST")
           VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
