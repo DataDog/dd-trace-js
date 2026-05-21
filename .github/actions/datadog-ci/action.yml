@@ -13,8 +13,14 @@ runs:
       with:
         node-version: '20'
 
+    - uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+      with:
+        max_attempts: 3
+        timeout_minutes: 5
+        retry_wait_seconds: 30
+        command: |
+          cd ${{ github.workspace }}/.github/actions/datadog-ci
+          yarn install --frozen-lockfile
+
     - shell: bash
-      run: |
-        yarn install --frozen-lockfile || (sleep 30 && yarn install --frozen-lockfile)
-        echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
-      working-directory: ${{ github.workspace }}/.github/actions/datadog-ci
+      run: echo "${{ github.workspace }}/.github/actions/datadog-ci/node_modules/.bin" >> $GITHUB_PATH
