@@ -95,17 +95,13 @@ class DatadogSpanContext {
    * @param {string} key - Tag key
    * @returns {boolean}
    */
-  hasTag (key) {
-    return Object.hasOwn(this._tags, key)
-  }
+  hasTag (key) { return Object.hasOwn(this._tags, key) }
 
   /**
    * Delete a tag.
    * @param {string} key - Tag key
    */
-  deleteTag (key) {
-    delete this._tags[key]
-  }
+  deleteTag (key) { delete this._tags[key] }
 
   /**
    * Get the live internal tags map. The returned reference is mutable;
@@ -123,9 +119,7 @@ class DatadogSpanContext {
   /**
    * Clear all tags.
    */
-  clearTags () {
-    this._tags = Object.create(null)
-  }
+  clearTags () { this._tags = Object.create(null) }
 }
 
 module.exports = DatadogSpanContext
