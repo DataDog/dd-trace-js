@@ -39,7 +39,7 @@ Cypress.on('command:end', (command) => {
 
   const name = command.get('name')
   const args = command.get('args')
-  if (name === 'task' && typeof args?.[0] === 'string' && args[0].startsWith('dd:')) {
+  if (name === 'task' && args && typeof args[0] === 'string' && args[0].startsWith('dd:')) {
     return
   }
   if (INTERNAL_CYPRESS_COMMANDS.has(name)) {
