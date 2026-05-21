@@ -156,7 +156,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 1)
+          assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -174,7 +174,7 @@ describe('Kinesis', function () {
               })
             }
           }, { timeoutMs: 10000 })
-          assert.ok(statsPointsReceived >= 2)
+          assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -232,7 +232,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 3)
+          assert.ok(statsPointsReceived >= 3, `Expected ${statsPointsReceived} >= 3`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 

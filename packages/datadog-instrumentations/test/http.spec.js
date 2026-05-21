@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -262,10 +263,10 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(Buffer.isBuffer(payload.body))
+                assert(Buffer.isBuffer(payload.body), `Expected Buffer, got ${inspect(payload.body)}`)
 
                 const expectedBody = Buffer.concat(chunks)
-                assert(payload.body.equals(expectedBody))
+                assert(payload.body.equals(expectedBody), `Got: ${inspect(payload.body)}`)
 
                 done()
               } catch (e) {

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
@@ -48,35 +49,41 @@ describe('msgpack/encoder', () => {
     const buffer = encoder.encode(data)
     const decoded = msgpack.decode(buffer, { useBigInt64: true })
 
-    assert.ok(Array.isArray(decoded))
-    assert.ok(typeof decoded[0] === 'object' && decoded[0] !== null)
+    assert.ok(Array.isArray(decoded), `Expected array, got ${inspect(decoded)}`)
+    assert.ok(
+      typeof decoded[0] === 'object' && decoded[0] !== null,
+      `Expected non-null object, got ${inspect(decoded[0])}`
+    )
     assert.strictEqual(decoded[0].first, 'test')
-    assert.ok(typeof decoded[1] === 'object' && decoded[1] !== null)
+    assert.ok(
+      typeof decoded[1] === 'object' && decoded[1] !== null,
+      `Expected non-null object, got ${inspect(decoded[1])}`
+    )
     assert.strictEqual(decoded[1].fixstr, 'foo')
-    assert.ok(Object.hasOwn(decoded[1], 'str'))
+    assert.ok(Object.hasOwn(decoded[1], 'str'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].str.length, 1000)
     assert.strictEqual(decoded[1].fixuint, 127)
     assert.strictEqual(decoded[1].fixint, -31)
     assert.strictEqual(decoded[1].uint8, 255)
     assert.strictEqual(decoded[1].uint16, 65535)
     assert.strictEqual(decoded[1].uint32, 4294967295)
-    assert.ok(Object.hasOwn(decoded[1], 'uint53'))
+    assert.ok(Object.hasOwn(decoded[1], 'uint53'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].uint53.toString(), '9007199254740991')
     assert.strictEqual(decoded[1].int8, -15)
     assert.strictEqual(decoded[1].int16, -32767)
     assert.strictEqual(decoded[1].int32, -2147483647)
-    assert.ok(Object.hasOwn(decoded[1], 'int53'))
+    assert.ok(Object.hasOwn(decoded[1], 'int53'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].int53.toString(), '-9007199254740991')
     assert.strictEqual(decoded[1].float, 12345.6789)
-    assert.ok(Object.hasOwn(decoded[1], 'biguint'))
+    assert.ok(Object.hasOwn(decoded[1], 'biguint'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].biguint.toString(), '9223372036854775807')
-    assert.ok(Object.hasOwn(decoded[1], 'bigint'))
+    assert.ok(Object.hasOwn(decoded[1], 'bigint'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].bigint.toString(), '-9223372036854775807')
-    assert.ok(Object.hasOwn(decoded[1], 'buffer'))
+    assert.ok(Object.hasOwn(decoded[1], 'buffer'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].buffer.toString('utf8'), 'test')
-    assert.ok(Object.hasOwn(decoded[1], 'buffer'))
+    assert.ok(Object.hasOwn(decoded[1], 'buffer'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].buffer.toString('utf8'), 'test')
-    assert.ok(Object.hasOwn(decoded[1], 'uint8array'))
+    assert.ok(Object.hasOwn(decoded[1], 'uint8array'), `Available keys: ${inspect(Object.keys(decoded[1]))}`)
     assert.strictEqual(decoded[1].uint8array[0], 1)
     assert.strictEqual(decoded[1].uint8array[1], 2)
     assert.strictEqual(decoded[1].uint8array[2], 3)

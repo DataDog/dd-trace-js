@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { promisify } = require('node:util')
+const { promisify, inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -787,7 +787,7 @@ describe('child process', () => {
           child.once('close', () => {
             sinon.assert.calledOnce(start)
             const context = start.firstCall.firstArg
-            assert.ok(Array.isArray(context.callArgs))
+            assert.ok(Array.isArray(context.callArgs), `Expected array, got ${inspect(context.callArgs)}`)
             assert.strictEqual(context.callArgs[0], 'echo')
             assert.deepStrictEqual(context.callArgs[1], ['hello'])
             done()
@@ -799,7 +799,7 @@ describe('child process', () => {
 
           sinon.assert.calledOnce(start)
           const context = start.firstCall.firstArg
-          assert.ok(Array.isArray(context.callArgs))
+          assert.ok(Array.isArray(context.callArgs), `Expected array, got ${inspect(context.callArgs)}`)
           assert.strictEqual(context.callArgs[0], 'echo')
           assert.deepStrictEqual(context.callArgs[1], ['hello'])
         })

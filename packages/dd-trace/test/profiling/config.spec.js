@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -74,7 +75,7 @@ describe('config', () => {
       },
     })
     assert.strictEqual(typeof config.service, 'string')
-    assert.ok(config.service.length > 0)
+    assert.ok(config.service.length > 0, `Expected ${config.service.length} > 0`)
     assert.strictEqual(typeof config.version, 'string')
     assertObjectContains(config.tags, {
       service: config.service,
@@ -152,7 +153,7 @@ describe('config', () => {
     const { config } = getProfilerConfig({ reportHostname: true })
 
     assert.strictEqual(typeof config.tags.host, 'string')
-    assert.ok(config.tags.host.length > 0)
+    assert.ok(config.tags.host.length > 0, `Expected ${config.tags.host.length} > 0`)
     assert.strictEqual(config.tags.host, os.hostname())
   })
 
@@ -443,8 +444,14 @@ describe('config', () => {
   })
 
   function assertOomExportCommand (config) {
-    assert.ok(config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`))
-    assert.ok(config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'))
+    assert.ok(
+      config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`),
+      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
+    )
+    assert.ok(
+      config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'),
+      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
+    )
   }
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {

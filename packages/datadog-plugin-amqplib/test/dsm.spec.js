@@ -95,7 +95,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived.length >= 1)
+            assert.ok(statsPointsReceived.length >= 1, `Expected ${statsPointsReceived.length} >= 1`)
             assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
               'direction:out',
               'has_routing_key:true',
@@ -123,7 +123,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived.length >= 1)
+            assert.ok(statsPointsReceived.length >= 1, `Expected ${statsPointsReceived.length} >= 1`)
             assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
               'direction:out',
               'exchange:namedExchange',

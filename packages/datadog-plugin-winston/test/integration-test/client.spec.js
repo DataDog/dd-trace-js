@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   sandboxCwd,
@@ -44,7 +45,7 @@ describe('esm', () => {
           undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
-            assert.ok(Object.hasOwn(jsonObject, 'dd'))
+            assert.ok(Object.hasOwn(jsonObject, 'dd'), `Available keys: ${inspect(Object.keys(jsonObject))}`)
           }
         )
       }).timeout(50000)
