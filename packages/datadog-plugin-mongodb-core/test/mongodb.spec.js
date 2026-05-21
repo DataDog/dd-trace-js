@@ -858,7 +858,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
@@ -961,7 +961,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
