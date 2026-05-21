@@ -1411,7 +1411,8 @@ createRootSuiteCh.subscribe({
 
 pageGotoCh.subscribe({
   asyncEnd (ctx) {
-    void handlePageGoto(ctx.self)
+    // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
+    ctx.asyncEndPromise = handlePageGoto(ctx.self)
   },
 })
 

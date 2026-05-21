@@ -265,6 +265,19 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'Async',
+          },
+          channelName: 'trace_promise_async_end',
+          transform: 'tracePromiseWithAsyncEnd',
+        },
+        {
+          module: {
             name: 'test-esm',
             versionRange: '>=0.1',
             filePath: 'pregel-class.js',
@@ -529,6 +542,40 @@ describe('check-require-cache', () => {
     test.test()
 
     assert.ok(subs.start.called)
+  })
+
+  it('should wait for an asyncEnd promise when configured', async () => {
+    const { test } = compileFile('trace-promise-async-end')
+    const steps = []
+
+    subs = {
+      asyncEnd (ctx) {
+        steps.push('asyncEnd')
+        ctx.asyncEndPromise = new Promise(resolve => {
+          setImmediate(() => {
+            steps.push('asyncEndPromise')
+            resolve()
+          })
+        })
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end')
+    ch.subscribe(subs)
+
+    const resultPromise = test().then(result => {
+      steps.push('resolved')
+      return result
+    })
+
+    await Promise.resolve()
+
+    assert.deepStrictEqual(steps, ['asyncEnd'])
+
+    const result = await resultPromise
+
+    assert.equal(result, 'result')
+    assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndPromise', 'resolved'])
   })
 
   it('should use import when rewriting esm modules', () => {

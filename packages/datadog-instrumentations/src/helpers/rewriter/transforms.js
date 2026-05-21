@@ -49,6 +49,7 @@ const transforms = module.exports = {
 
   traceAsyncIterator: traceAny,
   traceIterator: traceAny,
+  tracePromiseWithAsyncEnd: traceAny,
 }
 
 function traceAny (state, node, _parent, ancestry) {
@@ -117,7 +118,7 @@ function traceInstanceMethod (state, node, program) {
   // Extract only right-hand side function of line 2.
   const fn = ctorBody[1].expression.right
 
-  fn.async = operator === 'tracePromise'
+  fn.async = operator === 'tracePromise' || operator === 'tracePromiseWithAsyncEnd'
   fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` }, program)
 
   wrapSuper(state, fn)
@@ -130,6 +131,7 @@ function wrap (state, node, program) {
 
   if (operator === 'traceAsyncIterator') return wrapIterator(state, node, program)
   if (operator === 'traceIterator') return wrapIterator(state, node, program)
+  if (operator === 'tracePromiseWithAsyncEnd') return wrapPromiseWithAsyncEnd(state, node)
 }
 
 function wrapSuper (_state, node) {
@@ -236,6 +238,85 @@ function wrapIterator (state, node, program) {
           return Promise.reject(err);
         });
       };
+    }
+  `).body[0].body // Extract only block statement of function body.
+
+  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
+  query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
+
+  return wrapper
+}
+
+/**
+ * @param {{ channelName: string, moduleVersion: string }} state
+ * @param {import('estree').FunctionExpression | import('estree').Identifier} node
+ * @returns {import('estree').BlockStatement}
+ */
+function wrapPromiseWithAsyncEnd (state, node) {
+  const { channelName, moduleVersion } = state
+  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+
+  const wrapper = parse(`
+    function wrapper () {
+      const __apm$traced = () => {
+        const __apm$wrapped = () => {};
+        return __apm$wrapped.apply(this, arguments);
+      };
+
+      if (
+        !${channelVariable}.start.hasSubscribers &&
+        !${channelVariable}.asyncStart.hasSubscribers &&
+        !${channelVariable}.asyncEnd.hasSubscribers &&
+        !${channelVariable}.end.hasSubscribers &&
+        !${channelVariable}.error.hasSubscribers
+      ) {
+        return __apm$traced();
+      }
+
+      const __apm$ctx = {
+        arguments,
+        self: this,
+        moduleVersion: "${moduleVersion}"
+      };
+
+      return ${channelVariable}.start.runStores(__apm$ctx, () => {
+        try {
+          const __apm$promise = __apm$traced();
+
+          if (!__apm$promise || typeof __apm$promise.then !== 'function') {
+            __apm$ctx.result = __apm$promise;
+            return __apm$promise;
+          }
+
+          return __apm$promise.then(result => {
+            __apm$ctx.result = result;
+
+            ${channelVariable}.asyncStart.publish(__apm$ctx);
+            ${channelVariable}.asyncEnd.publish(__apm$ctx);
+
+            const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
+            if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
+              return __apm$asyncEndPromise.then(() => result);
+            }
+
+            return result;
+          }, err => {
+            __apm$ctx.error = err;
+
+            ${channelVariable}.error.publish(__apm$ctx);
+            ${channelVariable}.asyncStart.publish(__apm$ctx);
+            ${channelVariable}.asyncEnd.publish(__apm$ctx);
+
+            throw err;
+          });
+        } catch (err) {
+          __apm$ctx.error = err;
+          ${channelVariable}.error.publish(__apm$ctx);
+          throw err;
+        } finally {
+          ${channelVariable}.end.publish(__apm$ctx);
+        }
+      });
     }
   `).body[0].body // Extract only block statement of function body.
 

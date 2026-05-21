@@ -70,5 +70,6 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'Page_goto',
+    transform: 'tracePromiseWithAsyncEnd',
   },
 ]
