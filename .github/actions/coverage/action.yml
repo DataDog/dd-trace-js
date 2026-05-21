@@ -36,6 +36,10 @@ runs:
         fi
         echo "value=$flags" >> "$GITHUB_OUTPUT"
 
+    - name: Install gpg for Codecov validation
+      shell: bash
+      run: command -v gpg || sudo apt-get install -y gpg
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
       with:
