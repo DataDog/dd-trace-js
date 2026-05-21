@@ -148,10 +148,16 @@ async function rerunFailedWorkflows (workflowRuns) {
         )
       } catch (err) {
         if (err.status === 403) {
-          const { id, name } = workflowRun
-          console.log(`Workflow run ${id} (${name}) has no failed jobs — stale conclusion, treating as passed.`)
-          staleFailureRunIds.add(workflowRun.id)
-          return
+          const jobs = await octokit.paginate(octokit.rest.actions.listJobsForWorkflowRun, {
+            owner, repo, run_id: workflowRun.id, filter: 'latest', per_page: 100,
+          })
+          const hasFailedJobs = jobs.some(j => failureConclusions.has(j.conclusion))
+          if (!hasFailedJobs) {
+            const { id, name } = workflowRun
+            console.log(`Workflow run ${id} (${name}) has no failed jobs — stale conclusion, treating as passed.`)
+            staleFailureRunIds.add(workflowRun.id)
+            return
+          }
         }
         throw err
       }
