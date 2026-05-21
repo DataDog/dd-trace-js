@@ -411,7 +411,8 @@ function getAbsolutePath (filePath) {
   if (!filePath || path.isAbsolute(filePath)) {
     return filePath
   }
-  return path.join(rootDir || process.env.DD_PLAYWRIGHT_WORKER_ROOT_DIR || process.cwd(), filePath)
+  const baseDir = rootDir || getValueFromEnvSources('DD_PLAYWRIGHT_WORKER_ROOT_DIR') || process.cwd()
+  return path.join(baseDir, filePath)
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
