@@ -79,8 +79,9 @@ jobs:
       contents: read
       packages: write
     outputs:
-      latest-version: ${{ steps.versions.outputs.latest }}
-      oldest-version: ${{ steps.versions.outputs.oldest }}
+      images: ${{ steps.versions.outputs.images }}
+      latest: ${{ steps.versions.outputs.latest }}
+      oldest: ${{ steps.versions.outputs.oldest }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Determine versions
@@ -88,6 +89,9 @@ jobs:
         run: |
           LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
           OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
+          BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
+          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST" "$BASE" "$OLDEST")
+          echo "images=$IMAGES" >> $GITHUB_OUTPUT
           echo "latest=$LATEST" >> $GITHUB_OUTPUT
           echo "oldest=$OLDEST" >> $GITHUB_OUTPUT
       - name: Log in to GHCR
@@ -141,11 +145,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: >-
-        ghcr.io/datadog/dd-trace-js/playwright-tools:${{
-          matrix.playwright-version == 'latest'
-          && needs.playwright-image.outputs.latest-version
-          || needs.playwright-image.outputs.oldest-version }}
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.playwright-version] }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
