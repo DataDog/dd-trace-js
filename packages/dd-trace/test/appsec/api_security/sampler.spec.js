@@ -6,7 +6,7 @@ const { performance } = require('node:perf_hooks')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
+const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../../ext/priority')
 
 describe('API Security Sampler', () => {
   const req = { route: { path: '/test' }, method: 'GET' }
@@ -28,8 +28,8 @@ describe('API Security Sampler', () => {
       },
     }
 
-    apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': webStub,
+    apiSecuritySampler = proxyquire('../../../src/appsec/api_security/sampler', {
+      '../../plugins/util/web': webStub,
     })
 
     span = {
@@ -209,12 +209,12 @@ describe('API Security Sampler', () => {
 
     beforeEach(() => {
       keepTraceStub = sinon.stub()
-      apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-        '../plugins/util/web': webStub,
-        '../priority_sampler': {
+      apiSecuritySampler = proxyquire('../../../src/appsec/api_security/sampler', {
+        '../../plugins/util/web': webStub,
+        '../../priority_sampler': {
           keepTrace: keepTraceStub,
         },
-        '../standalone/product': {
+        '../../standalone/product': {
           ASM: 'asm',
         },
       })
