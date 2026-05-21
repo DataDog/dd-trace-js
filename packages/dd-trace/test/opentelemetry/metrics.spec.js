@@ -703,8 +703,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('drops writes to instruments not in the registered set', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const names = decoded.resourceMetrics[0].scopeMetrics[0].metrics.map(m => m.name)
-        assert.ok(names.includes('inset'))
-        assert.ok(!names.includes('notinset'))
+        assert.ok(names.includes('inset'), `expected 'inset' in exported metrics, got: ${names.join(', ')}`)
+        assert.ok(!names.includes('notinset'),
+          `expected 'notinset' to be dropped (writes to unregistered instruments), got: ${names.join(', ')}`)
       })
 
       setupMetrics()
