@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -273,10 +274,10 @@ describe('profiler', function () {
 
       const { profiles, start, end, tags } = await exporterPromise
 
-      assert.ok(Object.hasOwn(profiles, 'wall'))
+      assert.ok(Object.hasOwn(profiles, 'wall'), `Available keys: ${inspect(Object.keys(profiles))}`)
       assert.ok(profiles.wall instanceof Buffer)
       assert.strictEqual(profiles.wall.indexOf(magicBytes), 0)
-      assert.ok(Object.hasOwn(profiles, 'space'))
+      assert.ok(Object.hasOwn(profiles, 'space'), `Available keys: ${inspect(Object.keys(profiles))}`)
       assert.ok(profiles.space instanceof Buffer)
       assert.strictEqual(profiles.space.indexOf(magicBytes), 0)
       assert.ok(start instanceof Date)
@@ -363,7 +364,7 @@ describe('profiler', function () {
       await waitForExport()
 
       const { start: start2, end: end2 } = exporter.export.args[0][0]
-      assert.ok(start2 >= end)
+      assert.ok(start2 >= end, `Expected ${start2} >= ${end}`)
       assert.ok(start2 instanceof Date)
       assert.ok(end2 instanceof Date)
       assert.strictEqual(end2.getTime() - start2.getTime(), 65000)
@@ -382,7 +383,7 @@ describe('profiler', function () {
       profiler.start(makeStartOptions({ sourceMap: true }))
 
       const options = profilers[0].start.args[0][0]
-      assert.ok(Object.hasOwn(options, 'mapper'))
+      assert.ok(Object.hasOwn(options, 'mapper'), `Available keys: ${inspect(Object.keys(options))}`)
       assert.strictEqual(mapperInstance, options.mapper)
     })
 

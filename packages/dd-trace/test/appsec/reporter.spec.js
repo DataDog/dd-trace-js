@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
@@ -665,7 +666,10 @@ describe('reporter', () => {
           const { truncated, value: truncatedRequestBody } = Reporter.truncateRequestBody(requestBody)
 
           assert.strictEqual(truncated, true)
-          assert.ok(Object.hasOwn(truncatedRequestBody, 'str'))
+          assert.ok(
+            Object.hasOwn(truncatedRequestBody, 'str'),
+            `Available keys: ${inspect(Object.keys(truncatedRequestBody))}`
+          )
           assert.strictEqual(truncatedRequestBody.str.length, 4096)
           assert.strictEqual(objectDepth(truncatedRequestBody.nestedObj), 19)
           assert.strictEqual(Object.keys(truncatedRequestBody.objectWithLotsOfNodes).length, 256)

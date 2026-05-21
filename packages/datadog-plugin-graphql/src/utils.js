@@ -7,7 +7,10 @@ function extractErrorIntoSpanEvent (config, span, exc) {
     attributes.type = exc.name
   }
 
-  if (exc.stack) {
+  // graphql-js validation errors carry a lazy `.stack` accessor; reading it
+  // here is the only consumer in the pipeline and pays full V8 symbolisation.
+  const isValidationOnly = exc.locations && !exc.path && !exc.originalError?.stack
+  if (!isValidationOnly && exc.stack) {
     attributes.stacktrace = exc.stack
   }
 

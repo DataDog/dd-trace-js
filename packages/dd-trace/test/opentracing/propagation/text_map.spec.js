@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -164,7 +165,10 @@ describe('TextMapPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       assert.strictEqual(carrier['ot-baggage-sentry-release'], encodeURIComponent(value))
-      assert.ok(!carrier['ot-baggage-sentry-release'].includes('\n'))
+      assert.ok(
+        !carrier['ot-baggage-sentry-release'].includes('\n'),
+        `Got: ${inspect(carrier['ot-baggage-sentry-release'])}`
+      )
     })
 
     it('should handle special characters in baggage', () => {
@@ -1296,7 +1300,7 @@ describe('TextMapPropagator', () => {
         propagator.extract(carrier)
 
         const baggageItems = getAllBaggageItems()
-        assert.ok(Object.isFrozen(baggageItems))
+        assert.ok(Object.isFrozen(baggageItems), `Expected isFrozen, got ${inspect(baggageItems)}`)
         assert.throws(() => { baggageItems.foo = 'tampered' }, TypeError)
         assert.throws(() => { baggageItems.added = 'value' }, TypeError)
       })

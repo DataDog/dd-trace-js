@@ -734,7 +734,10 @@ describe('dogstatsd', () => {
       aggregator.histogram('test.hist', 10)
       aggregator.flush()
 
-      assert(gaugeCalls.length > 0 && incrementCalls.length > 0)
+      assert(
+        gaugeCalls.length > 0 && incrementCalls.length > 0,
+        `Got gauge=${gaugeCalls.length}, increment=${incrementCalls.length}`
+      )
 
       gaugeCalls.length = 0
       incrementCalls.length = 0

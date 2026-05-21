@@ -6,6 +6,7 @@ const dns = require('node:dns')
 const { once } = require('node:events')
 const path = require('node:path')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
@@ -216,7 +217,10 @@ describe('Config', () => {
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
       const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
-      assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
+      assert.ok(
+        !cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')),
+        `Got: ${inspect(cpuEntry.aliases)}`
+      )
       assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
       const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
       assert.strictEqual(runtimeIdEntry.aliases, undefined)
@@ -1802,7 +1806,7 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
-    assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
+    assert.ok(Object.hasOwn(config.tags, 'runtime-id'), `Available keys: ${inspect(Object.keys(config.tags))}`)
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     if (DD_MAJOR < 6) {
       assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
@@ -1979,10 +1983,12 @@ describe('Config', () => {
       { name: 'DD_TRACE_PROPAGATION_STYLE_INJECT', value: 'datadog', origin: 'calculated' },
     ].sort(comparator))
 
+    const configEntries = updateConfig.getCall(0).args[0]
     assert.ok(
-      !updateConfig.getCall(0).args[0].some(entry => {
+      !configEntries.some(entry => {
         return entry.name === 'DD_TRACE_PROPAGATION_STYLE_EXTRACT' && entry.origin === 'calculated'
-      })
+      }),
+      `Got: ${inspect(configEntries)}`
     )
   })
 
@@ -3517,7 +3523,10 @@ describe('Config', () => {
         request: undefined,
         response: undefined,
       })
-      assert.ok(!(Object.hasOwn(cloudPayloadTagging, 'rules')))
+      assert.ok(
+        !(Object.hasOwn(cloudPayloadTagging, 'rules')),
+        `Available keys: ${inspect(Object.keys(cloudPayloadTagging))}`
+      )
     })
   })
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const TestSetup = require('./test-setup')
 
@@ -56,9 +57,18 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
         assert.equal(streamSpan.error, 1)
         assert.equal(streamSpan.meta['span.kind'], 'internal')
         assert.equal(streamSpan.meta.component, 'langgraph')
-        assert.ok(Object.hasOwn(streamSpan.meta, 'error.type'))
-        assert.ok(Object.hasOwn(streamSpan.meta, 'error.message'))
-        assert.ok(Object.hasOwn(streamSpan.meta, 'error.stack'))
+        assert.ok(
+          Object.hasOwn(streamSpan.meta, 'error.type'),
+          `Available keys: ${inspect(Object.keys(streamSpan.meta))}`
+        )
+        assert.ok(
+          Object.hasOwn(streamSpan.meta, 'error.message'),
+          `Available keys: ${inspect(Object.keys(streamSpan.meta))}`
+        )
+        assert.ok(
+          Object.hasOwn(streamSpan.meta, 'error.stack'),
+          `Available keys: ${inspect(Object.keys(streamSpan.meta))}`
+        )
       })
 
       await testSetup.pregelStreamError().catch(() => {})

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
@@ -12,6 +13,7 @@ const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
+const { waitForTopicReady } = require('./helpers')
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   let edgeTags
@@ -81,6 +83,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
+          await waitForTopicReady(admin, testTopic)
           await admin.disconnect()
 
           consumer = kafka.consumer({
@@ -158,7 +161,10 @@ describe('Plugin', () => {
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(
+              recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
             recordCheckpointSpy.restore()
           })
 
@@ -171,7 +177,10 @@ describe('Plugin', () => {
             let consumerReceiveMessagePromise
             await consumer.run({
               eachMessage: async () => {
-                assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+                assert.ok(
+                  recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+                  `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+                )
                 recordCheckpointSpy.restore()
                 consumerReceiveMessagePromise = Promise.resolve()
               },

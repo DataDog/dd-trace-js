@@ -7,7 +7,7 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-const opentracing = require('../../../../vendor/dist/opentracing')
+const opentracing = require('opentracing')
 require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')

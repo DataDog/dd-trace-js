@@ -259,6 +259,7 @@
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
+/.github/workflows/openfeature.yml @DataDog/feature-flagging-and-experimentation-sdk
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
