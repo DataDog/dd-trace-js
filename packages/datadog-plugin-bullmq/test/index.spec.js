@@ -287,8 +287,10 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
   describe('producerFilter via tracer.use()', () => {
     function assertTraceDoesNotInclude (traces, rootName, filteredSpanName) {
       const spans = traces.flat()
-      assert.ok(spans.some(span => span.name === rootName))
-      assert.ok(!spans.some(span => span.name === filteredSpanName))
+      assert.ok(spans.some(span => span.name === rootName),
+        `expected a span named '${rootName}' in the trace`)
+      assert.ok(!spans.some(span => span.name === filteredSpanName),
+        `expected no span named '${filteredSpanName}' in the trace`)
     }
 
     it('invokes producerFilter with the job shape and emits a span when accepted', async () => {
