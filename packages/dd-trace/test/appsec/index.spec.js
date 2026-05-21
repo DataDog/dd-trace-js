@@ -64,7 +64,7 @@ describe('AppSec Index', function () {
   let log
   let appsecTelemetry
   let graphql
-  let apiSecuritySampler
+  let apiSecurity
   let rasp
   let serverless
 
@@ -136,10 +136,16 @@ describe('AppSec Index', function () {
       disable: sinon.stub(),
     }
 
-    apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web,
+    const apiSecuritySampler = proxyquire('../../src/appsec/api_security/sampler', {
+      '../../plugins/util/web': web,
     })
-    sinon.spy(apiSecuritySampler, 'sampleRequest')
+    apiSecurity = proxyquire('../../src/appsec/api_security', {
+      './sampler': apiSecuritySampler,
+      '../../plugins/util/web': web,
+      '../blocking': blocking,
+      '../telemetry': appsecTelemetry,
+    })
+    sinon.spy(apiSecurity, 'sampleRequest')
 
     rasp = {
       enable: sinon.stub(),
@@ -157,7 +163,7 @@ describe('AppSec Index', function () {
       './user_tracking': UserTracking,
       './telemetry': appsecTelemetry,
       './graphql': graphql,
-      './api_security_sampler': apiSecuritySampler,
+      './api_security': apiSecurity,
       './rasp': rasp,
       '../serverless': serverless,
     })
@@ -907,30 +913,30 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
-        sinon.assert.notCalled(apiSecuritySampler.sampleRequest)
+        sinon.assert.notCalled(apiSecurity.sampleRequest)
         sinon.assert.notCalled(waf.run)
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
-        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
+        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => false)
         const req = {}
         const res = {}
 
         responseBody.publish({ req, res, body: {} })
 
-        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithMatch(apiSecurity.sampleRequest, req, res)
         sinon.assert.notCalled(waf.run)
       })
 
       it('should call to the waf if it is a sampled request', () => {
-        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
+        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => true)
         const req = {}
         const res = {}
         const body = {}
 
         responseBody.publish({ req, res, body })
 
-        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithMatch(apiSecurity.sampleRequest, req, res)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
@@ -1597,7 +1603,7 @@ describe('AppSec Index (Serverless)', () => {
       './user_tracking': {},
       './telemetry': {},
       './graphql': {},
-      './api_security_sampler': {},
+      './api_security': {},
       './rasp': {},
       '../serverless': { IS_SERVERLESS: true },
       './rule_manager': RuleManager,

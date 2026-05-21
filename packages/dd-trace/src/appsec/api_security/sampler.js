@@ -1,11 +1,11 @@
 'use strict'
 
-const { TTLCache } = require('../../../../vendor/dist/@isaacs/ttlcache')
-const web = require('../plugins/util/web')
-const log = require('../log')
-const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
-const { keepTrace } = require('../priority_sampler')
-const { ASM } = require('../standalone/product')
+const { TTLCache } = require('../../../../../vendor/dist/@isaacs/ttlcache')
+const web = require('../../plugins/util/web')
+const log = require('../../log')
+const { AUTO_REJECT, USER_REJECT } = require('../../../../../ext/priority')
+const { keepTrace } = require('../../priority_sampler')
+const { ASM } = require('../../standalone/product')
 
 const MAX_SIZE = 4096
 
@@ -40,7 +40,9 @@ function sampleRequest (req, res, force = false) {
   if (!enabled) return false
 
   const key = computeKey(req, res)
-  if (!key || isSampled(key)) return false
+  if (!key) return false
+
+  if (isSampled(key)) return false
 
   const rootSpan = web.root(req)
   if (!rootSpan) return false
@@ -103,6 +105,15 @@ function computeKey (req, res) {
   return method + route + status
 }
 
+function isEnabled () {
+  return !!enabled
+}
+
+function hasRoute (req, res) {
+  const context = web.getContext(req)
+  return !!getRouteOrEndpoint(context, res.statusCode)
+}
+
 function getSpanPriority (span) {
   const spanContext = span.context?.()
   return spanContext._sampling?.priority
@@ -114,4 +125,6 @@ module.exports = {
   sampleRequest,
   isSampled,
   computeKey,
+  isEnabled,
+  hasRoute,
 }
