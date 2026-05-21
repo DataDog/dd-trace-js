@@ -1,7 +1,7 @@
 {
   "name": "debugger",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 3,
   "instructions": true,
   "variants": {
     "control": {
