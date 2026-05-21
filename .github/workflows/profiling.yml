@@ -99,7 +99,7 @@ jobs:
           $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe'
           New-Item -Path $key -Force | Out-Null
           Set-ItemProperty -Path $key -Name DumpFolder -Type ExpandString -Value $dumpDir
-          Set-ItemProperty -Path $key -Name DumpType   -Type DWord        -Value 2   # MiniDumpWithFullMemory
+          Set-ItemProperty -Path $key -Name DumpType   -Type DWord        -Value 1   # 1 = minidump (small; full dump = 2 would risk runner disk pressure with DumpCount=20)
           Set-ItemProperty -Path $key -Name DumpCount  -Type DWord        -Value 20
           "WER_DUMP_DIR=$dumpDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: yarn test:profiler:ci
