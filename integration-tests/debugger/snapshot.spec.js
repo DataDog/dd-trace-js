@@ -204,9 +204,12 @@ describe('Dynamic Instrumentation', function () {
           if ('fields' in prop) {
             if (prop.notCapturedReason === 'fieldCount') {
               assert.strictEqual(Object.keys(prop.fields).length, maxFieldCount)
-              assert.ok(prop.size > maxFieldCount)
+              assert.ok(prop.size > maxFieldCount, `Expected ${prop.size} > ${maxFieldCount}`)
             } else {
-              assert.ok(Object.keys(prop.fields).length < maxFieldCount)
+              assert.ok(
+                Object.keys(prop.fields).length < maxFieldCount,
+                `Expected ${Object.keys(prop.fields).length} < ${maxFieldCount}`
+              )
             }
           }
 
@@ -228,12 +231,12 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(locals.request.type, 'Request')
           assert.strictEqual(Object.keys(locals.request.fields).length, maxFieldCount)
           assert.strictEqual(locals.request.notCapturedReason, 'fieldCount')
-          assert.ok(locals.request.size > maxFieldCount)
+          assert.ok(locals.request.size > maxFieldCount, `Expected ${locals.request.size} > ${maxFieldCount}`)
 
           assert.strictEqual(locals.fastify.type, 'Object')
           assert.strictEqual(Object.keys(locals.fastify.fields).length, maxFieldCount)
           assert.strictEqual(locals.fastify.notCapturedReason, 'fieldCount')
-          assert.ok(locals.fastify.size > maxFieldCount)
+          assert.ok(locals.fastify.size > maxFieldCount, `Expected ${locals.fastify.size} > ${maxFieldCount}`)
 
           for (const value of Object.values(locals)) {
             assertMaxFieldCount(value)
@@ -300,7 +303,7 @@ describe('Dynamic Instrumentation', function () {
           const { raw } = captures.lines[t.breakpoint.line].locals.request.fields
           assert.strictEqual(raw.notCapturedReason, 'fieldCount')
           assert.strictEqual(Object.keys(raw.fields).length, 20)
-          assert.ok(raw.size > 20)
+          assert.ok(raw.size > 20, `Expected ${raw.size} > 20`)
           done()
         })
 

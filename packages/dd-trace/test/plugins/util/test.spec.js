@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -297,9 +298,9 @@ describe('attempt to fix summary', () => {
 
     assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
     assert.match(summary, /suite\.js › fails/)
-    assert.ok(!summary.includes('Errors are suppressed because'))
-    assert.ok(!summary.includes('Error:'))
-    assert.ok(!summary.includes('execution 1:'))
+    assert.ok(!summary.includes('Errors are suppressed because'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('Error:'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('execution 1:'), `Got: ${inspect(summary)}`)
   })
 
   it('reports when quarantine and disabled were ignored for attempt to fix', () => {
@@ -401,9 +402,9 @@ describe('attempt to fix summary', () => {
 
     const summary = formatAttemptToFixSummary(executions)
     assert.match(summary, /worker-suite\.js › worker test/)
-    assert.ok(!summary.includes('worker failure'))
-    assert.ok(!summary.includes('worker-suite.js:10:5'))
-    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.ok(!summary.includes('worker failure'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('worker-suite.js:10:5'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('Errors are suppressed because'), `Got: ${inspect(summary)}`)
     assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
   })
 

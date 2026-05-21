@@ -6,6 +6,7 @@ const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -159,8 +160,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-          assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-a'))
-          assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-b'))
+          assert.ok(
+            metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-a'),
+            `Got: ${inspect(metadataDicts)}`
+          )
+          assert.ok(
+            metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-b'),
+            `Got: ${inspect(metadataDicts)}`
+          )
         })
 
       childProcess = exec(
@@ -670,7 +677,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const atfTests = tests.filter(
               t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
             )
-            assert.ok(atfTests.length > 0)
+            assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
             for (const test of atfTests) {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
@@ -1707,7 +1714,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const quarantinedTests = tests.filter(
               test => test.meta[TEST_NAME] === 'efd and quarantine is a quarantined failing test'
             )
-            assert.ok(quarantinedTests.length >= 1)
+            assert.ok(quarantinedTests.length >= 1, `Expected ${quarantinedTests.length} >= 1`)
             for (const test of quarantinedTests) {
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             }
@@ -2001,7 +2008,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-          assert.ok(metadataDicts.length > 0)
+          assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
           metadataDicts.forEach(metadata => {
             assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
             assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
@@ -2656,10 +2663,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const coverageReport = payloads[0]
 
-          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+          assert.ok(
+            coverageReport.headers['content-type'].includes('multipart/form-data'),
+            `Got: ${inspect(coverageReport.headers['content-type'])}`
+          )
 
           assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-          assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+          assert.ok(
+            coverageReport.coverageFile.content.includes('SF:'),
+            `Got: ${inspect(coverageReport.coverageFile.content)}`
+          ) // LCOV format
 
           assert.strictEqual(coverageReport.eventFile.name, 'event')
           assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
