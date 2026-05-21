@@ -24,6 +24,38 @@ const suppressedTestFailures = new Map()
 // to a cross-origin URL, safeGetRum() handles the access error.
 let originalWindow
 
+let currentTestCommands = []
+const commandStartTimes = new Map()
+const INTERNAL_CYPRESS_COMMANDS = new Set(['wrap', 'then', 'noop'])
+
+Cypress.on('command:start', (command) => {
+  commandStartTimes.set(command.get('id'), Date.now())
+})
+
+Cypress.on('command:end', (command) => {
+  const id = command.get('id')
+  const startTime = commandStartTimes.get(id)
+  commandStartTimes.delete(id)
+
+  const name = command.get('name')
+  const args = command.get('args')
+  if (name === 'task' && typeof args?.[0] === 'string' && args[0].startsWith('dd:')) {
+    return
+  }
+  if (INTERNAL_CYPRESS_COMMANDS.has(name)) {
+    return
+  }
+  if (startTime == null) {
+    return
+  }
+  currentTestCommands.push({
+    name,
+    startTime,
+    endTime: Date.now(),
+    error: command.get('err') || null,
+  })
+})
+
 // If the test is using multi domain with cy.origin, trying to access
 // window properties will result in a cross origin error.
 function safeGetRum (window) {
@@ -169,6 +201,9 @@ beforeEach(function () {
     retryReasonsByTestName.delete(testName)
   }
 
+  currentTestCommands = []
+  commandStartTimes.clear()
+
   cy.on('window:load', (win) => {
     originalWindow = win
   })
@@ -310,5 +345,5 @@ afterEach(function () {
     suppressedTestFailures.delete(testName)
   }
 
-  cy.task('dd:afterEach', { test: testInfo, coverage })
+  cy.task('dd:afterEach', { test: testInfo, coverage, commands: currentTestCommands })
 })

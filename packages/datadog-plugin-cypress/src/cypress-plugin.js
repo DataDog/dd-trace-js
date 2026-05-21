@@ -74,6 +74,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
@@ -1280,7 +1281,7 @@ class CypressPlugin {
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
-      'dd:afterEach': ({ test, coverage }) => {
+      'dd:afterEach': ({ test, coverage, commands }) => {
         if (!this.activeTestSpan) {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
@@ -1442,6 +1443,28 @@ class CypressPlugin {
         }
         if (isDisabledFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+        }
+
+        if (Array.isArray(commands) && commands.length > 0) {
+          for (const command of commands) {
+            const { startTime, endTime } = command
+            if (typeof startTime !== 'number' || typeof endTime !== 'number' || endTime < startTime) {
+              continue
+            }
+            const stepSpan = this.tracer.startSpan('cypress.step', {
+              childOf: this.activeTestSpan,
+              startTime,
+              tags: {
+                [COMPONENT]: 'cypress',
+                'cypress.command': command.name,
+                [RESOURCE_NAME]: command.name,
+              },
+            })
+            if (command.error) {
+              stepSpan.setTag('error', command.error)
+            }
+            stepSpan.finish(endTime)
+          }
         }
 
         const finishedTest = {
