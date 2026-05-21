@@ -6,7 +6,6 @@ const { isSchemaAttribute } = require('../reporter')
 const appsecTelemetry = require('../telemetry')
 const sampler = require('./sampler')
 
-
 function reportRequest (req, res, { sampled, wafResult }) {
   if (!sampler.isEnabled()) return
   if (res.statusCode === 404 || isBlocked(res)) return
