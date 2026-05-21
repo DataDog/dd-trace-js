@@ -2,13 +2,19 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
+const { getOperationAttempt, getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
 const HIGH_CARDINALITY_PARENT_SPAN_NAMES = new Set([
   'aws.durable.map',
   'aws.durable.parallel',
+])
+
+// Span names whose underlying ops use the SDK's retry mechanism (StepDetails.Attempt).
+const RETRYABLE_SPAN_NAMES = new Set([
+  'aws.durable.step',
+  'aws.durable.wait_for_condition',
 ])
 
 // The SDK emits these subTypes as internal scaffolding around map/parallel iterations
@@ -46,10 +52,15 @@ class BaseContextPlugin extends TracingPlugin {
       meta['aws.durable.operation_id'] = operationId
     }
 
+    const metrics = RETRYABLE_SPAN_NAMES.has(spanName)
+      ? { 'aws.durable.operation_attempt': getOperationAttempt(ctx.self) }
+      : undefined
+
     this.startSpan(spanName, {
       resource,
       kind: this.constructor.kind,
       meta,
+      metrics,
     }, ctx)
 
     return ctx.currentStore

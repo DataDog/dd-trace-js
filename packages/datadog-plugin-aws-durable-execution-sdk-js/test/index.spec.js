@@ -102,6 +102,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
+  // Span names whose underlying ops use the SDK's retry mechanism and therefore carry
+  // the aws.durable.operation_attempt metric.
+  const RETRYABLE_SPAN_NAMES = new Set(['aws.durable.step', 'aws.durable.wait_for_condition'])
+
   for (const { span, operationName, run, opts } of [
     {
       span: 'aws.durable.step',
@@ -161,6 +165,15 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         })
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
         assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
+        if (RETRYABLE_SPAN_NAMES.has(span)) {
+          // SDK testing framework reports StepDetails.Attempt 0-indexed, so the first
+          // attempt produces operation_attempt=1 after max(1, 0). See util.js AIDEV-NOTE.
+          assert.equal(matched.metrics?.['aws.durable.operation_attempt'], 1,
+            `${span} should carry aws.durable.operation_attempt`)
+        } else {
+          assert.equal(matched.metrics?.['aws.durable.operation_attempt'], undefined,
+            `${span} must not carry aws.durable.operation_attempt`)
+        }
       })
       await invokeHandler(async (event, ctx) => run(ctx), opts)
       return tracePromise
@@ -318,18 +331,27 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   })
 
   it('checkpoint plugin: fail-then-succeed retry produces a span per attempt', async () => {
-    const failedAttemptSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
-      name: 'aws.durable.step',
-      resource: 'retry-step',
-      meta: { 'error.type': 'Error', 'error.message': 'transient failure' },
-      error: 1,
-    }))
+    const failedAttemptSpan = agent.assertSomeTraces(traces => {
+      const span = assertSpanByName(traces, {
+        name: 'aws.durable.step',
+        resource: 'retry-step',
+        meta: { 'error.type': 'Error', 'error.message': 'transient failure' },
+        error: 1,
+      })
+      // Both the original attempt and the first retry tag operation_attempt=1 here:
+      // the SDK testing framework reports StepDetails.Attempt 0-indexed, so max(1, 0)
+      // and max(1, 1) both collapse to 1. Production distinguishes them; see util.js.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 1,
+        'failed retry attempt should carry aws.durable.operation_attempt')
+    })
     const succeededAttemptSpan = agent.assertSomeTraces(traces => {
       const span = traces.flat().find(s =>
         s.name === 'aws.durable.step' && s.resource === 'retry-step'
       )
       assert.ok(span, 'expected step span')
       assert.notEqual(span.error, 1, 'successful retry attempt must not be tagged as errored')
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 1,
+        'successful retry attempt should carry aws.durable.operation_attempt')
     }, { timeoutMs: 5000 })
     const successfulExecuteSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
       name: 'aws.durable.execute',
