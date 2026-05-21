@@ -164,6 +164,54 @@ describe('DatabasePlugin DBM Hash', () => {
     })
   })
 
+  describe('dynamic_service mode', () => {
+    beforeEach(() => {
+      plugin.config.dbmPropagationMode = 'dynamic_service'
+    })
+
+    it('should inject hash even when dbm.injectSqlBaseHash is false', () => {
+      plugin.config['dbm.injectSqlBaseHash'] = false
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Comment should be created')
+      assert.ok(comment.includes("ddsh='AQIDBAUG'"),
+        'dynamic_service should inject hash regardless of injectSqlBaseHash')
+    })
+
+    it('should not inject traceparent', () => {
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Comment should be created')
+      assert.ok(!comment.includes('traceparent='), 'dynamic_service should not inject traceparent')
+    })
+
+    it('should behave identically to service + injectSqlBaseHash=true', () => {
+      plugin.config['dbm.injectSqlBaseHash'] = false
+
+      const dynamicComment = plugin.createDbmComment(span, 'test-service')
+
+      // Reset span tags and compare with service + injectSqlBaseHash=true
+      span._tags = {}
+      plugin.config.dbmPropagationMode = 'service'
+      plugin.config['dbm.injectSqlBaseHash'] = true
+
+      const serviceComment = plugin.createDbmComment(span, 'test-service')
+
+      assert.strictEqual(dynamicComment, serviceComment,
+        'dynamic_service should produce identical output to service + injectSqlBaseHash=true')
+    })
+
+    it('should not inject hash when propagation hash is disabled', () => {
+      propagationHash.isEnabled = () => false
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Comment should still be created')
+      assert.ok(!comment.includes('ddsh='), 'Should not inject hash when propagation hash is disabled')
+    })
+  })
+
   describe('control matrix for process tags and SQL base hash', () => {
     it('should inject hash when both propagateProcessTags and injectSqlBaseHash are enabled', () => {
       // DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true + DD_DBM_INJECT_SQL_BASEHASH=true

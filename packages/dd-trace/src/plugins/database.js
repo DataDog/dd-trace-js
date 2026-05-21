@@ -97,8 +97,9 @@ class DatabasePlugin extends StoragePlugin {
 
     let dbmComment = servicePropagation
 
-    // Add propagation hash if both process tags and SQL base hash injection are enabled
-    if (propagationHash.isEnabled() && this.config['dbm.injectSqlBaseHash']) {
+    // Add propagation hash if process tags are enabled and either SQL base hash injection is enabled
+    // or dynamic_service mode implicitly enables it
+    if (propagationHash.isEnabled() && (this.config['dbm.injectSqlBaseHash'] || mode === 'dynamic_service')) {
       const hashBase64 = propagationHash.getHashBase64()
       if (hashBase64) {
         dbmComment += `,ddsh='${hashBase64}'`
@@ -107,7 +108,7 @@ class DatabasePlugin extends StoragePlugin {
       }
     }
 
-    if (disableFullMode || mode === 'service') {
+    if (disableFullMode || mode === 'service' || mode === 'dynamic_service') {
       return dbmComment
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
