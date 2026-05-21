@@ -12,6 +12,7 @@ const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
+const { waitForTopicReady } = require('./helpers')
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   let edgeTags
@@ -81,6 +82,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
+          await waitForTopicReady(admin, testTopic)
           await admin.disconnect()
 
           consumer = kafka.consumer({
