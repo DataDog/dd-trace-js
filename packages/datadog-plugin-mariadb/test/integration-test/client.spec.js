@@ -12,13 +12,16 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
 describe('esm', () => {
   let agent
   let proc
   let variants
 
-  // test against later versions because server.mjs uses newer package syntax
-  withVersions('mariadb', 'mariadb', '>=3.0.0', version => {
+  // Lower bound: server.mjs uses newer package syntax. Upper bound: mariadb >=3.5
+  // is ESM-only with no default export, so server.mjs and every `varySandbox`
+  // variant would need a rewrite to named imports.
+  withVersions('mariadb', 'mariadb', '>=3.0.0 <3.5', version => {
     useSandbox([`'mariadb@${version}'`], false, [
       './packages/datadog-plugin-mariadb/test/integration-test/*'])
 

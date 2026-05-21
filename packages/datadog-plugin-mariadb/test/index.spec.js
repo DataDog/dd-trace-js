@@ -14,7 +14,12 @@ const { ANY_STRING, assertObjectContains } = require('../../../integration-tests
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
-const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
+const lowerBound = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
+// mariadb >=3.5 is ESM-only with no `require` exports condition; the CJS fixture loader can't
+// reach it on Node versions without unflagged require(esm) (20.19+, 22.12+, and later).
+const range = process.features.require_module // eslint-disable-line n/no-unsupported-features/node-builtins
+  ? lowerBound
+  : `${lowerBound} <3.5`
 
 describe('Plugin', () => {
   describe('mariadb', () => {
@@ -256,6 +261,19 @@ describe('Plugin', () => {
               assert.strictEqual(tracer.scope().active(), null)
             })
           })
+
+          if (semver.intersects(version, '>=3.5')) {
+            it('should load the ESM-only fixture and produce a span for a query', async () => {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  name: expectedSchema.outbound.opName,
+                  resource: 'SELECT 1',
+                  meta: { component: 'mariadb', 'db.type': 'mariadb' },
+                }),
+                connection.query('SELECT 1'),
+              ])
+            })
+          }
 
           it('should run event listeners in the parent context', done => {
             if (typeof connection.queryStream !== 'function') return this.skip()
