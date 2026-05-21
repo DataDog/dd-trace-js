@@ -7,6 +7,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 RUN npm install --prefix /tmp/pw @playwright/test@${PLAYWRIGHT_VERSION} \
     && /tmp/pw/node_modules/.bin/playwright install --with-deps chromium \
     && rm -rf /tmp/pw \
