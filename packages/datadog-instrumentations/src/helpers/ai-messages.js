@@ -1,6 +1,18 @@
 'use strict'
 
 /**
+ * Returns the value as a string, JSON-stringifying it when it is not already a string.
+ * Returns the value unchanged when it is `null` or `undefined`.
+ *
+ * @param {unknown} value
+ * @returns {string|undefined|null}
+ */
+function stringifyIfNeeded (value) {
+  if (value == null) return value
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+/**
  * Converts a LanguageModelV2FilePart with an image mediaType to an AI guard style image_url content part.
  *
  * @param {{type: 'file', data: URL|string|Uint8Array, mediaType: string}} part
@@ -79,12 +91,11 @@ function convertVercelPromptToMessages (prompt) {
           if (part.type === 'text') {
             textParts.push(part.text)
           } else if (part.type === 'tool-call') {
-            const args = part.args ?? part.input
             toolCalls.push({
               id: part.toolCallId,
               function: {
                 name: part.toolName,
-                arguments: typeof args === 'string' ? args : JSON.stringify(args),
+                arguments: stringifyIfNeeded(part.args ?? part.input),
               },
             })
           }
@@ -103,11 +114,10 @@ function convertVercelPromptToMessages (prompt) {
 
         for (const part of msg.content) {
           if (part.type === 'tool-result') {
-            const result = part.result ?? part.output
             messages.push({
               role: 'tool',
               tool_call_id: part.toolCallId,
-              content: typeof result === 'string' ? result : JSON.stringify(result),
+              content: stringifyIfNeeded(part.result ?? part.output),
             })
           }
         }
@@ -130,16 +140,13 @@ function buildToolCallOutputMessages (inputMessages, toolCalls) {
     ...inputMessages,
     {
       role: 'assistant',
-      tool_calls: toolCalls.map(tc => {
-        const args = tc.args ?? tc.input
-        return {
-          id: tc.toolCallId,
-          function: {
-            name: tc.toolName,
-            arguments: typeof args === 'string' ? args : JSON.stringify(args),
-          },
-        }
-      }),
+      tool_calls: toolCalls.map(tc => ({
+        id: tc.toolCallId,
+        function: {
+          name: tc.toolName,
+          arguments: stringifyIfNeeded(tc.args ?? tc.input),
+        },
+      })),
     },
   ]
 }
@@ -173,10 +180,102 @@ function buildOutputMessages (inputMessages, content) {
   return inputMessages
 }
 
+/**
+ * Converts OpenAI Responses API input/output items to OpenAI chat-style messages.
+ *
+ * @param {string|Array<object>|undefined} items
+ * @param {string} defaultRole
+ * @returns {Array<object>}
+ */
+function convertOpenAIResponseItemsToMessages (items, defaultRole) {
+  if (typeof items === 'string') return [{ role: defaultRole, content: items }]
+  if (!Array.isArray(items)) return []
+
+  const messages = []
+  for (const item of items) {
+    const message = openAIResponseItemToMessage(item, defaultRole)
+    if (message) messages.push(message)
+  }
+  return messages
+}
+
+/**
+ * Converts one OpenAI Responses API item to an OpenAI chat-style message.
+ *
+ * @param {object} item
+ * @param {string} defaultRole
+ * @returns {object|undefined}
+ */
+function openAIResponseItemToMessage (item, defaultRole) {
+  if (!item || typeof item !== 'object') return
+  const type = item.type ?? 'message'
+
+  if (type === 'message') {
+    const content = openAIResponseContentToMessageContent(item.content)
+    if (content != null) return { role: item.role || defaultRole, content }
+  } else if (type === 'function_call') {
+    return {
+      role: 'assistant',
+      tool_calls: [{
+        id: item.call_id,
+        function: {
+          name: item.name,
+          arguments: stringifyIfNeeded(item.arguments),
+        },
+      }],
+    }
+  } else if (type === 'function_call_output') {
+    return {
+      role: 'tool',
+      tool_call_id: item.call_id,
+      content: stringifyIfNeeded(item.output),
+    }
+  }
+}
+
+/**
+ * Converts OpenAI Responses API content to OpenAI chat-style message content.
+ *
+ * @param {string|Array<string|{type?: string, text?: string, refusal?: string,
+ *   image_url?: string|{url?: string}}>|undefined} content
+ * @returns {string|Array<{type: string, text?: string, image_url?: {url: string}}>|undefined}
+ */
+function openAIResponseContentToMessageContent (content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return
+
+  const parts = []
+  let hasImages = false
+
+  for (const part of content) {
+    if (!part) continue
+    if (typeof part === 'string') {
+      parts.push({ type: 'text', text: part })
+    } else if ((part.type === 'input_text' || part.type === 'output_text' || part.type === 'text') &&
+      typeof part.text === 'string') {
+      parts.push({ type: 'text', text: part.text })
+    } else if (part.type === 'refusal' && typeof part.refusal === 'string') {
+      parts.push({ type: 'text', text: part.refusal })
+    } else if (part.type === 'input_image' || part.type === 'image_url') {
+      const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url ?? part.url
+      if (url) {
+        hasImages = true
+        parts.push({ type: 'image_url', image_url: { url } })
+      }
+    }
+  }
+
+  if (!parts.length) return
+  if (hasImages) return parts
+  return parts.map(part => part.text).join('\n')
+}
+
 module.exports = {
   convertVercelPromptToMessages,
   convertFilePartToImageUrl,
   buildToolCallOutputMessages,
   buildTextOutputMessages,
   buildOutputMessages,
+  convertOpenAIResponseItemsToMessages,
+  openAIResponseContentToMessageContent,
 }
