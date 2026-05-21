@@ -306,8 +306,6 @@ moduleTypes.forEach(({
     }
 
     it('creates cypress.step spans for each command', async () => {
-      receiver.setInfoResponse({ endpoints: [] })
-
       const envVars = getCiVisEvpProxyConfig(receiver.port)
       const specToRun = 'cypress/e2e/commands.cy.js'
 
@@ -329,7 +327,7 @@ moduleTypes.forEach(({
 
       const receiverPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
-        ({ url }) => url === '/v0.4/traces',
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const allSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
 
