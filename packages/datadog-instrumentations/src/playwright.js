@@ -956,10 +956,6 @@ function deferEfdRetryGroups (testGroups) {
 function prepareDispatcherRun (dispatcher, args) {
   let testGroups = args[0]
 
-  if (!testGroups) {
-    return
-  }
-
   // Filter out disabled tests from testGroups before they get scheduled,
   // unless they have attemptToFix (in which case they should still run and be retried)
   if (isTestManagementTestsEnabled) {
@@ -1709,6 +1705,7 @@ function prepareProcessHostStartRunner (processHost) {
     ...processHost._extraEnv,
     // Used to detect that we're in a playwright worker
     DD_PLAYWRIGHT_WORKER: '1',
+    // Worker processes load their own instrumentation instance, so pass the parent-computed config root.
     DD_PLAYWRIGHT_WORKER_ROOT_DIR: rootDir,
   }
 }
