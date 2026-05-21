@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 
@@ -102,7 +103,7 @@ withVersions('multer', 'multer', version => {
 
         assert.ok(payload.req)
         assert.ok(payload.res)
-        assert.ok(Object.hasOwn(store, 'span'))
+        assert.ok(Object.hasOwn(store, 'span'), `Available keys: ${inspect(Object.keys(store))}`)
 
         sinon.assert.calledOnceWithExactly(middlewareProcessBodyStub, formData.get('key'))
         assert.strictEqual(res.data, 'DONE')

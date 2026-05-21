@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const context = describe
@@ -69,8 +70,12 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
     await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
 
-    assert.ok(!(agentProxyCiVisibilityExporter.getUncodedTraces()).includes(trace))
-    assert.ok(!(agentProxyCiVisibilityExporter._coverageBuffer).includes(coverage))
+    const uncodedTraces = agentProxyCiVisibilityExporter.getUncodedTraces()
+    assert.ok(!uncodedTraces.includes(trace), `Got: ${inspect(uncodedTraces)}`)
+    assert.ok(
+      !(agentProxyCiVisibilityExporter._coverageBuffer).includes(coverage),
+      `Got: ${inspect(agentProxyCiVisibilityExporter._coverageBuffer)}`
+    )
     // old traces and coverages are exported at once
     sinon.assert.calledWith(agentProxyCiVisibilityExporter.export, trace)
     sinon.assert.calledWith(agentProxyCiVisibilityExporter.exportCoverage, coverage)

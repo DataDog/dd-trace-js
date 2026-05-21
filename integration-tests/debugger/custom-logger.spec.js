@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -21,8 +22,11 @@ describe('Dynamic Instrumentation', function () {
 
   it('should log to the custom logger from the worker thread', function (done) {
     t.agent.on('debugger-input', () => {
-      assert(stdio.some((line) => line.startsWith('[CUSTOM LOGGER][DEBUG]: [debugger]')))
-      assert(stdio.some((line) => line.startsWith('[CUSTOM LOGGER][DEBUG]: [debugger:devtools_client]')))
+      assert(stdio.some((line) => line.startsWith('[CUSTOM LOGGER][DEBUG]: [debugger]')), `Got: ${inspect(stdio)}`)
+      assert(
+        stdio.some((line) => line.startsWith('[CUSTOM LOGGER][DEBUG]: [debugger:devtools_client]')),
+        `Got: ${inspect(stdio)}`
+      )
       assert.strictEqual(stderr.length, 0)
       done()
     })
