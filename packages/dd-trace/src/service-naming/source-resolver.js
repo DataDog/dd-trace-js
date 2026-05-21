@@ -2,13 +2,6 @@
 
 const { SVC_SRC_KEY } = require('../constants')
 
-/**
- * Symbol used to mark a span with the service name an integration intends to
- * claim. Written by {@link TracingPlugin#stampIntegrationService} (and
- * {@link TracingPlugin#setServiceName}) and read at finish time by
- * {@link resolveServiceSource} to detect whether the current `service.name`
- * was overridden by user code.
- */
 const INTEGRATION_SERVICE = Symbol('dd.integrationService')
 const MANUAL = 'm'
 
@@ -22,8 +15,6 @@ const MANUAL = 'm'
  * - service.name equals the tracer default → clear any svc_src
  * - integration marker exists and equals current service.name → integration
  *   owns the value; leave the source label the integration set
- * - no marker but svc_src already exists → preserve legacy integration
- *   attribution from callers that set both tags directly
  * - otherwise → user wrote (no marker) or overrode the integration value;
  *   stamp 'm'
  *
@@ -43,7 +34,7 @@ function resolveServiceSource (span, tracerService) {
 
   const marker = span[INTEGRATION_SERVICE]
 
-  if (marker === currentService || (marker === undefined && existingSource !== undefined)) {
+  if (marker === currentService) {
     return
   }
 

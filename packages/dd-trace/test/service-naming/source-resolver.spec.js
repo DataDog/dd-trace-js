@@ -38,14 +38,6 @@ describe('service-naming/source-resolver', () => {
       assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
     })
 
-    it('keeps an existing integration source when no marker was recorded', () => {
-      const span = makeSpan({ 'service.name': 'next', [SVC_SRC_KEY]: 'next' })
-
-      resolveServiceSource(span, TRACER_SERVICE)
-
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'next')
-    })
-
     it('marks manual when user overrides an integration value', () => {
       const span = makeSpan({ 'service.name': 'my-app', [SVC_SRC_KEY]: 'kafka' }, 'kafka-broker')
 
