@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   sandboxCwd,
@@ -31,7 +32,7 @@ describe('recursion regression test', () => {
     it('does not cause a recursion error when many commands are sent', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.equal(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
       })
 

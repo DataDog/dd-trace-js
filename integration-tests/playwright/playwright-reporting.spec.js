@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
 const {
@@ -254,9 +255,15 @@ versions.forEach((version) => {
 
             const stepEvents = events.filter(event => event.type === 'span')
 
-            assert.ok(testSessionEvent.content.resource.includes('test_session.playwright test'))
+            assert.ok(
+              testSessionEvent.content.resource.includes('test_session.playwright test'),
+              `Got: ${inspect(testSessionEvent.content.resource)}`
+            )
             assert.strictEqual(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-            assert.ok(testModuleEvent.content.resource.includes('test_module.playwright test'))
+            assert.ok(
+              testModuleEvent.content.resource.includes('test_module.playwright test'),
+              `Got: ${inspect(testModuleEvent.content.resource)}`
+            )
             assert.strictEqual(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'browser')
             assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'browser')
@@ -280,7 +287,7 @@ versions.forEach((version) => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.ok(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
-              assert.ok(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
+              assert.match(testSuiteEvent.content.meta[TEST_SOURCE_FILE], /-test\.js$/)
               assert.strictEqual(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
               assert.ok(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
@@ -339,7 +346,10 @@ versions.forEach((version) => {
 
             stepEvents.forEach(stepEvent => {
               assert.strictEqual(stepEvent.content.name, 'playwright.step')
-              assert.ok(Object.hasOwn(stepEvent.content.meta, 'playwright.step'))
+              assert.ok(
+                Object.hasOwn(stepEvent.content.meta, 'playwright.step'),
+                `Available keys: ${inspect(Object.keys(stepEvent.content.meta))}`
+              )
             })
             const annotatedTest = testEvents.find(test =>
               test.content.resource.endsWith('should work with annotated tests')
@@ -569,7 +579,7 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-            assert.ok(metadataDicts.length > 0)
+            assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
               assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
               assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')

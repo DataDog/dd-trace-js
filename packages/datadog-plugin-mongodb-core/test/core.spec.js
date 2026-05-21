@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const ddpv = require('mocha/package.json').version
@@ -565,7 +566,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              assert.ok(comment.includes(`traceparent='00-${traceId}-${spanId}-01'`))
+              assert.ok(comment.includes(`traceparent='00-${traceId}-${spanId}-01'`), `Got: ${inspect(comment)}`)
               assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
             })
             .then(done)

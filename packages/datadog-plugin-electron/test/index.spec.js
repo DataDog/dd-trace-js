@@ -33,7 +33,11 @@ describe('Plugin', () => {
     const startApp = done => {
       const electron = require(`../../../versions/electron@${version}`).get()
 
-      child = proc.spawn(electron, [join(__dirname, 'app', 'main')], {
+      const args = [join(__dirname, 'app', 'main')]
+      if (process.platform === 'linux') {
+        args.push('--no-sandbox', '--disable-gpu')
+      }
+      child = proc.spawn(electron, args, {
         env: {
           ...process.env,
           NODE_OPTIONS: `-r ${join(__dirname, 'tracer')}`,
@@ -50,7 +54,10 @@ describe('Plugin', () => {
     describe('electron', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load('electron'))
-        beforeEach(done => startApp(done))
+        beforeEach(function (done) {
+          this.timeout(30_000)
+          startApp(done)
+        })
 
         afterEach(() => agent.close({ ritmReset: false }))
         afterEach(done => {
@@ -109,7 +116,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when receiving', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.receive')
+              assert.ok(span, 'expected electron.main.receive span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -132,6 +140,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.main.handle')
+              assert.ok(span, 'expected electron.main.handle span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -152,7 +161,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.send')
+              assert.ok(span, 'expected electron.main.send span')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.main.send')
@@ -172,7 +182,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for renderer IPC when receiving', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.renderer.receive')
+              assert.ok(span, 'expected electron.renderer.receive span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -194,7 +205,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for renderer IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.renderer.send')
+              assert.ok(span, 'expected electron.renderer.send span')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.renderer.send')

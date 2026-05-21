@@ -67,7 +67,7 @@ async function assertPrerequisites () {
   for (const name of externalNames) {
     for (const inst of externals[name]) {
       // eslint-disable-next-line no-await-in-loop
-      await assertInstrumentation(inst, true)
+      await assertInstrumentation(inst, true, name)
     }
   }
 
@@ -77,9 +77,13 @@ async function assertPrerequisites () {
 /**
  * @param {object} instrumentation
  * @param {boolean} external
+ * @param {string} [pluginName] The plugin key the external entry belongs to. Same-name externals (e.g. the aerospike
+ *   externals entry that mirrors the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not
+ *   force every major to install on every job.
  */
-async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE && !external
+async function assertInstrumentation (instrumentation, external, pluginName) {
+  const honourEnvRange = !external || instrumentation.name === pluginName
+  const versions = process.env.PACKAGE_VERSION_RANGE && honourEnvRange
     ? [process.env.PACKAGE_VERSION_RANGE]
     : (instrumentation.versions || [])
 
@@ -140,15 +144,13 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     dependencies,
   }
 
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces',
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**'],
-      }
+  if (name === 'aerospike') {
+    pkg.installConfig = {
+      hoistingLimits: 'workspaces',
+    }
+  } else if (!external) {
+    pkg.workspaces = {
+      nohoist: ['**/**'],
     }
   }
 

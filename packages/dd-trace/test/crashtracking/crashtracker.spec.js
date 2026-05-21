@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -164,7 +165,7 @@ describeNotWindows('crashtracker', () => {
       const metadata = binding.init.firstCall.args[2]
 
       assert.ok(metadata)
-      assert.ok(Array.isArray(metadata.tags))
+      assert.ok(Array.isArray(metadata.tags), `Expected array, got ${inspect(metadata.tags)}`)
 
       // Check that process tags are included
       const hasEntrypointType = metadata.tags.some(tag => tag.startsWith('entrypoint.type:'))
@@ -200,7 +201,7 @@ describeNotWindows('crashtracker', () => {
       const metadata = binding.updateMetadata.firstCall.args[0]
 
       assert.ok(metadata)
-      assert.ok(Array.isArray(metadata.tags))
+      assert.ok(Array.isArray(metadata.tags), `Expected array, got ${inspect(metadata.tags)}`)
 
       // Verify process tags are in the updated metadata
       const hasProcessTags = metadata.tags.some(tag => tag.startsWith('entrypoint.'))

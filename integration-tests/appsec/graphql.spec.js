@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
+const { inspect } = require('node:util')
 const axios = require('axios')
 
 const {
@@ -40,12 +41,15 @@ describe('graphql', () => {
   it('should not report any attack', async () => {
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-      assert.ok(Array.isArray(payload))
+      assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
       assert.strictEqual(payload[1][0].name, 'web.request')
       assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
-      assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
+      assert.ok(
+        Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'),
+        `Available keys: ${inspect(Object.keys(payload[1][0].metrics))}`
+      )
       assert.ok(!('_dd.appsec.event' in payload[1][0].meta))
       assert.ok(!('_dd.appsec.json' in payload[1][0].meta))
     })
@@ -102,14 +106,20 @@ describe('graphql', () => {
 
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-      assert.ok(Array.isArray(payload))
+      assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
       assert.strictEqual(payload[1][0].name, 'web.request')
       assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
-      assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
+      assert.ok(
+        Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'),
+        `Available keys: ${inspect(Object.keys(payload[1][0].metrics))}`
+      )
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
-      assert.ok(Object.hasOwn(payload[1][0].meta, '_dd.appsec.json'))
+      assert.ok(
+        Object.hasOwn(payload[1][0].meta, '_dd.appsec.json'),
+        `Available keys: ${inspect(Object.keys(payload[1][0].meta))}`
+      )
       assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 

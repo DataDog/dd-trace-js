@@ -13,14 +13,14 @@ describe('fs instrumentation', () => {
   it('require node:fs should work', () => {
     return agent.load('node:fs', undefined, { flushInterval: 1 }).then(() => {
       const fs = require('node:fs')
-      assert(fs !== undefined)
+      assert.notStrictEqual(fs, undefined)
     })
   })
 
   it('require fs should work', () => {
     return agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       const fs = require('fs')
-      assert(fs !== undefined)
+      assert.notStrictEqual(fs, undefined)
     })
   })
 })

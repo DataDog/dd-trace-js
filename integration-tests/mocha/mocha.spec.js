@@ -5,6 +5,7 @@ const fs = require('fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('path')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -788,11 +789,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[COMPONENT], 'mocha')
             assert.strictEqual(test.meta[TEST_STATUS], 'fail')
             assert.strictEqual(test.meta[ERROR_TYPE], 'TypeError')
-            assert.ok(
-              test.meta[ERROR_MESSAGE]
-                .includes('mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":')
-            )
-            assert.match(test.meta[ERROR_MESSAGE], /Cannot set /)
+            const errorMessage = test.meta[ERROR_MESSAGE]
+            const expectedHookPrefix =
+              'mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":'
+            assert.ok(errorMessage.includes(expectedHookPrefix), `Got: ${inspect(errorMessage)}`)
+            assert.match(errorMessage, /Cannot set /)
             assert.ok(test.meta[ERROR_STACK])
           })
 
@@ -1181,7 +1182,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.ok(suite, `Expected suite event for ${suiteFile}`)
                 assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
               })
-              tests.forEach(test => assert.ok(suiteFiles.includes(test.meta[TEST_SUITE])))
+              tests.forEach(test => assert.ok(
+                suiteFiles.includes(test.meta[TEST_SUITE]),
+                `Got: ${inspect(suiteFiles)}`
+              ))
             })
 
           childProcess = exec(
@@ -1233,7 +1237,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.ok(suite, `Expected suite event for ${suiteFile}`)
                 assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
               })
-              tests.forEach(test => assert.ok(suiteFiles.includes(test.meta[TEST_SUITE])))
+              tests.forEach(test => assert.ok(
+                suiteFiles.includes(test.meta[TEST_SUITE]),
+                `Got: ${inspect(suiteFiles)}`
+              ))
             })
 
           childProcess = exec(
@@ -4085,7 +4092,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           'nyc output does not match the reported coverage (no --all flag)')
 
         eventsPromise.then(() => {
-          assert.ok(codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles)
+          assert.ok(
+            codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles,
+            `Expected ${codeCoverageWithoutUntestedFiles} > ${codeCoverageWithUntestedFiles}`
+          )
           done()
         }).catch(done)
       })
@@ -4829,7 +4839,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const atfTests = tests.filter(
               t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
             )
-            assert.ok(atfTests.length > 0)
+            assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
             for (const test of atfTests) {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
@@ -5491,7 +5501,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.ok(tests.length > 0)
+            assert.ok(tests.length > 0, `Expected ${tests.length} > 0`)
             const suiteEvents = events.filter(event => event.type === 'test_suite_end')
             assert.strictEqual(suiteEvents.length, 2, 'Expected exactly 2 suites to be reported')
             // Verify that tests have different runtime IDs, confirming parallel execution in different processes
@@ -5548,7 +5558,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-        assert.ok(metadataDicts.length > 0)
+        assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
         metadataDicts.forEach(metadata => {
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
@@ -6030,10 +6040,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const coverageReport = payloads[0]
 
-          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+          assert.ok(
+            coverageReport.headers['content-type'].includes('multipart/form-data'),
+            `Got: ${inspect(coverageReport.headers['content-type'])}`
+          )
 
           assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-          assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+          assert.ok(
+            coverageReport.coverageFile.content.includes('SF:'),
+            `Got: ${inspect(coverageReport.coverageFile.content)}`
+          ) // LCOV format
 
           assert.strictEqual(coverageReport.eventFile.name, 'event')
           assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')

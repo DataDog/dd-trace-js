@@ -19,9 +19,10 @@ const compiler = {
       // TODO: Figure out ESBuild `createRequire` issue and remove this hack.
       const oxc = runtimeRequire(['oxc', 'parser'].join('-'))
 
-      compiler.parse = (sourceText, options) => {
+      compiler.parse = (sourceText, { range, isModule } = {}) => {
         const { program, errors } = oxc.parseSync('index.js', sourceText, {
-          ...options,
+          range,
+          sourceType: isModule ? 'module' : 'script',
           preserveParens: false,
         })
 
