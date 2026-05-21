@@ -251,3 +251,8 @@ updates:
       test-versions:
         patterns:
           - "*"
+
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "weekly"

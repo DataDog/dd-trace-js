@@ -40,10 +40,60 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * - Universal Flag Configuration object
    */
   _setConfiguration (ufc) {
+    this._ffeConfig = ufc
     if (typeof this.setConfiguration === 'function') {
       this.setConfiguration(ufc)
     }
     log.debug('%s provider configuration updated', this.constructor.name)
+  }
+
+  async resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
+    const result = await super.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
+    return this._normalizeResolution(flagKey, defaultValue, result)
+  }
+
+  async resolveStringEvaluation (flagKey, defaultValue, context, logger) {
+    const result = await super.resolveStringEvaluation(flagKey, defaultValue, context, logger)
+    return this._normalizeResolution(flagKey, defaultValue, result)
+  }
+
+  async resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
+    const result = await super.resolveNumberEvaluation(flagKey, defaultValue, context, logger)
+    return this._normalizeResolution(flagKey, defaultValue, result)
+  }
+
+  async resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
+    const result = await super.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
+    return this._normalizeResolution(flagKey, defaultValue, result)
+  }
+
+  _normalizeResolution (flagKey, defaultValue, result) {
+    if (result?.errorCode === 'FLAG_NOT_FOUND') {
+      const { errorCode, ...withoutError } = result
+      return { ...withoutError, value: defaultValue, reason: 'DEFAULT' }
+    }
+
+    if (result?.reason !== 'TARGETING_MATCH') {
+      return result
+    }
+
+    const allocationKey = result.flagMetadata?.allocationKey
+    const allocation = this._ffeConfig?.flags?.[flagKey]?.allocations?.find(item => item.key === allocationKey)
+    if (!allocation) {
+      return result
+    }
+
+    if (allocation.rules?.length) {
+      return result
+    }
+
+    const flag = this._ffeConfig.flags[flagKey]
+    const selectedSplit = allocation.splits?.find(split => {
+      const variant = flag.variations?.[split.variationKey]
+      return variant?.key === result.variant || split.variationKey === result.variant
+    })
+    const reason = selectedSplit?.shards?.length ? 'SPLIT' : 'STATIC'
+    return { ...result, reason }
   }
 }
 
