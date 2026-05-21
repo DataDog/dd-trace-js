@@ -73,15 +73,19 @@ jobs:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   playwright-image:
-    name: Ensure Playwright Docker images
+    strategy:
+      fail-fast: false
+      matrix:
+        playwright-version: [oldest, latest]
+    name: Ensure Playwright Docker image (${{ matrix.playwright-version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     outputs:
+      # Both matrix jobs set this to the same value, so the last-writer-wins
+      # behaviour of matrix outputs is safe here.
       images: ${{ steps.versions.outputs.images }}
-      latest: ${{ steps.versions.outputs.latest }}
-      oldest: ${{ steps.versions.outputs.oldest }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Determine versions
@@ -91,30 +95,18 @@ jobs:
           OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
           IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST" "$BASE" "$OLDEST")
+          VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
-          echo "latest=$LATEST" >> $GITHUB_OUTPUT
-          echo "oldest=$OLDEST" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Ensure latest image
+      - name: Ensure image
         env:
-          VERSION: ${{ steps.versions.outputs.latest }}
-        run: |
-          IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${VERSION}"
-          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
-            echo "Image ${IMAGE} already exists, skipping build"
-          else
-            docker build --build-arg PLAYWRIGHT_VERSION="${VERSION}" \
-              -t "${IMAGE}" .github/playwright
-            docker push "${IMAGE}"
-          fi
-      - name: Ensure oldest image
-        env:
-          VERSION: ${{ steps.versions.outputs.oldest }}
+          VERSION: ${{ steps.versions.outputs.version }}
         run: |
           IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${VERSION}"
           if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
