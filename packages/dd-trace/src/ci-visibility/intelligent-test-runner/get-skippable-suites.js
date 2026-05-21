@@ -202,14 +202,14 @@ function fetchFromApi ({
             suite,
             name,
             coverage: suiteCoverage,
-            _missing_line_code_coverage: missingLineCodeCoverage,
+            _is_missing_line_code_coverage: isMissingLineCodeCoverage,
           },
         } of skippableItems) {
           const hasSuiteCoverage = !!suiteCoverage && Object.keys(suiteCoverage).length > 0
           mergeCoverage(coverage, suiteCoverage)
 
           if (isCodeCoverageEnabled && !hasCoverage && !hasSuiteCoverage) continue
-          if (isCodeCoverageEnabled && missingLineCodeCoverage) continue
+          if (isCodeCoverageEnabled && isMissingLineCodeCoverage) continue
 
           skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
         }

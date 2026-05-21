@@ -95,14 +95,14 @@ const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
       type: 'suite',
       attributes: {
         suite: 'suite1.spec.js',
-        _missing_line_code_coverage: true,
+        _is_missing_line_code_coverage: true,
       },
     },
     {
       type: 'suite',
       attributes: {
         suite: 'suite2.spec.js',
-        _missing_line_code_coverage: false,
+        _is_missing_line_code_coverage: false,
       },
     },
   ],
