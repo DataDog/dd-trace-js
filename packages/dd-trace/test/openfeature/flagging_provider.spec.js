@@ -17,6 +17,8 @@ describe('FlaggingProvider', () => {
   let channelStub
   let mockEvalMetricsHook
   let mockEvalMetricsHookClass
+  let mockSpanEnrichmentHook
+  let mockSpanEnrichmentHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -52,12 +54,18 @@ describe('FlaggingProvider', () => {
     }
     mockEvalMetricsHookClass = sinon.stub().returns(mockEvalMetricsHook)
 
+    mockSpanEnrichmentHook = {
+      destroy: sinon.spy(),
+    }
+    mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
       './eval-metrics-hook': mockEvalMetricsHookClass,
+      './span-enrichment-hook': mockSpanEnrichmentHookClass,
     })
   })
 
@@ -111,11 +119,28 @@ describe('FlaggingProvider', () => {
       sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
     })
 
-    it('should register EvalMetricsHook as a hook', () => {
+    it('should create SpanEnrichmentHook with tracer', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledOnceWithExactly(mockSpanEnrichmentHookClass, mockTracer)
+    })
+
+    it('should register EvalMetricsHook and SpanEnrichmentHook as hooks', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks.length, 1)
+      assert.strictEqual(provider.hooks.length, 2)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+      assert.strictEqual(provider.hooks[1], mockSpanEnrichmentHook)
+    })
+  })
+
+  describe('onClose', () => {
+    it('should call destroy on SpanEnrichmentHook', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
     })
   })
 
