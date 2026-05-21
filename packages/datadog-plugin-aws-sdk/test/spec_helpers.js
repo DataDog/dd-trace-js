@@ -3,6 +3,7 @@
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../version')
 
+const AWS_SDK_V2_RANGE = NODE_MAJOR === 18 ? '<2.1693.0' : '*'
 const AWS_SDK_V3_RANGE = NODE_MAJOR === 18 ? '3.0.0' : '>3.0.0'
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
@@ -26,7 +27,7 @@ function withAwsSdkV2Versions (range, cb) {
     range = undefined
   }
 
-  withVersions('aws-sdk', ['aws-sdk'], range, cb)
+  withVersions('aws-sdk', ['aws-sdk'], getAwsSdkV2Range(range), cb)
 }
 
 /**
@@ -56,6 +57,14 @@ function withAwsSdkVersions (range, cb) {
 
   withAwsSdkV2Versions(range, cb)
   withAwsSdkV3Versions(range, cb)
+}
+
+/**
+ * @param {string|undefined} range
+ * @returns {string}
+ */
+function getAwsSdkV2Range (range) {
+  return range === undefined ? AWS_SDK_V2_RANGE : `${range} ${AWS_SDK_V2_RANGE}`
 }
 
 /**
