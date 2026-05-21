@@ -91,10 +91,11 @@ jobs:
       - name: Determine versions
         id: versions
         run: |
-          LATEST=$(node -p "require('./integration-tests/playwright/versions').tag(require('./integration-tests/playwright/versions').latest)")
-          OLDEST=$(node -p "require('./integration-tests/playwright/versions').tag(require('./integration-tests/playwright/versions').oldest)")
+          LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
+          OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
+          DOCKER_HASH=$(sha256sum .github/playwright/Dockerfile | cut -c1-8)
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
-          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST" "$BASE" "$OLDEST")
+          IMAGES=$(printf '{"latest":"%s:%s-%s","oldest":"%s:%s-%s"}' "$BASE" "$LATEST" "$DOCKER_HASH" "$BASE" "$OLDEST" "$DOCKER_HASH")
           VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
