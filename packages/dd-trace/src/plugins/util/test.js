@@ -1220,14 +1220,17 @@ function getLocalSuiteSet (localSuites) {
   return localSuiteSet
 }
 
-function hasSkippableSuitesOutsideRun (skippableSuites, localSuites) {
+function getLocalSkippableSuites (skippableSuites, localSuites) {
   const localSuiteSet = getLocalSuiteSet(localSuites)
+  const localSkippableSuites = []
+
   for (const suite of skippableSuites || []) {
-    if (!localSuiteSet.has(suite)) {
-      return true
+    if (localSuiteSet.has(suite)) {
+      localSkippableSuites.push(suite)
     }
   }
-  return false
+
+  return localSkippableSuites
 }
 
 /**
@@ -1247,8 +1250,7 @@ function getSafeSkippableSuites ({
 }) {
   if (!isCodeCoverageEnabled) return skippableSuites || []
   if (!hasSkippedCoverage(skippedCoverage)) return []
-  if (hasSkippableSuitesOutsideRun(skippableSuites, localSuites)) return []
-  return skippableSuites || []
+  return getLocalSkippableSuites(skippableSuites, localSuites)
 }
 
 /**

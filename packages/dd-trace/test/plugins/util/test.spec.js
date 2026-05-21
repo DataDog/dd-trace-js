@@ -41,6 +41,7 @@ const {
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getSafeSkippableSuites,
   getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
 
@@ -208,6 +209,44 @@ describe('getTestSuitePath', () => {
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     assert.strictEqual(testSuitePath, sourceRoot)
+  })
+})
+
+describe('getSafeSkippableSuites', () => {
+  it('returns all skippable suites when code coverage is disabled', () => {
+    assert.deepStrictEqual(
+      getSafeSkippableSuites({
+        skippableSuites: ['suite-a.js', 'suite-b.js'],
+        skippedCoverage: {},
+        localSuites: ['suite-a.js'],
+        isCodeCoverageEnabled: false,
+      }),
+      ['suite-a.js', 'suite-b.js']
+    )
+  })
+
+  it('returns no skippable suites when code coverage is enabled without skipped coverage', () => {
+    assert.deepStrictEqual(
+      getSafeSkippableSuites({
+        skippableSuites: ['suite-a.js'],
+        skippedCoverage: {},
+        localSuites: ['suite-a.js'],
+        isCodeCoverageEnabled: true,
+      }),
+      []
+    )
+  })
+
+  it('returns only local skippable suites when code coverage is enabled', () => {
+    assert.deepStrictEqual(
+      getSafeSkippableSuites({
+        skippableSuites: ['suite-a.js', 'suite-outside-run.js', 'suite-b.js'],
+        skippedCoverage: { hash: 'bitmap' },
+        localSuites: ['suite-a.js', 'suite-b.js'],
+        isCodeCoverageEnabled: true,
+      }),
+      ['suite-a.js', 'suite-b.js']
+    )
   })
 })
 
@@ -946,8 +985,8 @@ describe('coverage utils', () => {
 
       assert.deepStrictEqual(coveredFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
       assert.deepStrictEqual(executableFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
-      assert.ok(coveredFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)))
-      assert.ok(executableFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)))
+      assert.ok(coveredFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)), inspect(coveredFiles))
+      assert.ok(executableFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)), inspect(executableFiles))
     })
 
     it('calculates total coverage using skipped-suite coverage bitmaps', () => {

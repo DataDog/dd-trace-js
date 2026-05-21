@@ -114,6 +114,7 @@ let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
+let repositoryRoot
 let activeTestSuiteAbsolutePath
 let isConsoleErrorWrapped = false
 
@@ -1131,16 +1132,29 @@ function getTestEnvironment (pkg, jestVersion) {
   return getWrappedEnvironment(pkg, jestVersion)
 }
 
+function getRepositoryRootFromConfig (config, fallbackRootDir) {
+  return config?.testEnvironmentOptions?._ddRepositoryRoot || repositoryRoot || fallbackRootDir || process.cwd()
+}
+
+function getRepositoryRootFromContexts (contexts, fallbackRootDir) {
+  const firstContext = contexts?.[Symbol.iterator]?.().next().value
+  return getRepositoryRootFromConfig(firstContext?.config, fallbackRootDir)
+}
+
+function getRepositoryRootFromTest (test, fallbackRootDir) {
+  return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
-  const repositoryRoot = rootDir || process.cwd()
-  const localSuites = originalTests.map(test => getTestSuitePath(test.path, repositoryRoot))
+  const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
+  const localSuites = originalTests.map(test => getTestSuitePath(test.path, suitePathRoot))
   const safeSkippableSuites = getSafeSkippableSuites({
     skippableSuites,
     skippedCoverage: skippableSuitesCoverage,
     localSuites,
     isCodeCoverageEnabled,
   })
-  const jestSuitesToRun = getJestSuitesToRun(safeSkippableSuites, originalTests, repositoryRoot)
+  const jestSuitesToRun = getJestSuitesToRun(safeSkippableSuites, originalTests, suitePathRoot)
   hasFilteredSkippableSuites = true
   log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
@@ -1173,8 +1187,7 @@ function reporterDispatcherWrapper (reporterDispatcherPackage) {
   const ReporterDispatcher = reporterDispatcherPackage.default ?? reporterDispatcherPackage
   if (ReporterDispatcher?.prototype?.onRunComplete) {
     shimmer.wrap(ReporterDispatcher.prototype, 'onRunComplete', onRunComplete => function (contexts, results) {
-      const firstContext = contexts?.[Symbol.iterator]?.().next().value
-      applySkippedCoverageToJestCoverageMap(results?.coverageMap, firstContext?.config?.rootDir)
+      applySkippedCoverageToJestCoverageMap(results?.coverageMap, getRepositoryRootFromContexts(contexts))
       return onRunComplete.apply(this, arguments)
     })
   }
@@ -1192,7 +1205,7 @@ function wrapCoverageReporter (CoverageReporter) {
     shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
       const result = addUntestedFiles.apply(this, args)
       const applySkippedCoverage = () => {
-        applySkippedCoverageToJestCoverageMap(this._coverageMap, this._globalConfig?.rootDir)
+        applySkippedCoverageToJestCoverageMap(this._coverageMap, repositoryRoot || this._globalConfig?.rootDir)
       }
       if (result?.then) {
         return result.then(value => {
@@ -1206,8 +1219,7 @@ function wrapCoverageReporter (CoverageReporter) {
   }
 
   shimmer.wrap(CoverageReporter.prototype, 'onRunComplete', onRunComplete => function (contexts, results) {
-    const firstContext = contexts?.[Symbol.iterator]?.().next().value
-    const rootDir = firstContext?.config?.rootDir || this._globalConfig?.rootDir
+    const rootDir = getRepositoryRootFromContexts(contexts, this._globalConfig?.rootDir)
     const coverageMap = results?.coverageMap || this._coverageMap
     applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
     return onRunComplete.apply(this, arguments)
@@ -1268,7 +1280,9 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
     const [{ rootDir, shard }] = arguments
 
     if (isKnownTestsEnabled) {
-      const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
+      const projectSuites = testPaths.tests.map(test => {
+        return getTestSuitePath(test.path, getRepositoryRootFromTest(test, test.context.config.rootDir))
+      })
 
       // If the `jest` key does not exist in the known tests response, we consider the Early Flake detection faulty.
       const isFaulty = !knownTests?.jest ||
@@ -1447,15 +1461,15 @@ function getCliWrapper (isNewJestVersion) {
 
       if (isUserCodeCoverageEnabled) {
         try {
-          const rootDir = result.globalConfig?.rootDir || process.cwd()
-          applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
+          const coverageRootDir = repositoryRoot || result.globalConfig?.rootDir || process.cwd()
+          applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
           testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
             coverageMap,
             undefined,
-            rootDir
+            coverageRootDir
           )
           testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
-            filename: getTestSuitePath(filename, rootDir),
+            filename: getTestSuitePath(filename, coverageRootDir),
             bitmap,
           }))
         } catch {
@@ -1904,6 +1918,8 @@ addHook({
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
   testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+  repositoryRoot = configs.find(config => config.testEnvironmentOptions?._ddRepositoryRoot)
+    ?.testEnvironmentOptions._ddRepositoryRoot || readConfigsResult.globalConfig.rootDir || process.cwd()
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   for (const config of configs) {

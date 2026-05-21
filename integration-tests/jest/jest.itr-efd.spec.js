@@ -890,6 +890,71 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('skips repository-relative suites when jest rootDir is a subproject', async () => {
+      const suite = 'ci-visibility/subproject/subproject-test.js'
+      const outsideRunSuite = 'ci-visibility/subproject/not-in-this-jest-run.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([
+        {
+          type: 'suite',
+          attributes: {
+            suite,
+            coverage: {
+              [hashCoverageFilePath(suite)]: getLinesBitmapBase64(1, 8),
+              [hashCoverageFilePath('ci-visibility/subproject/dependency.js')]: getLinesBitmapBase64(1, 3),
+            },
+          },
+        },
+        {
+          type: 'suite',
+          attributes: {
+            suite: outsideRunSuite,
+            coverage: {
+              [hashCoverageFilePath(outsideRunSuite)]: getLinesBitmapBase64(1, 8),
+            },
+          },
+        },
+      ])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const skippedSuite = events.find(event => {
+            return event.type === 'test_suite_end' && event.content.resource === `test_suite.${suite}`
+          }).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+        })
+
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PROJECTS: JSON.stringify([{
+              testMatch: ['**/subproject-test*'],
+              testEnvironment: 'node',
+              testRunner: 'jest-circus/runner',
+            }]),
+          },
+        }
+      )
+
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('report code coverage with all mocked files', async () => {
       const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
 
