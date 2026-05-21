@@ -128,7 +128,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // Wrap the default field resolver + walk the schema to wrap explicit field
     // resolvers. Done ONCE per execute (patchedResolvers/patchedTypes WeakSets
     // make this idempotent across calls that share a schema).
-    const defaultFieldResolver = getDefaultFieldResolver()
     setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
 
     const schema = args.schema
@@ -149,7 +148,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       //      against this source string to detect hardcoded-literal injection.
       source: docSource,
       config: this.config,
-      fields: Object.create(null),
+      fields: new Map(),
       abortController: new AbortController(),
       executeSpan: span,
       plugin: this,
@@ -231,32 +230,31 @@ class GraphQLExecutePlugin extends TracingPlugin {
   // hot when each span finishes — in benchmarks the batch pattern produced a
   // bursty encoding stall on collapse-off.
   _startResolveSpan (field, rootCtx, executeSpan, startTime) {
-    const { info, collapsedKey } = field
+    const { fieldNode, fieldName, returnType, variableValues, collapsedKey } = field
 
-    const parent = getParentField(rootCtx, collapsedKey)
+    const parent = getParentField(rootCtx, field)
     const childOf = parent?.span || executeSpan
 
     const document = rootCtx.source
-    const fieldNode = info.fieldNodes?.[0]
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
-      resource: `${info.fieldName}:${info.returnType}`,
+      resource: `${fieldName}:${returnType}`,
       childOf,
       type: 'graphql',
       startTime,
       meta: {
-        'graphql.field.name': info.fieldName,
+        'graphql.field.name': fieldName,
         'graphql.field.path': collapsedKey,
-        'graphql.field.type': info.returnType?.name,
+        'graphql.field.type': returnType?.name,
         'graphql.source': source,
       },
     }, false)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(info.variableValues)
+      const variables = this.config.variables(variableValues)
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
           const name = arg.value.name.value
@@ -275,7 +273,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     if (this.config.hooks.resolve) {
       this.config.hooks.resolve(span, {
-        fieldName: field.info.fieldName,
+        fieldName: field.fieldName,
         path: field.pathString,
         error: error || null,
         result: result instanceof Promise ? undefined : result,
@@ -300,31 +298,58 @@ function wrapResolve (resolve) {
     const rootCtx = contexts.get(contextValue)
     if (!rootCtx) return resolve.apply(this, arguments)
 
-    const path = pathToArray(info?.path)
-    const pathString = path.join('.')
-    const collapsedKey = rootCtx.config.collapse ? buildCollapsedPathString(path) : pathString
+    const infoPath = info?.path
+    const config = rootCtx.config
 
-    // Depth filter: measured against the effective (collapsed) path, so a
-    // collapsed segment like '*' counts toward depth — matches the previous
-    // resolve plugin's behavior exactly (e.g. with depth=2, 'friends.*.name'
-    // is depth 3 and gets filtered, but 'human.name' is depth 2 and passes).
-    if (!shouldInstrument(rootCtx.config, path)) return resolve.apply(this, arguments)
+    // Depth check directly on the linked-list — no array allocation needed.
+    // Moved before the Map lookup so depth-filtered resolvers bail immediately.
+    if (!shouldInstrumentNode(config, infoPath)) return resolve.apply(this, arguments)
+
+    // Map key strategy:
+    //   non-collapse → path node object reference (O(1) identity lookup, no string)
+    //   collapse     → collapsed path string (deduplicates array siblings automatically)
+    let mapKey, collapsedKey
+    if (config.collapse) {
+      collapsedKey = buildCollapsedPathStringFromNode(infoPath)
+      mapKey = collapsedKey
+    } else {
+      mapKey = infoPath
+    }
 
     // Record field on first-encounter. For collapsed mode, subsequent invocations
     // of the same collapsed path key find the existing entry and run through
     // without overwriting its timing (first resolver's timing represents the group).
-    let field = rootCtx.fields[collapsedKey]
+    let field = rootCtx.fields.get(mapKey)
     const isFirst = !field
+
     if (isFirst) {
-      field = rootCtx.fields[collapsedKey] = {
-        info, args, path, pathString, collapsedKey, span: null,
+      // Compute path string lazily — only on the first encounter per field entry.
+      const pathString = config.collapse ? collapsedKey : buildPathStringFromNode(infoPath)
+      if (!collapsedKey) collapsedKey = pathString
+
+      // Store only the scalars we actually use later; avoids retaining the full
+      // GraphQLResolveInfo object (which holds schema refs, variable maps, etc.).
+      field = {
+        fieldNode: info.fieldNodes?.[0],
+        fieldName: info.fieldName,
+        returnType: info.returnType,
+        variableValues: info.variableValues,
+        args,
+        infoPath,
+        pathString,
+        collapsedKey,
+        span: null,
       }
+      rootCtx.fields.set(mapKey, field)
     }
 
     // IAST exit hatch — IAST mutates `args` for taint tracking. Fires sync
     // before the resolver body runs so taint propagates into user code.
+    // pathToArray is kept here (IAST needs the array form) but gated so APM-only
+    // runs pay zero cost.
     if (iastResolveCh.hasSubscribers) {
-      iastResolveCh.publish({ rootCtx, args, info, path, pathString })
+      const pathArr = pathToArray(infoPath)
+      iastResolveCh.publish({ rootCtx, args, info, path: pathArr, pathString: field.pathString })
     }
 
     // AppSec exit hatch.
@@ -422,46 +447,69 @@ function pathToArray (path) {
   return flattened
 }
 
-// Build the collapsed-path string in a single walk, replacing number segments
-// with '*'. Skips the intermediate array that a map+join would allocate.
-function buildCollapsedPathString (path) {
-  let result = ''
-  for (const segment of path) {
-    if (result.length > 0) result += '.'
-    result += typeof segment === 'number' ? '*' : segment
-  }
-  return result
+// Build a plain path string from a graphql linked-list Path node (root→leaf).
+// Used on first-encounter for non-collapsed fields. Avoids pathToArray + join
+// so the intermediate array is never allocated.
+function buildPathStringFromNode (path) {
+  let length = 0
+  for (let curr = path; curr; curr = curr.prev) length++
+  const segments = new Array(length)
+  let i = length
+  for (let curr = path; curr; curr = curr.prev) segments[--i] = curr.key
+  return segments.join('.')
 }
 
-// Depth filtering: count only string segments in the path (array indices don't
-// count). config.depth < 0 means no limit. In collapse mode every segment
-// counts toward depth (number indices have been '*'-collapsed conceptually).
-function shouldInstrument (config, path) {
+// Build a collapsed path string from a linked-list node, replacing number
+// segments with '*' (array indices collapse to a single representative slot).
+function buildCollapsedPathStringFromNode (path) {
+  let length = 0
+  for (let curr = path; curr; curr = curr.prev) length++
+  const segments = new Array(length)
+  let i = length
+  for (let curr = path; curr; curr = curr.prev) {
+    segments[--i] = typeof curr.key === 'number' ? '*' : curr.key
+  }
+  return segments.join('.')
+}
+
+// Depth filtering directly on the linked-list node — no array allocation needed.
+// config.depth < 0 means no limit. In non-collapse mode only string segments
+// count toward depth (array indices are transparent). In collapse mode every
+// node counts (numbers have been conceptually '*'-collapsed).
+function shouldInstrumentNode (config, path) {
   if (config.depth < 0) return true
 
-  let depth
+  let depth = 0
   if (config.collapse) {
-    depth = path.length
+    for (let curr = path; curr; curr = curr.prev) depth++
   } else {
-    depth = 0
-    for (const segment of path) {
-      if (typeof segment === 'string') depth += 1
+    for (let curr = path; curr; curr = curr.prev) {
+      if (typeof curr.key === 'string') depth++
     }
   }
 
   return config.depth >= depth
 }
 
-// Walk up the collapsed path key to find the nearest recorded ancestor field.
-// Used for span parent-child nesting.
-function getParentField (rootCtx, key) {
-  let current = key
+// Walk up the path to find the nearest recorded ancestor field (for span parenting).
+// Non-collapse: traverse the linked-list prev chain, each node is a unique Map key.
+// Collapse: strip the last dotted segment of the collapsed key string, Map key is string.
+function getParentField (rootCtx, field) {
+  if (!rootCtx.config.collapse) {
+    for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
+      const f = rootCtx.fields.get(curr)
+      if (f) return f
+    }
+    return null
+  }
+
+  let current = field.collapsedKey
   while (current) {
     const last = current.lastIndexOf('.')
     if (last === -1) break
     current = current.slice(0, last)
-    const field = rootCtx.fields[current]
-    if (field) return field
+    const f = rootCtx.fields.get(current)
+    if (f) return f
   }
   return null
 }
@@ -541,12 +589,17 @@ function normalizeContextValue (rawArgs) {
   return rawArgs[3]
 }
 
-// graphql's defaultFieldResolver is captured on ddGlobal by the instrumentations
-// module at graphql load time. Read lazily so the execute.js load hook has had
-// a chance to run.
-function getDefaultFieldResolver () {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  return ddGlobal?.graphql_defaultFieldResolver
+// Fallback resolver used when graphql.execute() is called without an explicit
+// fieldResolver and the schema field has no .resolve. Mirrors graphql's own
+// defaultFieldResolver: property access on source, calling it if it's a function.
+// Defined locally so it survives dd-trace plugin-manager reloads (agent.load()
+// recreates globalThis[Symbol.for('dd-trace')], so capturing defaultFieldResolver
+// via ddGlobal at IITM hook time would lose the reference across test suites).
+function defaultFieldResolver (source, args, contextValue, info) {
+  if (source == null) return
+  const property = source[info.fieldName]
+  if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
+  return property
 }
 
 function getOperation (document, operationName) {

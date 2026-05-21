@@ -2,8 +2,6 @@
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-const ddGlobal = globalThis[Symbol.for('dd-trace')]
-
 // Orchestrion rewriter handles wrapping of:
 // - graphql: execute, executeField, parse, validate (CJS + ESM)
 // - @graphql-tools/executor: execute, normalizedExecutor (index + CJS sub-path)
@@ -25,28 +23,23 @@ for (const hook of getHooks('@graphql-tools/executor')) {
 // Module-load hooks: store module references on ddGlobal for cross-plugin access.
 // These are NOT function wraps — they capture module exports at load time for use
 // by @apollo/gateway and other plugins that may load after graphql.
-
-// Capture graphql's default field resolver so the execute plugin can wrap it at
-// runtime. Required for tracing fields that have no explicit .resolve (SDL-built
-// schemas where resolvers live on rootValue).
-addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
-  if (execute.defaultFieldResolver) {
-    ddGlobal.graphql_defaultFieldResolver = execute.defaultFieldResolver
-  }
-  return execute
-})
+// NOTE: ddGlobal is read lazily inside each callback (not at module load time) to
+// avoid capturing a stale reference when agent.load() recreates the ddGlobal object.
 
 addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
-  ddGlobal.graphql_printer = printer
+  const ddGlobal = globalThis[Symbol.for('dd-trace')]
+  if (ddGlobal) ddGlobal.graphql_printer = printer
   return printer
 })
 
 addHook({ name: 'graphql', file: 'language/visitor.js', versions: ['>=0.10'] }, visitor => {
-  ddGlobal.graphql_visitor = visitor
+  const ddGlobal = globalThis[Symbol.for('dd-trace')]
+  if (ddGlobal) ddGlobal.graphql_visitor = visitor
   return visitor
 })
 
 addHook({ name: 'graphql', file: 'utilities/index.js', versions: ['>=0.10'] }, utilities => {
-  ddGlobal.graphql_utilities = utilities
+  const ddGlobal = globalThis[Symbol.for('dd-trace')]
+  if (ddGlobal) ddGlobal.graphql_utilities = utilities
   return utilities
 })
