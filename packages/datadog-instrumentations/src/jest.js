@@ -35,6 +35,7 @@ const {
 const {
   getFormattedJestTestParameters,
   getJestTestName,
+  getRawJestTestName,
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
 } = require('../../datadog-plugin-jest/src/util')
@@ -540,7 +541,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
     // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
-      const describeSuffix = getJestTestName(state.currentDescribeBlock)
+      const describeSuffix = getRawJestTestName(state.currentDescribeBlock)
       const testName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
       return removeSeedSuffixFromTestName(testName)
     }
