@@ -6,7 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-const { writeBridgeTags } = require('../../src/llmobs/util')
+const { writeBridgeTags, findGenAIAncestorSpanId } = require('../../src/llmobs/util')
 
 function unserializableObject () {
   const obj = {}
@@ -37,12 +37,10 @@ describe('tagger', () => {
       },
     }
 
-    // Pass `writeBridgeTags` through to the real helper so the bridge-tag
-    // hook in `registerLLMObsSpan` is exercised end-to-end. Unit coverage
-    // for the helper itself lives in `util.spec.js`.
-    // Default `findGenAIAncestorSpanId` to a stub returning null so existing
-    // tests get the "no OTel gen_ai ancestor" branch — individual tests can
-    // re-stub it to exercise the suppression behavior.
+    // Pass real helpers through so bridge-tag logic is exercised end-to-end.
+    // `findGenAIAncestorSpanId` is defaulted to a stub returning null so
+    // existing tests get the "no gen_ai ancestor" branch; individual tests
+    // can call `.returns(id)` on the stub to exercise suppression.
     util = {
       generateTraceId: sinon.stub().returns('0123'),
       writeBridgeTags,
@@ -286,6 +284,58 @@ describe('tagger', () => {
 
             const tags = Tagger.tagMap.get(span)
             assert.strictEqual(tags['_ml_obs.llmobs_parent_id'], '777777')
+          })
+        })
+
+        // Integration test: real findGenAIAncestorSpanId detection (no stub).
+        // Verifies the full pipeline from APM span shape → detection → bridge
+        // tag suppression → LLMObs event parent_id assignment.
+        describe('with real gen_ai.* detection (unstubbed)', () => {
+          let RealTagger
+          let realTagger
+
+          before(() => {
+            RealTagger = proxyquire('../../src/llmobs/tagger', {
+              '../log': { warn () {} },
+              './util': { generateTraceId: sinon.stub().returns('0123'), writeBridgeTags, findGenAIAncestorSpanId },
+            })
+            realTagger = new RealTagger({ llmobs: { enabled: true, mlApp: 'test-app' } })
+          })
+
+          it('detects a real gen_ai.* APM ancestor, suppresses llmobs_parent_id, and sets the ancestor as event parent', () => {
+            const genAISpanId = '333333333333333'
+            const leafSpanId = '444444444444444'
+            const traceTags = {}
+            const traceStarted = []
+
+            const genAISpanCtx = {
+              _spanId: { toString: () => genAISpanId },
+              _parentId: null,
+              _tags: { 'gen_ai.operation.name': 'invoke_agent' },
+              _trace: { tags: traceTags, started: traceStarted },
+            }
+            const genAISpan = { context: () => genAISpanCtx }
+
+            const leafSpanCtx = {
+              _spanId: { toString: () => leafSpanId },
+              _parentId: { toString: () => genAISpanId },
+              _tags: {},
+              _trace: { tags: traceTags, started: traceStarted },
+              toTraceId () { return '00000000000000009999999999999999' },
+              toSpanId () { return leafSpanId },
+            }
+            const leafSpan = {
+              context: () => leafSpanCtx,
+              setTag (k, v) { leafSpanCtx._tags[k] = v },
+            }
+
+            traceStarted.push(genAISpan, leafSpan)
+
+            realTagger.registerLLMObsSpan(leafSpan, { kind: 'llm' })
+
+            assert.strictEqual(traceTags.llmobs_trace_id, '00000000000000009999999999999999')
+            assert.strictEqual(traceTags.llmobs_parent_id, undefined)
+            assert.strictEqual(RealTagger.tagMap.get(leafSpan)['_ml_obs.llmobs_parent_id'], genAISpanId)
           })
         })
       })
