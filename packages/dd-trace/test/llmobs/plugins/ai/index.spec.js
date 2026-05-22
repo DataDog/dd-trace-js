@@ -1077,6 +1077,27 @@ describe('Plugin', () => {
       }
     })
 
+    // Default expectations matching the "SDK-normalized" pattern used by Bedrock
+    // and Anthropic: input_tokens is the raw fresh count on v5-paired packages
+    // and the sum on v6-paired packages.
+    function defaultExpectedMetrics ({ scenario, isV6, cacheReadOnDoGenerate }) {
+      if (scenario === 'cache-read') {
+        return {
+          input_tokens: isV6 ? 4448 : 23,
+          cache_read_input_tokens: cacheReadOnDoGenerate ? 4425 : undefined,
+          cache_write_input_tokens: undefined,
+        }
+      }
+      if (scenario === 'cache-write') {
+        return {
+          input_tokens: isV6 ? 4448 : 23,
+          cache_write_input_tokens: 4425,
+          cache_read_input_tokens: undefined,
+        }
+      }
+      throw new Error(`Unknown scenario: ${scenario}`)
+    }
+
     /**
      * Generic helper that runs prompt-cache capture tests for a given AI SDK
      * provider. New providers can be added by passing a single config object —
@@ -1090,8 +1111,23 @@ describe('Plugin', () => {
      * @param {(PackageModule: object, scenario: string) => object} config.buildModel -
      *   Constructs the provider's language model with mock fetch wired in
      * @param {object} [config.env] - Env vars required during tests (e.g. AWS creds)
+     * @param {string[]} [config.scenarios] - Scenarios to test for this provider.
+     *   Defaults to both. Providers without cache_write support (e.g. OpenAI)
+     *   should pass ['cache-read'] only.
+     * @param {(opts: object) => object} [config.getExpectedMetrics] -
+     *   Override the default expected-metrics function. Providers whose
+     *   input_tokens semantics differ from the SDK-normalized pattern (e.g.
+     *   OpenAI's `prompt_tokens` is already the sum at the API level) can
+     *   provide their own version-aware expectations.
      */
-    function describeProviderCacheTests ({ providerName, getPackage, buildModel, env }) {
+    function describeProviderCacheTests ({
+      providerName,
+      getPackage,
+      buildModel,
+      env,
+      scenarios = ['cache-read', 'cache-write'],
+      getExpectedMetrics = defaultExpectedMetrics,
+    }) {
       describe(`${providerName}`, () => {
         if (env) useEnv(env)
 
@@ -1118,31 +1154,35 @@ describe('Plugin', () => {
           // because the SDK never exposes the attribute there.
           const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
 
-          it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
-            const model = buildModel(PackageModule, 'cache-read')
-            await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+          if (scenarios.includes('cache-read')) {
+            it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+              const model = buildModel(PackageModule, 'cache-read')
+              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
-            const { llmobsSpans } = await getEvents()
-            const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+              const { llmobsSpans } = await getEvents()
+              const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
 
-            assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
-            assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, cacheReadOnDoGenerate ? 4425 : undefined)
-            // cache_write is 0 in this scenario; we filter zero values, so the metric is absent.
-            assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, undefined)
-          })
+              const expected = getExpectedMetrics({ scenario: 'cache-read', isV6, cacheReadOnDoGenerate })
+              assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
+              assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+              assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+            })
+          }
 
-          it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
-            const model = buildModel(PackageModule, 'cache-write')
-            await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+          if (scenarios.includes('cache-write')) {
+            it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+              const model = buildModel(PackageModule, 'cache-write')
+              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
-            const { llmobsSpans } = await getEvents()
-            const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+              const { llmobsSpans } = await getEvents()
+              const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
 
-            assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
-            assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, 4425)
-            // cache_read is 0 in this scenario; we filter zero values, so the metric is absent.
-            assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, undefined)
-          })
+              const expected = getExpectedMetrics({ scenario: 'cache-write', isV6, cacheReadOnDoGenerate })
+              assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
+              assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+              assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+            })
+          }
         })
       })
     }
@@ -1174,6 +1214,58 @@ describe('Plugin', () => {
           fetch: makeMockFetch(`anthropic-${scenario}`),
         })('claude-3-5-haiku-20241022')
       },
+    })
+
+    // OpenAI's caching is implicit / server-side; no per-request cache_write metric.
+    // OpenAI's `prompt_tokens` (Chat Completions) / `input_tokens` (Responses) already
+    // include cached tokens at the API level, so `ai.usage.inputTokens` is the sum
+    // across all ai versions — unlike Bedrock/Anthropic where the v5-paired SDK
+    // passes raw fresh through.
+    const openaiExpectedMetrics = ({ scenario, cacheReadOnDoGenerate }) => {
+      if (scenario === 'cache-read') {
+        return {
+          input_tokens: 4448,
+          cache_read_input_tokens: cacheReadOnDoGenerate ? 4425 : undefined,
+          cache_write_input_tokens: undefined,
+        }
+      }
+      throw new Error(`OpenAI does not support scenario: ${scenario}`)
+    }
+
+    describeProviderCacheTests({
+      providerName: 'OpenAI (Chat Completions)',
+      getPackage: getAiSdkOpenAiPackage,
+      buildModel: (OpenAiModule, scenario) => {
+        const { createOpenAI } = OpenAiModule.get()
+        // Use `.chat()` to force the Chat Completions endpoint. Cache field path
+        // is `usage.prompt_tokens_details.cached_tokens`.
+        return createOpenAI({
+          apiKey: 'test-api-key',
+          fetch: makeMockFetch(`openai-${scenario}`),
+          compatibility: 'strict',
+        }).chat('gpt-4o-mini')
+      },
+      scenarios: ['cache-read'],
+      getExpectedMetrics: openaiExpectedMetrics,
+    })
+
+    describeProviderCacheTests({
+      providerName: 'OpenAI (Responses API)',
+      getPackage: getAiSdkOpenAiPackage,
+      buildModel: (OpenAiModule, scenario) => {
+        const { createOpenAI } = OpenAiModule.get()
+        // Default `openai(modelId)` routes to the Responses API on
+        // @ai-sdk/openai v1/v2/v3. Cache field path is
+        // `usage.input_tokens_details.cached_tokens`. As OpenAI migrates
+        // customers from Chat Completions to Responses, this path should
+        // become the more common one.
+        return createOpenAI({
+          apiKey: 'test-api-key',
+          fetch: makeMockFetch(`openai-responses-${scenario}`),
+        })('gpt-4o-mini')
+      },
+      scenarios: ['cache-read'],
+      getExpectedMetrics: openaiExpectedMetrics,
     })
   })
 })
