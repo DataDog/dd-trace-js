@@ -110,6 +110,16 @@ describe('FlaggingProvider', () => {
       provider._setConfiguration(null)
       provider._setConfiguration(undefined)
     })
+
+    it('should not throw when setConfiguration is not a function', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      provider.setConfiguration = null // Remove the method
+
+      provider._setConfiguration({ flags: {} })
+
+      // Should still log the debug message
+      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
+    })
   })
 
   describe('hooks', () => {

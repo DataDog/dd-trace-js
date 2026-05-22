@@ -357,8 +357,14 @@ describe('SpanEnrichmentHook', () => {
 
       assert.strictEqual(mockSpan.setTag.callCount, 3)
       const tagNames = mockSpan.setTag.getCalls().map(c => c.args[0])
-      assert.ok(tagNames.includes('ffe_flags_enc'), `Expected tagNames to include 'ffe_flags_enc', got: ${tagNames}`)
-      assert.ok(tagNames.includes('ffe_subjects_enc'), `Expected tagNames to include 'ffe_subjects_enc', got: ${tagNames}`)
+      assert.ok(
+        tagNames.includes('ffe_flags_enc'),
+        `Expected tagNames to include 'ffe_flags_enc', got: ${tagNames}`
+      )
+      assert.ok(
+        tagNames.includes('ffe_subjects_enc'),
+        `Expected tagNames to include 'ffe_subjects_enc', got: ${tagNames}`
+      )
       assert.ok(
         tagNames.includes('ffe_runtime_defaults'),
         `Expected tagNames to include 'ffe_runtime_defaults', got: ${tagNames}`
@@ -418,6 +424,25 @@ describe('SpanEnrichmentHook', () => {
       finishSubscriber(mockSpan)
 
       sinon.assert.notCalled(mockSpan.setTag)
+    })
+
+    it('should skip falsy values but set truthy values', () => {
+      const hook = new SpanEnrichmentHook(mockTracer)
+      const state = hook._getOrCreateState(mockSpan)
+      // Add data so hasData() returns true
+      state.addSerialId(100)
+      // Mock toSpanTags to return mixed truthy/falsy values
+      state.toSpanTags = () => ({
+        ffe_flags_enc: 'validValue',
+        ffe_subjects_enc: '',
+        ffe_runtime_defaults: null,
+      })
+
+      finishSubscriber(mockSpan)
+
+      // Should only set the truthy value
+      sinon.assert.calledOnce(mockSpan.setTag)
+      sinon.assert.calledWith(mockSpan.setTag, 'ffe_flags_enc', 'validValue')
     })
   })
 
