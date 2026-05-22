@@ -16,6 +16,7 @@ runs:
       id: node-version
       env:
         VERSION: ${{ inputs.version }}
+        LATEST_VERSION: ${{ env.LATEST_VERSION }}
       shell: bash
       run: |
         node_version() {
@@ -29,7 +30,7 @@ runs:
           oldest)      version=$(node_version 18) ;;
           maintenance) version=$(node_version 20) ;;
           active)      version=$(node_version 22) ;;
-          latest)      version=$(node_version 24) ;;
+          latest)      version=${LATEST_VERSION:-$(node_version 24)} ;;
           *)           version=$VERSION ;;
         esac
         echo "version=$version" >> "$GITHUB_OUTPUT"
