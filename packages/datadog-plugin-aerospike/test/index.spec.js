@@ -41,14 +41,6 @@ describe('Plugin', () => {
           hosts: [
             { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 },
           ],
-          policies: {
-            write: { totalTimeout: 5000 },
-            read: { totalTimeout: 5000 },
-            operate: { totalTimeout: 5000 },
-            query: { totalTimeout: 5000 },
-            remove: { totalTimeout: 5000 },
-            batch: { totalTimeout: 5000 },
-          },
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
