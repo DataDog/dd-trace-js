@@ -61,7 +61,7 @@ runs:
       shell: bash
       run: |
         MAJOR=$(node -e "process.stdout.write(String(parseInt(process.versions.node)))")
-        echo "supported=$([ "$MAJOR" -ge 18 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        echo "supported=$([ "$MAJOR" -ge 12 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
     - name: Install Bun
       if: steps.bun-check.outputs.supported == 'true'
       shell: bash
