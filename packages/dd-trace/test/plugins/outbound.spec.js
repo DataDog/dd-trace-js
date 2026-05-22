@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 const sinon = require('sinon')
@@ -209,16 +210,19 @@ describe('OuboundPlugin', () => {
         const tags = parseTags(args[0])
 
         assertObjectContains(tags, { _dd: { code_origin: { type: 'exit' } } })
-        assert.ok(Array.isArray(tags._dd.code_origin.frames))
-        assert.ok(tags._dd.code_origin.frames.length > 0)
+        assert.ok(
+          Array.isArray(tags._dd.code_origin.frames),
+          `Expected array, got ${inspect(tags._dd.code_origin.frames)}`
+        )
+        assert.ok(tags._dd.code_origin.frames.length > 0, `Expected ${tags._dd.code_origin.frames.length} > 0`)
 
         for (const frame of tags._dd.code_origin.frames) {
           assert.strictEqual(frame.file, __filename)
-          assert.ok(Object.hasOwn(frame, 'line'))
+          assert.ok(Object.hasOwn(frame, 'line'), `Available keys: ${inspect(Object.keys(frame))}`)
           assert.match(frame.line, /^\d+$/)
-          assert.ok(Object.hasOwn(frame, 'column'))
+          assert.ok(Object.hasOwn(frame, 'column'), `Available keys: ${inspect(Object.keys(frame))}`)
           assert.match(frame.column, /^\d+$/)
-          assert.ok(Object.hasOwn(frame, 'type'))
+          assert.ok(Object.hasOwn(frame, 'type'), `Available keys: ${inspect(Object.keys(frame))}`)
           assert.strictEqual(typeof frame.type, 'string')
         }
 

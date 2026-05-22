@@ -153,7 +153,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(ret, false)
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(!('appsec.blocked' in traces[0][0].meta) || traces[0][0].meta['appsec.blocked'] !== 'true')
+        assert.notStrictEqual(traces[0][0].meta['appsec.blocked'], 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         assert.strictEqual(traces[0][0].metrics['_dd.appsec.block.failed'], 1)
       }).then(done).catch(done)

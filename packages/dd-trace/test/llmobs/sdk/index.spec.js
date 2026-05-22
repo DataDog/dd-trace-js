@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -179,7 +180,8 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
-            assert.ok(LLMObsTagger.tagMap.get(span) == null)
+            const tag = LLMObsTagger.tagMap.get(span)
+            assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
             span.setTag('k', 'v')
             cb()
           })
@@ -426,7 +428,8 @@ describe('sdk', () => {
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
-            assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
+            const tag = LLMObsTagger.tagMap.get(llmobs._active())
+            assert.ok(tag == null, `Expected no LLMObs tag for active span, got ${inspect(tag)}`)
           })
 
           fn(1)
@@ -604,7 +607,7 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            assert.ok(err == null)
+            assert.ok(err == null, `Expected ${err} == null`)
             assert.strictEqual(res, 'output')
           })
 
@@ -686,7 +689,7 @@ describe('sdk', () => {
             workflowSpan = _workflow
             tracer.trace('apmOperation', () => {
               myWrappedLlm('input', (err, res) => {
-                assert.ok(err == null)
+                assert.ok(err == null, `Expected ${err} == null`)
                 assert.strictEqual(res, 'output')
                 llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
                   taskSpan = _task
@@ -909,8 +912,8 @@ describe('sdk', () => {
       tracer.trace('test', span => {
         assert.throws(() => llmobs.annotate(span, {}))
 
-        // no span in registry, should not throw
-        assert.ok(LLMObsTagger.tagMap.get(span) == null)
+        const tag = LLMObsTagger.tagMap.get(span)
+        assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
       })
     })
 

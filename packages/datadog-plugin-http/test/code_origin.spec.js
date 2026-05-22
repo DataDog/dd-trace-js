@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -37,11 +38,26 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['_dd.code_origin.type'], 'exit')
 
               // Just validate that frame 0 tags are present. The detailed validation is performed in a different test.
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.file'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.line'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.column'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.method'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.type'))
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.file'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.line'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.column'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.method'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.type'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
             })
             .then(done)
             .catch(done)

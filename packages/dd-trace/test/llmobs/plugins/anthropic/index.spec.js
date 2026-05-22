@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, before, it } = require('mocha')
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
@@ -205,7 +206,10 @@ describe('Plugin', () => {
         assert.ok(response)
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        assert.ok(!llmobsSpans[0].meta.output.messages[0].content.includes('signature'))
+        assert.ok(
+          !llmobsSpans[0].meta.output.messages[0].content.includes('signature'),
+          `Got: ${inspect(llmobsSpans[0].meta.output.messages[0].content)}`
+        )
 
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
