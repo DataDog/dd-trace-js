@@ -168,8 +168,8 @@ const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} t
 const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)`
 
 if (Object.keys(flaky).length === 0) {
-  const message = `*No flaky ${logString}`
-  console.log(message)
+  const message = `No flaky ${logString}`
+  console.log(`*${message}`)
   if (CI) {
     writeFileSync('flakiness.md', message)
   }
