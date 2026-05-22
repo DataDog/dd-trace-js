@@ -60,16 +60,9 @@ function wrapAsyncProducer (original, type) {
     const opts = options ?? {}
     const ctx = { type, subject, data, options: opts, connection: this, createHeaders }
     return publishStartCh.runStores(ctx, () => {
-      let promise
-      try {
-        promise = original.call(this, subject, data, opts)
-      } catch (err) {
-        ctx.error = err
-        publishErrorCh.publish(ctx)
-        publishFinishCh.publish(ctx)
-        throw err
-      }
-      return Promise.resolve(promise).then(
+      // `request`/`requestMany` never throw synchronously — they wrap their own
+      // input validation in a try/catch that returns `Promise.reject`.
+      return Promise.resolve(original.call(this, subject, data, opts)).then(
         result => {
           ctx.result = result
           publishFinishCh.publish(ctx)

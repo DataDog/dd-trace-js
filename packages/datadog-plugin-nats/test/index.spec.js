@@ -6,6 +6,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
+const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -35,8 +36,12 @@ describe('Plugin', () => {
 
       afterEach(async () => {
         if (connection && !connection.isClosed()) {
-          await connection.drain().catch(() => {})
-          await connection.close().catch(() => {})
+          // close() may hang if a subscription callback threw (the library's drain
+          // path waits for inflight messages); race with a timer to keep tests fast.
+          await Promise.race([
+            connection.close().catch(() => {}),
+            new Promise(resolve => setTimeout(resolve, 500)),
+          ])
         }
         connection = null
       })
@@ -217,6 +222,98 @@ describe('Plugin', () => {
             await received
             return assertion
           })
+        })
+
+        describe('errors', () => {
+          it('records sync publish failures and rethrows', () => {
+            const assertion = agent.assertSomeTraces(traces => {
+              const producer = traces[0].find(
+                s => s.meta?.component === 'nats' && s.meta['span.kind'] === 'producer'
+              )
+              assert.ok(producer, 'expected producer span')
+              assert.strictEqual(producer.error, 1)
+              assert.ok(producer.meta?.[ERROR_MESSAGE], 'expected an error message tag')
+            })
+
+            // Empty subject — nats-core's `_check()` throws synchronously,
+            // exercising the catch/publishErrorCh branch in `wrapSyncProducer`.
+            assert.throws(() => connection.publish('', 'hello'))
+            return assertion
+          })
+
+          it('records async request failures and rejects', async () => {
+            const assertion = agent.assertSomeTraces(traces => {
+              const producer = traces[0].find(
+                s => s.meta?.component === 'nats' && s.meta['span.kind'] === 'producer'
+              )
+              assert.ok(producer, 'expected producer span')
+              assert.strictEqual(producer.error, 1)
+            })
+
+            // No responder is subscribed — the broker returns a 503 NoResponders
+            // status after the configured timeout, hitting the async rejection branch.
+            await assert.rejects(connection.request(subject, 'hello', { timeout: 200 }))
+            await assertion
+          })
+
+          it('records consumer callback errors and rethrows', async () => {
+            const fakeError = new Error('boom')
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const consumer = traces[0].find(
+                s => s.meta?.component === 'nats' && s.meta['span.kind'] === 'consumer'
+              )
+              assert.ok(consumer, 'expected consumer span')
+              assert.strictEqual(consumer.error, 1)
+              assert.strictEqual(consumer.meta?.[ERROR_MESSAGE], fakeError.message)
+            })
+
+            connection.subscribe(subject, {
+              max: 1,
+              callback: () => { throw fakeError },
+            })
+            connection.publish(subject, 'hello')
+            await assertion
+          })
+
+          it('passes through null/error deliveries without creating a span', () => {
+            // NATS calls the user's callback with `(err, {})` on subscription timeout —
+            // exercises the `!message || err` short-circuit before the runStores branch.
+            let called = false
+            connection.subscribe(subject, {
+              max: 1,
+              timeout: 50,
+              callback: (err) => { called = true; assert.ok(err) },
+            })
+            return new Promise(resolve => setTimeout(() => { assert.ok(called); resolve() }, 200))
+          })
+        })
+      })
+
+      describe('when the plugin is disabled', () => {
+        beforeEach(async () => {
+          await agent.load('nats', { enabled: false })
+          connection = await connect({ servers: '127.0.0.1:4222' })
+        })
+
+        afterEach(() => agent.close({ ritmReset: false }))
+
+        it('skips the publish wrapper fast-path', () => {
+          // The wrap's `!hasSubscribers` branch returns the original immediately,
+          // covering the early-out line in `wrapSyncProducer`/`wrapAsyncProducer`/subscribe.
+          connection.publish(subject, 'hello')
+        })
+
+        it('skips the subscribe wrapper fast-path', () => {
+          const sub = connection.subscribe(subject, { max: 1 })
+          assert.ok(sub, 'expected subscription object')
+          sub.unsubscribe()
+        })
+
+        it('skips the async-producer wrapper fast-path', async () => {
+          // No responder — `request` will reject with timeout; the fast-path returns
+          // the original promise without instrumenting it.
+          await assert.rejects(connection.request(subject, 'hi', { timeout: 50 }))
         })
       })
     })
