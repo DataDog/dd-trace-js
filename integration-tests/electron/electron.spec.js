@@ -67,7 +67,7 @@ describe('Electron integration', function () {
         `--out=${outDir}`,
         '--overwrite',
       ],
-      { cwd: sandboxFolder, stdio: 'inherit', env: { ...process.env, DEBUG: '@electron/*' } }
+      { cwd: sandboxFolder, stdio: 'pipe' }
     )
 
     // The layout produced by electron-packager differs per platform:
