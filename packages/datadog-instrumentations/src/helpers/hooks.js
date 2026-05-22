@@ -114,6 +114,7 @@ module.exports = {
   multer: () => require('../multer'),
   mysql: () => require('../mysql'),
   mysql2: () => require('../mysql2'),
+  '@nats-io/nats-core': () => require('../nats'),
   next: () => require('../next'),
   'node-serialize': () => require('../node-serialize'),
   nyc: () => require('../nyc'),
