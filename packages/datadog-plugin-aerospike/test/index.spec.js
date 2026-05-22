@@ -19,6 +19,7 @@ describe('Plugin', () => {
   let userKey
   let key
   let keyString
+  let indexName
 
   describe('aerospike', function () {
     this.timeout(8000)
@@ -49,6 +50,7 @@ describe('Plugin', () => {
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
+        indexName = `tags_idx_${process.hrtime.bigint()}`
       })
 
       after(() => {
@@ -192,7 +194,7 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': 'demo',
                   'aerospike.bin': 'tags',
-                  'aerospike.index': 'tags_idx',
+                  'aerospike.index': indexName,
                   component: 'aerospike',
                 },
               })
@@ -204,7 +206,7 @@ describe('Plugin', () => {
                 ns,
                 set: 'demo',
                 bin: 'tags',
-                index: 'tags_idx',
+                index: indexName,
                 type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING,
               }
@@ -235,7 +237,7 @@ describe('Plugin', () => {
                 ns,
                 set: 'demo',
                 bin: 'tags',
-                index: 'tags_idx',
+                index: indexName,
                 datatype: aerospike.indexDataType.STRING,
               }
               client.createIndex(index, (error, job) => {
