@@ -27,15 +27,6 @@ describe('Plugin', () => {
     this.timeout(8000)
 
     withVersions('aerospike', 'aerospike', version => {
-      // Assign unique bin/index names once per version block so that the
-      // createIndex and query tests share the same pre-built index. Using
-      // a counter prevents cross-version conflicts on the shared server.
-      before(() => {
-        const id = ++indexCounter
-        binName = `b${id}`
-        indexName = `i${id}`
-      })
-
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
@@ -53,6 +44,9 @@ describe('Plugin', () => {
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
+        const id = ++indexCounter
+        binName = `b${id}`
+        indexName = `i${id}`
       })
 
       after(() => {
@@ -248,15 +242,22 @@ describe('Plugin', () => {
                 if (!job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
                   if (waitError) return done(waitError)
-                  const query = client.query(ns, 'demo')
-                  const queryPolicy = {
-                    totalTimeout: 10000,
+                  // waitUntilDone signals the index is built, but the server
+                  // query thread may need a moment to pick it up. Retry with
+                  // a short delay until the query succeeds or retries run out.
+                  let retries = 0
+                  const runQuery = () => {
+                    const q = client.query(ns, 'demo')
+                    q.select('id', binName)
+                    q.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
+                    const stream = q.foreach({ totalTimeout: 10000 })
+                    stream.on('error', (err) => {
+                      if (retries++ < 5) setTimeout(runQuery, 500)
+                      else done(err)
+                    })
+                    stream.on('end', () => { client.close(false) })
                   }
-                  query.select('id', binName)
-                  query.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
-                  const stream = query.foreach(queryPolicy)
-                  stream.on('error', done)
-                  stream.on('end', () => { client.close(false) })
+                  runQuery()
                 })
               })
             }).catch(done)
