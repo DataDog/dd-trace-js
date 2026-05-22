@@ -129,6 +129,22 @@ class TracingPlugin extends Plugin {
   }
 
   /**
+   * Set `service.name` on a span on behalf of this integration without triggering
+   * the manual-source stamp. Use this for late-binding cases where the service is
+   * not known at startSpan time (e.g. web framework config applied after the span
+   * is already open) but the value is integration-driven, not user-provided.
+   *
+   * For user-provided service overrides, use `span.setTag('service.name', name)`
+   * so that the manual-source ('m') stamp is applied automatically.
+   *
+   * @param {import('../opentracing/span')} span Internal DatadogSpan instance.
+   * @param {string} name Service name the integration is claiming.
+   */
+  setServiceName (span, name) {
+    span._spanContext._tags['service.name'] = name
+  }
+
+  /**
    * @param {unknown} error
    * @param {import('../../../..').Span} [span]
    */

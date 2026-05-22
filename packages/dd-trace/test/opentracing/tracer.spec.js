@@ -41,7 +41,7 @@ describe('Tracer', () => {
     fields = {}
 
     span = {
-      addTags: sinon.stub().returns(span),
+      _addTags: sinon.stub(),
     }
     Span = sinon.stub().returns(span)
 
@@ -142,7 +142,7 @@ describe('Tracer', () => {
         links: undefined,
       }, true)
 
-      sinon.assert.calledWith(span.addTags, {
+      sinon.assert.calledWith(span._addTags, {
         foo: 'bar',
       })
 
@@ -251,8 +251,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(span.addTags, config.tags)
-      sinon.assert.calledWith(span.addTags, fields.tags)
+      sinon.assert.calledWith(span._addTags, config.tags)
+      sinon.assert.calledWith(span._addTags, fields.tags)
     })
 
     it('If span is granted a service name that differs from the global service name' +
@@ -272,8 +272,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(span.addTags, config.tags)
-      sinon.assert.calledWith(span.addTags, { ...fields.tags, version: undefined })
+      sinon.assert.calledWith(span._addTags, config.tags)
+      sinon.assert.calledWith(span._addTags, { ...fields.tags, version: undefined })
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,

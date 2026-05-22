@@ -86,8 +86,8 @@ class DatadogTracer {
       links: options.links,
     }, this._debug)
 
-    span.addTags(this._config.tags)
-    span.addTags(options.tags)
+    span._addTags(this._config.tags)
+    span._addTags(options.tags)
 
     return span
   }

@@ -33,7 +33,7 @@ class NextPlugin extends ServerPlugin {
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method,
-        ...(serviceSource === undefined ? {} : { [SVC_SRC_KEY]: serviceSource }),
+        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
       },
       integrationName: this.constructor.id,
     })

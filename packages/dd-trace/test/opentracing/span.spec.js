@@ -12,6 +12,7 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 require('../setup/core')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../../src/constants')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const startCh = channel('dd-trace:span:start')
@@ -453,6 +454,16 @@ describe('Span', () => {
 
       sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
     })
+
+    it('should stamp manual svc_src when service.name is written', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setTag('service.name', 'user-svc')
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+        'service.name': 'user-svc',
+        [SVC_SRC_KEY]: SVC_SRC_MANUAL,
+      })
+    })
   })
 
   describe('addTags', () => {
@@ -474,6 +485,16 @@ describe('Span', () => {
       span.addTags(tags)
 
       sinon.assert.calledWith(prioritySampler.sample, span, false)
+    })
+
+    it('should stamp manual svc_src when service.name is in the map', () => {
+      span.addTags({ 'service.name': 'user-svc', foo: 'bar' })
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+        'service.name': 'user-svc',
+        foo: 'bar',
+        [SVC_SRC_KEY]: SVC_SRC_MANUAL,
+      })
     })
   })
 
@@ -513,6 +534,30 @@ describe('Span', () => {
       span.finish()
 
       assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
+    })
+
+    it('should clear svc_src when service.name matches the tracer default', () => {
+      processor.process.returns(Promise.resolve())
+      tracer._service = 'app'
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span._spanContext._tags['service.name'] = 'app'
+      span._spanContext._tags[SVC_SRC_KEY] = 'opt.plugin'
+      span.finish()
+
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], undefined)
+    })
+
+    it('should leave svc_src untouched when service.name differs from the tracer default', () => {
+      processor.process.returns(Promise.resolve())
+      tracer._service = 'app'
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span._spanContext._tags['service.name'] = 'kafka-broker'
+      span._spanContext._tags[SVC_SRC_KEY] = 'kafka'
+      span.finish()
+
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {
