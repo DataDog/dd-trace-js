@@ -24,7 +24,7 @@
     "dependency": "@azure/cosmos",
     "integration": "azure-cosmos",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "4.9.2",
+    "max_tracer_supported": "4.9.3",
     "auto-instrumented": "True"
   },
   {
