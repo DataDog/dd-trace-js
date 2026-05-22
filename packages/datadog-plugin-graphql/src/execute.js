@@ -1,9 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { extractErrorIntoSpanEvent } = require('./utils')
-
-let tools
+const { extractErrorIntoSpanEvent, getSignature } = require('./utils')
 
 class GraphQLExecutePlugin extends TracingPlugin {
   static id = 'graphql'
@@ -63,25 +61,6 @@ function addVariableTags (config, span, variableValues) {
   }
 
   span.addTags(tags)
-}
-
-function getSignature (document, operationName, operationType, calculate) {
-  if (calculate !== false && tools !== false) {
-    try {
-      try {
-        tools = tools || require('./tools')
-      } catch (e) {
-        tools = false
-        throw e
-      }
-
-      return tools.defaultEngineReportingSignature(document, operationName)
-    } catch {
-      // safety net
-    }
-  }
-
-  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = GraphQLExecutePlugin

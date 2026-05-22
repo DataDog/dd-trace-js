@@ -18,9 +18,13 @@ import globals from 'globals'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
+import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
+import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -99,8 +103,6 @@ export default [
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
-      'packages/datadog-plugin-graphql/src/tools/signature.js', // Inlined from apollo-graphql
-      'packages/datadog-plugin-graphql/src/tools/transforms.js', // Inlined from apollo-graphql
     ],
   },
   eslintPluginJs.configs.recommended,
@@ -380,9 +382,13 @@ export default [
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
+          'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
+          'eslint-timer-unref': eslintTimerUnref,
         },
       },
       import: eslintPluginImport,
@@ -501,6 +507,8 @@ export default [
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+      'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {
         // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
@@ -578,7 +586,9 @@ export default [
       'eslint.config.mjs',
     ],
     rules: {
-      'eslint-rules/eslint-config-names-sync': 'error',
+      'eslint-rules/eslint-config-names-sync': ['error', {
+        indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
+      }],
     },
   },
   {
@@ -728,6 +738,8 @@ export default [
       n: eslintPluginN,
     },
     rules: {
+      'eslint-rules/eslint-prefer-assert-match': 'error',
+      'eslint-rules/eslint-require-boolean-assert-message': 'error',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
@@ -744,6 +756,22 @@ export default [
       'no-restricted-syntax': ['error', {
         selector: "CallExpression:matches([callee.name='doesNotThrow'], [callee.property.name='doesNotThrow'])",
         message: 'Do not use `assert.doesNotThrow()`. Execute the expression directly instead.',
+      }, {
+        // `assert(a === b)` / `assert.ok(a === b)` → `assert.strictEqual(a, b)`
+        selector:
+          'CallExpression[arguments.length<=2]' +
+          ':matches([callee.name="assert"], [callee.object.name="assert"][callee.property.name="ok"])' +
+          ' > BinaryExpression[operator="==="]:first-child',
+        message: 'Use `assert.strictEqual(a, b)` instead of `assert(a === b)` / `assert.ok(a === b)`. ' +
+          'The strict variant includes both values in the failure message automatically.',
+      }, {
+        // `assert(a !== b)` / `assert.ok(a !== b)` → `assert.notStrictEqual(a, b)`
+        selector:
+          'CallExpression[arguments.length<=2]' +
+          ':matches([callee.name="assert"], [callee.object.name="assert"][callee.property.name="ok"])' +
+          ' > BinaryExpression[operator="!=="]:first-child',
+        message: 'Use `assert.notStrictEqual(a, b)` instead of `assert(a !== b)` / `assert.ok(a !== b)`. ' +
+          'The strict variant includes both values in the failure message automatically.',
       }],
       'n/no-missing-require': 'off',
       'require-await': 'off',
@@ -775,6 +803,15 @@ export default [
     rules: {
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
+    },
+  },
+  {
+    // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
+    // JSDoc type to `jsdoc/valid-types`. The shape is required by the plugin.
+    name: 'dd-trace/datadog-plugin-jest/fixtures',
+    files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
+    rules: {
+      'jsdoc/valid-types': 'off',
     },
   },
   {

@@ -50,6 +50,11 @@ const contentHeaderList = [
   'content-language',
 ]
 
+const mandatoryResponseHeaderList = [
+  'content-type',
+  'content-length',
+]
+
 const responseHeaderList = [
   ...contentHeaderList,
   'content-type',
@@ -101,6 +106,8 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_
 const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+
+const MANDATORY_RESPONSE_HEADERS_MAP = mapHeaderAndTags(mandatoryResponseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
@@ -168,14 +175,21 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
-  // Basic collection
-  if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
-
   // Skip the spread when the stored side is empty -- common during the early
   // request lifecycle when no upstream response headers have been captured.
+  const liveResponseHeaders = res?.getHeaders?.()
   const responseHeaders = isEmpty(storedResponseHeaders)
-    ? res.getHeaders()
-    : { ...storedResponseHeaders, ...res.getHeaders() }
+    ? (liveResponseHeaders ?? {})
+    : (liveResponseHeaders ? { ...storedResponseHeaders, ...liveResponseHeaders } : storedResponseHeaders)
+
+  // content-type and content-length are always reported when appsec is enabled,
+  // even without a security event.
+  if (!shouldCollectEventHeaders) {
+    return Object.assign(
+      mandatoryCollectedHeaders,
+      filterHeaders(responseHeaders, MANDATORY_RESPONSE_HEADERS_MAP)
+    )
+  }
 
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)

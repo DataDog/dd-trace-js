@@ -13,7 +13,7 @@ const { executeRequest } = require('./util')
 
 function assertHasGuardSpan (payload, predicate) {
   const spans = payload[0].filter(span => span.name === 'ai_guard')
-  assert.ok(spans.length > 0)
+  assert.ok(spans.length > 0, `Expected ${spans.length} > 0`)
   const matching = spans.find(predicate)
   assert.notStrictEqual(matching, undefined)
 }

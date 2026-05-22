@@ -1,0 +1,88 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [master, mq-working-branch-master-*]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # dd-octo-sts is used for checkout and init to reduce GITHUB_TOKEN rate-limit
+  # consumption. The official analyze action uploads SARIF with github.token
+  # (security-events: write) so GitHub derives the correct analysis_key from the
+  # workflow context — raw API uploads always get "(default)" which the PR
+  # Security tab does not recognise. wait-for-processing is disabled on the
+  # action to avoid spending github.token budget on status polls; processing
+  # completion is checked in a separate step using the dd-octo-sts token.
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript"]
+
+    steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: codeql-analysis
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+
+      - name: Initialize CodeQL
+        id: init-codeql
+        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          languages: ${{ matrix.language }}
+          config-file: .github/codeql_config.yml
+          token: ${{ steps.octo-sts.outputs.token }}
+          # If you wish to specify custom queries, you can do so here or in a config file.
+          # By default, queries listed here will override any specified in a config file.
+          # Prefix the list here with "+" to use these queries and those in the config file.
+          # queries: ./path/to/local/query, your-org/your-repo/queries@main
+
+      - name: Perform CodeQL Analysis
+        id: analyze
+        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          token: ${{ github.token }}
+          wait-for-processing: false
+
+      - name: Wait for SARIF processing
+        env:
+          TOKEN: ${{ steps.octo-sts.outputs.token }}
+          SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
+        run: |
+          # Poll every 10s (30x = 5 min total), matching the official action's
+          # timeout but halving the API calls vs its default 5s interval.
+          for i in $(seq 1 30); do
+            RESULT=$(curl -sf \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/code-scanning/sarifs/$SARIF_ID")
+            STATUS=$(echo "$RESULT" | jq -r '.processing_status')
+            echo "Processing status: $STATUS"
+            if [ "$STATUS" = "complete" ]; then exit 0; fi
+            if [ "$STATUS" = "failed" ]; then
+              echo "$RESULT" | jq -r '.errors // empty'
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "SARIF processing did not complete within 5 minutes"
+          exit 1

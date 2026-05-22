@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const { performance } = require('perf_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const dc = require('dc-polyfill')
@@ -275,7 +276,7 @@ describe('Plugin', () => {
 
           after(() => {
             server.close()
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should instrument graphql-yoga execution', done => {
@@ -320,7 +321,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withNamingSchema(
@@ -433,7 +434,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].resource, 'hello:String')
               assert.strictEqual(spans[1].type, 'graphql')
               assert.strictEqual(spans[1].error, 0)
-              assert.ok(Number(spans[1].duration) > 0)
+              assert.ok(Number(spans[1].duration) > 0, `Expected ${Number(spans[1].duration)} > 0`)
               assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
@@ -470,7 +471,10 @@ describe('Plugin', () => {
             graphql.graphql({ schema, source }),
           ])
 
-          assert.ok(!result.errors || result.errors.length === 0)
+          assert.ok(
+            !result.errors || result.errors.length === 0,
+            `Got errors: ${inspect(result.errors)}`
+          )
           assert.strictEqual(result.data.hello, 'world')
           // eslint-disable-next-line no-proto
           assert.strictEqual(result.data.__proto__, 'alias')
@@ -504,13 +508,13 @@ describe('Plugin', () => {
                   }
 
                   if (span.resource === 'fastAsyncField:String') {
-                    assert.ok(fastAsyncTime < slowAsyncTime)
+                    assert.ok(fastAsyncTime < slowAsyncTime, `Expected ${fastAsyncTime} < ${slowAsyncTime}`)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    assert.ok(slowAsyncTime < syncTime)
+                    assert.ok(slowAsyncTime < syncTime, `Expected ${slowAsyncTime} < ${syncTime}`)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    assert.ok(syncTime > slowAsyncTime)
+                    assert.ok(syncTime > slowAsyncTime, `Expected ${syncTime} > ${slowAsyncTime}`)
                     foundSyncFieldSpan = true
                   }
 
@@ -1035,7 +1039,10 @@ describe('Plugin', () => {
               assert.ok(('startTime' in spanEvents[0]))
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(('stacktrace' in spanEvents[0].attributes))
+              assert.ok(
+                !Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+              )
               assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
@@ -1110,10 +1117,16 @@ describe('Plugin', () => {
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
               assert.strictEqual(spanEvents.length, 1)
-              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.ok(
+                Object.hasOwn(spanEvents[0], 'startTime'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0]))}`
+              )
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.ok(
+                Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+              )
               assert.strictEqual(spanEvents[0].attributes.message, 'test')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
               assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
@@ -1418,7 +1431,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1481,7 +1494,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1519,7 +1532,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1589,7 +1602,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1641,7 +1654,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1718,7 +1731,10 @@ describe('Plugin', () => {
             graphql.graphql({ schema, source }),
           ])
 
-          assert.ok(!result.errors || result.errors.length === 0)
+          assert.ok(
+            !result.errors || result.errors.length === 0,
+            `Got errors: ${inspect(result.errors)}`
+          )
           // eslint-disable-next-line no-proto
           assert.strictEqual(result.data.__proto__, 'alias')
         })
@@ -1732,7 +1748,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1754,6 +1770,20 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should fallback to the operation type', async () => {
+          const source = '{ friends { name } }'
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query')
+            }),
+            graphql.graphql({ schema, source }),
+          ])
         })
       })
 
@@ -1788,7 +1818,7 @@ describe('Plugin', () => {
           key => config.hooks[key].resetHistory()
         ))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should run the execute hook before graphql.execute span is finished', done => {
           const document = graphql.parse(source)
@@ -1932,7 +1962,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should support apollo-server schema stitching', done => {

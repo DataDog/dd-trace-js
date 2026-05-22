@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const {
   DEFAULT_MAX_COLLECTION_SIZE,
   LARGE_OBJECT_SKIP_THRESHOLD,
@@ -82,7 +83,7 @@ describe('Dynamic Instrumentation', function () {
             // Prepare to assert that no snapshot is produced on a subsequent trigger
             const secondPayloadReceived = new Promise(/** @type {() => void} */ (resolve) => {
               t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
-                assert.ok(!Object.hasOwn(snapshot, 'captures'))
+                assert.ok(!Object.hasOwn(snapshot, 'captures'), `Available keys: ${inspect(Object.keys(snapshot))}`)
                 assert.deepStrictEqual(snapshot.evaluationErrors, expectedEvaluationErrors)
                 resolve()
               })

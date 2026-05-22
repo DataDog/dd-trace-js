@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec } = require('child_process')
+const { inspect } = require('node:util')
 const {
   sandboxCwd,
   useSandbox,
@@ -98,8 +99,14 @@ versionRange.forEach(version => {
                 },
               })
 
-              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
-              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
+              assert.ok(
+                Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION),
+                `Available keys: ${inspect(Object.keys(seleniumTest.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION),
+                `Available keys: ${inspect(Object.keys(seleniumTest.meta))}`
+              )
             })
 
           const telemetryPromise = receiver
@@ -115,8 +122,8 @@ versionRange.forEach(version => {
                 .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
               eventFinishedTestEvents.forEach(({ tags }) => {
-                assert.ok(tags.includes('is_rum'))
-                assert.ok(tags.includes('browser_driver:selenium'))
+                assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+                assert.ok(tags.includes('browser_driver:selenium'), `Got: ${inspect(tags)}`)
               })
             })
 

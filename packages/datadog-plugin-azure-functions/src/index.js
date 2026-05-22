@@ -13,6 +13,7 @@ const triggerMap = {
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
   eventHub: 'EventHubs',
+  cosmosDB: 'CosmosDB',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -127,6 +128,8 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `EventHubs ${functionName}`,
       'span.kind': 'consumer',
     }
+  } else if (triggerMap[methodName] === 'CosmosDB') {
+    meta['resource.name'] = `CosmosDB ${functionName}`
   }
 
   return meta
@@ -155,7 +158,7 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
     if (!props || Object.keys(props).length === 0) return
     const spanContext = tracer.extract('text_map', props)
     if (spanContext) {
-      span.addLink(spanContext)
+      span.addLink({ context: spanContext })
     }
   }
 

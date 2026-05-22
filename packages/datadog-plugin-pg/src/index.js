@@ -9,9 +9,9 @@ class PGPlugin extends DatabasePlugin {
   static system = 'postgres'
 
   bindStart (ctx) {
-    const { params = {}, query, processId, stream } = ctx
+    const { params = {}, query, originalText, processId, stream } = ctx
     const service = this.serviceName({ pluginConfig: this.config, params })
-    const originalStatement = this.maybeTruncate(query.text)
+    const originalStatement = this.maybeTruncate(originalText)
 
     const span = this.startSpan(this.operationName(), {
       service,
@@ -32,7 +32,7 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
-    ctx.injected = this.injectDbmQuery(span, query.text, service.name, !!query.name)
+    ctx.injected = this.injectDbmQuery(span, originalText, service.name, !!query.name)
 
     return ctx.currentStore
   }

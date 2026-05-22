@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 const Readable = require('node:stream').Readable
 
 const { after, afterEach, before, describe, it } = require('mocha')
@@ -103,7 +104,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             withPeerService(
@@ -259,6 +260,44 @@ describe('Plugin', () => {
                 })
             })
 
+            it('should handle `client_stream` calls with (metadata, callback)', async () => {
+              const client = await buildClient({
+                getClientStream: (_, callback) => setTimeout(callback, 40),
+              })
+
+              const call = client.getClientStream(new grpc.Metadata(), () => {})
+              assert.ok(call, 'expected ClientWritableStream, got falsy value')
+              assert.strictEqual(typeof call.write, 'function')
+
+              return agent.assertFirstTraceSpan({
+                meta: {
+                  'grpc.method.name': 'getClientStream',
+                  'grpc.method.kind': 'client_streaming',
+                },
+              })
+            })
+
+            it('should handle `client_stream` calls with (metadata, options, callback)', async () => {
+              const client = await buildClient({
+                getClientStream: (_, callback) => setTimeout(callback, 40),
+              })
+
+              const call = client.getClientStream(
+                new grpc.Metadata(),
+                { deadline: new Date(Date.now() + 10_000) },
+                () => {}
+              )
+              assert.ok(call, 'expected ClientWritableStream, got falsy value')
+              assert.strictEqual(typeof call.write, 'function')
+
+              return agent.assertFirstTraceSpan({
+                meta: {
+                  'grpc.method.name': 'getClientStream',
+                  'grpc.method.kind': 'client_streaming',
+                },
+              })
+            })
+
             it('should handle `bidi` calls', async () => {
               const client = await buildClient({
                 getBidi: stream => stream.end(),
@@ -286,6 +325,55 @@ describe('Plugin', () => {
                   assert.strictEqual(traces[0][0].meta.component, 'grpc')
                   assert.strictEqual(traces[0][0].meta['_dd.integration'], 'grpc')
                 })
+            })
+
+            it('should handle `bidi` calls with (metadata)', async () => {
+              const client = await buildClient({
+                getBidi: stream => stream.end(),
+              })
+
+              const call = client.getBidi(new grpc.Metadata())
+              assert.ok(call, 'expected ClientDuplexStream, got falsy value')
+              assert.strictEqual(typeof call.on, 'function')
+              call.on('data', () => {})
+
+              return agent.assertFirstTraceSpan({
+                meta: {
+                  'grpc.method.name': 'getBidi',
+                  'grpc.method.kind': 'bidi_streaming',
+                },
+              })
+            })
+
+            it('should rethrow synchronous errors from the wrapped client method', async () => {
+              const client = await buildClient({
+                getUnary: (_, callback) => callback(),
+              })
+
+              assert.throws(() => {
+                client.getUnary({ first: 'foobar' }, new grpc.Metadata(), 'not-an-options-object', () => {})
+              }, Error)
+            })
+
+            it('should handle `bidi` calls with (metadata, options)', async () => {
+              const client = await buildClient({
+                getBidi: stream => stream.end(),
+              })
+
+              const call = client.getBidi(
+                new grpc.Metadata(),
+                { deadline: new Date(Date.now() + 10_000) }
+              )
+              assert.ok(call, 'expected ClientDuplexStream, got falsy value')
+              assert.strictEqual(typeof call.on, 'function')
+              call.on('data', () => {})
+
+              return agent.assertFirstTraceSpan({
+                meta: {
+                  'grpc.method.name': 'getBidi',
+                  'grpc.method.kind': 'bidi_streaming',
+                },
+              })
             })
 
             it('should handle cancelled `unary` calls', async () => {
@@ -359,7 +447,10 @@ describe('Plugin', () => {
                     },
                   })
 
-                  assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].meta, ERROR_STACK),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+                  )
                   assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 2)
                 })
             })
@@ -406,7 +497,10 @@ describe('Plugin', () => {
                     },
                   })
 
-                  assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].meta, ERROR_STACK),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+                  )
                   assert.match(traces[0][0].meta[ERROR_MESSAGE], /^13 INTERNAL:.+$/m)
                   assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 13)
                 })
@@ -562,7 +656,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should be configured with the correct values', async () => {
@@ -594,7 +688,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should handle request metadata', async () => {
@@ -650,7 +744,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should handle request metadata', async () => {

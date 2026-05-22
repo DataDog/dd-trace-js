@@ -401,8 +401,11 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(intValue !== null && typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
 
         // Double/float body
-        assert(logRecords[2].body.doubleValue !== undefined)
-        assert(Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001)
+        assert.notStrictEqual(logRecords[2].body.doubleValue, undefined)
+        assert(
+          Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001,
+          `Expected ${Math.abs(logRecords[2].body.doubleValue - 3.14159)} < 0.00001`
+        )
 
         // Boolean body
         assert.strictEqual(logRecords[3].body.boolValue, true)

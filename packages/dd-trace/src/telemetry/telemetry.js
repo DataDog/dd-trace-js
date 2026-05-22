@@ -291,7 +291,7 @@ function heartbeat (config, application) {
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
-  }, config.telemetry.heartbeatInterval).unref()
+  }, config.telemetry.heartbeatInterval).unref?.()
 }
 
 /** @param {import('../config/config-base')} config */
@@ -307,7 +307,7 @@ function extendedHeartbeat (config) {
       heartbeatFailedDependencies = []
     }
     sendData(config, application, host, 'app-extended-heartbeat', appPayload)
-  }, config.telemetry.extendedHeartbeatInterval).unref()
+  }, config.telemetry.extendedHeartbeatInterval).unref?.()
 }
 
 /**

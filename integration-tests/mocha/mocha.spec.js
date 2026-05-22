@@ -5,6 +5,7 @@ const fs = require('fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('path')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -788,11 +789,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[COMPONENT], 'mocha')
             assert.strictEqual(test.meta[TEST_STATUS], 'fail')
             assert.strictEqual(test.meta[ERROR_TYPE], 'TypeError')
-            assert.ok(
-              test.meta[ERROR_MESSAGE]
-                .includes('mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":')
-            )
-            assert.match(test.meta[ERROR_MESSAGE], /Cannot set /)
+            const errorMessage = test.meta[ERROR_MESSAGE]
+            const expectedHookPrefix =
+              'mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":'
+            assert.ok(errorMessage.includes(expectedHookPrefix), `Got: ${inspect(errorMessage)}`)
+            assert.match(errorMessage, /Cannot set /)
             assert.ok(test.meta[ERROR_STACK])
           })
 
@@ -1127,6 +1128,312 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           eventsPromise,
           once(childProcess, 'exit'),
         ])
+      })
+
+      context('suite reporting - tests with no describe wrapper', () => {
+        // When a test file uses only top-level it() calls (no describe() block),
+        // mocha never emits a non-root 'suite' event for that file.
+        //
+        // The 'suite' handler in packages/datadog-instrumentations/src/mocha/main.js
+        // only fires testSuiteStartCh when it encounters a non-root suite with
+        // suite.tests.length > 0. With no non-root suites at all, the condition is
+        // never met: no suite context is stored in testFileToSuiteCtx, no suite
+        // span is created by the plugin, and no test_suite_end event is emitted.
+        //
+        // Meanwhile tests run and report normally as mocha.test spans.
+
+        it('reports a suite event for a single file with only top-level tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 2)
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+              tests.forEach(test => assert.strictEqual(test.meta[TEST_SUITE], suiteFile))
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports suite events for two files with only top-level tests', async () => {
+          const suiteFiles = [
+            'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
+            'ci-visibility/mocha-plugin-tests/top-level-it-no-describe2.js',
+          ]
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 4)
+              assert.strictEqual(suiteEvents.length, 2)
+              suiteFiles.forEach(suiteFile => {
+                const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+                assert.ok(suite, `Expected suite event for ${suiteFile}`)
+                assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+              })
+              tests.forEach(test => assert.ok(
+                suiteFiles.includes(test.meta[TEST_SUITE]),
+                `Got: ${inspect(suiteFiles)}`
+              ))
+            })
+
+          childProcess = exec(
+            'node node_modules/mocha/bin/mocha' +
+            ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports a suite event for a file with mixed top-level and nested tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 2)
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+              tests.forEach(test => assert.strictEqual(test.meta[TEST_SUITE], suiteFile))
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports suite events for two files with mixed top-level and nested tests', async () => {
+          const suiteFiles = [
+            'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js',
+            'ci-visibility/mocha-plugin-tests/top-level-it-mixed2.js',
+          ]
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 4)
+              assert.strictEqual(suiteEvents.length, 2)
+              suiteFiles.forEach(suiteFile => {
+                const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+                assert.ok(suite, `Expected suite event for ${suiteFile}`)
+                assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+              })
+              tests.forEach(test => assert.ok(
+                suiteFiles.includes(test.meta[TEST_SUITE]),
+                `Got: ${inspect(suiteFiles)}`
+              ))
+            })
+
+          childProcess = exec(
+            'node node_modules/mocha/bin/mocha' +
+            ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports fail status when a top-level test fails alongside passing nested tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed-failing.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports a suite event when a beforeEach hook fails on top-level tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-with-failing-hook.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+              // beforeEach failure aborts after the first test starts — only 1 test span is emitted
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        context('suite span timing', () => {
+          it('suite spans for top-level-only files are bounded to their own file execution', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-no-describe2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.notStrictEqual(suiteA.start, suiteB.start,
+              'Suite spans for different files must not start simultaneously')
+
+            // Files run fully sequentially: suite A must finish before suite B starts
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+              'Suite A must end before suite B starts'
+            )
+          })
+
+          it('suite spans for files with afterEach hooks are bounded to their own file execution', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-with-hooks.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-with-hooks2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.notStrictEqual(suiteA.start, suiteB.start,
+              'Suite spans for different files must not start simultaneously')
+
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+              'Suite A must end before suite B starts'
+            )
+          })
+
+          // Mixed files have an inherent overlap: root tests from all files run before any
+          // describes, so suite B starts while suite A is still open. What we can assert:
+          // start times are ordered (a's root test runs before b's root test) and end times
+          // are ordered (a's describe finishes before b's describe).
+          it('suite spans for mixed files have ordered start and end times', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-mixed2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.ok(suiteA.start < suiteB.start, 'Suite A must start before suite B')
+
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) < suiteB.start + BigInt(suiteB.duration),
+              'Suite A must end before suite B ends'
+            )
+          })
+        })
       })
     })
   })
@@ -3785,7 +4092,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           'nyc output does not match the reported coverage (no --all flag)')
 
         eventsPromise.then(() => {
-          assert.ok(codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles)
+          assert.ok(
+            codeCoverageWithoutUntestedFiles > codeCoverageWithUntestedFiles,
+            `Expected ${codeCoverageWithoutUntestedFiles} > ${codeCoverageWithUntestedFiles}`
+          )
           done()
         }).catch(done)
       })
@@ -3991,6 +4301,53 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(snapshotIdByTest, snapshotIdByLog)
           assert.strictEqual(spanIdByTest, spanIdByLog)
           assert.strictEqual(traceIdByTest, traceIdByLog)
+          done()
+        }).catch(done)
+      })
+    })
+
+    onlyLatestIt('reports a passing suite for top-level tests retried with dynamic instrumentation', (done) => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const suiteFile = 'ci-visibility/dynamic-instrumentation/top-level-test-hit-breakpoint.js'
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(suiteEvents.length, 1)
+          assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+
+          assert.strictEqual(retriedTests.length, 1)
+          assert.strictEqual(retriedTests[0].meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/top-level-test-hit-breakpoint',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            TEST_SHOULD_PASS_AFTER_RETRY: '1',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        eventsPromise.then(() => {
+          assert.strictEqual(code, 0)
           done()
         }).catch(done)
       })
@@ -4482,7 +4839,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const atfTests = tests.filter(
               t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
             )
-            assert.ok(atfTests.length > 0)
+            assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
             for (const test of atfTests) {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
@@ -5144,7 +5501,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.ok(tests.length > 0)
+            assert.ok(tests.length > 0, `Expected ${tests.length} > 0`)
             const suiteEvents = events.filter(event => event.type === 'test_suite_end')
             assert.strictEqual(suiteEvents.length, 2, 'Expected exactly 2 suites to be reported')
             // Verify that tests have different runtime IDs, confirming parallel execution in different processes
@@ -5201,7 +5558,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-        assert.ok(metadataDicts.length > 0)
+        assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
         metadataDicts.forEach(metadata => {
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
@@ -5683,10 +6040,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const coverageReport = payloads[0]
 
-          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+          assert.ok(
+            coverageReport.headers['content-type'].includes('multipart/form-data'),
+            `Got: ${inspect(coverageReport.headers['content-type'])}`
+          )
 
           assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-          assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+          assert.ok(
+            coverageReport.coverageFile.content.includes('SF:'),
+            `Got: ${inspect(coverageReport.coverageFile.content)}`
+          ) // LCOV format
 
           assert.strictEqual(coverageReport.eventFile.name, 'event')
           assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')

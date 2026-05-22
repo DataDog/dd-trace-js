@@ -19,6 +19,20 @@ The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
 names for several majors.
 
+### `Span.addLink(spanContext, attributes)` legacy overload removed
+
+`Span.addLink` (both the OpenTracing-style API and the OpenTelemetry bridge)
+no longer accepts a positional `(spanContext, attributes)` form. Pass the
+single-argument shape instead: `addLink({ context, attributes })`.
+
+```js
+// Before (still works on v5)
+span.addLink(otherSpan.context(), { foo: 'bar' })
+
+// After
+span.addLink({ context: otherSpan.context(), attributes: { foo: 'bar' } })
+```
+
 ### `DD_TRACE_STARTUP_LOGS` defaults to `true`
 
 Startup configuration is logged to the console by default. Set

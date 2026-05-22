@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -9,6 +10,7 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
+const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -160,8 +162,9 @@ describe('Span', () => {
     })
 
     assert.deepStrictEqual(span.context()._traceId, '123')
-    assert.ok(Object.hasOwn(span.context()._trace.tags, '_dd.p.tid'))
-    assert.match(span.context()._trace.tags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
+    const traceTags = span.context()._trace.tags
+    assert.ok(Object.hasOwn(traceTags, '_dd.p.tid'), `Available keys: ${inspect(Object.keys(traceTags))}`)
+    assert.match(traceTags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
   })
 
   it('should be published via dd-trace:span:start channel', () => {
@@ -216,7 +219,10 @@ describe('Span', () => {
 
       assert.ok('foo' in span.context()._baggageItems)
       assert.strictEqual(span.context()._baggageItems.foo, 'bar')
-      assert.ok(!('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar')
+      assert.ok(
+        !('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar',
+        `Got parent._baggageItems: ${inspect(parent._baggageItems)}`
+      )
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -245,8 +251,8 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      span.addLink(span2.context())
-      assert.ok(Object.hasOwn(span, '_links'))
+      span.addLink({ context: span2.context() })
+      assert.ok(Object.hasOwn(span, '_links'), `Available keys: ${inspect(Object.keys(span))}`)
       assert.strictEqual(span._links.length, 1)
     })
 
@@ -258,7 +264,7 @@ describe('Span', () => {
         foo: 'bar',
         baz: 'qux',
       }
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, attributes)
     })
 
@@ -273,7 +279,7 @@ describe('Span', () => {
         qux: [1, 2, 3],
       }
 
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, {
         foo: 'true',
         bar: 'hi',
@@ -293,10 +299,20 @@ describe('Span', () => {
         baz: 'valid',
       }
 
-      span.addLink(span2.context(), attributes)
+      span.addLink({ context: span2.context(), attributes })
       assert.deepStrictEqual(span._links[0].attributes, {
         baz: 'valid',
       })
+    })
+
+    const legacyAddLinkTest = DD_MAJOR < 6 ? it : it.skip
+    legacyAddLinkTest('still accepts the deprecated (spanContext, attributes) form on v5', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addLink(span2.context(), { foo: 'bar' })
+      assert.strictEqual(span._links.length, 1)
+      assert.deepStrictEqual(span._links[0].attributes, { foo: 'bar' })
     })
 
     it('seeds links from constructor fields.links and sanitizes their attributes', () => {

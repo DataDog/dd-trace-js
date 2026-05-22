@@ -15,6 +15,10 @@ const errorCh = channel('apm:pg:query:error')
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
+// Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
+// the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
+const originalTextCache = new WeakMap()
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -44,7 +48,12 @@ function wrapQuery (query) {
 
     const textPropObj = pgQuery.cursor ?? pgQuery
     const stream = typeof textPropObj.read === 'function'
-    const originalText = textPropObj.text
+
+    let originalText = originalTextCache.get(textPropObj)
+    if (originalText === undefined) {
+      originalText = textPropObj.text
+      originalTextCache.set(textPropObj, originalText)
+    }
 
     const abortController = new AbortController()
     const ctx = {
@@ -184,7 +193,7 @@ function wrapPoolQuery (query) {
       }
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (...args) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
           finish(ctx)
           return cb.apply(this, args)
         })

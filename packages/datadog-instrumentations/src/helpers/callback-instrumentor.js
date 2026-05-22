@@ -45,7 +45,7 @@ function createCallbackInstrumentor (prefix, { captureResult = false } = {}) {
         }
 
         return startCh.runStores(ctx, () => {
-          args[lastIndex] = shimmer.wrapFunction(cb, cb => function (error, ...rest) {
+          args[lastIndex] = shimmer.wrapCallback(cb, cb => function (error, ...rest) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)

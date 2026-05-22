@@ -2,7 +2,7 @@
 
 const assert = require('assert')
 const http = require('http')
-const { format } = require('util')
+const { format, inspect } = require('util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -236,7 +236,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(gauge.name, 'memory')
         const dp = gauge.gauge.dataPoints[0]
         const value = dp.asDouble !== undefined ? dp.asDouble : dp.asInt
-        assert(value > 0)
+        assert(value > 0, `Expected ${value} > 0`)
         assert.strictEqual(dp.attributes.find(a => a.key === 'type').value.stringValue, 'heap')
       })
 
@@ -287,7 +287,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
         const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
         assert.strictEqual(dataPoint.asInt, 5)
-        assert(dataPoint.timeUnixNano > 0)
+        assert(dataPoint.timeUnixNano > 0, `Expected ${dataPoint.timeUnixNano} > 0`)
       })
 
       setupMetrics()
@@ -441,18 +441,31 @@ describe('OpenTelemetry Meter Provider', () => {
     })
 
     it('supports DELTA for counters', (done) => {
-      const validator = mockOtlpExport((decoded) => {
+      const exportedValues = []
+
+      mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'test')
         assert.strictEqual(counter.sum.aggregationTemporality, 1)
-        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
+        exportedValues.push(counter.sum.dataPoints[0].asInt)
       })
 
       setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta' })
       const meter = metrics.getMeter('app')
-      meter.createCounter('test').add(5)
+      const counter = meter.createCounter('test')
 
-      setTimeout(() => { validator(); done() }, 150)
+      counter.add(5)
+
+      setTimeout(() => {
+        counter.add(3)
+
+        setTimeout(() => {
+          assert.strictEqual(exportedValues.length, 2, 'should have 2 exports')
+          assert.strictEqual(exportedValues[0], 5, 'first export should be 5')
+          assert.strictEqual(exportedValues[1], 3, 'second export should be 3 (delta), not 8 (cumulative)')
+          done()
+        }, 120)
+      }, 120)
     })
 
     it('LOWMEMORY uses DELTA for sync counters', (done) => {
@@ -711,7 +724,11 @@ describe('OpenTelemetry Meter Provider', () => {
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
       const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
-      assert(warnSpy.getCalls().some(call => format(...call.args) === expectedMsg))
+      const warnCalls = warnSpy.getCalls()
+      assert(
+        warnCalls.some(call => format(...call.args) === expectedMsg),
+        `Expected warn call ${inspect(expectedMsg)}, got: ${inspect(warnCalls.map(c => format(...c.args)))}`
+      )
       warnSpy.restore()
     })
   })
@@ -897,10 +914,18 @@ describe('OpenTelemetry Meter Provider', () => {
       obsGauge.addCallback(() => {})
       obsGauge.addCallback('not a function')
       provider.reader.forceFlush()
-      assert(warnSpy.getCalls().some(call =>
-        format(...call.args) === 'PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'))
+      let warnCalls = warnSpy.getCalls()
+      const expectedShutdownMsg = 'PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'
+      assert(
+        warnCalls.some(call => format(...call.args) === expectedShutdownMsg),
+        `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+      )
       provider.reader.shutdown()
-      assert(warnSpy.getCalls().some(call => format(...call.args) === 'PeriodicMetricReader is already shutdown'))
+      warnCalls = warnSpy.getCalls()
+      assert(
+        warnCalls.some(call => format(...call.args) === 'PeriodicMetricReader is already shutdown'),
+        `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+      )
       warnSpy.restore()
     })
   })
@@ -914,9 +939,11 @@ describe('OpenTelemetry Meter Provider', () => {
       const warnSpy = sinon.spy(log, 'warn')
       const validator = mockOtlpExport((metrics) => {
         assert.strictEqual(countMetrics(metrics), 3)
-        assert(warnSpy.getCalls().some(call =>
-          format(...call.args).includes('Metric queue exceeded limit (max: 3)')
-        ))
+        const warnCalls = warnSpy.getCalls()
+        assert(
+          warnCalls.some(call => format(...call.args).includes('Metric queue exceeded limit (max: 3)')),
+          `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+        )
       })
 
       setupMetrics(
@@ -939,7 +966,11 @@ describe('OpenTelemetry Meter Provider', () => {
       const validator = mockOtlpExport((metrics) => {
         if (++callCount === 1) {
           assert.strictEqual(countMetrics(metrics), 3)
-          assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
+          const warnCalls = warnSpy.getCalls()
+          assert(
+            warnCalls.some(call => format(...call.args).includes('Metric queue exceeded limit')),
+            `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+          )
         }
       })
 
@@ -964,7 +995,11 @@ describe('OpenTelemetry Meter Provider', () => {
         if (!firstExport) return
         firstExport = false
         assert.strictEqual(countMetrics(metrics), 3)
-        assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
+        const warnCalls = warnSpy.getCalls()
+        assert(
+          warnCalls.some(call => format(...call.args).includes('Metric queue exceeded limit')),
+          `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+        )
       })
 
       setupMetrics(
@@ -997,12 +1032,16 @@ describe('OpenTelemetry Meter Provider', () => {
         const counter1Metric = exportedMetrics.find(m => m.name === 'counter.sync')
         assert(counter1Metric, 'counter.sync should be exported')
         assert.strictEqual(counter1Metric.sum.dataPoints.length, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE)
-        assert(warnSpy.getCalls().some(call => {
-          const formatted = format(...call.args)
-          return formatted.includes('Metric queue exceeded limit') &&
-            formatted.includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
-            formatted.includes('Dropping 2 measurements')
-        }))
+        const warnCalls = warnSpy.getCalls()
+        assert(
+          warnCalls.some(call => {
+            const formatted = format(...call.args)
+            return formatted.includes('Metric queue exceeded limit') &&
+              formatted.includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
+              formatted.includes('Dropping 2 measurements')
+          }),
+          `Got warn calls: ${inspect(warnCalls.map(c => format(...c.args)))}`
+        )
       })
 
       setupMetrics({ DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '30000' }, false)
@@ -1031,7 +1070,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
       httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
         requestCount++
-        assert(options.headers['Content-Length'] > 0)
+        assert(options.headers['Content-Length'] > 0, `Expected ${options.headers['Content-Length']} > 0`)
 
         const handler = (event, handler) => {
           handlers[event] = handler

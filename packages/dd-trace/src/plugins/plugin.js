@@ -160,14 +160,12 @@ module.exports = class Plugin {
   /**
    * Enable or disable the plugin and (re)apply its configuration.
    *
-   * TODO: Remove the overloading with `enabled` and use the config object directly.
-   *
-   * @param {boolean | import('../config/config-base') & {enabled: boolean}} config Either a boolean to
+   * @param {boolean | Record<string, unknown> & {enabled: boolean}} config Either a boolean to
    * enable/disable or a configuration object containing at least `{ enabled: boolean }`.
    */
   configure (config) {
     if (typeof config === 'boolean') {
-      config = /** @type {import('../config/config-base') & {enabled: boolean}} */ ({ enabled: config })
+      config = { enabled: config }
     }
     this.config = config
     if (config.enabled) {

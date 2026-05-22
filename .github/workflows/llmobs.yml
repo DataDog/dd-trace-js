@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
@@ -54,6 +53,10 @@ jobs:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   openai:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, latest]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -64,23 +67,21 @@ jobs:
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
-          flags: llmobs-${{ github.job }}
+          flags: llmobs-openai-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: llmobs-${{ github.job }}
+          suffix: llmobs-${{ github.job }}-${{ matrix.version }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

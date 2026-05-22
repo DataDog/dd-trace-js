@@ -77,7 +77,7 @@ describe('TracingPlugin', () => {
 describe('common Plugin behaviour', () => {
   before(() => agent.load())
 
-  after(() => agent.close({ ritmReset: false }))
+  after(() => agent.close())
   class CommonPlugin extends TracingPlugin {
     static id = 'commonPlugin'
     static operation = 'dothings'
@@ -158,7 +158,7 @@ describe('common Plugin behaviour', () => {
         done, 'commonPlugin', {},
         span => {
           assert.strictEqual(span.service, 'test')
-          assert.ok(!('_dd.base_service' in span.meta) || span.meta['_dd.base_service'] !== 'test')
+          assert.notStrictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })

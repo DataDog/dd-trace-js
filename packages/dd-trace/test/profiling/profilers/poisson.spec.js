@@ -83,7 +83,7 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.strictEqual(typeof filter.currentSamplingInstant, 'number')
     assert.strictEqual(filter.currentSamplingInstant, 0)
     assert.strictEqual(typeof filter.nextSamplingInstant, 'number')
-    assert.ok(filter.nextSamplingInstant > 0)
+    assert.ok(filter.nextSamplingInstant > 0, `Expected ${filter.nextSamplingInstant} > 0`)
     assert.strictEqual(filter.samplingInstantCount, 1)
   })
 
@@ -101,9 +101,12 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.strictEqual(filter.currentSamplingInstant, 0)
     nowValue = prevNextSamplingInstant + 15
     filter.filter(event)
-    assert.ok(filter.nextSamplingInstant > prevNextSamplingInstant)
-    assert.ok(filter.currentSamplingInstant > 0)
-    assert.ok(filter.samplingInstantCount > 1)
+    assert.ok(
+      filter.nextSamplingInstant > prevNextSamplingInstant,
+      `Expected ${filter.nextSamplingInstant} > ${prevNextSamplingInstant}`
+    )
+    assert.ok(filter.currentSamplingInstant > 0, `Expected ${filter.currentSamplingInstant} > 0`)
+    assert.ok(filter.samplingInstantCount > 1, `Expected ${filter.samplingInstantCount} > 1`)
   })
 
   it('should not advance sampling instant if event endTime < nextSamplingInstant', () => {
@@ -131,10 +134,13 @@ describe('PoissonProcessSamplingFilter', () => {
     nowValue = 1000
     const event = { startTime: 0, duration: 1e6 }
     filter.filter(event)
-    assert.ok(filter.currentSamplingInstant >= prevNextSamplingInstant)
+    assert.ok(
+      filter.currentSamplingInstant >= prevNextSamplingInstant,
+      `Expected ${filter.currentSamplingInstant} >= ${prevNextSamplingInstant}`
+    )
     assert.strictEqual(typeof filter.nextSamplingInstant, 'number')
-    assert.ok(filter.nextSamplingInstant < 500000)
-    assert.ok(filter.samplingInstantCount < 30)
+    assert.ok(filter.nextSamplingInstant < 500000, `Expected ${filter.nextSamplingInstant} < 500000`)
+    assert.ok(filter.samplingInstantCount < 30, `Expected ${filter.samplingInstantCount} < 30`)
   })
 
   it('should reset nextSamplingInstant if it is too far in the past', () => {
@@ -146,10 +152,10 @@ describe('PoissonProcessSamplingFilter', () => {
     const event = { startTime: 100000, duration: 100 }
     nowValue = event.startTime + event.duration
     filter.filter(event)
-    assert.ok(filter.nextSamplingInstant > nowValue)
+    assert.ok(filter.nextSamplingInstant > nowValue, `Expected ${filter.nextSamplingInstant} > ${nowValue}`)
     // With the feature, the expected value is 2. Without it, the expected value
     // would be 1000. 100 should be enough not to be flaky.
-    assert.ok(filter.samplingInstantCount < 100)
+    assert.ok(filter.samplingInstantCount < 100, `Expected ${filter.samplingInstantCount} < 100`)
   })
 
   it('should return true if event.startTime < currentSamplingInstant', () => {
@@ -184,6 +190,6 @@ describe('PoissonProcessSamplingFilter', () => {
       const event = { startTime: 0, duration: filter.nextSamplingInstant }
       filter.filter(event)
     }
-    assert.ok(filter.samplingInstantCount > initialCount)
+    assert.ok(filter.samplingInstantCount > initialCount, `Expected ${filter.samplingInstantCount} > ${initialCount}`)
   })
 })

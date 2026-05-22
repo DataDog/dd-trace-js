@@ -1,5 +1,19 @@
 import { defineConfig } from 'vite'
 
+class CustomSequencer {
+  async shard (files) {
+    return files
+  }
+
+  async sort (files) {
+    if (process.env.CUSTOM_SEQUENCER_MARKER) {
+      // eslint-disable-next-line no-console
+      console.log(process.env.CUSTOM_SEQUENCER_MARKER)
+    }
+    return files
+  }
+}
+
 const config = {
   test: {
     include: [
@@ -8,6 +22,12 @@ const config = {
     pool: process.env.POOL_CONFIG || 'forks',
     reporters: ['default'],
   },
+}
+
+if (process.env.CUSTOM_SEQUENCER) {
+  config.test.sequence = {
+    sequencer: CustomSequencer,
+  }
 }
 
 if (process.env.COVERAGE_PROVIDER) {

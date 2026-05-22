@@ -369,6 +369,92 @@ class FakeCiVisIntake extends FakeAgent {
     return super.stop()
   }
 
+  // Gather payloads while childProcess runs, then run onPayload once on the
+  // accumulated buffer after the child emits `'exit'` plus `gracePeriod` ms of HTTP
+  // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
+  // only when a workload's child runtime is provably above the default.
+  /**
+   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
+   *   so a child that has already exited is handled correctly.
+   * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy
+   *   accepts everything.
+   * @param {(payloads: object[]) => void} onPayload Assertion callback, invoked once
+   *   on the post-exit buffer. Callers can read `childProcess.exitCode` immediately
+   *   after the returned promise resolves.
+   * @param {{ gracePeriod?: number, hardTimeout?: number }} [options]
+   */
+  gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
+    const { gracePeriod = 1000, hardTimeout = 30_000 } = options
+    const payloads = []
+
+    return new Promise((resolve, reject) => {
+      let settled = false
+      let graceTimer = null
+
+      const cleanup = () => {
+        settled = true
+        this.off('message', messageHandler)
+        childProcess.off('exit', exitHandler)
+        clearTimeout(hardTimer)
+        clearTimeout(graceTimer)
+      }
+
+      const messageHandler = (message) => {
+        if (settled) return
+        if (!payloadMatch || payloadMatch(message)) {
+          payloads.push(message)
+        }
+      }
+
+      const exitHandler = () => {
+        if (settled) return
+        // Hung-child backstop is moot once the child has exited; only the
+        // grace period applies from here. Without this, a child exiting
+        // close to `hardTimeout` races the grace timer and rejects with a
+        // wrong "child still running" message instead of running the
+        // assertion.
+        clearTimeout(hardTimer)
+        graceTimer = setTimeout(() => {
+          if (settled) return
+          if (payloads.length === 0) {
+            cleanup()
+            reject(new Error(
+              'gatherPayloadsUntilChildExit: child exited with no matching payloads ' +
+              `(after ${gracePeriod}ms grace period)`
+            ))
+            return
+          }
+          try {
+            onPayload(payloads)
+            cleanup()
+            resolve()
+          } catch (error) {
+            cleanup()
+            reject(error)
+          }
+        }, gracePeriod)
+      }
+
+      const hardTimer = setTimeout(() => {
+        if (settled) return
+        cleanup()
+        reject(new Error(
+          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)`
+        ))
+      }, hardTimeout)
+
+      this.on('message', messageHandler)
+
+      // Child may already have exited (very fast spawn-and-die).
+      if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+        queueMicrotask(exitHandler)
+      } else {
+        childProcess.once('exit', exitHandler)
+      }
+    })
+  }
+
   // Similar to gatherPayloads but resolves if enough payloads have been gathered
   // to make the assertions pass. It times out after maxGatheringTime so it should
   // always be faster or as fast as gatherPayloads

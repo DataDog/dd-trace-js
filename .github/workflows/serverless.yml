@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
@@ -164,6 +163,7 @@ jobs:
           - eventhubs
           - client
           - servicebus
+          - cosmosdb
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -199,15 +199,22 @@ jobs:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Localtestpass1!"
           SQL_SERVER: azuresqledge
+      azurecosmosemulator:
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:bf3bd3cbe3fae2005a0745f77b01d1fc8cd04112193f3ee32289ee15ee9ae5fa # vnext-preview
+        ports:
+          - "127.0.0.1:8081:8081"
+          - "127.0.0.1:8080:8080"
+          - "127.0.0.1:1234:1234"
+        env:
+          ACCEPT_EULA: "Y"
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
     env:
       PLUGINS: azure-functions
-      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
+      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator,azurecosmosemulator
       SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-
       - name: Copy emulator config files
         run: |
           docker cp \
@@ -221,17 +228,9 @@ jobs:
         run: |
           docker restart ${{ job.services.azureeventhubsemulator.id }}
           docker restart ${{ job.services.azureservicebusemulator.id }}
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:integration:plugins:coverage
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/integration-test-newest-lts
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -286,7 +285,42 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/integration-test
+      - uses: ./.github/actions/plugins/integration-test-newest-lts
+        with:
+          flags: serverless-azure-durable-functions
+
+  azure-cosmos:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      azurite:
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite@sha256:647c63a91102a9d8e8000aab803436e1fc85fbb285e7ce830a82ee5d6661cf37 # 3.35.0
+        ports:
+          - "127.0.0.1:10000:10000"
+          - "127.0.0.1:10001:10001"
+          - "127.0.0.1:10002:10002"
+      azurecosmosemulator:
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:bf3bd3cbe3fae2005a0745f77b01d1fc8cd04112193f3ee32289ee15ee9ae5fa # vnext-preview
+        ports:
+          - "127.0.0.1:8081:8081"
+          - "127.0.0.1:8080:8080"
+          - "127.0.0.1:1234:1234"
+        env:
+          ACCEPT_EULA: "Y"
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
+    env:
+      PLUGINS: azure-cosmos
+      SERVICES: azurite,azurecosmosemulator
+      NODE_OPTIONS: '--experimental-global-webcrypto'
+      NODE_TLS_REJECT_UNAUTHORIZED: 0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Wait for Cosmos emulator to be ready
+        run: timeout 120 bash -c 'until nc -z 127.0.0.1 8081; do sleep 3; done'
+      - uses: ./.github/actions/plugins/test
+
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest

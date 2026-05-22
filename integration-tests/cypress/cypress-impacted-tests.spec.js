@@ -12,10 +12,11 @@ const {
   useSandbox,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  stopCiVisTestEnv,
   warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
@@ -37,7 +38,6 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
-const RECEIVER_STOP_TIMEOUT = 20000
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
@@ -103,7 +103,7 @@ moduleTypes.forEach(({
     }
 
     this.timeout(80_000)
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
@@ -112,91 +112,27 @@ moduleTypes.forEach(({
     before(async function () {
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
+
+      const webApp = await startWebAppServer()
+      webAppBaseUrl = webApp.baseUrl
+      webAppServer = webApp.server
     })
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-
-      // Create a fresh web server for each test to avoid state issues
-      webAppServer = createWebAppServer()
-      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-        webAppServer.once('error', reject)
-        webAppServer.listen(0, 'localhost', () => {
-          webAppPort = webAppServer.address().port
-          webAppServer.removeListener('error', reject)
-          resolve()
-        })
-      }))
     })
 
-    // Cypress child processes can sometimes hang or take longer to
-    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
-    // because there are pending connections.
     afterEach(async () => {
-      if (childProcess && childProcess.pid) {
-        try {
-          childProcess.kill('SIGKILL')
-        } catch (error) {
-          // Process might already be dead - this is fine, ignore error
-        }
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
+    })
 
-        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
-        // The OS will clean up zombies, and fresh server per test prevents port conflicts
-      }
-
-      // Close web server before stopping receiver
-      if (webAppServer) {
-        await /** @type {Promise<void>} */ (new Promise((resolve) => {
-          webAppServer.close((err) => {
-            if (err) {
-              // eslint-disable-next-line no-console
-              console.error('Web server close error:', err)
-            }
-            resolve()
-          })
-        }))
-      }
-
-      // Add timeout to prevent hanging
-      const stopPromise = receiver.stop()
-      const timeoutPromise = new Promise((resolve, reject) =>
-        setTimeout(() => reject(new Error('Receiver stop timeout')), RECEIVER_STOP_TIMEOUT)
-      )
-
-      try {
-        await Promise.race([stopPromise, timeoutPromise])
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn('Receiver stop timed out:', error.message)
-      }
-
-      // Small delay to allow OS to release ports
-      await new Promise(resolve => setTimeout(resolve, 100))
+    after(async () => {
+      await stopWebAppServer(webAppServer)
     })
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', async () => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const metadataDicts = payloads
-              .filter(({ payload }) => payload.metadata?.test)
-              .flatMap(({ payload }) => payload.metadata)
-
-            assert.ok(metadataDicts.length > 0)
-            metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
-              // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
-            })
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -207,12 +143,36 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               DD_TEST_SESSION_NAME: 'my-test-session-name',
               SPEC_PATTERN: specToRun,
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const metadataDicts = payloads
+                .filter(({ payload }) => payload.metadata?.test)
+                .flatMap(({ payload }) => payload.metadata)
+
+              assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
+              metadataDicts.forEach(metadata => {
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
+                // capabilities logic does not overwrite test session name
+                assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+              })
+            }, { hardTimeout: 25000 })
 
         // TODO: remove this once we have figured out flakiness
         childProcess.stdout?.pipe(process.stdout)
@@ -266,77 +226,78 @@ moduleTypes.forEach(({
         execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
-      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
+      const getTestAssertions = ({ isModified, isEfd, isNew }, childProcess) =>
         receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const testSession = events.find(event => event.type === 'test_session_end').content
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
 
-            if (isEfd) {
-              assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-            } else {
-              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            }
+              if (isEfd) {
+                assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+              } else {
+                assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+              }
 
-            const resourceNames = tests.map(span => span.resource)
+              const resourceNames = tests.map(span => span.resource)
 
-            assertObjectContains(resourceNames,
-              [
-                'cypress/e2e/impacted-test.js.impacted test is impacted test',
-              ]
-            )
+              assertObjectContains(resourceNames,
+                [
+                  'cypress/e2e/impacted-test.js.impacted test is impacted test',
+                ]
+              )
 
-            const impactedTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
+              const impactedTests = tests.filter(test =>
+                test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
               test.meta[TEST_NAME] === 'impacted test is impacted test')
 
-            if (isEfd) {
-              assert.strictEqual(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
-            } else {
-              assert.strictEqual(impactedTests.length, 1)
-            }
-
-            for (const impactedTest of impactedTests) {
-              if (isModified) {
-                assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
+              if (isEfd) {
+                assert.strictEqual(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
               } else {
-                assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
+                assert.strictEqual(impactedTests.length, 1)
               }
-              if (isNew) {
-                assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
-              } else {
-                assert.ok(!(TEST_IS_NEW in impactedTest.meta))
-              }
-            }
 
-            if (isEfd) {
-              const retriedTests = tests.filter(
-                test => test.meta[TEST_IS_RETRY] === 'true' &&
+              for (const impactedTest of impactedTests) {
+                if (isModified) {
+                  assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
+                } else {
+                  assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
+                }
+                if (isNew) {
+                  assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
+                } else {
+                  assert.ok(!(TEST_IS_NEW in impactedTest.meta))
+                }
+              }
+
+              if (isEfd) {
+                const retriedTests = tests.filter(
+                  test => test.meta[TEST_IS_RETRY] === 'true' &&
                 test.meta[TEST_NAME] === 'impacted test is impacted test'
-              )
-              assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
-              let retriedTestNew = 0
-              let retriedTestsWithReason = 0
-              retriedTests.forEach(test => {
-                if (test.meta[TEST_IS_NEW] === 'true') {
-                  retriedTestNew++
-                }
-                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
-                  retriedTestsWithReason++
-                }
-              })
-              assert.strictEqual(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
-              assert.strictEqual(retriedTestsWithReason, NUM_RETRIES_EFD)
-            }
-          }, 25000)
+                )
+                assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+                let retriedTestNew = 0
+                let retriedTestsWithReason = 0
+                retriedTests.forEach(test => {
+                  if (test.meta[TEST_IS_NEW] === 'true') {
+                    retriedTestNew++
+                  }
+                  if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                    retriedTestsWithReason++
+                  }
+                })
+                assert.strictEqual(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+                assert.strictEqual(retriedTestsWithReason, NUM_RETRIES_EFD)
+              }
+            }, 25000)
 
       const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/impacted-test.js'
@@ -347,13 +308,15 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
               ...extraEnvVars,
             },
           }
         )
+
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew }, childProcess)
 
         // TODO: remove this once we have figured out flakiness
         childProcess.stdout?.pipe(process.stdout)
@@ -422,37 +385,6 @@ moduleTypes.forEach(({
           known_tests_enabled: true,
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-
-            assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true',
-            })
-
-            const impactedTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
-              test.meta[TEST_NAME] === 'impacted test is impacted test')
-
-            // Should only have 1 test, no retries when testIsolation is false
-            assert.equal(impactedTests.length, 1)
-
-            for (const impactedTest of impactedTests) {
-              assertObjectContains(impactedTest.meta, {
-                [TEST_IS_MODIFIED]: 'true',
-              })
-            }
-
-            // No retries should occur when testIsolation is false
-            const retriedTests = tests.filter(
-              test => test.meta[TEST_IS_RETRY] === 'true' &&
-              test.meta[TEST_NAME] === 'impacted test is impacted test'
-            )
-            assert.equal(retriedTests.length, 0)
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/impacted-test.js'
@@ -463,13 +395,47 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
               CYPRESS_TEST_ISOLATION: 'false',
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              assertObjectContains(testSession.meta, {
+                [TEST_EARLY_FLAKE_ENABLED]: 'true',
+              })
+
+              const impactedTests = tests.filter(test =>
+                test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
+              test.meta[TEST_NAME] === 'impacted test is impacted test')
+
+              // Should only have 1 test, no retries when testIsolation is false
+              assert.equal(impactedTests.length, 1)
+
+              for (const impactedTest of impactedTests) {
+                assertObjectContains(impactedTest.meta, {
+                  [TEST_IS_MODIFIED]: 'true',
+                })
+              }
+
+              // No retries should occur when testIsolation is false
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_IS_RETRY] === 'true' &&
+              test.meta[TEST_NAME] === 'impacted test is impacted test'
+              )
+              assert.equal(retriedTests.length, 0)
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -499,50 +465,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // All tests in the file are new and modified, so they should all be retried
-            // 2 tests * (1 original + 2 retries) = 6 tests total
-            assert.equal(tests.length, 6)
-
-            // Extract test execution order with full details
-            const testExecutionOrder = tests.map(test => ({
-              name: test.meta[TEST_NAME],
-              isRetry: test.meta[TEST_IS_RETRY] === 'true',
-              isModified: test.meta[TEST_IS_MODIFIED] === 'true',
-            }))
-
-            // All should be marked as modified
-            testExecutionOrder.forEach(test => {
-              assert.equal(test.isModified, true)
-            })
-
-            // Expected order:
-            // 1. "first test" (original)
-            // 2. "first test" (retry 1)
-            // 3. "first test" (retry 2)
-            // 4. "second test" (original)
-            // 5. "second test" (retry 1)
-            // 6. "second test" (retry 2)
-
-            assertObjectContains(testExecutionOrder, [
-              { name: 'impacted test order first test', isRetry: false },
-              { name: 'impacted test order first test', isRetry: true },
-              { name: 'impacted test order first test', isRetry: true },
-              { name: 'impacted test order second test', isRetry: false },
-              { name: 'impacted test order second test', isRetry: true },
-              { name: 'impacted test order second test', isRetry: true },
-            ])
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true',
-            })
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/impacted-test-order.js'
@@ -553,12 +475,59 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // All tests in the file are new and modified, so they should all be retried
+              // 2 tests * (1 original + 2 retries) = 6 tests total
+              assert.equal(tests.length, 6)
+
+              // Extract test execution order with full details
+              const testExecutionOrder = tests.map(test => ({
+                name: test.meta[TEST_NAME],
+                isRetry: test.meta[TEST_IS_RETRY] === 'true',
+                isModified: test.meta[TEST_IS_MODIFIED] === 'true',
+              }))
+
+              // All should be marked as modified
+              testExecutionOrder.forEach(test => {
+                assert.equal(test.isModified, true)
+              })
+
+              // Expected order:
+              // 1. "first test" (original)
+              // 2. "first test" (retry 1)
+              // 3. "first test" (retry 2)
+              // 4. "second test" (original)
+              // 5. "second test" (retry 1)
+              // 6. "second test" (retry 2)
+
+              assertObjectContains(testExecutionOrder, [
+                { name: 'impacted test order first test', isRetry: false },
+                { name: 'impacted test order first test', isRetry: true },
+                { name: 'impacted test order first test', isRetry: true },
+                { name: 'impacted test order second test', isRetry: false },
+                { name: 'impacted test order second test', isRetry: true },
+                { name: 'impacted test order second test', isRetry: true },
+              ])
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assertObjectContains(testSession.meta, {
+                [TEST_EARLY_FLAKE_ENABLED]: 'true',
+              })
+            }, { hardTimeout: 25000 })
 
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()

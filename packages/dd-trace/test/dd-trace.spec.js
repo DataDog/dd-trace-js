@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
@@ -11,13 +12,12 @@ const agent = require('./plugins/agent')
 describe('dd-trace', () => {
   let tracer
 
-  beforeEach(() => {
-    tracer = require('../')
-    return agent.load()
+  beforeEach(async () => {
+    tracer = await agent.load()
   })
 
-  afterEach(() => {
-    agent.close()
+  afterEach(async () => {
+    await agent.close()
   })
 
   it('should record and send a trace to the agent', () => {
@@ -39,10 +39,16 @@ describe('dd-trace', () => {
       // small `duration` values decode as `Number` and large `start`
       // timestamps decode as `BigInt`. Coerce both to BigInt before checking
       // the round-trip values so the test is encoding-agnostic.
-      assert.ok(BigInt(payload[0][0].start) > 0n)
-      assert.ok(BigInt(payload[0][0].duration) >= 0n)
-      assert.ok(Object.hasOwn(payload[0][0].metrics, SAMPLING_PRIORITY_KEY))
-      assert.ok(Object.hasOwn(payload[0][0].meta, DECISION_MAKER_KEY))
+      assert.ok(BigInt(payload[0][0].start) > 0n, `Expected ${BigInt(payload[0][0].start)} > 0n`)
+      assert.ok(BigInt(payload[0][0].duration) >= 0n, `Expected ${BigInt(payload[0][0].duration)} >= 0n`)
+      assert.ok(
+        Object.hasOwn(payload[0][0].metrics, SAMPLING_PRIORITY_KEY),
+        `Available keys: ${inspect(Object.keys(payload[0][0].metrics))}`
+      )
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta, DECISION_MAKER_KEY),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+      )
     })
   })
 })
