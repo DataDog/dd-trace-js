@@ -21,6 +21,7 @@ describe('Plugin', () => {
   let keyString
   let indexName
   let binName
+  let indexCounter = 0
 
   describe('aerospike', function () {
     this.timeout(8000)
@@ -51,9 +52,9 @@ describe('Plugin', () => {
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
-        const ts = process.hrtime.bigint()
-        binName = `tags_${ts}`
-        indexName = `tags_idx_${ts}`
+        const id = ++indexCounter
+        binName = `b${id}`
+        indexName = `i${id}`
       })
 
       after(() => {
