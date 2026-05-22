@@ -2,12 +2,29 @@
 
 const dc = require('dc-polyfill')
 const shimmer = require('../../../datadog-shimmer')
-const { convertOpenAIResponseItemsToMessages } = require('./ai-messages')
+const {
+  convertOpenAIResponseItemsToMessages,
+  convertOpenAIResponsePromptToMessages,
+  normalizeOpenAIChatMessages,
+} = require('./ai-messages')
 
 // TODO: this channel name is incorrect, instrumentations publish with THEIR name, not with their subscribers names.
 const aiguardChannel = dc.channel('dd-trace:ai:aiguard')
 
-const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses'])
+/**
+ * @typedef {object} ResourceHandler
+ * @property {(callArgs: object) => (Array<object>|undefined)} getInputMessages
+ * @property {(body: object) => Array<object>} getOutputMessages
+ * @property {(inputMessages: Array<object>, outputMessages: Array<object>) => Promise<unknown>}
+ *   publishOutputEvaluation
+ */
+
+/**
+ * @typedef {object} Guard
+ * @property {ResourceHandler} handler
+ * @property {Array<object>} inputMessages
+ * @property {() => Promise<void>} getInputEval
+ */
 
 /**
  * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
@@ -28,37 +45,7 @@ function publishEvaluation (messages) {
  * @returns {Array<object>|undefined}
  */
 function getChatCompletionsInputMessages (callArgs) {
-  return callArgs?.messages?.length ? callArgs.messages : undefined
-}
-
-/**
- * Extracts OpenAI input messages from a `responses.create` call. The `instructions`
- * field is treated as a system prompt — it directly steers model behavior and the
- * LLMObs OpenAI plugin already surfaces it as one — so AI Guard must screen it too.
- *
- * @param {object} callArgs - First argument passed to the wrapped method
- * @returns {Array<object>|undefined}
- */
-function getResponsesInputMessages (callArgs) {
-  const input = convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
-  if (typeof callArgs?.instructions === 'string' && callArgs.instructions.length) {
-    const messages = [{ role: 'system', content: callArgs.instructions }]
-    for (const message of input) messages.push(message)
-    return messages
-  }
-  return input.length ? input : undefined
-}
-
-/**
- * Extracts OpenAI input messages from a method call's first argument.
- *
- * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
- * @param {object} callArgs - First argument passed to the wrapped OpenAI method
- * @returns {Array<object>|undefined}
- */
-function getInputMessages (baseResource, callArgs) {
-  if (baseResource === 'chat.completions') return getChatCompletionsInputMessages(callArgs)
-  if (baseResource === 'responses') return getResponsesInputMessages(callArgs)
+  return normalizeOpenAIChatMessages(callArgs?.messages)
 }
 
 /**
@@ -72,7 +59,7 @@ function getInputMessages (baseResource, callArgs) {
  * @returns {Array<object>}
  */
 function getChatCompletionsOutputMessages (body) {
-  const messages = []
+  const eligible = []
   const choices = Array.isArray(body?.choices) ? body.choices : []
   for (const choice of choices) {
     const message = choice?.message
@@ -82,10 +69,73 @@ function getChatCompletionsOutputMessages (body) {
       message?.refusal != null ||
       message?.function_call != null
     ) {
-      messages.push(message)
+      eligible.push(message)
     }
   }
-  return messages
+  return normalizeOpenAIChatMessages(eligible) ?? []
+}
+
+/**
+ * Publishes AI Guard After Model evaluation for `chat.completions` output.
+ *
+ * Chat completions may return multiple choices when `n > 1`. Screen every choice
+ * concurrently so any unsafe assistant output rejects `.parse()`, regardless of
+ * which choice the caller ends up using.
+ *
+ * @param {Array<object>} inputMessages
+ * @param {Array<object>} outputMessages - One entry per choice
+ * @returns {Promise<Array<void>>}
+ */
+function publishChatCompletionsOutputEvaluation (inputMessages, outputMessages) {
+  const evals = []
+  for (const message of outputMessages) {
+    evals.push(publishEvaluation([...inputMessages, message]))
+  }
+  return Promise.all(evals)
+}
+
+/**
+ * Extracts OpenAI input messages from a `responses.create` call. The `instructions`
+ * field is treated as a developer prompt — it directly steers model behavior and the
+ * LLMObs OpenAI plugin already surfaces it as one — so AI Guard must screen it too.
+ *
+ * AI Guard `/evaluate` accepts a single leading system/developer message; if the
+ * caller's `input` already begins with one, prepend the `instructions` text to its
+ * content rather than emit a second developer turn.
+ *
+ * @param {object} callArgs - First argument passed to the wrapped method
+ * @returns {Array<object>|undefined}
+ */
+function getResponsesInputMessages (callArgs) {
+  const messages = [
+    ...convertOpenAIResponseItemsToMessages(callArgs?.input, 'user'),
+    ...convertOpenAIResponsePromptToMessages(callArgs?.prompt),
+  ]
+
+  const instructions = typeof callArgs?.instructions === 'string' && callArgs.instructions.length
+    ? callArgs.instructions
+    : null
+  if (!instructions) return messages.length ? messages : undefined
+
+  const first = messages[0]
+  if (first && (first.role === 'developer' || first.role === 'system')) {
+    const merged = { role: 'developer', content: mergeInstructionsWithContent(instructions, first.content) }
+    return [merged, ...messages.slice(1)]
+  }
+  return [{ role: 'developer', content: instructions }, ...messages]
+}
+
+/**
+ * Merges Responses API instructions with an existing leading developer/system content value.
+ *
+ * @param {string} instructions
+ * @param {string|Array<object>|undefined} content
+ * @returns {string|Array<object>}
+ */
+function mergeInstructionsWithContent (instructions, content) {
+  if (Array.isArray(content)) return [{ type: 'text', text: instructions }, ...content]
+  if (typeof content === 'string' && content.length) return `${instructions}\n\n${content}`
+  return instructions
 }
 
 /**
@@ -99,41 +149,38 @@ function getResponsesOutputMessages (body) {
 }
 
 /**
- * Extracts OpenAI output messages from parsed response bodies.
+ * Publishes AI Guard After Model evaluation for `responses` output.
  *
- * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
- * @param {object} body - Parsed response body
- * @returns {Array<object>}
+ * The Responses API returns a single conversation turn whose `output` items form one
+ * coherent message (reasoning steps + final assistant message + tool calls + ...);
+ * they are screened together as a single evaluation.
+ *
+ * @param {Array<object>} inputMessages
+ * @param {Array<object>} outputMessages
+ * @returns {Promise<void>}
  */
-function getOutputMessages (baseResource, body) {
-  if (baseResource === 'chat.completions') return getChatCompletionsOutputMessages(body)
-  if (baseResource === 'responses') return getResponsesOutputMessages(body)
-  return []
+function publishResponsesOutputEvaluation (inputMessages, outputMessages) {
+  return publishEvaluation([...inputMessages, ...outputMessages])
 }
 
 /**
- * Publishes AI Guard After Model evaluation for extracted OpenAI output messages.
+ * Per-resource handlers describing how AI Guard reads inputs and screens outputs for
+ * each LLM-prompt-accepting OpenAI endpoint. The keys also serve as the set of
+ * resources eligible for AI Guard evaluation.
  *
- * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
- * @param {Array<object>} inputMessages - Already-converted AI Guard style input messages
- * @param {Array<object>} outputMessages - Already-converted AI Guard style output messages
- * @returns {Promise<void|Array<void>>}
+ * @type {Record<string, ResourceHandler>}
  */
-function publishOutputEvaluation (baseResource, inputMessages, outputMessages) {
-  if (!outputMessages.length) return Promise.resolve()
-
-  if (baseResource === 'chat.completions') {
-    // Chat completions may return multiple choices when `n > 1`. Screen every choice
-    // concurrently so any unsafe assistant output rejects `.parse()`, regardless of
-    // which choice the caller ends up using.
-    const evals = []
-    for (const message of outputMessages) {
-      evals.push(publishEvaluation([...inputMessages, message]))
-    }
-    return Promise.all(evals)
-  }
-
-  return publishEvaluation([...inputMessages, ...outputMessages])
+const RESOURCE_HANDLERS = {
+  'chat.completions': {
+    getInputMessages: getChatCompletionsInputMessages,
+    getOutputMessages: getChatCompletionsOutputMessages,
+    publishOutputEvaluation: publishChatCompletionsOutputEvaluation,
+  },
+  responses: {
+    getInputMessages: getResponsesInputMessages,
+    getOutputMessages: getResponsesOutputMessages,
+    publishOutputEvaluation: publishResponsesOutputEvaluation,
+  },
 }
 
 /**
@@ -148,27 +195,28 @@ function hasSubscribers () {
 
 /**
  * Builds a guard handle when AI Guard is enabled and applicable to this call. The
- * handle exposes a lazy `getInputEval` so Before Model evaluation only kicks off
- * once the caller consumes the APIPromise. Returns null when AI Guard does not apply
- * (no subscribers, non-conversational resource, streaming, or no input messages).
+ * handle binds the per-resource handler so downstream functions never re-dispatch
+ * on `baseResource`. Returns null when AI Guard does not apply (no subscribers,
+ * non-eligible resource, streaming, or no input messages).
  *
- * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {string} baseResource - e.g. `'chat.completions'` or `'responses'`
  * @param {object} callArgs - First argument passed to the wrapped OpenAI method
  * @param {boolean} stream - Whether the caller asked for a streamed response
- * @returns {{baseResource: string, inputMessages: Array<object>, getInputEval: () => Promise<void>}|null}
+ * @returns {Guard|null}
  */
 function createGuard (baseResource, callArgs, stream) {
   // Streaming AI Guard support lands in a follow-up PR. For now, provider-level AI
   // Guard only evaluates non-streaming responses.
-  if (stream || !AIGUARD_CONVERSATIONAL_RESOURCES.has(baseResource) || !aiguardChannel.hasSubscribers) {
-    return null
-  }
-  const inputMessages = getInputMessages(baseResource, callArgs)
+  if (stream || !aiguardChannel.hasSubscribers) return null
+  const handler = RESOURCE_HANDLERS[baseResource]
+  if (!handler) return null
+
+  const inputMessages = handler.getInputMessages(callArgs)
   if (!inputMessages) return null
 
   let inputEvalPromise
   const getInputEval = () => (inputEvalPromise ??= publishEvaluation(inputMessages))
-  return { baseResource, inputMessages, getInputEval }
+  return { handler, inputMessages, getInputEval }
 }
 
 /**
@@ -177,12 +225,12 @@ function createGuard (baseResource, callArgs, stream) {
  * path because the response body has not been parsed.
  *
  * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
- * @param {{getInputEval: () => Promise<void>}} guard
+ * @param {Guard} guard
  */
 function wrapAsResponse (apiProm, guard) {
   if (typeof apiProm.asResponse !== 'function') return
-  shimmer.wrap(apiProm, 'asResponse', origAsResponse => function () {
-    const responsePromise = origAsResponse.apply(this, arguments)
+  shimmer.wrap(apiProm, 'asResponse', origAsResponse => function (...args) {
+    const responsePromise = origAsResponse.apply(this, args)
     return Promise.all([guard.getInputEval(), responsePromise]).then(([, response]) => response)
   })
 }
@@ -192,7 +240,7 @@ function wrapAsResponse (apiProm, guard) {
  * result only once the Before Model verdict is in.
  *
  * @param {Promise<unknown>} parsedPromise
- * @param {{getInputEval: () => Promise<void>}} guard
+ * @param {Guard} guard
  * @returns {Promise<unknown>}
  */
 function gateParse (parsedPromise, guard) {
@@ -202,13 +250,14 @@ function gateParse (parsedPromise, guard) {
 /**
  * Runs After Model evaluation against the response body.
  *
- * @param {{baseResource: string, inputMessages: Array<object>}} guard
+ * @param {Guard} guard
  * @param {object} body - Parsed OpenAI response body
- * @returns {Promise<void|Array<void>>}
+ * @returns {Promise<unknown>}
  */
 function evaluateOutput (guard, body) {
-  const outputMessages = getOutputMessages(guard.baseResource, body)
-  return publishOutputEvaluation(guard.baseResource, guard.inputMessages, outputMessages)
+  const outputMessages = guard.handler.getOutputMessages(body)
+  if (!outputMessages.length) return Promise.resolve()
+  return guard.handler.publishOutputEvaluation(guard.inputMessages, outputMessages)
 }
 
 module.exports = {

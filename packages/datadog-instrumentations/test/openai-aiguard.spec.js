@@ -428,7 +428,7 @@ describe('openai AI Guard instrumentation', () => {
         .finally(unsubscribe)
     })
 
-    it('After Model includes the assistant message when only deprecated `function_call` is set', () => {
+    it('After Model normalizes deprecated `function_call` into modern `tool_calls`', () => {
       const { calls, unsubscribe } = subscribeAutoResolve()
       const functionCallMessage = {
         role: 'assistant',
@@ -441,7 +441,14 @@ describe('openai AI Guard instrumentation', () => {
       return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].messages.at(-1), functionCallMessage)
+          assert.deepStrictEqual(calls[1].messages.at(-1), {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: 'do_thing',
+              function: { name: 'do_thing', arguments: '{}' },
+            }],
+          })
         })
         .finally(unsubscribe)
     })
@@ -803,14 +810,14 @@ describe('openai AI Guard instrumentation', () => {
         .finally(unsubscribe)
     })
 
-    it('prepends `instructions` as a system message in Before Model', () => {
+    it('prepends `instructions` as a developer message in Before Model', () => {
       const { calls, unsubscribe } = subscribeAutoResolve()
       const responses = new Responses()
       responses._nextApiPromise = new FakeAPIPromise({ output: [] })
 
       return responses.create({ instructions: 'Be concise.', input: 'hi' }).parse()
         .then(() => assert.deepStrictEqual(calls[0].messages, [
-          { role: 'system', content: 'Be concise.' },
+          { role: 'developer', content: 'Be concise.' },
           { role: 'user', content: 'hi' },
         ]))
         .finally(unsubscribe)
@@ -826,9 +833,47 @@ describe('openai AI Guard instrumentation', () => {
       return responses.create({ instructions: 'Greet the user.' }).parse()
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[0].messages, [{ role: 'system', content: 'Greet the user.' }])
+          assert.deepStrictEqual(calls[0].messages, [{ role: 'developer', content: 'Greet the user.' }])
           assert.deepStrictEqual(calls[1].messages.at(-1), { role: 'assistant', content: 'Hi!' })
         })
+        .finally(unsubscribe)
+    })
+
+    it('merges `instructions` into a leading developer message in `input`', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({
+        instructions: 'Be concise.',
+        input: [
+          { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'Use bullets.' }] },
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+        ],
+      }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, [
+          { role: 'developer', content: 'Be concise.\n\nUse bullets.' },
+          { role: 'user', content: 'hi' },
+        ]))
+        .finally(unsubscribe)
+    })
+
+    it('merges `instructions` into a leading system message in `input`', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({
+        instructions: 'Be concise.',
+        input: [
+          { type: 'message', role: 'system', content: [{ type: 'input_text', text: 'You are helpful.' }] },
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+        ],
+      }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, [
+          { role: 'developer', content: 'Be concise.\n\nYou are helpful.' },
+          { role: 'user', content: 'hi' },
+        ]))
         .finally(unsubscribe)
     })
   })
