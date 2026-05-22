@@ -200,6 +200,84 @@ describe('Plugin', () => {
           })
         })
 
+        describe('publishMessage', () => {
+          it('creates a producer span via the wrapped prototype publish', () => {
+            const assertion = agent.assertSomeTraces(traces => {
+              const producer = traces[0].find(
+                s => s.meta?.component === 'nats' && s.meta['span.kind'] === 'producer'
+              )
+              assert.ok(producer, 'expected producer span')
+              assertObjectContains(producer, {
+                resource: subject,
+                meta: { 'nats.subject': subject, 'nats.operation': 'publish' },
+              })
+            })
+
+            connection.publishMessage({ subject, data: 'hello' })
+            return assertion
+          })
+        })
+
+        describe('respondMessage', () => {
+          it('creates a producer span when replying to a Msg', async () => {
+            const replyInbox = `reply-${id()}`
+            const received = new Promise(resolve => {
+              connection.subscribe(replyInbox, {
+                max: 1,
+                callback: (_e, msg) => resolve(msg),
+              })
+            })
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const producer = traces[0].find(
+                s =>
+                  s.meta?.component === 'nats' &&
+                  s.meta['span.kind'] === 'producer' &&
+                  s.resource === replyInbox
+              )
+              assert.ok(producer, 'expected producer span for the reply')
+            })
+
+            // respondMessage internally calls this.publish(msg.reply, ...) which
+            // hits the wrapped prototype method.
+            connection.respondMessage({ subject, reply: replyInbox, data: 'pong' })
+            await received
+            return assertion
+          })
+        })
+
+        describe('wildcard subscriptions', () => {
+          it('uses the delivered subject, not the subscription filter', async () => {
+            const wildcard = `${subject}.*`
+            const concrete = `${subject}.created`
+            const received = new Promise(resolve => {
+              connection.subscribe(wildcard, {
+                max: 1,
+                callback: (_e, msg) => resolve(msg),
+              })
+            })
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const consumer = traces[0].find(
+                s => s.meta?.component === 'nats' && s.meta['span.kind'] === 'consumer'
+              )
+              assert.ok(consumer, 'expected consumer span')
+              assertObjectContains(consumer, {
+                resource: concrete,
+                meta: {
+                  'nats.subject': concrete,
+                  'messaging.destination.name': concrete,
+                  'nats.subscription.subject': wildcard,
+                },
+              })
+            })
+
+            connection.publish(concrete, 'hello')
+            await received
+            return assertion
+          })
+        })
+
         describe('distributed tracing', () => {
           it('propagates trace context via headers', async () => {
             const received = new Promise(resolve => {
