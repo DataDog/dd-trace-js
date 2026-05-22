@@ -80,7 +80,8 @@ describe('Plugin', () => {
 
               assert(span.meta['http.useragent'].includes('azure-cosmos-js/'), 'expected http.useragent in span meta')
               assert(parseInt(span.meta['db.response.status_code']) >= 200 &&
-                parseInt(span.meta['db.response.status_code']) < 300)
+                parseInt(span.meta['db.response.status_code']) < 300,
+                `expected 2xx status code, got ${span.meta['db.response.status_code']}`)
 
               validatedResources.add(resource)
             }
@@ -184,7 +185,8 @@ describe('Plugin', () => {
               },
             })
 
-            assert(conflictCreate.meta['http.useragent'].includes('azure-cosmos-js/'))
+            assert(conflictCreate.meta['http.useragent'].includes('azure-cosmos-js/'),
+              `expected http.useragent to include 'azure-cosmos-js/', got ${conflictCreate.meta['http.useragent']}`)
           }
         )
 
