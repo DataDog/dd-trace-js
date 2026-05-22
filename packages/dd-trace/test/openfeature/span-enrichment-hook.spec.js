@@ -246,7 +246,10 @@ describe('SpanEnrichmentHook', () => {
       hook.finally(hookContext(), evalDetails())
 
       sinon.assert.calledOnce(log.warn)
-      assert.ok(log.warn.firstCall.args[1].includes('context error'))
+      assert.ok(
+        log.warn.firstCall.args[1].includes('context error'),
+        `Expected warning message to include 'context error', got: ${log.warn.firstCall.args[1]}`
+      )
     })
   })
 
@@ -354,9 +357,12 @@ describe('SpanEnrichmentHook', () => {
 
       assert.strictEqual(mockSpan.setTag.callCount, 3)
       const tagNames = mockSpan.setTag.getCalls().map(c => c.args[0])
-      assert.ok(tagNames.includes('ffe_flags_enc'))
-      assert.ok(tagNames.includes('ffe_subjects_enc'))
-      assert.ok(tagNames.includes('ffe_runtime_defaults'))
+      assert.ok(tagNames.includes('ffe_flags_enc'), `Expected tagNames to include 'ffe_flags_enc', got: ${tagNames}`)
+      assert.ok(tagNames.includes('ffe_subjects_enc'), `Expected tagNames to include 'ffe_subjects_enc', got: ${tagNames}`)
+      assert.ok(
+        tagNames.includes('ffe_runtime_defaults'),
+        `Expected tagNames to include 'ffe_runtime_defaults', got: ${tagNames}`
+      )
     })
 
     it('should clean up state after applying tags', () => {
@@ -382,7 +388,10 @@ describe('SpanEnrichmentHook', () => {
       finishSubscriber(mockSpan)
 
       sinon.assert.calledOnce(log.warn)
-      assert.ok(log.warn.firstCall.args[1].includes('setTag failed'))
+      assert.ok(
+        log.warn.firstCall.args[1].includes('setTag failed'),
+        `Expected warning message to include 'setTag failed', got: ${log.warn.firstCall.args[1]}`
+      )
     })
 
     it('should clean up state even when setTag throws', () => {
