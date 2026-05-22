@@ -72,7 +72,59 @@ jobs:
           flags: test-optimization-testopt-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
+  playwright-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        playwright-version: [oldest, latest]
+    name: Ensure Playwright Docker image (${{ matrix.playwright-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      # Both matrix jobs set this to the same value, so the last-writer-wins
+      # behaviour of matrix outputs is safe here.
+      images: ${{ steps.versions.outputs.images }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Determine versions
+        id: versions
+        run: |
+          LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
+          OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
+          DOCKER_HASH=$(sha256sum .github/playwright/Dockerfile | cut -c1-8)
+          LATEST_TAG="${LATEST}-${DOCKER_HASH}"
+          OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
+          BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
+          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
+          PW_VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
+          IMAGE_TAG=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
+          echo "images=$IMAGES" >> $GITHUB_OUTPUT
+          echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
+          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Ensure image
+        env:
+          PW_VERSION: ${{ steps.versions.outputs.pw-version }}
+          IMAGE_TAG: ${{ steps.versions.outputs.image-tag }}
+        run: |
+          IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${IMAGE_TAG}"
+          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "Image ${IMAGE} already exists, skipping build"
+          else
+            docker build --build-arg PLAYWRIGHT_VERSION="${PW_VERSION}" \
+              -t "${IMAGE}" .github/playwright
+            docker push "${IMAGE}"
+          fi
+
   integration-playwright:
+    needs: playwright-image
     strategy:
       fail-fast: false
       matrix:
@@ -91,7 +143,10 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ghcr.io/rochdev/playwright-tools@sha256:65b8161e23ede2354d04c8a242032d9ee8ca275359eac1764c027f073d38217c # 1.54.1-5
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.playwright-version] }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -105,25 +160,6 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      # We need this because the "oldest" playwright version depends on the major version of dd-trace
-      # For v5 it's 1.18.0 and for v6 it's 1.38.0
-      # We don't cache "latest" because it changes based on playwright releases.
-      # We could do it, but we'd have to request GitHub API to get the latest version,
-      # and the cache hit rate would be way lower than for "oldest", which should be 100%.
-      - name: Get dd-trace major version
-        if: matrix.playwright-version == 'oldest'
-        id: dd-version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "dd-trace major version: $MAJOR"
-      - name: Cache Playwright browsers
-        if: matrix.playwright-version == 'oldest'
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: /github/home/.cache/ms-playwright
-          key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
       - name: Configure Git safe directory
         # The Playwright job runs in a container where the checkout can be owned by a different UID.
         # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
