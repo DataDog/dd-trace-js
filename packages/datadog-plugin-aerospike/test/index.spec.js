@@ -248,6 +248,7 @@ describe('Plugin', () => {
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
                   const stream = query.foreach(queryPolicy)
+                  stream.on('error', () => {})
                   stream.on('end', () => { client.close(false) })
                 })
               })
