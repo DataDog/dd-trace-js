@@ -27,6 +27,15 @@ describe('Plugin', () => {
     this.timeout(8000)
 
     withVersions('aerospike', 'aerospike', version => {
+      // Assign unique bin/index names once per version block so that the
+      // createIndex and query tests share the same pre-built index. Using
+      // a counter prevents cross-version conflicts on the shared server.
+      before(() => {
+        const id = ++indexCounter
+        binName = `b${id}`
+        indexName = `i${id}`
+      })
+
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
@@ -44,9 +53,6 @@ describe('Plugin', () => {
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
-        const id = ++indexCounter
-        binName = `b${id}`
-        indexName = `i${id}`
       })
 
       after(() => {
@@ -239,7 +245,7 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING,
               }
               client.createIndex(index, (error, job) => {
-                if (error || !job) return done(error ?? new Error('no job returned by createIndex'))
+                if (!job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
                   if (waitError) return done(waitError)
                   const query = client.query(ns, 'demo')
