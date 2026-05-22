@@ -457,7 +457,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
-          version: '24.15' # TODO: remove pin when file copy regression in Node 24.16 is fixed
+          version: '24.15'
       - uses: ./.github/actions/install
       # Ubuntu 24.04 tightened AppArmor defaults and now blocks unprivileged user
       # namespaces, which Electron's Chromium sandbox requires to run. Setting
