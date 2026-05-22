@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { after, before, beforeEach, describe, it } = require('mocha')
 
@@ -24,6 +25,14 @@ describe('Plugin', () => {
     this.timeout(8000)
 
     withVersions('aerospike', 'aerospike', version => {
+      // Load the native binding into require.cache during the describe phase
+      // so agent.load() doesn't pay the dlopen() cost in the before() hook.
+      const pkgRoot = path.dirname(
+        require(`../../../versions/aerospike@${version}`).pkgJsonPath()
+      )
+      const bindings = require(require.resolve('bindings', { paths: [pkgRoot] }))
+      bindings({ bindings: 'aerospike.node', module_root: pkgRoot })
+
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
@@ -38,6 +47,14 @@ describe('Plugin', () => {
           hosts: [
             { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 },
           ],
+          policies: {
+            write: { totalTimeout: 5000 },
+            read: { totalTimeout: 5000 },
+            operate: { totalTimeout: 5000 },
+            query: { totalTimeout: 5000 },
+            remove: { totalTimeout: 5000 },
+            batch: { totalTimeout: 5000 },
+          },
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
@@ -94,7 +111,7 @@ describe('Plugin', () => {
                 .then(() => {
                   client.close(false)
                 })
-            })
+            }).catch(done)
           })
 
           it('should instrument connect', done => {
@@ -112,7 +129,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            aerospike.connect(config).then(client => { client.close(false) })
+            aerospike.connect(config).then(client => { client.close(false) }).catch(done)
           })
 
           it('should instrument get', done => {
@@ -137,7 +154,7 @@ describe('Plugin', () => {
             aerospike.connect(config).then(client => {
               return client.get(key)
                 .then(() => client.close(false))
-            })
+            }).catch(done)
           })
 
           it('should instrument operate', done => {
@@ -169,7 +186,7 @@ describe('Plugin', () => {
                   return client.operate(key, ops)
                 })
                 .then(() => client.close(false))
-            })
+            }).catch(done)
           })
 
           it('should instrument createIndex', done => {
@@ -202,7 +219,7 @@ describe('Plugin', () => {
               }
               return client.createIndex(index)
                 .then(() => client.close(false))
-            })
+            }).catch(done)
           })
 
           it('should instrument query', done => {
@@ -231,7 +248,9 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING,
               }
               client.createIndex(index, (error, job) => {
+                if (error || !job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
+                  if (waitError) return done(waitError)
                   const query = client.query(ns, 'demo')
                   const queryPolicy = {
                     totalTimeout: 10000,
@@ -242,7 +261,7 @@ describe('Plugin', () => {
                   stream.on('end', () => { client.close(false) })
                 })
               })
-            })
+            }).catch(done)
           })
 
           it('should run the callback in the parent context', done => {
@@ -255,7 +274,7 @@ describe('Plugin', () => {
                   done()
                 })
               })
-            })
+            }).catch(done)
           })
 
           it('should handle errors', done => {
@@ -325,7 +344,7 @@ describe('Plugin', () => {
           aerospike.connect(config).then(client => {
             return client.put(key, { i: 123 })
               .then(() => client.close(false))
-          })
+          }).catch(done)
         })
 
         withNamingSchema(
