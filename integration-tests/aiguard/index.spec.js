@@ -268,7 +268,10 @@ describe('AIGuard SDK integration tests', () => {
     const response = await executeRequest(`${url}/openai-chat-tool?deny=false`)
     assert.strictEqual(response.status, 200)
     assert.strictEqual(response.body.blocked, false)
-    assert.ok(Array.isArray(response.body.message.tool_calls))
+    assert.ok(
+      Array.isArray(response.body.message.tool_calls),
+      `expected tool_calls array, got ${JSON.stringify(response.body.message)}`
+    )
 
     await agent.assertMessageReceived(({ payload }) => {
       const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
@@ -367,7 +370,7 @@ describe('AIGuard SDK integration tests', () => {
     const response = await executeRequest(`${url}/openai-stream`)
     assert.strictEqual(response.status, 200)
     assert.strictEqual(response.body.streamed, true)
-    assert.ok(response.body.chunks > 0)
+    assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
 
     await agent.assertMessageReceived(({ payload }) => {
       const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
