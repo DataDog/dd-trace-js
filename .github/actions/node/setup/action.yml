@@ -38,7 +38,6 @@ runs:
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: ${{ steps.node-version.outputs.version }}
-        check-latest: ${{ !contains(steps.node-version.outputs.version, '.') }}
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
 
     # Persist the resolved version so subsequent runs within this 60-minute window can reuse it.
