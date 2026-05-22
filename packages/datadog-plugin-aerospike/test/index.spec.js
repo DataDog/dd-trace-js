@@ -25,13 +25,14 @@ describe('Plugin', () => {
     this.timeout(8000)
 
     withVersions('aerospike', 'aerospike', version => {
-      // Load the native binding into require.cache during the describe phase
-      // so agent.load() doesn't pay the dlopen() cost in the before() hook.
+      // Load the native binding during the describe phase so it's in require.cache
+      // before agent.load() runs, eliminating the dlopen() cost from the before() hook.
+      // Use the node-pre-gyp path directly so the cached key matches what aerospike resolves.
       const pkgRoot = path.dirname(
         require(`../../../versions/aerospike@${version}`).pkgJsonPath()
       )
-      const bindings = require(require.resolve('bindings', { paths: [pkgRoot] }))
-      bindings({ bindings: 'aerospike.node', module_root: pkgRoot })
+      const nodePreGypLabel = `node-v${process.versions.modules}-${process.platform}-${process.arch}`
+      require(path.join(pkgRoot, 'lib', 'binding', nodePreGypLabel, 'aerospike.node'))
 
       beforeEach(() => {
         tracer = require('../../dd-trace')
