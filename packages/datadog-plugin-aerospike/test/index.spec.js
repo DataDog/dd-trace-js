@@ -243,21 +243,17 @@ describe('Plugin', () => {
                 job.waitUntilDone((waitError) => {
                   if (waitError) return done(waitError)
                   // waitUntilDone signals the index is built, but the server
-                  // query thread may need a moment to pick it up. Retry with
-                  // a short delay until the query succeeds or retries run out.
-                  let retries = 0
-                  const runQuery = () => {
-                    const q = client.query(ns, 'demo')
-                    q.select('id', binName)
-                    q.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
-                    const stream = q.foreach({ totalTimeout: 10000 })
-                    stream.on('error', (err) => {
-                      if (retries++ < 5) setTimeout(runQuery, 500)
-                      else done(err)
-                    })
+                  // query thread needs a moment to pick it up. A fixed delay
+                  // avoids background retries that can leak into the next test.
+                  setTimeout(() => {
+                    const query = client.query(ns, 'demo')
+                    const queryPolicy = { totalTimeout: 10000 }
+                    query.select('id', binName)
+                    query.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
+                    const stream = query.foreach(queryPolicy)
+                    stream.on('error', done)
                     stream.on('end', () => { client.close(false) })
-                  }
-                  runQuery()
+                  }, 1000)
                 })
               })
             }).catch(done)
