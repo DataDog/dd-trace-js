@@ -10,7 +10,7 @@ runs:
   steps:
     # Resolve the version from the input alias. Exact patch versions come from
     # packages/dd-trace/test/plugins/versions/package.json, kept up-to-date by
-    # Dependabot. Falls back to the major (check-latest) when the file is absent
+    # Dependabot. Falls back to the bare major when the file is absent
     # (e.g. sparse checkouts that only include .github/).
     - name: Resolve Node.js version
       id: node-version
