@@ -305,7 +305,7 @@ moduleTypes.forEach(({
       })
     }
 
-    it.only('creates cypress.step spans for each command', async () => {
+    it('creates cypress.step spans for each command', async () => {
       const envVars = getCiVisEvpProxyConfig(receiver.port)
       const specToRun = 'cypress/e2e/commands.cy.js'
 
