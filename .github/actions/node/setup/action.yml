@@ -56,6 +56,13 @@ runs:
       if: steps.node-version-cache.outputs.cache-hit != 'true'
       shell: bash
       run: node -v | tr -d 'v' > "$RUNNER_TEMP/.node-resolved-version-${{ steps.node-version.outputs.version }}"
-    - name: Install Bun
+    - name: Check Node.js version for Bun
+      id: bun-check
       shell: bash
-      run: npm install -g bun@1.3.1
+      run: |
+        MAJOR=$(node -e "process.stdout.write(String(parseInt(process.versions.node)))")
+        echo "supported=$([ "$MAJOR" -ge 18 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+    - name: Install Bun
+      if: steps.bun-check.outputs.supported == 'true'
+      shell: bash
+      run: npm install -g bun@1.3.1 --prefer-offline --no-audit --no-fund
