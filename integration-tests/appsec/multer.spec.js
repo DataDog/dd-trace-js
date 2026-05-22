@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const { inspect } = require('node:util')
 const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
@@ -96,13 +97,13 @@ describe('multer', () => {
 
       describe('IAST', () => {
         function assertCmdInjection ({ payload }) {
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
 
           const { meta } = payload[0][0]
 
-          assert.ok(Object.hasOwn(meta, '_dd.iast.json'))
+          assert.ok(Object.hasOwn(meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(meta))}`)
 
           const iastJson = JSON.parse(meta['_dd.iast.json'])
 

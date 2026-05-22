@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -52,15 +53,18 @@ describe('plugins/util/web', () => {
     it('should set the correct defaults', () => {
       const config = web.normalizeConfig({})
 
-      assert.ok(Object.hasOwn(config, 'headers'))
-      assert.ok(Array.isArray(config.headers))
-      assert.ok(Object.hasOwn(config, 'validateStatus'))
+      assert.ok(Object.hasOwn(config, 'headers'), `Available keys: ${inspect(Object.keys(config))}`)
+      assert.ok(Array.isArray(config.headers), `Expected array, got ${inspect(config.headers)}`)
+      assert.ok(Object.hasOwn(config, 'validateStatus'), `Available keys: ${inspect(Object.keys(config))}`)
       assert.strictEqual(typeof config.validateStatus, 'function')
       assert.strictEqual(config.validateStatus(200), true)
       assert.strictEqual(config.validateStatus(500), false)
-      assert.ok(Object.hasOwn(config, 'hooks'))
-      assert.ok(typeof config.hooks === 'object' && config.hooks !== null)
-      assert.ok(Object.hasOwn(config.hooks, 'request'))
+      assert.ok(Object.hasOwn(config, 'hooks'), `Available keys: ${inspect(Object.keys(config))}`)
+      assert.ok(
+        typeof config.hooks === 'object' && config.hooks !== null,
+        `Expected non-null object, got ${inspect(config.hooks)}`
+      )
+      assert.ok(Object.hasOwn(config.hooks, 'request'), `Available keys: ${inspect(Object.keys(config.hooks))}`)
       assert.strictEqual(typeof config.hooks.request, 'function')
       assert.strictEqual(config.queryStringObfuscation, true)
     })
@@ -76,7 +80,7 @@ describe('plugins/util/web', () => {
 
       assert.deepStrictEqual(config.headers, [['test', undefined]])
       assert.strictEqual(config.validateStatus(200), false)
-      assert.ok(Object.hasOwn(config, 'hooks'))
+      assert.ok(Object.hasOwn(config, 'hooks'), `Available keys: ${inspect(Object.keys(config))}`)
       assert.strictEqual(config.hooks.request(), 'test')
     })
 
@@ -290,7 +294,7 @@ describe('plugins/util/web', () => {
 
       web.finishAll(context)
 
-      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `Available keys: ${inspect(Object.keys(tags))}`)
       assert.strictEqual(tags[HTTP_ENDPOINT], '/api/orders/{param:int}/items')
     })
 
@@ -304,8 +308,8 @@ describe('plugins/util/web', () => {
 
       web.finishAll(context)
 
-      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
-      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT), `Available keys: ${inspect(Object.keys(tags))}`)
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `Available keys: ${inspect(Object.keys(tags))}`)
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
     })
   })

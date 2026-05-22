@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -86,7 +87,10 @@ function graphqlCommonTests (config) {
 
     it('Should detect COMMAND_INJECTION vulnerability with hardcoded query', (done) => {
       agent.assertSomeTraces(payload => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.iast.json'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
 
         const iastJson = JSON.parse(payload[0][0].meta['_dd.iast.json'])
         assert.strictEqual(iastJson.vulnerabilities[0].type, 'COMMAND_INJECTION')
@@ -98,7 +102,10 @@ function graphqlCommonTests (config) {
 
     it('Should detect COMMAND_INJECTION vulnerability with query and variables', (done) => {
       agent.assertSomeTraces(payload => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.iast.json'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
 
         const iastJson = JSON.parse(payload[0][0].meta['_dd.iast.json'])
         assert.strictEqual(iastJson.vulnerabilities[0].type, 'COMMAND_INJECTION')

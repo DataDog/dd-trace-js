@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const Module = require('node:module')
+const { inspect } = require('node:util')
 
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -238,7 +239,7 @@ describe('graphql signature fallback', () => {
       locations: ['1:2'],
       path: ['hello', '0'],
     })
-    assert.ok(!Object.hasOwn(attributes, 'extensions.missing'))
+    assert.ok(!Object.hasOwn(attributes, 'extensions.missing'), `Available keys: ${inspect(Object.keys(attributes))}`)
   })
 })
 
@@ -297,7 +298,8 @@ describe('extractErrorIntoSpanEvent stack handling', () => {
     extractErrorIntoSpanEvent({}, span, error)
 
     assert.equal(getStackReads(), 0)
-    assert.ok(!Object.hasOwn(span.events[0].attributes, 'stacktrace'))
+    const attrs = span.events[0].attributes
+    assert.ok(!Object.hasOwn(attrs, 'stacktrace'), `Available keys: ${inspect(Object.keys(attrs))}`)
   })
 
   it('skips stack symbolication when a validation error pins multiple AST nodes', () => {
@@ -311,7 +313,8 @@ describe('extractErrorIntoSpanEvent stack handling', () => {
     extractErrorIntoSpanEvent({}, span, error)
 
     assert.equal(getStackReads(), 0)
-    assert.ok(!Object.hasOwn(span.events[0].attributes, 'stacktrace'))
+    const attrs = span.events[0].attributes
+    assert.ok(!Object.hasOwn(attrs, 'stacktrace'), `Available keys: ${inspect(Object.keys(attrs))}`)
   })
 
   it('keeps stacktrace for execution errors with a resolver path', () => {
