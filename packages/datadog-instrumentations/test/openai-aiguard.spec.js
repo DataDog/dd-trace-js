@@ -802,5 +802,34 @@ describe('openai AI Guard instrumentation', () => {
         }]))
         .finally(unsubscribe)
     })
+
+    it('prepends `instructions` as a system message in Before Model', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({ instructions: 'Be concise.', input: 'hi' }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, [
+          { role: 'system', content: 'Be concise.' },
+          { role: 'user', content: 'hi' },
+        ]))
+        .finally(unsubscribe)
+    })
+
+    it('evaluates `instructions`-only calls (no `input`)', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hi!' }] }],
+      })
+
+      return responses.create({ instructions: 'Greet the user.' }).parse()
+        .then(() => {
+          assert.strictEqual(calls.length, 2)
+          assert.deepStrictEqual(calls[0].messages, [{ role: 'system', content: 'Greet the user.' }])
+          assert.deepStrictEqual(calls[1].messages.at(-1), { role: 'assistant', content: 'Hi!' })
+        })
+        .finally(unsubscribe)
+    })
   })
 })

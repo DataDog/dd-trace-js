@@ -42,6 +42,34 @@ function wrapAsResponseForAIGuard (apiProm, getInputEval) {
 }
 
 /**
+ * Extracts OpenAI input messages from a `chat.completions.create` call.
+ *
+ * @param {object} callArgs - First argument passed to the wrapped method
+ * @returns {Array<object>|undefined}
+ */
+function getChatCompletionsInputMessages (callArgs) {
+  return callArgs?.messages?.length ? callArgs.messages : undefined
+}
+
+/**
+ * Extracts OpenAI input messages from a `responses.create` call. The `instructions`
+ * field is treated as a system prompt — it directly steers model behavior and the
+ * LLMObs OpenAI plugin already surfaces it as one — so AI Guard must screen it too.
+ *
+ * @param {object} callArgs - First argument passed to the wrapped method
+ * @returns {Array<object>|undefined}
+ */
+function getResponsesInputMessages (callArgs) {
+  const input = convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
+  if (typeof callArgs?.instructions === 'string' && callArgs.instructions.length) {
+    const messages = [{ role: 'system', content: callArgs.instructions }]
+    for (const message of input) messages.push(message)
+    return messages
+  }
+  return input.length ? input : undefined
+}
+
+/**
  * Extracts OpenAI input messages from a method call's first argument.
  *
  * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
@@ -49,12 +77,45 @@ function wrapAsResponseForAIGuard (apiProm, getInputEval) {
  * @returns {Array<object>|undefined}
  */
 function getInputMessages (baseResource, callArgs) {
-  if (baseResource === 'chat.completions') {
-    return callArgs?.messages?.length ? callArgs.messages : undefined
-  }
+  if (baseResource === 'chat.completions') return getChatCompletionsInputMessages(callArgs)
+  if (baseResource === 'responses') return getResponsesInputMessages(callArgs)
+}
 
-  const messages = convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
-  return messages.length ? messages : undefined
+/**
+ * Extracts OpenAI output messages from a `chat.completions.create` parsed body.
+ * Includes any choice whose message carries content (including empty string),
+ * `tool_calls`, a `refusal` field, or the deprecated `function_call` field. GPT-4o
+ * emits `{content: null, refusal: "..."}` on policy refusals, and pre-tool-call
+ * SDK paths still produce `function_call`-only output — AI Guard must still see them.
+ *
+ * @param {object} body - Parsed response body
+ * @returns {Array<object>}
+ */
+function getChatCompletionsOutputMessages (body) {
+  const messages = []
+  const choices = Array.isArray(body?.choices) ? body.choices : []
+  for (const choice of choices) {
+    const message = choice?.message
+    if (
+      message?.content != null ||
+      message?.tool_calls?.length ||
+      message?.refusal != null ||
+      message?.function_call != null
+    ) {
+      messages.push(message)
+    }
+  }
+  return messages
+}
+
+/**
+ * Extracts OpenAI output messages from a `responses.create` parsed body.
+ *
+ * @param {object} body - Parsed response body
+ * @returns {Array<object>}
+ */
+function getResponsesOutputMessages (body) {
+  return convertOpenAIResponseItemsToMessages(body?.output, 'assistant')
 }
 
 /**
@@ -65,28 +126,9 @@ function getInputMessages (baseResource, callArgs) {
  * @returns {Array<object>}
  */
 function getOutputMessages (baseResource, body) {
-  if (baseResource === 'chat.completions') {
-    const messages = []
-    const choices = Array.isArray(body?.choices) ? body.choices : []
-    for (const choice of choices) {
-      const message = choice?.message
-      // Include the message when it has content (including empty string), tool_calls,
-      // a `refusal` field, or the deprecated `function_call` field. GPT-4o emits
-      // `{content: null, refusal: "..."}` on policy refusals and AI Guard should still
-      // see those, and pre-tool-call SDK paths still produce `function_call`-only output.
-      if (
-        message?.content != null ||
-        message?.tool_calls?.length ||
-        message?.refusal != null ||
-        message?.function_call != null
-      ) {
-        messages.push(message)
-      }
-    }
-    return messages
-  }
-
-  return convertOpenAIResponseItemsToMessages(body?.output, 'assistant')
+  if (baseResource === 'chat.completions') return getChatCompletionsOutputMessages(body)
+  if (baseResource === 'responses') return getResponsesOutputMessages(body)
+  return []
 }
 
 /**
@@ -102,8 +144,8 @@ function publishOutputEvaluation (baseResource, inputMessages, outputMessages) {
 
   if (baseResource === 'chat.completions') {
     // Chat completions may return multiple choices when `n > 1`. Screen every choice
-    // so any unsafe assistant output rejects `.parse()`, regardless of which choice
-    // the caller ends up using.
+    // concurrently so any unsafe assistant output rejects `.parse()`, regardless of
+    // which choice the caller ends up using.
     const evals = []
     for (const message of outputMessages) {
       evals.push(publishEvaluation([...inputMessages, message]))
