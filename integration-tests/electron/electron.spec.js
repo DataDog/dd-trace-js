@@ -12,25 +12,26 @@ const { assertTraceReceived } = require('./helpers')
 describe('Electron integration', function () {
   let httpServer
   let httpPort
-  let electronBin
-  let appDir
+  let binaryPath
   let child
 
-  // Create a sandbox with electron installed alongside dd-trace.
-  // The app source files are copied in; dd-trace is installed into the app directory
-  // from the pre-packed sandbox tgz so it is available at runtime.
-  useSandbox(['electron'], false, [path.join(__dirname, 'app')])
+  // Create a sandbox with electron and @electron/packager installed alongside dd-trace.
+  // The app source files are copied in; dd-trace is then installed into the app directory
+  // from the pre-packed sandbox tgz so electron-packager bundles it inside the binary.
+  useSandbox(['electron', '@electron/packager'], false, [path.join(__dirname, 'app')])
 
   before(async function () {
     this.timeout(30_000)
 
     const sandboxFolder = sandboxCwd()
-    appDir = path.join(sandboxFolder, 'app')
+    const appDir = path.join(sandboxFolder, 'app')
 
     // createSandbox packs dd-trace into a .tgz one level above the sandbox folder.
     // We reference it with a file: URL so npm installs the exact local build.
     const ddTraceTgz = path.join(path.dirname(sandboxFolder), 'dd-trace.tgz')
 
+    // Write the app's package.json with dd-trace as a bundled dependency so that
+    // electron-packager includes it inside the binary together with the app source.
     fs.writeFileSync(
       path.join(appDir, 'package.json'),
       JSON.stringify({
@@ -44,13 +45,43 @@ describe('Electron integration', function () {
     // Install dd-trace and its transitive dependencies into the app directory.
     execFileSync('npm', ['install'], { cwd: appDir, stdio: 'pipe' })
 
-    // Use the electron binary already installed in the sandbox. Reading path.txt
-    // (written by electron's postinstall) avoids any per-platform path logic here.
-    const electronRelPath = fs.readFileSync(
-      path.join(sandboxFolder, 'node_modules', 'electron', 'path.txt'),
-      'utf-8'
-    ).trim()
-    electronBin = path.join(sandboxFolder, 'node_modules', 'electron', 'dist', electronRelPath)
+    // Use the electron version already installed in the sandbox so that
+    // electron-packager finds the cached binary and does not re-download it.
+    const electronVersion = require(
+      path.join(sandboxFolder, 'node_modules', 'electron', 'package.json')
+    ).version
+
+    // Build a real standalone Electron binary. Running a compiled binary rather
+    // than `electron <dir>` is a more faithful test of production behaviour.
+    const outDir = path.join(sandboxFolder, 'dist')
+    fs.mkdirSync(outDir, { recursive: true })
+
+    execFileSync(
+      path.join(sandboxFolder, 'node_modules', '.bin', 'electron-packager'),
+      [
+        appDir,
+        'ElectronTest',
+        `--platform=${process.platform}`,
+        `--arch=${process.arch}`,
+        `--electron-version=${electronVersion}`,
+        `--out=${outDir}`,
+        '--overwrite',
+      ],
+      { cwd: sandboxFolder, stdio: 'inherit', env: { ...process.env, DEBUG: '@electron/*' } }
+    )
+
+    // The layout produced by electron-packager differs per platform:
+    //   macOS  → <out>/ElectronTest-darwin-<arch>/ElectronTest.app/Contents/MacOS/ElectronTest
+    //   Linux  → <out>/ElectronTest-linux-<arch>/ElectronTest
+    //   Windows→ <out>/ElectronTest-win32-<arch>/ElectronTest.exe
+    const packageDir = path.join(outDir, `ElectronTest-${process.platform}-${process.arch}`)
+    if (process.platform === 'darwin') {
+      binaryPath = path.join(packageDir, 'ElectronTest.app', 'Contents', 'MacOS', 'ElectronTest')
+    } else if (process.platform === 'win32') {
+      binaryPath = path.join(packageDir, 'ElectronTest.exe')
+    } else {
+      binaryPath = path.join(packageDir, 'ElectronTest')
+    }
 
     await new Promise(resolve => {
       httpServer = http.createServer((_req, res) => {
@@ -71,8 +102,7 @@ describe('Electron integration', function () {
   beforeEach(function (done) {
     this.timeout(30_000)
 
-    const args = [appDir, ...(process.platform === 'linux' ? ['--no-sandbox'] : [])]
-    child = spawn(electronBin, args, {
+    child = spawn(binaryPath, process.platform === 'linux' ? ['--no-sandbox'] : [], {
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       windowsHide: true,
     })
