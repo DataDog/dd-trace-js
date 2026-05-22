@@ -114,13 +114,6 @@ describe('Plugin', () => {
       })
 
       it('should attach an error to the span', async () => {
-        const checkTraces = agent.assertFirstTraceSpan({
-          error: 1,
-          meta: {
-            'error.type': 'Error',
-          },
-        })
-
         const params = {
           model: 'gpt-3.5-turbo', // incorrect model
           prompt: 'Hello, OpenAI!',
@@ -130,17 +123,26 @@ describe('Plugin', () => {
           stream: false,
         }
 
+        let errorType = 'Error'
+
         try {
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             await openai.completions.create(params)
           } else {
             await openai.createCompletion(params)
           }
-        } catch {
-          // ignore, we expect an error
+        } catch (e) {
+          if (e.type) { // version 3 of openai does not return an error type
+            errorType = e.type
+          }
         }
 
-        await checkTraces
+        await agent.assertFirstTraceSpan({
+          error: 1,
+          meta: {
+            'error.type': errorType,
+          },
+        })
 
         clock.tick(10 * 1000)
 
