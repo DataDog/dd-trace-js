@@ -21,6 +21,7 @@ function getOperationName (type) {
       // Surface unrecognized operations explicitly rather than silently
       // collapsing them into 'publish' — if NATS adds a new outbound API,
       // this lets us see it in traces and fix the mapping deliberately.
+      /* istanbul ignore next */
       return 'unknown'
   }
 }
