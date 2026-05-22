@@ -242,6 +242,7 @@ describe('Plugin', () => {
                 set: 'demo',
                 bin: binName,
                 index: indexName,
+                type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING,
               }
               client.createIndex(index, (error, job) => {
