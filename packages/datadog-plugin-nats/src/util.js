@@ -12,11 +12,16 @@ function headersToTextMap (msgHdrs) {
 
 function getOperationName (type) {
   switch (type) {
+    case 'publish':
+      return 'publish'
     case 'request':
     case 'requestMany':
       return 'request'
     default:
-      return 'publish'
+      // Surface unrecognized operations explicitly rather than silently
+      // collapsing them into 'publish' — if NATS adds a new outbound API,
+      // this lets us see it in traces and fix the mapping deliberately.
+      return 'unknown'
   }
 }
 

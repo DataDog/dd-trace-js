@@ -200,6 +200,30 @@ describe('Plugin', () => {
           })
         })
 
+        describe('request span deduplication', () => {
+          it('creates exactly one producer span per request (no nested publish span)', async () => {
+            // request() internally calls this.publish() which is also wrapped.
+            // Without suppression that would double-count every traced request.
+            const responder = connection.subscribe(subject, {
+              max: 1,
+              callback: (_e, msg) => msg.respond('pong'),
+            })
+            void responder
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const producers = traces[0].filter(
+                s => s.meta?.component === 'nats' && s.meta['span.kind'] === 'producer'
+              )
+              assert.strictEqual(producers.length, 1,
+                `expected exactly one producer span for the request, got ${producers.length}`)
+              assert.strictEqual(producers[0].meta['nats.operation'], 'request')
+            })
+
+            await connection.request(subject, 'ping', { timeout: 2000 })
+            await assertion
+          })
+        })
+
         describe('publishMessage', () => {
           it('creates a producer span via the wrapped prototype publish', () => {
             const assertion = agent.assertSomeTraces(traces => {
