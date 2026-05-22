@@ -8,9 +8,10 @@ inputs:
 runs:
   using: composite
   steps:
-    # Resolve the version from the input alias. Exact versions come from
-    # packages/dd-trace/test/plugins/versions/package.json, kept up-to-date
-    # by Dependabot, so all jobs always use the same pinned patch version.
+    # Resolve the version from the input alias. Exact patch versions come from
+    # packages/dd-trace/test/plugins/versions/package.json, kept up-to-date by
+    # Dependabot. Falls back to the major (check-latest) when the file is absent
+    # (e.g. sparse checkouts that only include .github/).
     - name: Resolve Node.js version
       id: node-version
       env:
@@ -18,8 +19,10 @@ runs:
       shell: bash
       run: |
         node_version() {
-          jq -r ".dependencies[\"node-${1}\"] | ltrimstr(\"npm:node@\")" \
-            packages/dd-trace/test/plugins/versions/package.json
+          local file="packages/dd-trace/test/plugins/versions/package.json"
+          [ -f "$file" ] && node -p \
+            "require('./${file}').dependencies['node-${1}'].replace('npm:node@','')" \
+            || echo "${1}"
         }
         case "$VERSION" in
           eol)         version=16 ;;
