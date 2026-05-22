@@ -331,8 +331,14 @@ moduleTypes.forEach(({
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const testEvent = events.find(event => event.type === 'test')
-          assert.ok(testEvent, 'cypress.test event exists')
+          const passTestEvent = events.find(
+            event => event.type === 'test' && event.content.resource.includes('runs well-known commands')
+          )
+          const failTestEvent = events.find(
+            event => event.type === 'test' && event.content.resource.includes('fails on a step')
+          )
+          assert.ok(passTestEvent, 'passing cypress.test event exists')
+          assert.ok(failTestEvent, 'failing cypress.test event exists')
 
           const stepEvents = events.filter(event => event.type === 'span' && event.content.name === 'cypress.step')
           assert.ok(stepEvents.length > 0, 'cypress.step spans exist')
@@ -357,8 +363,18 @@ moduleTypes.forEach(({
           assert.ok(containsStep, 'contains step span exists')
 
           for (const stepEvent of stepEvents) {
-            assert.strictEqual(stepEvent.content.trace_id.toString(), testEvent.content.trace_id.toString())
+            const matchesPass = stepEvent.content.trace_id.toString() === passTestEvent.content.trace_id.toString()
+            const matchesFail = stepEvent.content.trace_id.toString() === failTestEvent.content.trace_id.toString()
+            assert.ok(matchesPass || matchesFail, 'step span trace_id matches one of the test trace_ids')
           }
+
+          const failedStep = stepEvents.find(event =>
+            event.content.trace_id.toString() === failTestEvent.content.trace_id.toString() &&
+            event.content.meta[ERROR_MESSAGE]
+          )
+          assert.ok(failedStep, 'failed step span with error exists')
+          assert.ok(failedStep.content.meta[ERROR_MESSAGE], 'failed step has error message')
+          assert.ok(failedStep.content.meta[ERROR_TYPE], 'failed step has error type')
         },
         { hardTimeout: 60000 }
       )

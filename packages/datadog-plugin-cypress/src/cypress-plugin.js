@@ -1461,7 +1461,10 @@ class CypressPlugin {
               },
             })
             if (command.error) {
-              stepSpan.setTag('error', command.error)
+              const errorObj = new Error(command.error.message || String(command.error))
+              if (command.error.name) errorObj.name = command.error.name
+              if (command.error.stack) errorObj.stack = command.error.stack
+              stepSpan.setTag('error', errorObj)
             }
             stepSpan.finish(endTime)
           }

@@ -12,4 +12,9 @@ describe('commands suite', () => {
     cy.document().should('have.property', 'charset')
     cy.window().should('have.property', 'document')
   })
+
+  it('fails on a step', () => {
+    cy.visit('/')
+    cy.get('.nonexistent-element').should('exist')
+  })
 })

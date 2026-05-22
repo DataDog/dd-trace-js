@@ -29,12 +29,12 @@ const commandStartTimes = new Map()
 const INTERNAL_CYPRESS_COMMANDS = new Set(['wrap', 'then', 'noop'])
 
 Cypress.on('command:start', (command) => {
-  commandStartTimes.set(command.get('id'), Date.now())
+  commandStartTimes.set(command.get('id'), { startTime: Date.now(), name: command.get('name') })
 })
 
 Cypress.on('command:end', (command) => {
   const id = command.get('id')
-  const startTime = commandStartTimes.get(id)
+  const entry = commandStartTimes.get(id)
   commandStartTimes.delete(id)
 
   const name = command.get('name')
@@ -45,14 +45,16 @@ Cypress.on('command:end', (command) => {
   if (INTERNAL_CYPRESS_COMMANDS.has(name)) {
     return
   }
-  if (startTime == null) {
+  if (entry == null) {
     return
   }
+  const err = command.get('err')
   currentTestCommands.push({
     name,
-    startTime,
+    startTime: entry.startTime,
     endTime: Date.now(),
-    error: command.get('err') || null,
+    // Serialize the error to a plain object so it survives cy.task JSON transport.
+    error: err ? { message: err.message, stack: err.stack, name: err.name } : null,
   })
 })
 
@@ -88,6 +90,29 @@ function getTestProperties (testName) {
 // By not re-throwing the error, Cypress marks the test as passed
 // This allows quarantined tests to run but not affect the exit code
 Cypress.on('fail', (err, runnable) => {
+  // For commands that time out, command:end may never fire.
+  // Finalize any in-flight commands so their step spans carry the error.
+  const hadInFlightCommands = commandStartTimes.size > 0
+  for (const [, { startTime, name }] of commandStartTimes) {
+    if (INTERNAL_CYPRESS_COMMANDS.has(name)) continue
+    currentTestCommands.push({
+      name,
+      startTime,
+      endTime: Date.now(),
+      error: { message: err.message, stack: err.stack, name: err.name },
+    })
+  }
+  commandStartTimes.clear()
+
+  // If command:end fired for all commands (none in-flight) but the last command
+  // has no error, it means command:end fired before the error was attached to it.
+  if (!hadInFlightCommands && currentTestCommands.length > 0) {
+    const lastCommand = currentTestCommands[currentTestCommands.length - 1]
+    if (!lastCommand.error) {
+      lastCommand.error = { message: err.message, stack: err.stack, name: err.name }
+    }
+  }
+
   if (!isTestManagementEnabled) {
     throw err
   }
