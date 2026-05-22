@@ -27,6 +27,10 @@ module.exports = {
       versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
     },
     {
+      name: '@ai-sdk/google',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+    },
+    {
       name: 'zod',
       versions: ['>=3.25.75'],
     },

@@ -52,6 +52,17 @@ function getAiSdkAnthropicPackage (vercelAiVersion) {
   return null
 }
 
+function getAiSdkGooglePackage (vercelAiVersion) {
+  if (semifies(vercelAiVersion, '>=6.0.0')) {
+    return '@ai-sdk/google'
+  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
+    return '@ai-sdk/google@2.0.0'
+  } else if (semifies(vercelAiVersion, '>=4.0.0')) {
+    return '@ai-sdk/google@1.0.0'
+  }
+  return null
+}
+
 const MOCK_TELEMETRY_METADATA = {
   userId: '12345',
   organizationId: 'orgAbc123',
@@ -1266,6 +1277,39 @@ describe('Plugin', () => {
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: openaiExpectedMetrics,
+    })
+
+    describeProviderCacheTests({
+      providerName: 'Google Gemini',
+      getPackage: getAiSdkGooglePackage,
+      buildModel: (GoogleModule, scenario) => {
+        const { createGoogleGenerativeAI } = GoogleModule.get()
+        // Google's response has a genuinely different shape from OpenAI:
+        // `usageMetadata.cachedContentTokenCount`. By covering Google we
+        // prove that the `ai.usage.cachedInputTokens` standardized-attribute
+        // path works against a third upstream API shape distinct from the
+        // OpenAI-compatible family (which xAI, Mistral OpenAI-mode, etc. share).
+        return createGoogleGenerativeAI({
+          apiKey: 'test-api-key',
+          fetch: makeMockFetch(`google-${scenario}`),
+        })('gemini-2.5-flash')
+      },
+      // Google's context caching is a separate API call to create the cache;
+      // per-request responses only report cache reads.
+      scenarios: ['cache-read'],
+      // Google's `promptTokenCount` already includes cached tokens at the API
+      // level (same convention as OpenAI), so `ai.usage.inputTokens` is the
+      // sum across all ai versions.
+      getExpectedMetrics: ({ scenario, cacheReadOnDoGenerate }) => {
+        if (scenario === 'cache-read') {
+          return {
+            input_tokens: 4448,
+            cache_read_input_tokens: cacheReadOnDoGenerate ? 4425 : undefined,
+            cache_write_input_tokens: undefined,
+          }
+        }
+        throw new Error(`Google does not support scenario: ${scenario}`)
+      },
     })
   })
 })
