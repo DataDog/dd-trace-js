@@ -1088,20 +1088,28 @@ describe('Plugin', () => {
       }
     })
 
-    // Default expectations matching the "SDK-normalized" pattern used by Bedrock
-    // and Anthropic: input_tokens is the raw fresh count on v5-paired packages
-    // and the sum on v6-paired packages.
+    // Default expectations for providers (like Bedrock and Anthropic) whose
+    // v5-paired SDK passes the raw fresh input through and whose v6-paired SDK
+    // normalizes upstream. With the SDK-level normalization in `getUsage()`,
+    // `input_tokens` is now always the sum (4448) — for cache-write on v5
+    // stacks the plugin detects `inputTokens < cacheSum` and normalizes itself
+    // to match the bedrockruntime.js convention.
     function defaultExpectedMetrics ({ scenario, isV6, cacheReadOnDoGenerate }) {
       if (scenario === 'cache-read') {
         return {
-          input_tokens: isV6 ? 4448 : 23,
+          // Without `cacheReadTokens` on the doGenerate span (older SDKs),
+          // the normalization heuristic has no cache_sum to compare against,
+          // so input stays raw (23) on those versions.
+          input_tokens: isV6 || cacheReadOnDoGenerate ? 4448 : 23,
           cache_read_input_tokens: cacheReadOnDoGenerate ? 4425 : undefined,
           cache_write_input_tokens: undefined,
         }
       }
       if (scenario === 'cache-write') {
         return {
-          input_tokens: isV6 ? 4448 : 23,
+          // cache_write is captured via providerMetadata across all SDK
+          // versions, so the plugin can always normalize input to the sum.
+          input_tokens: 4448,
           cache_write_input_tokens: 4425,
           cache_read_input_tokens: undefined,
         }

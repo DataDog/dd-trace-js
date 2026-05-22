@@ -112,6 +112,25 @@ function getUsage (tags) {
 
   if (providerCache.cacheWriteTokens) usage.cacheWriteTokens = providerCache.cacheWriteTokens
 
+  // Normalize `inputTokens` to the sum convention used by `bedrockruntime.js`.
+  // Some SDK combinations (e.g. `ai@5` + `@ai-sdk/amazon-bedrock@3`) pass the
+  // raw fresh count through, which makes `nonCached = input - cacheRead -
+  // cacheWrite` go negative downstream.
+  //
+  // Detection: if `inputTokens < cacheSum`, the value cannot already be a sum
+  // that includes them (non-negative arithmetic). This is provider/version
+  // agnostic and won't double-count on stacks where the SDK already
+  // normalized (`ai@6` + `bedrock@4` / `anthropic@3`, OpenAI, Google).
+  if (usage.inputTokens != null) {
+    const cacheSum = (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
+    if (usage.inputTokens < cacheSum) {
+      usage.inputTokens += cacheSum
+      if (usage.totalTokens != null) {
+        usage.totalTokens = usage.inputTokens + (usage.outputTokens || 0)
+      }
+    }
+  }
+
   return usage
 }
 
