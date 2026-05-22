@@ -38,7 +38,7 @@ jobs:
             yarn.lock
       - uses: ./.github/actions/node
         with:
-          version: active
+          version: 24.15.0 # TODO: remove pin when file copy regression in Node 24.16 is fixed
       - run: yarn install --frozen-lockfile --ignore-scripts
       - run: node scripts/flakiness.mjs
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
