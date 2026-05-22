@@ -3197,7 +3197,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_NET_ENABLED": [
