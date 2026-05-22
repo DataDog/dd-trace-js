@@ -48,4 +48,8 @@ if (process.env.MAX_FAILURES) {
   config.maxFailures = Number(process.env.MAX_FAILURES)
 }
 
+if (process.env.BROWSER_WS_ENDPOINT) {
+  config.use = { browserWSEndpoint: process.env.BROWSER_WS_ENDPOINT }
+}
+
 module.exports = config

@@ -11,6 +11,7 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
 } = require('../helpers')
+const { useBrowserServer } = require('../helpers/playwright')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
@@ -72,6 +73,8 @@ versions.forEach((version) => {
     after(async () => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
+
+    useBrowserServer()
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()

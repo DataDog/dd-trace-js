@@ -13,6 +13,7 @@ const {
   getCiVisEvpProxyConfig,
   assertObjectContains,
 } = require('../helpers')
+const { useBrowserServer } = require('../helpers/playwright')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
@@ -87,6 +88,8 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
       await new Promise(resolve => webAppServerWithRedirect.close(resolve))
     })
+
+    useBrowserServer()
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
