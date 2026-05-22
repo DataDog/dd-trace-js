@@ -16,6 +16,14 @@ const SPAN_KIND_CONSUMER = protoSpanKind.values.SPAN_KIND_CONSUMER
 // Cached zero Identifier used to detect zero IDs without re-allocating per span.
 const ZERO_ID = id('0')
 
+// DD propagation tag carrying the upper 64 bits of a 128-bit trace ID as 16 hex chars.
+// span_format.js#extractChunkTags only copies this onto the first-in-chunk span, so the
+// transformer scans the batch to find it and applies it to every span's traceId.
+const TRACE_ID_128 = '_dd.p.tid'
+
+// Matches the propagation layer's `hex16` check: exactly 16 lower- or upper-case hex chars.
+const TRACE_ID_128_HEX = /^[0-9A-Fa-f]{16}$/
+
 /**
  * @typedef {import('../../id').Identifier} Identifier
  *
@@ -65,6 +73,7 @@ const STATUS_CODE_ERROR = 2
 const EXCLUDED_META_KEYS = new Set([
   '_dd.span_links',
   'span.kind',
+  TRACE_ID_128,
 ])
 
 /**
@@ -113,6 +122,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @returns {object[]} Array of scope span objects
    */
   #transformScopeSpans (spans) {
+    const traceIdHigh = this.#findTraceIdHigh(spans)
     return [{
       scope: {
         name: 'dd-trace-js',
@@ -121,22 +131,39 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         droppedAttributesCount: 0,
       },
       schemaUrl: '',
-      spans: spans.map(span => this.#transformSpan(span)),
+      spans: spans.map(span => this.#transformSpan(span, traceIdHigh)),
     }]
+  }
+
+  /**
+   * Finds the upper 64 bits of a 128-bit DD trace ID within the batch. The tag only lives on
+   * the first-in-chunk span, but a single batch is a single trace, so the value applies to
+   * every span. Scans the batch instead of trusting an ordering contract from span_processor.
+   * Skips non-hex values so a malformed tag on one span doesn't poison the whole batch.
+   *
+   * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans
+   * @returns {string | undefined} 16-char hex of the upper 64 bits, or undefined when absent
+   */
+  #findTraceIdHigh (spans) {
+    for (const span of spans) {
+      const tidHigh = span.meta?.[TRACE_ID_128]
+      if (tidHigh && TRACE_ID_128_HEX.test(tidHigh)) return tidHigh
+    }
   }
 
   /**
    * Transforms a single DD-formatted span to an OTLP Span object.
    *
    * @param {DDFormattedSpan} span - DD-formatted span to transform
+   * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
    * @returns {object} OTLP Span object
    */
-  #transformSpan (span) {
+  #transformSpan (span, traceIdHigh) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
     return {
-      traceId: this.#idToBytes(span.trace_id, 16),
+      traceId: this.#buildTraceIdHex(span.trace_id, traceIdHigh),
       spanId: this.#idToBytes(span.span_id, 8),
       parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
       name: span.resource,
@@ -298,6 +325,26 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       droppedAttributesCount: 0,
       flags: link.flags,
     }
+  }
+
+  /**
+   * Builds the OTLP traceId hex string. DD splits a 128-bit trace ID into the low 64 bits
+   * on the span Identifier and the upper 64 bits as a hex string in `_dd.p.tid`. When the
+   * upper half is provided and the Identifier buffer is the 64-bit-only shape, prepend it
+   * so the OTLP traceId carries the full 128 bits. Full-width Identifiers pass through
+   * untouched, so this is safe regardless of how the trace ID was generated.
+   *
+   * `traceIdHigh` is validated to exactly 16 hex chars by `#findTraceIdHigh`.
+   *
+   * @param {Identifier} traceId - DD Identifier for the trace ID
+   * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits, or undefined
+   * @returns {string} 32-char lowercase hex trace ID
+   */
+  #buildTraceIdHex (traceId, traceIdHigh) {
+    if (traceIdHigh && traceId.toBuffer().length <= 8) {
+      return traceIdHigh + this.#idToBytes(traceId, 8)
+    }
+    return this.#idToBytes(traceId, 16)
   }
 
   /**

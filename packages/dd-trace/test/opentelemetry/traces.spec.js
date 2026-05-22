@@ -34,7 +34,7 @@ describe('OpenTelemetry Traces', () => {
    * @param {object} [overrides] - Optional field overrides
    * @returns {object} A mock DD-formatted span
    */
-  function createMockSpan (overrides = {}) {
+  function createMockSpan(overrides = {}) {
     return {
       trace_id: id('1234567890abcdef1234567890abcdef'),
       span_id: id('abcdef1234567890'),
@@ -58,7 +58,7 @@ describe('OpenTelemetry Traces', () => {
     }
   }
 
-  function mockOtlpExport (validator) {
+  function mockOtlpExport(validator) {
     let capturedPayload, capturedHeaders
     let validatorCalled = false
 
@@ -72,21 +72,21 @@ describe('OpenTelemetry Traces', () => {
             validator(decoded, capturedHeaders)
             validatorCalled = true
           },
-          on: () => {},
-          once: () => {},
-          setTimeout: () => {},
+          on: () => { },
+          once: () => { },
+          setTimeout: () => { },
         }
-        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+        callback({ statusCode: 200, on: () => { }, once: () => { }, setTimeout: () => { } })
         return mockReq
       }
       const mockReq = {
-        write: () => {},
-        end: () => {},
-        on: () => {},
-        once: () => {},
-        setTimeout: () => {},
+        write: () => { },
+        end: () => { },
+        on: () => { },
+        once: () => { },
+        setTimeout: () => { },
       }
-      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+      callback({ statusCode: 200, on: () => { }, once: () => { }, setTimeout: () => { } })
       return mockReq
     })
 
@@ -105,7 +105,7 @@ describe('OpenTelemetry Traces', () => {
    * @param {object} [extraEnv] - Extra environment variables for this one build
    * @returns {OtlpHttpTraceExporter}
    */
-  function buildExporter (extraEnv) {
+  function buildExporter(extraEnv) {
     if (extraEnv) Object.assign(process.env, extraEnv)
     return createOtlpTraceExporter(getConfigFresh())
   }
@@ -140,7 +140,7 @@ describe('OpenTelemetry Traces', () => {
      * @param {Buffer} payload - The JSON-encoded payload
      * @returns {object} Decoded JSON object
      */
-    function decodePayload (payload) {
+    function decodePayload(payload) {
       return JSON.parse(payload.toString())
     }
 
@@ -150,7 +150,7 @@ describe('OpenTelemetry Traces', () => {
      * @param {object[]} attributes - Array of OTLP KeyValue objects
      * @returns {Record<string, string|number>} Flat key-value map
      */
-    function extractAttrs (attributes) {
+    function extractAttrs(attributes) {
       const attrs = {}
       for (const attr of attributes) {
         if (attr.value.stringValue !== undefined) {
@@ -462,6 +462,133 @@ describe('OpenTelemetry Traces', () => {
         ['/api/first', '/api/second']
       )
     })
+
+    describe('128-bit trace ID handling', () => {
+      // DD splits 128-bit trace IDs: low 64 bits live on the span Identifier,
+      // upper 64 bits live in trace-level tags as `_dd.p.tid` (16 hex chars).
+      // span_format.js#extractChunkTags only copies trace-level tags onto the
+      // first-in-chunk span, so the transformer has to look across the batch
+      // to find `_dd.p.tid` and then apply it to every span.
+
+      it('reconstructs the full 128-bit traceId for every span in a batch from _dd.p.tid', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const tidHigh = '1234567890abcdef'
+        const traceIdLow = id(lowHex)
+
+        const firstSpan = createMockSpan({
+          trace_id: traceIdLow,
+          meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
+        })
+        const secondSpan = createMockSpan({
+          trace_id: traceIdLow,
+          span_id: id('bbbbbbbbbbbbbbbb'),
+          meta: { 'span.kind': 'internal' },
+        })
+        const thirdSpan = createMockSpan({
+          trace_id: traceIdLow,
+          span_id: id('cccccccccccccccc'),
+          meta: { 'span.kind': 'internal' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([firstSpan, secondSpan, thirdSpan]))
+        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        const expectedTraceId = tidHigh + lowHex
+        for (const otlpSpan of otlpSpans) {
+          assert.strictEqual(otlpSpan.traceId, expectedTraceId)
+        }
+      })
+
+      it('finds _dd.p.tid on a non-first span and applies it to every span', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const tidHigh = '1234567890abcdef'
+        const traceIdLow = id(lowHex)
+
+        const spans = [
+          createMockSpan({ trace_id: traceIdLow, meta: { 'span.kind': 'internal' } }),
+          createMockSpan({
+            trace_id: traceIdLow,
+            span_id: id('bbbbbbbbbbbbbbbb'),
+            meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
+          }),
+        ]
+
+        const decoded = decodePayload(transformer.transformSpans(spans))
+        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        const expectedTraceId = tidHigh + lowHex
+        assert.strictEqual(otlpSpans[0].traceId, expectedTraceId)
+        assert.strictEqual(otlpSpans[1].traceId, expectedTraceId)
+      })
+
+      it('drops _dd.p.tid from OTLP attributes once consumed into traceId', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({
+          trace_id: id('abcdef0123456789'),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890abcdef' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(attrs['_dd.p.tid'], undefined)
+      })
+
+      it('zero-pads traceId to 32 hex chars when no _dd.p.tid is present', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({
+          trace_id: id('abcdef0123456789'),
+          meta: { 'span.kind': 'internal' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '0000000000000000abcdef0123456789')
+      })
+
+      it('skips a non-hex _dd.p.tid and uses a valid one from a later span', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const tidHigh = '1234567890abcdef'
+        const traceIdLow = id(lowHex)
+
+        const spans = [
+          createMockSpan({
+            trace_id: traceIdLow,
+            meta: { 'span.kind': 'internal', '_dd.p.tid': 'not-a-hex-value!!' },
+          }),
+          createMockSpan({
+            trace_id: traceIdLow,
+            span_id: id('bbbbbbbbbbbbbbbb'),
+            meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
+          }),
+        ]
+
+        const decoded = decodePayload(transformer.transformSpans(spans))
+        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        const expectedTraceId = tidHigh + lowHex
+        assert.strictEqual(otlpSpans[0].traceId, expectedTraceId)
+        assert.strictEqual(otlpSpans[1].traceId, expectedTraceId)
+      })
+
+      it('uses a full 16-byte trace_id buffer directly without consulting _dd.p.tid', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const unusedTidHigh = '1000000000000000'
+        const span = createMockSpan({
+          trace_id: id('1234567890abcdef1234567890abcdef'),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': unusedTidHigh },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '1234567890abcdef1234567890abcdef')
+      })
+    })
   })
 
   describe('Exporter', () => {
@@ -546,7 +673,7 @@ describe('OpenTelemetry Traces', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
         exportCalled = true
-        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+        return { write: () => { }, end: () => { }, on: () => { }, once: () => { }, setTimeout: () => { } }
       })
 
       const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
@@ -559,7 +686,7 @@ describe('OpenTelemetry Traces', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
         exportCalled = true
-        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+        return { write: () => { }, end: () => { }, on: () => { }, once: () => { }, setTimeout: () => { } }
       })
 
       const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
@@ -572,7 +699,7 @@ describe('OpenTelemetry Traces', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
         exportCalled = true
-        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+        return { write: () => { }, end: () => { }, on: () => { }, once: () => { }, setTimeout: () => { } }
       })
 
       const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
