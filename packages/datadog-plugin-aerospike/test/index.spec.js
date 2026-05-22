@@ -228,7 +228,8 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            aerospike.connect(config).then(client => {
+            aerospike.connect(config).then(async client => {
+              await client.put(key, { [binName]: ['green', 'blue'] })
               const index = {
                 ns,
                 set: 'demo',
@@ -245,10 +246,10 @@ describe('Plugin', () => {
                   const queryPolicy = {
                     totalTimeout: 10000,
                   }
-                  query.select('id', 'tags')
+                  query.select('id', binName)
                   query.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
                   const stream = query.foreach(queryPolicy)
-                  stream.on('error', () => {})
+                  stream.on('error', done)
                   stream.on('end', () => { client.close(false) })
                 })
               })
