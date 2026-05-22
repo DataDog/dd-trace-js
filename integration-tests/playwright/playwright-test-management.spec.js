@@ -30,14 +30,13 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {

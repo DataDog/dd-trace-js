@@ -20,14 +20,13 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
