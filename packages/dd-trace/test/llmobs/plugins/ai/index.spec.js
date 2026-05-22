@@ -41,6 +41,17 @@ function getAiSdkBedrockPackage (vercelAiVersion) {
   return null
 }
 
+function getAiSdkAnthropicPackage (vercelAiVersion) {
+  if (semifies(vercelAiVersion, '>=6.0.0')) {
+    return '@ai-sdk/anthropic'
+  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
+    return '@ai-sdk/anthropic@2.0.0'
+  } else if (semifies(vercelAiVersion, '>=4.0.0')) {
+    return '@ai-sdk/anthropic@1.0.0'
+  }
+  return null
+}
+
 const MOCK_TELEMETRY_METADATA = {
   userId: '12345',
   organizationId: 'orgAbc123',
@@ -1041,12 +1052,13 @@ describe('Plugin', () => {
     })
   })
 
-  describe('Bedrock prompt cache token capture', () => {
-    // @ai-sdk/amazon-bedrock uses globalThis.fetch (not node:http), so nock
-    // cannot intercept it. Both bedrock@3 and bedrock@4 accept an options.fetch
-    // parameter in createAmazonBedrock(), so we pass a mock fetch directly
-    // rather than patching globalThis.fetch — this avoids both the nock
-    // limitation and timing issues around when globalThis.fetch is captured.
+  describe('prompt cache token capture', () => {
+    // Both @ai-sdk/amazon-bedrock and @ai-sdk/anthropic use globalThis.fetch
+    // (not node:http), so nock cannot intercept them. Each provider's
+    // create*() factory accepts an options.fetch parameter, so we pass a mock
+    // fetch directly rather than patching globalThis.fetch — this avoids both
+    // the nock limitation and timing issues around when globalThis.fetch is
+    // captured.
     function makeMockFetch (scenario) {
       const fixture = require(`../../../../../datadog-plugin-ai/test/resources/${scenario}.json`)
       return () => new Response(JSON.stringify(fixture), {
@@ -1055,81 +1067,113 @@ describe('Plugin', () => {
       })
     }
 
-    useEnv({
-      AWS_ACCESS_KEY_ID: 'test-access-key',
-      AWS_SECRET_ACCESS_KEY: 'test-secret-key',
-      AWS_REGION: 'us-east-1',
-    })
-
     // @ai-sdk/amazon-bedrock signs requests with aws4fetch, which calls
     // globalThis.crypto for SHA256/HMAC. Node 19+ exposes crypto as a global;
     // on Node 18 (still supported and used in CI) we polyfill it from
-    // node:crypto.webcrypto.
+    // node:crypto.webcrypto. (Anthropic doesn't need this — simple API key auth.)
     before(() => {
       if (typeof globalThis.crypto === 'undefined') {
         globalThis.crypto = require('node:crypto').webcrypto
       }
     })
 
-    withVersions('ai', 'ai', '>=5.0.0', (version, _, realVersion) => {
-      const bedrockPkg = getAiSdkBedrockPackage(realVersion)
-      if (!bedrockPkg) return
+    /**
+     * Generic helper that runs prompt-cache capture tests for a given AI SDK
+     * provider. New providers can be added by passing a single config object —
+     * no test-orchestration code duplication required.
+     *
+     * @param {object} config
+     * @param {string} config.providerName - Display name (e.g., 'Bedrock', 'Anthropic')
+     * @param {(realVersion: string) => string | null} config.getPackage -
+     *   Returns the versioned package path for the given ai version, or null
+     *   to skip that ai version (no compatible provider package)
+     * @param {(PackageModule: object, scenario: string) => object} config.buildModel -
+     *   Constructs the provider's language model with mock fetch wired in
+     * @param {object} [config.env] - Env vars required during tests (e.g. AWS creds)
+     */
+    function describeProviderCacheTests ({ providerName, getPackage, buildModel, env }) {
+      describe(`${providerName}`, () => {
+        if (env) useEnv(env)
 
-      let ai
-      let BedrockModule
+        withVersions('ai', 'ai', '>=5.0.0', (version, _, realVersion) => {
+          const pkg = getPackage(realVersion)
+          if (!pkg) return
 
-      beforeEach(() => {
-        ai = require(`../../../../../../versions/ai@${version}`).get()
-        BedrockModule = require(`../../../../../../versions/${bedrockPkg}`)
+          let ai
+          let PackageModule
+
+          beforeEach(() => {
+            ai = require(`../../../../../../versions/ai@${version}`).get()
+            PackageModule = require(`../../../../../../versions/${pkg}`)
+          })
+
+          // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
+          // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
+          // count through unchanged. Fixtures use the raw provider shape (inputTokens = fresh only).
+          const isV6 = semifies(realVersion, '>=6.0.0')
+
+          // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
+          // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
+          // For those older versions our fix correctly no-ops at the doGenerate scope
+          // because the SDK never exposes the attribute there.
+          const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
+
+          it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+            const model = buildModel(PackageModule, 'cache-read')
+            await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+            const { llmobsSpans } = await getEvents()
+            const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+            assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
+            assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, cacheReadOnDoGenerate ? 4425 : undefined)
+            // cache_write is 0 in this scenario; we filter zero values, so the metric is absent.
+            assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, undefined)
+          })
+
+          it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+            const model = buildModel(PackageModule, 'cache-write')
+            await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+            const { llmobsSpans } = await getEvents()
+            const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+            assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
+            assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, 4425)
+            // cache_read is 0 in this scenario; we filter zero values, so the metric is absent.
+            assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, undefined)
+          })
+        })
       })
+    }
 
-      // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
-      // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
-      // count through unchanged. Both fixtures use the raw Bedrock shape
-      // (inputTokens = fresh only).
-      const isV6 = semifies(realVersion, '>=6.0.0')
-
-      // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
-      // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
-      // For those older versions our fix correctly no-ops at the doGenerate scope
-      // because the SDK never exposes the attribute there.
-      const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
-
-      it('surfaces cache_read_input_tokens when Bedrock returns cacheReadInputTokens', async () => {
+    describeProviderCacheTests({
+      providerName: 'Bedrock',
+      getPackage: getAiSdkBedrockPackage,
+      buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
-        const model = createAmazonBedrock({
+        return createAmazonBedrock({
           region: 'us-east-1',
-          fetch: makeMockFetch('bedrock-cache-read'),
+          fetch: makeMockFetch(`bedrock-${scenario}`),
         })('anthropic.claude-3-haiku-20240307-v1:0')
+      },
+      env: {
+        AWS_ACCESS_KEY_ID: 'test-access-key',
+        AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+        AWS_REGION: 'us-east-1',
+      },
+    })
 
-        await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-        const { llmobsSpans } = await getEvents()
-        const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
-
-        assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
-        assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, cacheReadOnDoGenerate ? 4425 : undefined)
-        // cache_write is 0 in this scenario; we filter zero values, so the metric is absent.
-        assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, undefined)
-      })
-
-      it('surfaces cache_write_input_tokens when Bedrock returns cacheWriteInputTokens', async () => {
-        const { createAmazonBedrock } = BedrockModule.get()
-        const model = createAmazonBedrock({
-          region: 'us-east-1',
-          fetch: makeMockFetch('bedrock-cache-write'),
-        })('anthropic.claude-3-haiku-20240307-v1:0')
-
-        await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-        const { llmobsSpans } = await getEvents()
-        const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
-
-        assert.equal(doGenerateSpan.metrics.input_tokens, isV6 ? 4448 : 23)
-        assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, 4425)
-        // cache_read is 0 in this scenario; we filter zero values, so the metric is absent.
-        assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, undefined)
-      })
+    describeProviderCacheTests({
+      providerName: 'Anthropic',
+      getPackage: getAiSdkAnthropicPackage,
+      buildModel: (AnthropicModule, scenario) => {
+        const { createAnthropic } = AnthropicModule.get()
+        return createAnthropic({
+          apiKey: 'test-api-key',
+          fetch: makeMockFetch(`anthropic-${scenario}`),
+        })('claude-3-5-haiku-20241022')
+      },
     })
   })
 })
