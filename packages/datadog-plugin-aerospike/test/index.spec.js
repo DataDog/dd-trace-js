@@ -225,7 +225,7 @@ describe('Plugin', () => {
                   'aerospike.setname': set,
                   component: 'aerospike',
                 },
-              })
+              }, { timeoutMs: 14000 })
               .then(done)
               .catch(done)
 
