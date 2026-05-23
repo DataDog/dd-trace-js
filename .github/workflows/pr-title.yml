@@ -73,10 +73,7 @@ jobs:
               if (breaking) return 'semver-major'
               const effective = type === 'revert' ? revertedType : type
               if (effective === 'feat') return 'semver-minor'
-              if (effective === 'fix' || effective === 'perf' || effective === 'refactor') {
-                return 'semver-patch'
-              }
-              return undefined
+              return 'semver-patch'
             }
 
             const pr = context.payload.pull_request
