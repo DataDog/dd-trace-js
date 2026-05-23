@@ -87,17 +87,38 @@ jobs:
 
             const ALIAS = { fix: 'bug', feat: 'enhancement' }
 
-            // Build the desired label set from the title.
-            // Type, scope, and alias are only added if they exist in the repo; semver always exists.
-            const desired = new Set()
-            if (next.type && repoLabels.has(next.type)) desired.add(next.type)
-            const alias = ALIAS[next.type]
-            if (alias && repoLabels.has(alias)) desired.add(alias)
-            if (next.scope && repoLabels.has(next.scope)) desired.add(next.scope)
-            const targetSemver = semverFor(next)
-            if (targetSemver) desired.add(targetSemver)
+            // Returns the set of labels derived from a parsed title.
+            // Type, scope, and alias are only added if they exist in the repo.
+            const titledLabels = (parsed) => {
+              const labels = new Set()
+              if (!parsed.type) return labels
+              if (repoLabels.has(parsed.type)) labels.add(parsed.type)
+              const alias = ALIAS[parsed.type]
+              if (alias && repoLabels.has(alias)) labels.add(alias)
+              if (parsed.scope && repoLabels.has(parsed.scope)) labels.add(parsed.scope)
+              const semver = semverFor(parsed)
+              if (semver) labels.add(semver)
+              return labels
+            }
 
+            const nextLabels = titledLabels(next)
             const current = new Set((pr.labels || []).map(l => l.name))
+
+            // When the title changes, remove labels from the old title that no
+            // longer apply so stale type/scope/semver labels don't linger.
+            const titleChanged = context.payload.action === 'edited' &&
+              context.payload.changes?.title?.from != null
+            const toRemove = new Set()
+            if (titleChanged) {
+              const prev = parse(context.payload.changes.title.from)
+              for (const label of titledLabels(prev)) {
+                if (!nextLabels.has(label)) toRemove.add(label)
+              }
+            }
+
+            const desired = new Set([...current].filter(l => !toRemove.has(l)))
+            for (const label of nextLabels) desired.add(label)
+
             const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
             if (!unchanged) {
               await github.rest.issues.setLabels({
