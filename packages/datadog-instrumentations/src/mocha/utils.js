@@ -503,13 +503,38 @@ function getTestFinishInfo (test, status, config, error) {
   }
 }
 
-function getOnTestEndHandler (config) {
+function getOnTestEndHandler (config, finalAttemptHandlers) {
   return async function (test) {
     if (test._ddShouldSkipEfdRetry) {
       return
     }
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
+    const shouldFinishTest = ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))
+    let testFinishInfo
+    let isFinalAttempt = false
+
+    // If there are afterEach to be run, we don't finish the test yet.
+    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
+    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
+    // directly sets finalStatus without waiting for hooks
+    if (!ctx && test.isPending()) {
+      test._ddIsFinalAttempt = true
+      isFinalAttempt = true
+    }
+
+    if (shouldFinishTest) {
+      testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
+      if (testFinishInfo.finalStatus !== undefined) {
+        test._ddIsFinalAttempt = true
+        isFinalAttempt = true
+      }
+    }
+
+    if (isFinalAttempt) {
+      finalAttemptHandlers?.onStart?.(test)
+    }
 
     // After finishing it might take a bit for the snapshot to be handled.
     // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
@@ -521,13 +546,7 @@ function getOnTestEndHandler (config) {
       })
     }
 
-    // If there are afterEach to be run, we don't finish the test yet.
-    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
-    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
-    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
-    // directly sets finalStatus without waiting for hooks
-    if (ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))) {
-      const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
+    if (shouldFinishTest) {
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
@@ -535,6 +554,10 @@ function getOnTestEndHandler (config) {
         ...testFinishInfo,
         ...ctx.currentStore,
       })
+    }
+
+    if (isFinalAttempt) {
+      finalAttemptHandlers?.onFinish?.(test)
     }
   }
 }
@@ -552,6 +575,9 @@ function getOnHookEndHandler (config) {
         // skip to avoid double-publishing
         if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
           const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
+          if (testFinishInfo.finalStatus !== undefined) {
+            test._ddIsFinalAttempt = true
+          }
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
@@ -583,6 +609,20 @@ function getOnFailHandler (isMain, config) {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
         const testFinishInfo = getTestFinishInfo(test, 'fail', config, err)
+        // ATR never retries hook failures: this.retries(N) is set in runnableWrapper
+        // which only runs when the test function executes — hooks bypass that path,
+        // so _retries stays at -1 and getIsLastRetry returns false, leaving finalStatus
+        // undefined. We must also mark the attempt final when no clone-based retry
+        // mechanism (EFD original, EFD clone, ATF) has queued further attempts.
+        const noCloneRetries = !test._ddIsEfdRetry &&
+          !((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled) &&
+          !test._ddIsAttemptToFix
+        if (testFinishInfo.finalStatus !== undefined || noCloneRetries) {
+          test._ddIsFinalAttempt = true
+        }
+        // test.state is never set to 'failed' for hook failures (Mocha marks the hook,
+        // not the test). Flag it so finishRootSuiteForFile can compute the correct status.
+        test._ddHookFailed = true
         testFinishCh.publish({
           status: 'fail',
           hasBeenRetried: isMochaRetry(test),

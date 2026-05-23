@@ -20,14 +20,13 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -289,7 +288,7 @@ versions.forEach((version) => {
               const eventuallyPassingTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
               )
-              assert.ok(eventuallyPassingTests.length > 1)
+              assert.ok(eventuallyPassingTests.length > 1, `Expected ${eventuallyPassingTests.length} > 1`)
 
               const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
               assert.strictEqual(finalRuns.length, 1,

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -12,9 +13,11 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { clientToCluster } = require('../../datadog-instrumentations/src/helpers/kafka')
 const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { createTopicWithRetry } = require('./helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -24,7 +27,7 @@ describe('Plugin', () => {
     this.timeout(10000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
       let kafka
@@ -38,8 +41,7 @@ describe('Plugin', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
 
         beforeEach(async () => {
-          tracer = require('../../dd-trace')
-          await agent.load('kafkajs')
+          tracer = await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
           Broker = require(`../../../versions/kafkajs@${version}/node_modules/kafkajs/src/broker`)
@@ -50,7 +52,7 @@ describe('Plugin', () => {
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
+          await createTopicWithRetry(admin, {
             waitForLeaders: true,
             topics: [{
               topic: testTopic,
@@ -58,6 +60,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
+          await admin.disconnect()
         })
 
         describe('producer', () => {
@@ -147,6 +150,46 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, userMessages)
           })
 
+          it('should disable header injection when broker advertises Produce <v3', async () => {
+            const startCh = dc.channel('apm:kafkajs:produce:start')
+            const sentMessageBatches = []
+            const captureStart = (ctx) => sentMessageBatches.push({
+              messages: ctx.messages,
+              disableHeaderInjection: ctx.disableHeaderInjection,
+            })
+            startCh.subscribe(captureStart)
+
+            const producer = kafka.producer()
+            await producer.connect()
+
+            try {
+              // Reach into kafkajs's broker pool and downgrade the negotiated
+              // Produce version. We can't ask the docker broker to pretend to
+              // be <0.11; lying locally is enough to drive the proactive
+              // header-support check.
+              const cluster = clientToCluster.get(producer)
+              cluster.brokerPool.versions[0].maxVersion = 2
+
+              const userMessages = [{ key: 'k', value: 'v' }]
+              await producer.send({ topic: testTopic, messages: userMessages })
+
+              assert.strictEqual(sentMessageBatches.length, 1)
+              assert.strictEqual(sentMessageBatches[0].disableHeaderInjection, true)
+              // Boundary clones with `cloneMessages` when injection is off,
+              // so the channel sees a fresh array whose entries have no
+              // `headers` field at all (no `{}` seeding) and the user's
+              // array stays untouched.
+              const [clonedMessage] = sentMessageBatches[0].messages
+              assert.notStrictEqual(sentMessageBatches[0].messages, userMessages)
+              assert.notStrictEqual(clonedMessage, userMessages[0])
+              assert.strictEqual(Object.hasOwn(clonedMessage, 'headers'), false)
+              assert.strictEqual(userMessages[0].headers, undefined)
+            } finally {
+              await producer.disconnect()
+              startCh.unsubscribe(captureStart)
+            }
+          })
+
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
             const resourceName = expectedSchema.send.opName
@@ -186,7 +229,10 @@ describe('Plugin', () => {
             it('should not extract bootstrap servers when initialized with a function', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.ok(!((['messaging.kafka.bootstrap.servers']).some(k => Object.hasOwn((span.meta), k))))
+                assert.ok(
+                  !((['messaging.kafka.bootstrap.servers']).some(k => Object.hasOwn((span.meta), k))),
+                  `Got: ${inspect(['messaging.kafka.bootstrap.servers'])}`
+                )
               })
 
               kafka = new Kafka({
@@ -254,7 +300,10 @@ describe('Plugin', () => {
 
                 // The first send injects trace headers into the cloned
                 // batch that kafkajs serializes.
-                assert.ok(Object.hasOwn(sentMessageBatches[0][0].headers, 'x-datadog-trace-id'))
+                assert.ok(
+                  Object.hasOwn(sentMessageBatches[0][0].headers, 'x-datadog-trace-id'),
+                  `Available keys: ${inspect(Object.keys(sentMessageBatches[0][0].headers))}`
+                )
 
                 sendRequestStub.restore()
 
@@ -347,7 +396,8 @@ describe('Plugin', () => {
                 resource: testTopic,
               })
 
-              assert.ok(parseInt(span.parent_id.toString()) > 0)
+              const parentId = parseInt(span.parent_id.toString())
+              assert.ok(parentId > 0, `Expected ${parentId} > 0`)
             })
 
             await consumer.run({ eachMessage: () => {} })

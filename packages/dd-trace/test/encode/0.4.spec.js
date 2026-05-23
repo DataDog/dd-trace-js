@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
@@ -63,7 +64,7 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
-      assert.ok(Array.isArray(trace))
+      assert.ok(Array.isArray(trace), `Expected array, got ${inspect(trace)}`)
       assert.ok(trace[0] instanceof Object)
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
@@ -297,7 +298,7 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      assert.ok(Array.isArray(trace))
+      assert.ok(Array.isArray(trace), `Expected array, got ${inspect(trace)}`)
       assert.ok(trace[0] instanceof Object)
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
@@ -319,7 +320,7 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      assert.ok(Array.isArray(trace))
+      assert.ok(Array.isArray(trace), `Expected array, got ${inspect(trace)}`)
       assert.ok(trace[0] instanceof Object)
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())

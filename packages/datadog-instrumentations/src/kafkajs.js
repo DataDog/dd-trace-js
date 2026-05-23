@@ -8,6 +8,7 @@ const {
   addHook,
 } = require('./helpers/instrument')
 const {
+  brokerSupportsMessageHeaders,
   clientToCluster,
   cloneMessages,
 } = require('./helpers/kafka')
@@ -26,7 +27,7 @@ const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
-const disabledHeaderWeakSet = new WeakSet()
+const noop = () => {}
 
 addHook({ name: 'kafkajs', file: 'src/producer/index.js', versions: ['>=1.4'] }, (createProducer) =>
   shimmer.wrapFunction(createProducer, original => function wrappedCreateProducer (params) {
@@ -64,15 +65,26 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     const bootstrapServers = this._brokers
     const cluster = clientToCluster.get(producer)
 
+    let disableHeaderInjection = false
+
+    let refreshHeaderSupport = () => {
+      if (!brokerSupportsMessageHeaders(cluster?.brokerPool)) {
+        disableHeaderInjection = true
+        refreshHeaderSupport = noop
+        log.info('kafkajs broker negotiated Produce <v3; tracer header injection disabled.')
+      }
+    }
+
     producer.send = function (...args) {
       if (!producerStartCh.hasSubscribers) {
         return originalSend.apply(this, args)
       }
 
-      // Fast path: kafkajs has fetched metadata, so clusterId is already on
-      // the broker pool.
+      // Fast path: kafkajs has fetched metadata, so versions and clusterId
+      // are already on the broker pool.
       const metadata = cluster?.brokerPool?.metadata
       if (metadata) {
+        refreshHeaderSupport()
         return runSend.call(this, args, metadata.clusterId)
       }
 
@@ -84,7 +96,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         return runSend.call(this, args)
       }
       return cluster.refreshMetadataIfNecessary().then(
-        () => runSend.call(this, args, cluster.brokerPool?.metadata?.clusterId),
+        () => {
+          refreshHeaderSupport()
+          return runSend.call(this, args, cluster.brokerPool?.metadata?.clusterId)
+        },
         () => runSend.call(this, args)
       )
     }
@@ -93,7 +108,6 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       const arg0 = args[0]
       const topic = arg0?.topic
       const inputMessages = Array.isArray(arg0?.messages) ? arg0.messages : []
-      const disableHeaderInjection = disabledHeaderWeakSet.has(producer)
 
       // Hand kafkajs and the plugin a shallow clone so injection writes to
       // tracer-owned objects instead of the caller's. With injection
@@ -125,8 +139,13 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             (error) => {
               ctx.error = error
               if (error) {
+                // Safety net for mixed-version clusters where the seed
+                // broker advertised Produce v3+ but the leader we shipped to
+                // could not parse the headers, surfacing as
+                // KafkaJSProtocolError UNKNOWN (server error code -1).
                 if (error.name === 'KafkaJSProtocolError' && error.type === 'UNKNOWN') {
-                  disabledHeaderWeakSet.add(producer)
+                  disableHeaderInjection = true
+                  refreshHeaderSupport = noop
                   log.error(
                     // eslint-disable-next-line @stylistic/max-len
                     'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'

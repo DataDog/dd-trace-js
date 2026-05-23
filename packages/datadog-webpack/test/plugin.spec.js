@@ -63,6 +63,10 @@ describe('loader', () => {
 
     const result = loader.call(context, source)
 
+    // Switch to `assert.match(result, new RegExp(`^${RegExp.escape(source)}`), ...)` once the minimum supported
+    // Node.js version is 24. Until then, `RegExp.escape` is unavailable and hand-escaping every regex metacharacter
+    // in `source` would be more error-prone than this `startsWith` check.
+    // eslint-disable-next-line eslint-rules/eslint-prefer-assert-match
     assert.ok(result.startsWith(source), 'result should start with original source')
     assert.ok(result.includes("require('dc-polyfill')"), 'result should require dc-polyfill')
     assert.ok(result.includes("'dd-trace:bundler:load'"), 'result should use the bundler channel')

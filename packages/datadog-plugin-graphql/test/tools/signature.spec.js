@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const Module = require('node:module')
+const { inspect } = require('node:util')
 
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -238,6 +239,119 @@ describe('graphql signature fallback', () => {
       locations: ['1:2'],
       path: ['hello', '0'],
     })
-    assert.ok(!Object.hasOwn(attributes, 'extensions.missing'))
+    assert.ok(!Object.hasOwn(attributes, 'extensions.missing'), `Available keys: ${inspect(Object.keys(attributes))}`)
+  })
+})
+
+describe('extractErrorIntoSpanEvent stack handling', () => {
+  const lazyStack = 'GraphQLError: lazy stack\n    at validate (graphql/validate.js:1:1)'
+
+  /**
+   * Builds a GraphQLError-shaped object with a lazy `.stack` accessor that
+   * mirrors what V8 installs via `Error.captureStackTrace` in graphql-js.
+   * The cost of `.stack` is paid on read, not on capture, so counting reads
+   * is the strongest proof the fix avoids symbolisation.
+   *
+   * @param {{
+   *   message?: string,
+   *   locations?: ReadonlyArray<{ line: number, column: number }>,
+   *   path?: ReadonlyArray<string | number>,
+   *   originalError?: { stack?: string },
+   * }} [shape]
+   * @returns {{ error: object, getStackReads: () => number }}
+   */
+  function buildLazyError (shape = {}) {
+    const error = { name: 'GraphQLError', message: shape.message ?? 'oops' }
+    if (shape.locations !== undefined) error.locations = shape.locations
+    if (shape.path !== undefined) error.path = shape.path
+    if (shape.originalError !== undefined) error.originalError = shape.originalError
+    let stackReads = 0
+    Object.defineProperty(error, 'stack', {
+      configurable: true,
+      enumerable: false,
+      get () {
+        stackReads += 1
+        return lazyStack
+      },
+    })
+    return { error, getStackReads: () => stackReads }
+  }
+
+  function captureSpan () {
+    const events = []
+    return {
+      events,
+      addEvent (name, attributes) {
+        events.push({ name, attributes })
+      },
+    }
+  }
+
+  it('skips stack symbolication for validation-only errors', () => {
+    const { extractErrorIntoSpanEvent } = require('../../src/utils')
+    const { error, getStackReads } = buildLazyError({
+      message: 'Cannot query field "foo" on type "Query".',
+      locations: [{ line: 1, column: 3 }],
+    })
+    const span = captureSpan()
+
+    extractErrorIntoSpanEvent({}, span, error)
+
+    assert.equal(getStackReads(), 0)
+    const attrs = span.events[0].attributes
+    assert.ok(!Object.hasOwn(attrs, 'stacktrace'), `Available keys: ${inspect(Object.keys(attrs))}`)
+  })
+
+  it('skips stack symbolication when a validation error pins multiple AST nodes', () => {
+    const { extractErrorIntoSpanEvent } = require('../../src/utils')
+    const { error, getStackReads } = buildLazyError({
+      message: 'There can be only one operation named "Foo".',
+      locations: [{ line: 2, column: 3 }, { line: 4, column: 3 }],
+    })
+    const span = captureSpan()
+
+    extractErrorIntoSpanEvent({}, span, error)
+
+    assert.equal(getStackReads(), 0)
+    const attrs = span.events[0].attributes
+    assert.ok(!Object.hasOwn(attrs, 'stacktrace'), `Available keys: ${inspect(Object.keys(attrs))}`)
+  })
+
+  it('keeps stacktrace for execution errors with a resolver path', () => {
+    const { extractErrorIntoSpanEvent } = require('../../src/utils')
+    const { error } = buildLazyError({
+      message: 'Resolver failed',
+      locations: [{ line: 5, column: 3 }],
+      path: ['user', 'name'],
+    })
+    const span = captureSpan()
+
+    extractErrorIntoSpanEvent({}, span, error)
+
+    assert.equal(span.events[0].attributes.stacktrace, lazyStack)
+  })
+
+  it('keeps stacktrace when an upstream originalError carries its own stack', () => {
+    const { extractErrorIntoSpanEvent } = require('../../src/utils')
+    const { error } = buildLazyError({
+      message: 'TypeError: cannot read properties of undefined',
+      locations: [{ line: 5, column: 3 }],
+      originalError: { stack: 'TypeError: ...\n    at /app/index.js:1:1' },
+    })
+    const span = captureSpan()
+
+    extractErrorIntoSpanEvent({}, span, error)
+
+    assert.equal(span.events[0].attributes.stacktrace, lazyStack)
+  })
+
+  it('keeps stacktrace for errors with neither locations nor path', () => {
+    const { extractErrorIntoSpanEvent } = require('../../src/utils')
+    const { error } = buildLazyError({ message: 'Something happened' })
+    const span = captureSpan()
+
+    extractErrorIntoSpanEvent({}, span, error)
+
+    assert.equal(span.events[0].attributes.stacktrace, lazyStack)
   })
 })

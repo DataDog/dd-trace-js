@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 const Readable = require('node:stream').Readable
 
 const { after, afterEach, before, describe, it } = require('mocha')
@@ -103,7 +104,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             withPeerService(
@@ -446,7 +447,10 @@ describe('Plugin', () => {
                     },
                   })
 
-                  assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].meta, ERROR_STACK),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+                  )
                   assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 2)
                 })
             })
@@ -493,7 +497,10 @@ describe('Plugin', () => {
                     },
                   })
 
-                  assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].meta, ERROR_STACK),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+                  )
                   assert.match(traces[0][0].meta[ERROR_MESSAGE], /^13 INTERNAL:.+$/m)
                   assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 13)
                 })
@@ -649,7 +656,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should be configured with the correct values', async () => {
@@ -681,7 +688,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should handle request metadata', async () => {
@@ -737,7 +744,7 @@ describe('Plugin', () => {
             })
 
             after(() => {
-              return agent.close({ ritmReset: false })
+              return agent.close()
             })
 
             it('should handle request metadata', async () => {

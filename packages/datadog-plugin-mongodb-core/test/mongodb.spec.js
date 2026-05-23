@@ -93,7 +93,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -501,7 +501,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -567,6 +567,86 @@ describe('Plugin', () => {
         )
       })
 
+      describe('with obfuscateQuery: "types"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'types',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should report scalar value types in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"string","age":"number"}`,
+            meta: {
+              'mongodb.query': '{"user":"string","age":"number"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while reporting value types', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
+            },
+          })
+        })
+      })
+
+      describe('with obfuscateQuery: "redact"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'redact',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should redact scalar values in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"?","age":"?"}`,
+            meta: {
+              'mongodb.query': '{"user":"?","age":"?"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while redacting their values', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"?","$lte":"?"}}',
+            },
+          })
+        })
+      })
+
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', {
@@ -575,7 +655,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -617,13 +697,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
-          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 1 })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -671,18 +750,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
-        before(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full',
-          })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 0 })
         })
 
-        after(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -731,7 +804,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -772,7 +845,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -785,7 +858,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
@@ -818,7 +891,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -828,7 +900,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -867,7 +939,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -877,7 +948,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -890,7 +961,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
