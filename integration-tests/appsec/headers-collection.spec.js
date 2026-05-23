@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 
 const {
@@ -56,7 +57,10 @@ describe('AppSec headers collection - Express', () => {
         requestHeaders.length
       )
       requestHeaders.forEach((headerName) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, `http.request.headers.${headerName}`))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, `http.request.headers.${headerName}`),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
       })
 
       // Response headers
@@ -65,7 +69,10 @@ describe('AppSec headers collection - Express', () => {
         responseHeaders.length
       )
       responseHeaders.forEach((headerName) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, `http.response.headers.${headerName}`))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, `http.response.headers.${headerName}`),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
       })
     })
   }

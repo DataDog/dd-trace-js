@@ -2,6 +2,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @anthropic-ai/sdk,anthropic,0.14.0,0.96.0,True
 @apollo/gateway,apollo,2.3.0,2.14.0,True
 @aws-sdk/smithy-client,aws-sdk,3.0.0,3.374.0,True
+@azure/cosmos,azure-cosmos,4.4.1,4.9.2,True
 @azure/event-hubs,azure-event-hubs,6.0.0,6.0.4,True
 @azure/functions,azure-functions,4.0.0,4.14.0,True
 @azure/service-bus,azure-service-bus,7.9.2,7.9.5,True
@@ -19,8 +20,8 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @jest/test-sequencer,jest,28.0.0,30.4.1,True
 @jest/transform,jest,28.0.0,30.4.1,True
 @koa/router,koa,8.0.0,15.5.0,True
-@langchain/core,langchain,0.1.0,1.1.46,True
-@langchain/langgraph,langgraph,1.1.2,1.3.0,True
+@langchain/core,langchain,0.1.0,1.1.47,True
+@langchain/langgraph,langgraph,1.1.2,1.3.1,True
 @modelcontextprotocol/sdk,modelcontextprotocol-sdk,1.27.1,1.29.0,True
 @node-redis/client,redis,1.0.0,1.0.6,True
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
@@ -29,7 +30,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @smithy/smithy-client,aws-sdk,1.0.3,4.13.3,True
 @vitest/runner,vitest,1.6.0,4.1.6,True
 aerospike,aerospike,4.0.0,6.7.0,True
-ai,ai,4.0.0,6.0.184,True
+ai,ai,4.0.0,6.0.185,True
 amqp10,amqp10,3.0.0,3.6.0,True
 amqplib,amqplib,0.5.0,2.0.1,True
 avsc,avsc,5.0.0,5.7.9,True
