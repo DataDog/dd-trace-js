@@ -211,7 +211,8 @@ describe('Plugin', () => {
             }).catch(done)
           })
 
-          it('should instrument query', done => {
+          it('should instrument query', function (done) {
+            this.timeout(15_000)
             agent
               .assertFirstTraceSpan({
                 name: expectedSchema.command.opName,
@@ -228,8 +229,8 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            // Capture now — beforeEach will overwrite binName/indexName before
-            // any retry setTimeout fires, so closures must use these snapshots.
+            // Capture now — beforeEach overwrites binName/indexName for the
+            // next test before any async callback fires.
             const testBinName = binName
             const testIndexName = indexName
             aerospike.connect(config).then(client => {
@@ -245,21 +246,18 @@ describe('Plugin', () => {
                 if (!job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
                   if (waitError) return done(waitError)
-                  // waitUntilDone may return before the server query thread has
-                  // picked up the new index. Retry with backoff; capture testBinName
-                  // so retries are not affected by the next test's beforeEach.
-                  let retries = 0
-                  const runQuery = () => {
-                    const q = client.query(ns, 'demo')
-                    q.select('id', testBinName)
-                    q.where(aerospike.filter.contains(testBinName, 'green', aerospike.indexType.LIST))
-                    const stream = q.foreach({ totalTimeout: 10000 })
-                    stream.on('error', () => {
-                      if (retries++ < 5) setTimeout(runQuery, 500)
-                    })
+                  // waitUntilDone signals the build is done, but the server
+                  // query thread on older clients needs extra time to pick up
+                  // the new index. 3 s covers the observed settling window.
+                  setTimeout(() => {
+                    const query = client.query(ns, 'demo')
+                    const queryPolicy = { totalTimeout: 10000 }
+                    query.select('id', testBinName)
+                    query.where(aerospike.filter.contains(testBinName, 'green', aerospike.indexType.LIST))
+                    const stream = query.foreach(queryPolicy)
+                    stream.on('error', done)
                     stream.on('end', () => { client.close(false) })
-                  }
-                  runQuery()
+                  }, 3000)
                 })
               })
             }).catch(done)
