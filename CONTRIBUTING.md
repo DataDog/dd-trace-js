@@ -116,7 +116,7 @@ Examples:
 
 ```
 feat(appsec): add new WAF rule
-fix(redis): handle connection timeout
+fix: handle cross section things
 docs: update contributing guidelines
 chore(deps): bump express to v5
 revert: fix(redis): handle connection timeout
