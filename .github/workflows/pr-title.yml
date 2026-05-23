@@ -48,11 +48,6 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const TYPES = [
-              'feat', 'fix', 'docs', 'style', 'refactor',
-              'perf', 'test', 'build', 'ci', 'chore', 'revert',
-            ]
-
             const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
             const parse = (title) => {
               const m = (title || '').match(pattern)
@@ -85,16 +80,12 @@ jobs:
               for (const label of page.data) repoLabels.add(label.name)
             }
 
-            const ALIAS = { fix: 'bug', feat: 'enhancement' }
-
             // Returns the set of labels derived from a parsed title.
-            // Type, scope, and alias are only added if they exist in the repo.
+            // Type and scope are only added if they exist in the repo.
             const titledLabels = (parsed) => {
               const labels = new Set()
               if (!parsed.type) return labels
               if (repoLabels.has(parsed.type)) labels.add(parsed.type)
-              const alias = ALIAS[parsed.type]
-              if (alias && repoLabels.has(alias)) labels.add(alias)
               if (parsed.scope && repoLabels.has(parsed.scope)) labels.add(parsed.scope)
               const semver = semverFor(parsed)
               if (semver) labels.add(semver)
