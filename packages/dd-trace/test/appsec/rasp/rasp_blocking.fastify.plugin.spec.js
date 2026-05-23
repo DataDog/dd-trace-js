@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -111,7 +112,7 @@ describe('RASP - fastify blocking', () => {
       sinon.assert.calledOnce(hooks.onError)
       assert.strictEqual(res.status, 500)
       assert.notStrictEqual(res.data, blockedJson)
-      assert(res.data.includes('loul'))
+      assert(res.data.includes('loul'), `Got: ${inspect(res.data)}`)
       await checkRaspExecutedAndNotThreat(agent, false)
     })
 

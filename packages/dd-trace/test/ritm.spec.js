@@ -69,7 +69,7 @@ describe('Ritm', () => {
     // - we don't recurse infinitely on a CJS cycle
     // - we observe module-a and module-b as part of the cycle
     // - start/end counts stay in sync
-    assert.ok(startListener.callCount >= 2)
+    assert.ok(startListener.callCount >= 2, `Expected ${startListener.callCount} >= 2`)
     assert.equal(endListener.callCount, startListener.callCount)
 
     const startRequests = new Set()

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -127,7 +128,7 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers, false)
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
-    assert.ok(!calledTags.includes('manual_checkpoint:true'))
+    assert.ok(!calledTags.includes('manual_checkpoint:true'), `Got: ${inspect(calledTags)}`)
   })
 
   it('should call trackTransaction on the processor with correct args', function () {

@@ -57,6 +57,26 @@ jobs:
           flags: platform-webpack
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
+  instrumentation-ai:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: ai
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-aws-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: aws-sdk
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-bluebird:
     runs-on: ubuntu-latest
     permissions:
@@ -97,6 +117,55 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
+  # The couchbase native binding ships libcouchbase: the 3.x line has no
+  # prebuilt binary for Node 18+ and its bundled sources do not compile under
+  # modern gcc (missing <cstdint> for std::uint8_t). Pin one Node version per
+  # range instead of using the composite action that runs both oldest+latest,
+  # mirroring the existing plugin job's matrix.
+  instrumentation-couchbase:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node-version: eol
+            range: "^3.0.7"
+          - node-version: 18
+            range: ">=4.2.0"
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: couchbase
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: yarn config set ignore-engines true
+      - run: yarn test:instrumentations:ci --ignore-engines
+      - uses: ./.github/actions/coverage
+        with:
+          flags: instrumentations-${{ github.job }}-${{ matrix.node-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  instrumentation-crypto:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: crypto
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
     permissions:
@@ -133,6 +202,26 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-express-multi-version:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: express-multi-version
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: fetch
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-fs:
     runs-on: ubuntu-latest
     permissions:
@@ -149,6 +238,16 @@ jobs:
       id-token: write
     env:
       PLUGINS: generic-pool
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-hono:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: hono
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
@@ -190,6 +289,16 @@ jobs:
         if: "!cancelled()"
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  instrumentation-http-client-options:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: http-client-options
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
 
   instrumentation-knex:
     runs-on: ubuntu-latest
@@ -254,6 +363,16 @@ jobs:
     env:
       PLUGINS: mysql2
       SERVICES: mysql2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-otel-sdk-trace:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: otel-sdk-trace
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
@@ -337,6 +456,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-stripe:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: stripe
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-url:
     runs-on: ubuntu-latest
     permissions:
@@ -353,6 +482,16 @@ jobs:
       id-token: write
     env:
       PLUGINS: when
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-zlib:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: zlib
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test

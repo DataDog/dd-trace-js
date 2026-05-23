@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const EventEmitter = require('node:events')
 const net = require('node:net')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 
@@ -87,7 +88,10 @@ describe('Plugin', () => {
               })
 
               if (implementation !== 'pg.native') {
-                assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
+                assert.ok(
+                  Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                  `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                )
               }
             }, { spanResourceMatch: /^SELECT \$1::text as message$/ })
               .then(done)
@@ -140,7 +144,10 @@ describe('Plugin', () => {
                 })
 
                 if (implementation !== 'pg.native') {
-                  assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                  )
                 }
               })
                 .then(done)
@@ -314,7 +321,7 @@ describe('Plugin', () => {
 
                   const readPromise = (async () => {
                     for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'))
+                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
                     }
                   })()
 
@@ -350,7 +357,7 @@ describe('Plugin', () => {
                   const rejectedRead = assert.rejects(async () => {
                     // eslint-disable-next-line no-unreachable-loop
                     for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'))
+                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
                       throw new Error('Test error')
                     }
                   }, {

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
@@ -66,7 +67,10 @@ describe('API Security sampling integration', () => {
     it('samples first express route request only', async () => {
       const firstMessage = agent.assertMessageReceived(({ payload }) => {
         const span = findSpanBy(payload, span => span.meta?.['http.route'] === '/api_security_sampling/:i')
-        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+        assert.ok(
+          Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
       }, 10_000)
 
       await axios.post('/api_security_sampling/1', { key: 'value' })
@@ -74,7 +78,10 @@ describe('API Security sampling integration', () => {
 
       const secondMessage = agent.assertMessageReceived(({ payload }) => {
         const span = findSpanBy(payload, span => span.meta?.['http.route'] === '/api_security_sampling/:i')
-        assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+        assert.ok(
+          !Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
       }, 10_000)
 
       await axios.post('/api_security_sampling/2', { key: 'value' })
@@ -86,7 +93,10 @@ describe('API Security sampling integration', () => {
 
       const firstMessage = agent.assertMessageReceived(({ payload }) => {
         const span = findSpanBy(payload, span => span.meta?.['http.endpoint'] === expectedEndpoint)
-        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+        assert.ok(
+          Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
       }, 10_000)
 
       await axios.post('/api_security_sampling_resource_renaming/101', { key: 'value' })
@@ -94,7 +104,10 @@ describe('API Security sampling integration', () => {
 
       const secondMessage = agent.assertMessageReceived(({ payload }) => {
         const span = findSpanBy(payload, span => span.meta?.['http.endpoint'] === expectedEndpoint)
-        assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+        assert.ok(
+          !Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
       }, 10_000)
 
       await axios.post('/api_security_sampling_resource_renaming/202', { key: 'value' })

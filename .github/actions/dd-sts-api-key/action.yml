@@ -11,6 +11,6 @@ runs:
   steps:
     - name: Get Datadog API key
       id: dd-sts
-      uses: DataDog/dd-sts-action@cf22dd37b6a6355fd2dcd4b7a1634ef5f837e6fc # v1.0.1
+      uses: DataDog/dd-sts-action@1f350ca511be980515cf08b0bd64182b9c6e5d32 # v1.0.3
       with:
         policy: dd-trace-js-api-key
