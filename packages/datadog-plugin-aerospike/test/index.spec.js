@@ -246,18 +246,23 @@ describe('Plugin', () => {
                 if (!job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
                   if (waitError) return done(waitError)
-                  // waitUntilDone signals the build is done, but the server
-                  // query thread on older clients needs extra time to pick up
-                  // the new index. 3 s covers the observed settling window.
-                  setTimeout(() => {
-                    const query = client.query(ns, 'demo')
-                    const queryPolicy = { totalTimeout: 10000 }
-                    query.select('id', testBinName)
-                    query.where(aerospike.filter.contains(testBinName, 'green', aerospike.indexType.LIST))
-                    const stream = query.foreach(queryPolicy)
-                    stream.on('error', done)
+                  // waitUntilDone signals the build is done but the server
+                  // query thread on older clients may not have picked it up
+                  // yet. Poll until the query succeeds rather than sleeping a
+                  // fixed amount. testBinName is captured before beforeEach
+                  // can overwrite binName for the next test.
+                  let retries = 0
+                  const runQuery = () => {
+                    const q = client.query(ns, 'demo')
+                    q.select('id', testBinName)
+                    q.where(aerospike.filter.contains(testBinName, 'green', aerospike.indexType.LIST))
+                    const stream = q.foreach({ totalTimeout: 10000 })
+                    stream.on('error', () => {
+                      if (retries++ < 20) setTimeout(runQuery, 500)
+                    })
                     stream.on('end', () => { client.close(false) })
-                  }, 3000)
+                  }
+                  runQuery()
                 })
               })
             }).catch(done)
