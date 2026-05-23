@@ -27,18 +27,6 @@ describe('Plugin', () => {
     this.timeout(8000)
 
     withVersions('aerospike', 'aerospike', version => {
-      // The createIndex and query tests within a version block share the same
-      // bin/index names so the query test runs against a well-settled index
-      // (built seconds earlier by createIndex). Fresh indexes cause query
-      // failures on older clients against newer servers due to protocol timing.
-      // Different version blocks get counter-unique names to prevent
-      // cross-version pollution on the shared CI server.
-      before(() => {
-        const id = ++indexCounter
-        binName = `b${id}`
-        indexName = `i${id}`
-      })
-
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
@@ -56,6 +44,9 @@ describe('Plugin', () => {
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
+        const id = ++indexCounter
+        binName = `b${id}`
+        indexName = `i${id}`
       })
 
       after(() => {
@@ -237,12 +228,16 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
+            // Capture now — beforeEach will overwrite binName/indexName before
+            // any retry setTimeout fires, so closures must use these snapshots.
+            const testBinName = binName
+            const testIndexName = indexName
             aerospike.connect(config).then(client => {
               const index = {
                 ns,
                 set: 'demo',
-                bin: binName,
-                index: indexName,
+                bin: testBinName,
+                index: testIndexName,
                 type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING,
               }
@@ -250,15 +245,21 @@ describe('Plugin', () => {
                 if (!job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
                   if (waitError) return done(waitError)
-                  const query = client.query(ns, 'demo')
-                  const queryPolicy = {
-                    totalTimeout: 10000,
+                  // waitUntilDone may return before the server query thread has
+                  // picked up the new index. Retry with backoff; capture testBinName
+                  // so retries are not affected by the next test's beforeEach.
+                  let retries = 0
+                  const runQuery = () => {
+                    const q = client.query(ns, 'demo')
+                    q.select('id', testBinName)
+                    q.where(aerospike.filter.contains(testBinName, 'green', aerospike.indexType.LIST))
+                    const stream = q.foreach({ totalTimeout: 10000 })
+                    stream.on('error', () => {
+                      if (retries++ < 5) setTimeout(runQuery, 500)
+                    })
+                    stream.on('end', () => { client.close(false) })
                   }
-                  query.select('id', binName)
-                  query.where(aerospike.filter.contains(binName, 'green', aerospike.indexType.LIST))
-                  const stream = query.foreach(queryPolicy)
-                  stream.on('error', done)
-                  stream.on('end', () => { client.close(false) })
+                  runQuery()
                 })
               })
             }).catch(done)
