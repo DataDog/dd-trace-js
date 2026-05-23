@@ -29,7 +29,6 @@ describe('config-helper stable config sources', () => {
         DD_SERVICE: 'fleet-service',
         DD_ENV: 'fleet-env',
       }
-      this.warnings = []
     })
 
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
@@ -51,7 +50,6 @@ describe('config-helper stable config sources', () => {
       DD_SERVICE: 'fleet-service',
       DD_ENV: 'fleet-env',
     })
-    assert.deepStrictEqual(sources.stableConfigWarnings, [])
   })
 
   it('does not load stable config in serverless environment', () => {
@@ -82,6 +80,7 @@ describe('config-helper stable config sources', () => {
 describe('config-helper env resolution', () => {
   let getValueFromEnvSources
   let getConfiguredEnvName
+  let getEnvironmentVariables
   let getEnvironmentVariable
   let resetModule
   let originalEnv
@@ -91,6 +90,7 @@ describe('config-helper env resolution', () => {
     const mod = proxyquire('../../src/config/helper', overrides)
     getValueFromEnvSources = mod.getValueFromEnvSources
     getConfiguredEnvName = mod.getConfiguredEnvName
+    getEnvironmentVariables = mod.getEnvironmentVariables
     getEnvironmentVariable = mod.getEnvironmentVariable
     resetModule = () => {}
   }
@@ -185,6 +185,28 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(value, 'production')
   })
 
+  it('logs unsupported DD_ environment variables while collecting envs', () => {
+    const log = {
+      warn: sinon.spy(),
+    }
+    loadModule({
+      '../log': log,
+      '../serverless': {
+        IS_SERVERLESS: true,
+      },
+    })
+    process.env.DD_UNSUPPORTED_CONFIG = 'value'
+
+    const envs = getEnvironmentVariables()
+
+    assert.ok(!('DD_UNSUPPORTED_CONFIG' in envs))
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Missing configuration %s in supported-configurations.json. The environment variable is ignored.',
+      'DD_UNSUPPORTED_CONFIG',
+    )
+  })
+
   describe('with stable config and env vars', () => {
     beforeEach(() => {
       // Re-load module with stable config enabled (non-serverless)
@@ -197,7 +219,6 @@ describe('config-helper env resolution', () => {
         this.fleetEntries = {
           DD_SERVICE: 'fleet-service',
         }
-        this.warnings = []
       })
 
       const mod = proxyquire('../../src/config/helper', {
@@ -226,7 +247,6 @@ describe('config-helper env resolution', () => {
           DD_TRACE_SAMPLE_RATE: '0.9',
           DD_SERVICE: 'fleet',
         }
-        this.warnings = []
       })
 
       const mod = proxyquire('../../src/config/helper', {
@@ -252,7 +272,6 @@ describe('config-helper env resolution', () => {
         this.fleetEntries = {
           DD_SERVICE: undefined,
         }
-        this.warnings = []
       })
 
       const mod = proxyquire('../../src/config/helper', {

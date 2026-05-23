@@ -16,37 +16,14 @@ describe('log', () => {
   describe('config', () => {
     let env
 
-    /**
-     * @param {{
-     *   fleetEntries?: Record<string, string|undefined>,
-     *   localEntries?: Record<string, string|undefined>,
-     *   isServerless?: boolean
-     * }} [options]
-     */
-    const reloadLog = (options = {}) => {
-      const { fleetEntries, localEntries, isServerless = true } = options
+    const reloadLog = () => {
       const logWriter = {
         configure: sinon.spy(),
       }
-      const configHelper = isServerless
-        ? proxyquire.noPreserveCache()('../src/config/helper', {
-          '../serverless': { IS_SERVERLESS: true },
-        })
-        : proxyquire.noPreserveCache()('../src/config/helper', {
-          '../serverless': { IS_SERVERLESS: false },
-          './stable': function StableConfigStub () {
-            this.localEntries = localEntries
-            this.fleetEntries = fleetEntries
-            this.warnings = []
-          },
-        })
 
       const log = proxyquire.noPreserveCache()('../src/log', {
-        '../config/helper': configHelper,
         './writer': logWriter,
       })
-
-      logWriter.configure.resetHistory()
 
       return { log, logWriter }
     }
@@ -65,11 +42,27 @@ describe('log', () => {
       assert.strictEqual(typeof log.configure, 'function')
     })
 
-    it('should configure with default config if no environment variables are set', () => {
+    it('should configure without debug enabled by default', () => {
       const { log, logWriter } = reloadLog()
 
       assert.strictEqual(log.configure({}), false)
-      sinon.assert.calledOnceWithExactly(logWriter.configure, false, 'debug', undefined)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, false, undefined, undefined)
+    })
+
+    it('should configure from DD_TRACE_DEBUG when that source is configured', () => {
+      process.env.DD_TRACE_DEBUG = 'false'
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({ DD_TRACE_DEBUG: true }), true)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, true, undefined, undefined)
+    })
+
+    it('should configure from DD_TRACE_DEBUG when disabled', () => {
+      process.env.DD_TRACE_DEBUG = 'false'
+      const { log, logWriter } = reloadLog()
+
+      assert.strictEqual(log.configure({ DD_TRACE_DEBUG: false }), false)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, false, undefined, undefined)
     })
 
     it('should pass the logger option to the writer', () => {
@@ -79,135 +72,85 @@ describe('log', () => {
         error: () => {},
       }
 
-      log.configure({ logger })
+      log.configure({ DD_TRACE_DEBUG: true, logLevel: 'debug', logger })
 
-      sinon.assert.calledOnceWithExactly(logWriter.configure, false, 'debug', logger)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', logger)
     })
 
-    it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
-      process.env.DD_TRACE_LOG_LEVEL = 'error'
-      process.env.DD_TRACE_DEBUG = 'false'
-      process.env.OTEL_LOG_LEVEL = 'debug'
+    it('should pass the final log level to the writer', () => {
       const { log, logWriter } = reloadLog()
 
-      assert.strictEqual(log.configure({}), false)
-      sinon.assert.calledOnceWithExactly(logWriter.configure, false, 'error', undefined)
+      assert.strictEqual(log.configure({ DD_TRACE_DEBUG: true, logLevel: 'error' }), true)
+      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'error', undefined)
     })
 
-    it('should initialize with OTEL environment variables when DD env vars are not set', () => {
-      process.env.OTEL_LOG_LEVEL = 'debug'
-      const { log, logWriter } = reloadLog()
+    it('should replay buffered logs when configured', () => {
+      const log = proxyquire.noPreserveCache()('../src/log', {})
+      const logger = {
+        debug: sinon.spy(),
+        info: sinon.spy(),
+        warn: sinon.spy(),
+        error: sinon.spy(),
+      }
 
-      assert.strictEqual(log.configure({}), true)
-      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', undefined)
+      log.debug('early debug')
+      log.info('early info')
+      log.warn('early %s', 'warning')
+      log.error('early error')
+      log.errorWithoutTelemetry('early error without telemetry')
+      log.configure({ DD_TRACE_DEBUG: true, logLevel: 'debug', logger })
+
+      sinon.assert.calledOnceWithExactly(logger.debug, 'early debug')
+      sinon.assert.calledOnceWithExactly(logger.info, 'early info')
+      sinon.assert.calledOnceWithExactly(logger.warn, 'early warning')
+      sinon.assert.calledTwice(logger.error)
+      assert.strictEqual(logger.error.firstCall.args[0].message, 'early error')
+      assert.strictEqual(logger.error.secondCall.args[0], 'early error without telemetry')
     })
 
-    it('should initialize from environment variables', () => {
-      process.env.DD_TRACE_DEBUG = 'true'
-      const { log, logWriter } = reloadLog()
+    it('should drop buffered logs when disabled', () => {
+      const log = proxyquire.noPreserveCache()('../src/log', {})
+      const logger = {
+        debug: sinon.spy(),
+        warn: sinon.spy(),
+        error: sinon.spy(),
+      }
 
-      assert.strictEqual(log.configure({}), true)
-      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', undefined)
+      log.warn('early %s', 'warning')
+      log.configure({ DD_TRACE_DEBUG: false, logLevel: 'debug', logger })
+
+      sinon.assert.notCalled(logger.warn)
     })
 
-    it('should read case-insensitive booleans from environment variables', () => {
-      process.env.DD_TRACE_DEBUG = 'TRUE'
-      const { log, logWriter } = reloadLog()
+    it('should preserve buffered trace call sites', function foo () {
+      const log = proxyquire.noPreserveCache()('../src/log', {})
+      const logger = {
+        debug: sinon.spy(),
+        error: sinon.spy(),
+      }
 
-      assert.strictEqual(log.configure({}), true)
-      sinon.assert.calledOnceWithExactly(logWriter.configure, true, 'debug', undefined)
+      log.trace('early trace')
+      log.configure({ DD_TRACE_DEBUG: true, logLevel: 'trace', logger })
+
+      sinon.assert.calledOnce(logger.debug)
+      assert.match(logger.debug.firstCall.args[0], /^Trace: Context.foo\('early trace'\)/)
     })
 
-    describe('configure', () => {
-      it('prefers fleetStableConfigValue over env and local', () => {
-        process.env.DD_TRACE_DEBUG = 'false'
+    it('should replace write methods with noops when disabled after being enabled', () => {
+      const log = proxyquire.noPreserveCache()('../src/log', {})
+      const logger = {
+        debug: sinon.spy(),
+        error: sinon.spy(),
+      }
 
-        let loaded = reloadLog({
-          fleetEntries: { DD_TRACE_DEBUG: 'true' },
-          isServerless: false,
-          localEntries: { DD_TRACE_DEBUG: 'false' },
-        })
-        assert.strictEqual(loaded.log.configure({}), true)
+      log.configure({ DD_TRACE_DEBUG: true, logLevel: 'debug', logger })
+      log.debug('before disable')
+      log.configure({ DD_TRACE_DEBUG: false, logLevel: 'debug', logger })
+      log.debug('after disable')
+      log.error('after disable')
 
-        process.env.DD_TRACE_DEBUG = 'true'
-
-        loaded = reloadLog({
-          fleetEntries: { DD_TRACE_DEBUG: 'false' },
-          isServerless: false,
-          localEntries: { DD_TRACE_DEBUG: 'true' },
-        })
-        assert.strictEqual(loaded.log.configure({}), false)
-      })
-
-      it('uses DD_TRACE_DEBUG when fleetStableConfigValue is not set', () => {
-        process.env.DD_TRACE_DEBUG = 'true'
-        let loaded = reloadLog({
-          isServerless: false,
-          localEntries: { DD_TRACE_DEBUG: 'false' },
-        })
-        assert.strictEqual(loaded.log.configure({}), true)
-
-        process.env.DD_TRACE_DEBUG = 'false'
-        loaded = reloadLog({
-          isServerless: false,
-          localEntries: { DD_TRACE_DEBUG: 'true' },
-        })
-        assert.strictEqual(loaded.log.configure({}), false)
-      })
-
-      it('uses OTEL_LOG_LEVEL=debug when DD vars are not set', () => {
-        process.env.OTEL_LOG_LEVEL = 'debug'
-        let loaded = reloadLog({
-          isServerless: false,
-          localEntries: { OTEL_LOG_LEVEL: 'info' },
-        })
-        assert.strictEqual(loaded.log.configure({}), true)
-
-        process.env.OTEL_LOG_LEVEL = 'info'
-        loaded = reloadLog({
-          isServerless: false,
-          localEntries: { OTEL_LOG_LEVEL: 'debug' },
-        })
-        assert.strictEqual(loaded.log.configure({}), false)
-      })
-
-      it('falls back to localStableConfigValue', () => {
-        let loaded = reloadLog({
-          isServerless: false,
-          localEntries: { DD_TRACE_DEBUG: 'false' },
-        })
-        assert.strictEqual(loaded.log.configure({}), false)
-
-        loaded = reloadLog({
-          isServerless: false,
-          localEntries: { DD_TRACE_DEBUG: 'true' },
-        })
-        assert.strictEqual(loaded.log.configure({}), true)
-      })
-
-      it('falls back to internal config.enabled when nothing else provided', () => {
-        const { log, logWriter } = reloadLog({
-          fleetEntries: {},
-          isServerless: false,
-          localEntries: {},
-        })
-
-        process.env.OTEL_LOG_LEVEL = 'debug'
-        assert.strictEqual(log.configure({}), true)
-
-        process.env = {}
-        assert.strictEqual(log.configure({}), true)
-        sinon.assert.calledWithExactly(logWriter.configure.secondCall, true, 'debug', undefined)
-      })
-
-      it('falls back to the previous log level when no override is provided', () => {
-        const { log, logWriter } = reloadLog()
-
-        log.configure({ logLevel: 'error' })
-        log.configure({})
-
-        sinon.assert.calledWithExactly(logWriter.configure.secondCall, false, 'error', undefined)
-      })
+      sinon.assert.calledOnceWithExactly(logger.debug, 'before disable')
+      sinon.assert.notCalled(logger.error)
     })
   })
 
@@ -217,13 +160,9 @@ describe('log', () => {
     let logger
     let error
 
-    function loadConfiguredLog (options = {}, envEntries = {}) {
-      process.env = {
-        DD_TRACE_DEBUG: 'true',
-        ...envEntries,
-      }
+    function loadConfiguredLog (options = {}) {
       log = proxyquire.noPreserveCache()('../src/log', {})
-      log.configure(options)
+      log.configure({ DD_TRACE_DEBUG: true, logLevel: 'debug', ...options })
       return log
     }
 
@@ -253,12 +192,15 @@ describe('log', () => {
       console.debug.restore()
     })
 
-    it('should support chaining', () => {
+    it('should not return itself from logger methods', () => {
       loadConfiguredLog({ logger })
 
-      log
-        .error('error')
-        .debug('debug')
+      assert.strictEqual(log.trace('trace'), undefined)
+      assert.strictEqual(log.debug('debug'), undefined)
+      assert.strictEqual(log.info('info'), undefined)
+      assert.strictEqual(log.warn('warn'), undefined)
+      assert.strictEqual(log.error('error'), undefined)
+      assert.strictEqual(log.errorWithoutTelemetry('error without telemetry'), undefined)
     })
 
     it('should call the logger in a noop context', () => {
@@ -415,7 +357,7 @@ describe('log', () => {
 
     describe('configure', () => {
       it('should disable the logger when DD_TRACE_DEBUG is false', () => {
-        loadConfiguredLog({}, { DD_TRACE_DEBUG: 'false' })
+        loadConfiguredLog({ DD_TRACE_DEBUG: false })
         log.debug('debug')
         log.error(error)
 
@@ -423,8 +365,8 @@ describe('log', () => {
         sinon.assert.notCalled(console.error)
       })
 
-      it('should enable the logger when OTEL_LOG_LEVEL is debug', () => {
-        loadConfiguredLog({}, { OTEL_LOG_LEVEL: 'debug' })
+      it('should enable the logger when DD_TRACE_DEBUG is true', () => {
+        loadConfiguredLog({ DD_TRACE_DEBUG: true })
         log.debug('debug')
         log.error(error)
 

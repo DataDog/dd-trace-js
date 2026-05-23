@@ -30,6 +30,10 @@ describe('Config', () => {
   let fs
   let existsSyncParam
   let existsSyncReturn
+  let logInfo
+  let logWarn
+  let logError
+  let logConfigure
   let updateConfig
   const isWindows = process.platform === 'win32'
 
@@ -60,9 +64,10 @@ describe('Config', () => {
     } = overrides
 
     log = proxyquire('../../src/log', {})
-    sinon.spy(log, 'info')
-    sinon.spy(log, 'warn')
-    sinon.spy(log, 'error')
+    logInfo = sinon.spy(log, 'info')
+    logWarn = sinon.spy(log, 'warn')
+    logError = sinon.spy(log, 'error')
+    logConfigure = sinon.spy(log, 'configure')
     const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
     const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
     const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
@@ -71,8 +76,13 @@ describe('Config', () => {
       './parsers': parsers,
       '../../../../version': { DD_MAJOR: ddMajor },
     })
+    const stableConfig = proxyquire.noPreserveCache()('../../src/config/stable', {
+      '../log': log,
+    })
     const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+      '../log': log,
       './supported-configurations.json': supportedConfigurations,
+      './stable': stableConfig,
     })
     const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
     return proxyquire.noPreserveCache()('../../src/config', {
@@ -82,6 +92,7 @@ describe('Config', () => {
       '../serverless': serverless,
       'node:fs': fs,
       './helper': configHelper,
+      './stable': stableConfig,
       '../pkg': pkg,
       '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
@@ -266,7 +277,6 @@ describe('Config', () => {
   describe('property surface', () => {
     // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
     const INTERNAL_RUNTIME_PROPERTIES = [
-      'debug',
       'isServiceNameInferred',
       'sampler',
       'stableConfig',
@@ -295,10 +305,50 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config, {
-      debug: true,
+      DD_TRACE_DEBUG: true,
       logger: undefined,
       logLevel: 'error',
     })
+  })
+
+  it('should configure the logger with the resolved config', () => {
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_TRACE_LOG_LEVEL = 'warn'
+    const logger = {
+      debug: sinon.spy(),
+      error: sinon.spy(),
+    }
+
+    const config = getConfig({ logger, logLevel: 'error' })
+
+    sinon.assert.calledOnce(logConfigure)
+    assert.strictEqual(logConfigure.firstCall.args[0], config)
+    assertObjectContains(logConfigure.firstCall.args[0], {
+      DD_TRACE_DEBUG: true,
+      logger,
+      logLevel: 'error',
+    })
+  })
+
+  it('should keep DD_TRACE_DEBUG precedence when OTEL_LOG_LEVEL is debug', () => {
+    process.env.DD_TRACE_DEBUG = 'false'
+    process.env.OTEL_LOG_LEVEL = 'debug'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_TRACE_DEBUG, false)
+    sinon.assert.calledOnce(logConfigure)
+    assert.strictEqual(logConfigure.firstCall.args[0].DD_TRACE_DEBUG, false)
+  })
+
+  it('should enable debug when OTEL_LOG_LEVEL is the configured log level source', () => {
+    process.env.OTEL_LOG_LEVEL = 'debug'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_TRACE_DEBUG, true)
+    sinon.assert.calledOnce(logConfigure)
+    assert.strictEqual(logConfigure.firstCall.args[0].DD_TRACE_DEBUG, true)
   })
 
   it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
@@ -351,7 +401,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config, {
-      debug: false,
+      DD_TRACE_DEBUG: false,
       service: 'service',
       logLevel: 'error',
       sampleRate: 0.5,
@@ -386,7 +436,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config, {
-      debug: true,
+      DD_TRACE_DEBUG: true,
       service: 'otel_service',
       logLevel: 'debug',
       sampleRate: 0.1,
@@ -577,12 +627,12 @@ describe('Config', () => {
       ['always_off', 'parentbased_always_off'],
       ['traceidratio', 'parentbased_traceidratio'],
     ]) {
-      log.info.resetHistory()
+      logInfo.resetHistory()
       process.env.OTEL_TRACES_SAMPLER = sampler
       process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
       getConfig()
       sinon.assert.calledWith(
-        log.info,
+        logInfo,
         'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
         sampler,
         parentBased
@@ -592,11 +642,11 @@ describe('Config', () => {
 
   it('should not log a sampler upgrade for parentbased samplers', () => {
     for (const sampler of ['parentbased_always_on', 'parentbased_always_off', 'parentbased_traceidratio']) {
-      log.info.resetHistory()
+      logInfo.resetHistory()
       process.env.OTEL_TRACES_SAMPLER = sampler
       process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
       getConfig()
-      const upgradeCall = log.info.getCalls().find(
+      const upgradeCall = logInfo.getCalls().find(
         (call) => call.args[0]?.includes?.('does not respect upstream sampling decisions')
       )
       assert.strictEqual(upgradeCall, undefined)
@@ -655,7 +705,7 @@ describe('Config', () => {
   it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/json'
     getConfig()
-    const warnCall = log.warn.getCalls().find(
+    const warnCall = logWarn.getCalls().find(
       (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
     )
     assert.strictEqual(warnCall, undefined)
@@ -722,7 +772,6 @@ describe('Config', () => {
         },
       },
       DD_CRASHTRACKING_ENABLED: true,
-      debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
         port: 8125,
@@ -979,7 +1028,7 @@ describe('Config', () => {
     const config = getConfig({
       logger: {},
     })
-    sinon.assert.notCalled(log.warn)
+    sinon.assert.notCalled(logWarn)
     assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
@@ -1198,7 +1247,6 @@ describe('Config', () => {
         },
       },
       DD_CRASHTRACKING_ENABLED: false,
-      debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
         port: 5218,
@@ -1811,22 +1859,22 @@ describe('Config', () => {
     if (DD_MAJOR < 6) {
       assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
       assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
-      sinon.assert.calledOnce(log.warn)
+      sinon.assert.calledOnce(logWarn)
     } else {
       // In v6 `experimental.b3` is no longer parsed, so the calculated push doesn't fire and the
       // propagation styles stay at the explicit input (`tracePropagationStyle: { inject: ['datadog'], ... }`).
       assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog'])
       assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
-      sinon.assert.calledThrice(log.warn)
+      sinon.assert.calledTwice(logWarn)
       sinon.assert.calledWithExactly(
-        log.warn,
+        logWarn,
         'Unknown option %s with value %o',
         'iast.securityControlsConfiguration',
         'SANITIZER:CODE_INJECTION:sanitizer.js:method',
       )
-      sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'experimental.b3', true)
+      sinon.assert.calledWithExactly(logWarn, 'Unknown option %s with value %o', 'experimental.b3', true)
     }
-    sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'enabled', false)
+    sinon.assert.calledWithExactly(logWarn, 'Unknown option %s with value %o', 'enabled', false)
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -1998,7 +2046,7 @@ describe('Config', () => {
     const config = getConfig()
 
     sinon.assert.calledWithExactly(
-      log.warn,
+      logWarn,
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
     assert.strictEqual(config.spanAttributeSchema, 'v0')
@@ -2950,16 +2998,16 @@ describe('Config', () => {
       it(`v5 keeps experimental.iast (${name})`, () => {
         const config = getConfig({ experimental: { iast } }, { ddMajor: 5 })
         assert.strictEqual(config.iast[v5Field], v5Value)
-        sinon.assert.notCalled(log.warn)
+        sinon.assert.notCalled(logWarn)
       })
 
       it(`v6 rejects experimental.iast (${name}) as Unknown option`, () => {
         const config = getConfig({ experimental: { iast } }, { ddMajor: 6 })
         assert.strictEqual(config.iast.enabled, false)
         assert.strictEqual(config.iast.requestSampling, 30)
-        sinon.assert.calledOnce(log.warn)
+        sinon.assert.calledOnce(logWarn)
         sinon.assert.calledWithExactly(
-          log.warn,
+          logWarn,
           'Unknown option %s with value %o',
           'experimental.iast',
           iast,
@@ -2998,7 +3046,7 @@ describe('Config', () => {
 
       assert.strictEqual(config.sampler?.spanSamplingRules, undefined)
       sinon.assert.calledWithMatch(
-        log.warn,
+        logWarn,
         'Error reading span sampling rules file %s; %o',
         '{"sample_rate":',
         sinon.match.instanceOf(SyntaxError)
@@ -3019,7 +3067,7 @@ describe('Config', () => {
       },
     })
 
-    sinon.assert.callCount(log.error, 3)
+    sinon.assert.callCount(logError, 3)
     const assertMissingAppsecTemplateError = (message, optionName, fileName) => {
       const escapedFileName = fileName.replaceAll('.', '\\.')
       const escapedOptionName = optionName.replaceAll('.', '\\.')
@@ -3041,17 +3089,17 @@ describe('Config', () => {
     }
 
     assertMissingAppsecTemplateError(
-      log.error.firstCall.args[0],
+      logError.firstCall.args[0],
       'appsec.blockedTemplateHtml',
       'DOES_NOT_EXIST.html'
     )
     assertMissingAppsecTemplateError(
-      log.error.secondCall.args[0],
+      logError.secondCall.args[0],
       'appsec.blockedTemplateJson',
       'DOES_NOT_EXIST.json'
     )
     assertMissingAppsecTemplateError(
-      log.error.thirdCall.args[0],
+      logError.thirdCall.args[0],
       'appsec.blockedTemplateGraphql',
       'DOES_NOT_EXIST.json'
     )
@@ -3733,9 +3781,6 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
   DD_FOOBAR_ENABLED: baz
 `)
-      const stableConfig = new StableConfig()
-      assert.strictEqual(stableConfig.warnings.length, 0)
-
       const config = getConfig()
       assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
@@ -3747,8 +3792,75 @@ apm_configuration_default:
     apm_configuration_default:
 DD_RUNTIME_METRICS_ENABLED true
 `)
+      getConfig()
+      sinon.assert.calledWithMatch(logWarn, 'Error parsing configuration from file: %s')
+    })
+
+    it('should log a warning if the libdatadog library is unavailable', () => {
+      fs.writeFileSync(
+        localConfigPath,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: 'true'
+`)
+      const log = {
+        warn: sinon.spy(),
+      }
+      const StableConfig = proxyquire.noPreserveCache()('../../src/config/stable', {
+        '../log': log,
+        '@datadog/libdatadog': null,
+      })
+
       const stableConfig = new StableConfig()
-      assert.strictEqual(stableConfig.warnings.length, 1)
+
+      assert.strictEqual(stableConfig.wasm_loaded, false)
+      sinon.assert.calledOnceWithExactly(log.warn, 'Can\'t load libdatadog library')
+    })
+
+    it('should log a warning if the library_config module is unavailable', () => {
+      fs.writeFileSync(
+        localConfigPath,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: 'true'
+`)
+      const log = {
+        warn: sinon.spy(),
+      }
+      const StableConfig = proxyquire.noPreserveCache()('../../src/config/stable', {
+        '../log': log,
+        '@datadog/libdatadog': {
+          maybeLoad: sinon.stub().withArgs('library_config').returns(undefined),
+        },
+      })
+
+      const stableConfig = new StableConfig()
+
+      assert.strictEqual(stableConfig.wasm_loaded, true)
+      sinon.assert.calledOnceWithExactly(log.warn, 'Can\'t load library_config library')
+    })
+
+    it('should log a warning if stable config files cannot be read', () => {
+      const log = {
+        warn: sinon.spy(),
+      }
+      const StableConfig = proxyquire.noPreserveCache()('../../src/config/stable', {
+        '../log': log,
+        fs: {
+          readFileSync: sinon.stub().throws(Object.assign(new Error('Access denied'), { code: 'EACCES' })),
+        },
+      })
+
+      const stableConfig = new StableConfig()
+
+      assert.strictEqual(stableConfig.wasm_loaded, false)
+      sinon.assert.calledWithExactly(
+        log.warn,
+        'Error reading config file at %s. %s: %s',
+        localConfigPath,
+        'EACCES',
+        'Access denied',
+      )
     })
 
     it('should only load the WASM module if the stable config files exist', () => {
@@ -3778,7 +3890,6 @@ apm_configuration_default:
       assert.deepStrictEqual(stableConfig.stableConfig, {
         fleetEntries: {},
         localEntries: {},
-        warnings: undefined,
       })
     })
 
@@ -4104,8 +4215,8 @@ rules:
 
       getConfig(undefined, { ddMajor: 5 })
 
-      assert.strictEqual(log.warn.called, true)
-      const warningMessage = log.warn.args[0][0]
+      assert.strictEqual(logWarn.called, true)
+      const warningMessage = logWarn.args[0][0]
       assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
       assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
       assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
@@ -4120,7 +4231,7 @@ rules:
       const config = getConfig(undefined, { ddMajor: 6 })
 
       assert.strictEqual(config.service, 'my-nx-project')
-      assert.strictEqual(log.warn.called, false)
+      assert.strictEqual(logWarn.called, false)
     })
 
     it('should not warn when DD_ENABLE_NX_SERVICE_NAME is explicitly set', () => {
@@ -4131,7 +4242,7 @@ rules:
 
       getConfig()
 
-      assert.strictEqual(log.warn.called, false)
+      assert.strictEqual(logWarn.called, false)
     })
 
     it('should not warn when a service name is explicitly configured', () => {
@@ -4141,7 +4252,7 @@ rules:
 
       getConfig()
 
-      assert.strictEqual(log.warn.called, false)
+      assert.strictEqual(logWarn.called, false)
     })
   })
 

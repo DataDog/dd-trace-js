@@ -21,7 +21,9 @@
  */
 
 const { deprecate } = require('util')
+
 const { DD_MAJOR } = require('../../../../version')
+const log = require('../log')
 const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
@@ -92,7 +94,6 @@ for (const deprecation of Object.keys(deprecations)) {
 
 let localStableConfig
 let fleetStableConfig
-let stableConfigWarnings
 let stableConfigLoaded = false
 
 function loadStableConfig () {
@@ -109,7 +110,6 @@ function loadStableConfig () {
   const instance = new StableConfig()
   localStableConfig = instance.localEntries
   fleetStableConfig = instance.fleetEntries
-  stableConfigWarnings = instance.warnings
 }
 
 function getValueFromSource (name, source) {
@@ -150,10 +150,9 @@ function validateAccess (name) {
 
 module.exports = {
   /**
-   * Expose raw stable config maps and warnings for consumers that need
-   * per-source access (e.g. telemetry in Config).
+   * Expose raw stable config maps for consumers that need per-source access.
    *
-   * @returns {{ localStableConfig: object, fleetStableConfig: object, stableConfigWarnings: string[] }}
+   * @returns {{ localStableConfig: object, fleetStableConfig: object }}
    */
   getStableConfigSources () {
     if (!stableConfigLoaded) {
@@ -162,7 +161,6 @@ module.exports = {
     return {
       localStableConfig,
       fleetStableConfig,
-      stableConfigWarnings,
     }
   },
   /**
@@ -188,12 +186,11 @@ module.exports = {
               break
             }
           }
-        // TODO(BridgeAR) Implement logging. It would have to use a timeout to
-        // lazily log the message after all loading being done otherwise.
-        //   debug(
-        //     `Missing configuration ${env} in supported-configurations file. The environment variable is ignored.`
-        //   )
-        // This could be moved inside the main config logic.
+        } else {
+          log.warn(
+            'Missing configuration %s in supported-configurations.json. The environment variable is ignored.',
+            key,
+          )
         }
         deprecationMethods[key]?.()
       } else if (!internalOnly) {

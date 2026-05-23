@@ -2,11 +2,11 @@
 
 const os = require('os')
 const fs = require('fs')
+const log = require('../log')
 const { getEnvironmentVariable } = require('./helper')
 
 class StableConfig {
   constructor () {
-    this.warnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
     this.localEntries = {}
     this.fleetEntries = {}
     this.wasm_loaded = false
@@ -27,13 +27,13 @@ class StableConfig {
       libdatadog = require('@datadog/libdatadog')
       this.wasm_loaded = true
     } catch {
-      this.warnings.push('Can\'t load libdatadog library')
+      log.warn('Can\'t load libdatadog library')
       return
     }
 
     const libconfig = libdatadog.maybeLoad('library_config')
     if (libconfig === undefined) {
-      this.warnings.push('Can\'t load library_config library')
+      log.warn('Can\'t load library_config library')
       return
     }
 
@@ -50,17 +50,17 @@ class StableConfig {
           this.fleetEntries[entry.name] = entry.value
         }
       }
-    } catch (e) {
-      this.warnings.push(`Error parsing configuration from file: ${e.message}`)
+    } catch (error) {
+      log.warn('Error parsing configuration from file: %s', error.message)
     }
   }
 
   #readConfigFromPath (path) {
     try {
       return fs.readFileSync(path, 'utf8')
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        this.warnings.push(`Error reading config file at ${path}. ${err.code}: ${err.message}`)
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        log.warn('Error reading config file at %s. %s: %s', path, error.code, error.message)
       }
       return '' // Always return a string for configurator.get_configuration()
     }
