@@ -208,10 +208,10 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
         })
         : spanGenerationFn()
 
-      assert.ok(
-        typeof spanGenerationPromise?.then === 'function',
+      assert.strictEqual(
+        typeof spanGenerationPromise?.then, 'function',
         'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-        util.inspect(spanGenerationPromise, { depth: 1 })
+          util.inspect(spanGenerationPromise, { depth: 1 }),
       )
 
       await Promise.all([

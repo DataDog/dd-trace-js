@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -468,7 +469,7 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Given null iastContext should return empty array', () => {
       const result = taintTrackingOperations.getRanges(null)
-      assert.ok(Array.isArray(result))
+      assert.ok(Array.isArray(result), `Expected array, got ${inspect(result)}`)
       assert.strictEqual(result.length, 0)
     })
   })

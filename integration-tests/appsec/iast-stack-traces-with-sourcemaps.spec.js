@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const childProcess = require('child_process')
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
@@ -64,7 +65,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
       await agent.assertMessageReceived(({ payload }) => {
         const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
         spans.forEach(span => {
-          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
           const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
 
           assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {
@@ -96,7 +97,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
       await agent.assertMessageReceived(({ payload }) => {
         const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
         spans.forEach(span => {
-          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
           const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
 
           assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {

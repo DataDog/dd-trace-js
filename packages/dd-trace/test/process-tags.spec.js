@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
@@ -32,10 +33,10 @@ describe('process-tags', () => {
 
   describe('processTags', () => {
     it('should return an object with tags, serialized, and tagsObject properties', () => {
-      assert.ok(Object.hasOwn(processTags, 'tags'))
-      assert.ok(Object.hasOwn(processTags, 'serialized'))
-      assert.ok(Object.hasOwn(processTags, 'tagsObject'))
-      assert.ok(Array.isArray(processTags.tags))
+      assert.ok(Object.hasOwn(processTags, 'tags'), `Available keys: ${inspect(Object.keys(processTags))}`)
+      assert.ok(Object.hasOwn(processTags, 'serialized'), `Available keys: ${inspect(Object.keys(processTags))}`)
+      assert.ok(Object.hasOwn(processTags, 'tagsObject'), `Available keys: ${inspect(Object.keys(processTags))}`)
+      assert.ok(Array.isArray(processTags.tags), `Expected array, got ${inspect(processTags.tags)}`)
       assert.strictEqual(typeof processTags.serialized, 'string')
       assert.strictEqual(typeof processTags.tagsObject, 'object')
     })
@@ -71,14 +72,14 @@ describe('process-tags', () => {
     it('should have entrypoint.type set to "script"', () => {
       const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
 
-      assert.ok(Array.isArray(typeTag))
+      assert.ok(Array.isArray(typeTag), `Expected array, got ${inspect(typeTag)}`)
       assert.strictEqual(typeTag[1], 'script')
     })
 
     it('should set entrypoint.workdir to the basename of cwd', () => {
       const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
 
-      assert.ok(Array.isArray(workdirTag))
+      assert.ok(Array.isArray(workdirTag), `Expected array, got ${inspect(workdirTag)}`)
       assert.strictEqual(typeof workdirTag[1], 'string')
       assert.doesNotMatch(workdirTag[1], /\//)
     })
@@ -121,7 +122,7 @@ describe('process-tags', () => {
       // serialized should be comma-separated and not include undefined values
       if (processTags.serialized) {
         const parts = processTags.serialized.split(',')
-        assert.ok(parts.length > 0)
+        assert.ok(parts.length > 0, `Expected ${parts.length} > 0`)
         parts.forEach(part => {
           assert.match(part, /:/)
           assert.doesNotMatch(part, /undefined/)
@@ -281,7 +282,7 @@ describe('process-tags', () => {
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof processor._processTags === 'string')
+      assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
     })
 
@@ -312,7 +313,7 @@ describe('process-tags', () => {
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof processor._processTags === 'string')
+      assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
     })
   })

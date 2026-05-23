@@ -27,6 +27,7 @@ class UndiciPlugin extends HttpClientPlugin {
     // Subscribe to native undici diagnostic channels for undici >= 4.7.0
     // These channels fire for ALL undici requests (fetch, request, stream, etc.)
     this.addSub('undici:request:create', this.#onNativeRequestCreate.bind(this))
+    this.addSub('undici:request:bodySent', this.#onNativeRequestBodySent.bind(this))
     this.addSub('undici:request:headers', this.#onNativeRequestHeaders.bind(this))
     this.addSub('undici:request:trailers', this.#onNativeRequestTrailers.bind(this))
     this.addSub('undici:request:error', this.#onNativeRequestError.bind(this))
@@ -109,10 +110,28 @@ class UndiciPlugin extends HttpClientPlugin {
       span,
       store,
       uri,
+      method,
     })
 
     // Enter the span context
     storage('legacy').enterWith({ ...store, span })
+  }
+
+  #onNativeRequestBodySent ({ request }) {
+    const ctx = requestContexts.get(request)
+    if (!ctx || ctx.method !== 'CONNECT') return
+
+    const { span, store } = ctx
+
+    this.config.hooks.request(span, null, null)
+
+    span.finish()
+
+    requestContexts.delete(request)
+
+    if (store) {
+      storage('legacy').enterWith(store)
+    }
   }
 
   #onNativeRequestHeaders ({ request, response }) {

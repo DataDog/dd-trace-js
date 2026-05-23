@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 const semver = require('semver')
@@ -125,7 +126,7 @@ describe('RASP - lfi', () => {
               const file = args[vulnerableIndex]
               return testBlockingRequest(`/?file=${file}`, undefined, ruleEvalCount)
                 .then(span => {
-                  assert(span.meta['_dd.appsec.json'].includes(file))
+                  assert(span.meta['_dd.appsec.json'].includes(file), `Got: ${inspect(span.meta['_dd.appsec.json'])}`)
                 })
             })
 

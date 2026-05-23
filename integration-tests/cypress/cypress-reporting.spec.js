@@ -6,6 +6,7 @@ const { once } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -1111,7 +1112,7 @@ moduleTypes.forEach(({
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
             assert.ok(testSessionEvent)
             const testEvents = events.filter(event => event.type === 'test')
-            assert.ok(testEvents.length > 0)
+            assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
           }, { hardTimeout: 30000 })
 
       await Promise.all([
@@ -1283,9 +1284,10 @@ moduleTypes.forEach(({
                 11,
                 'should report the correct source line for it() test'
               )
-              assert.ok(
-                itTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
-              `TEST_SOURCE_FILE should point to TypeScript source, got: ${itTestEvent.content.meta[TEST_SOURCE_FILE]}`
+              assert.match(
+                itTestEvent.content.meta[TEST_SOURCE_FILE],
+                /spec-source-line\.cy\.ts$/,
+                `TEST_SOURCE_FILE should point to TypeScript source, got: ${itTestEvent.content.meta[TEST_SOURCE_FILE]}`
               )
 
               // 'specify' with a template literal test name is defined at line 16.
@@ -1297,9 +1299,12 @@ moduleTypes.forEach(({
                 16,
                 'should report the correct source line for specify() with template literal name'
               )
-              assert.ok(
-                testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
-              `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
+              assert.match(
+                testTestEvent.content.meta[TEST_SOURCE_FILE],
+                /spec-source-line\.cy\.ts$/,
+                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
+                  testTestEvent.content.meta[TEST_SOURCE_FILE]
+                }`
               )
             }, { hardTimeout: 60000 })
 
@@ -1413,9 +1418,12 @@ moduleTypes.forEach(({
                 7,
                 'should report TS source line resolved via declaration scanning fallback'
               )
-              assert.ok(
-                fallbackEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-fallback.cy.ts'),
-              `TEST_SOURCE_FILE should point to TypeScript source, got: ${fallbackEvent.content.meta[TEST_SOURCE_FILE]}`
+              assert.match(
+                fallbackEvent.content.meta[TEST_SOURCE_FILE],
+                /spec-source-line-fallback\.cy\.ts$/,
+                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
+                  fallbackEvent.content.meta[TEST_SOURCE_FILE]
+                }`
               )
             }, { hardTimeout: 60000 })
 
@@ -1464,9 +1472,12 @@ moduleTypes.forEach(({
                 noMatchEvent.content.metrics[TEST_SOURCE_START]
               }`
               )
-              assert.ok(
-                noMatchEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-no-match.cy.ts'),
-              `TEST_SOURCE_FILE should point to TypeScript source, got: ${noMatchEvent.content.meta[TEST_SOURCE_FILE]}`
+              assert.match(
+                noMatchEvent.content.meta[TEST_SOURCE_FILE],
+                /spec-source-line-no-match\.cy\.ts$/,
+                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
+                  noMatchEvent.content.meta[TEST_SOURCE_FILE]
+                }`
               )
             }, { hardTimeout: 60000 })
 
@@ -1508,11 +1519,12 @@ moduleTypes.forEach(({
               jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START] > 100,
               'should keep generated invocationDetails line directly for plain JS specs without source maps'
             )
-            assert.ok(
-              jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-invocation.cy.js'),
-            `TEST_SOURCE_FILE should point to JS source, got: ${
-              jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE]
-            }`
+            assert.match(
+              jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE],
+              /spec-source-line-invocation\.cy\.js$/,
+              `TEST_SOURCE_FILE should point to JS source, got: ${
+                jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE]
+              }`
             )
           }, { hardTimeout: 60000 })
 
@@ -1575,9 +1587,10 @@ moduleTypes.forEach(({
               11,
               'should report the correct source line for it() test'
             )
-            assert.ok(
-              itTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
-            `TEST_SOURCE_FILE should point to TypeScript source, got: ${itTestEvent.content.meta[TEST_SOURCE_FILE]}`
+            assert.match(
+              itTestEvent.content.meta[TEST_SOURCE_FILE],
+              /spec-source-line\.cy\.ts$/,
+              `TEST_SOURCE_FILE should point to TypeScript source, got: ${itTestEvent.content.meta[TEST_SOURCE_FILE]}`
             )
 
             // 'specify' with a template literal test name is defined at line 16.
@@ -1587,9 +1600,10 @@ moduleTypes.forEach(({
             // contains interpolated variables), so the exact TS line cannot be recovered in this
             // mode. We verify the event exists and that TEST_SOURCE_FILE points to the TS source.
             assert.ok(testTestEvent, 'specify() with template literal name should exist')
-            assert.ok(
-              testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
-            `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
+            assert.match(
+              testTestEvent.content.meta[TEST_SOURCE_FILE],
+              /spec-source-line\.cy\.ts$/,
+              `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
             )
           }, { hardTimeout: 60000 })
       childProcess.stdout?.on('data', chunk => {
@@ -2043,10 +2057,10 @@ moduleTypes.forEach(({
             .flatMap(content => content.coverages)
 
           coverages.forEach(coverage => {
-            assert.ok(Object.hasOwn(coverage, 'test_session_id'))
-            assert.ok(Object.hasOwn(coverage, 'test_suite_id'))
-            assert.ok(Object.hasOwn(coverage, 'span_id'))
-            assert.ok(Object.hasOwn(coverage, 'files'))
+            assert.ok(Object.hasOwn(coverage, 'test_session_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+            assert.ok(Object.hasOwn(coverage, 'test_suite_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+            assert.ok(Object.hasOwn(coverage, 'span_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+            assert.ok(Object.hasOwn(coverage, 'files'), `Available keys: ${inspect(Object.keys(coverage))}`)
           })
 
           const fileNames = coverages
