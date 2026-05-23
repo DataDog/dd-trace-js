@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const ddpv = require('mocha/package.json').version
@@ -69,7 +70,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -369,7 +370,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -420,7 +421,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -464,7 +465,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -526,7 +527,6 @@ describe('Plugin', () => {
           // Tracer-level config (third arg) only takes effect if the global
           // tracer is wiped first; tracer.init() short-circuits once the
           // process-wide singleton has been initialized by an earlier load.
-          agent.wipe()
           return agent.load('mongodb-core', {}, {
             dbmPropagationMode: 'full',
             sampler: { sampleRate: 1 },
@@ -534,7 +534,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -566,7 +566,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              assert.ok(comment.includes(`traceparent='00-${traceId}-${spanId}-01'`))
+              assert.ok(comment.includes(`traceparent='00-${traceId}-${spanId}-01'`), `Got: ${inspect(comment)}`)
               assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
             })
             .then(done)
@@ -582,7 +582,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -691,13 +691,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
-          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 1 })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {
@@ -748,16 +747,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
-        before(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 0 })
         })
 
-        after(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {

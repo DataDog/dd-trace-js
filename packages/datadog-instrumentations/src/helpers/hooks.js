@@ -21,6 +21,7 @@ module.exports = {
   '@modelcontextprotocol/sdk': () => require('../modelcontextprotocol-sdk'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
+  '@azure/cosmos': { esmFirst: true, fn: () => require('../azure-cosmos') },
   '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@azure/functions': () => require('../azure-functions'),
   'durable-functions': () => require('../azure-durable-functions'),

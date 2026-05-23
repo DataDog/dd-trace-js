@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { performance } = require('perf_hooks')
+const { inspect } = require('node:util')
 
 const api = require('@opentelemetry/api')
 const { describe, it } = require('mocha')
@@ -366,7 +367,10 @@ describe('OTel Span', () => {
     span.end()
 
     const formatted = spanFormat(span._ddSpan)
-    assert.ok(Object.hasOwn(formatted.meta, '_dd.span_links'))
+    assert.ok(
+      Object.hasOwn(formatted.meta, '_dd.span_links'),
+      `Available keys: ${inspect(Object.keys(formatted.meta))}`
+    )
 
     const links = JSON.parse(formatted.meta['_dd.span_links'])
     assert.strictEqual(links.length, 1)
@@ -465,7 +469,7 @@ describe('OTel Span', () => {
     // Keep the error set to 1
     formatted = spanFormat(span._ddSpan)
     assert.strictEqual(formatted.error, 1)
-    assert.ok(Object.hasOwn(formatted, 'meta'))
+    assert.ok(Object.hasOwn(formatted, 'meta'), `Available keys: ${inspect(Object.keys(formatted))}`)
     assert.strictEqual(formatted.meta['error.message'], 'foobar')
   })
 
@@ -510,7 +514,10 @@ describe('OTel Span', () => {
     const { _tags } = span._ddSpan.context()
 
     span.setStatus({ code: 2, message: 'error' })
-    assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
+    assert.ok(
+      !(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error',
+      `Got ${ERROR_MESSAGE}: ${inspect(_tags[ERROR_MESSAGE])}`
+    )
   })
 
   describe('setStatus precedence (OTel spec)', () => {
@@ -578,7 +585,7 @@ describe('OTel Span', () => {
 
     assert.strictEqual(span.ended, true)
     assert.strictEqual(span.isRecording(), false)
-    assert.ok(Object.hasOwn(span._ddSpan, '_duration'))
+    assert.ok(Object.hasOwn(span._ddSpan, '_duration'), `Available keys: ${inspect(Object.keys(span._ddSpan))}`)
   })
 
   it('should trigger span processor events', () => {

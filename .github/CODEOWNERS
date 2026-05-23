@@ -238,6 +238,7 @@
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
+/.github/playwright/ @DataDog/ci-app-libraries
 /.github/actions/upload-node-reports/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/sdlc-security
@@ -258,6 +259,7 @@
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
+/.github/workflows/openfeature.yml @DataDog/feature-flagging-and-experimentation-sdk
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
@@ -294,6 +296,7 @@
 /integration-tests/coverage-fixtures/parent.js @DataDog/lang-platform-js
 /integration-tests/coverage-fixtures/worker.js @DataDog/lang-platform-js
 /integration-tests/coverage-manual-process.spec.js @DataDog/lang-platform-js
+/integration-tests/crashtracking/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files.spec.js @DataDog/lang-platform-js

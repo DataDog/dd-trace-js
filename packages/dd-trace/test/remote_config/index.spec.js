@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -142,13 +143,28 @@ describe('RemoteConfig', () => {
     assert.ok(Array.isArray(clientTracer.process_tags), 'process_tags should be an array')
 
     // Verify expected process tag keys are present
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')))
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')))
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')))
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')))
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
 
     // Verify entrypoint.type has expected value
-    assert.ok(clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'))
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
   })
 
   it('should add git metadata to tags if present', () => {

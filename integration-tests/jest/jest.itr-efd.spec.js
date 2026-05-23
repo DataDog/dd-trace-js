@@ -6,6 +6,7 @@ const { once } = require('node:events')
 const { fork, exec } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -93,7 +94,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     'office-addin-mock',
     'winston',
     'jest-image-snapshot',
-    '@fast-check/jest',
   ].filter(Boolean), true)
 
   before(function () {
@@ -880,10 +880,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('report code coverage with all mocked files', (done) => {
+    it('report code coverage with all mocked files', async () => {
       const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
 
-      codeCovRequestPromise.then((codeCovRequest) => {
+      const assertCodeCoverage = codeCovRequestPromise.then((codeCovRequest) => {
         const allCoverageFiles = codeCovRequest.payload
           .flatMap(coverage => coverage.content.coverages)
           .flatMap(file => file.files)
@@ -891,9 +891,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         assertObjectContains(allCoverageFiles, [
           'ci-visibility/test/sum.js',
+          'ci-visibility/test/static-mock.js',
           'ci-visibility/jest/mocked-test.js',
         ])
-      }).catch(done)
+      })
 
       childProcess = exec(
         runTestsCommand,
@@ -905,9 +906,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         }
       )
-      childProcess.on('exit', () => {
-        done()
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        assertCodeCoverage,
+      ])
     })
   })
 
@@ -3574,8 +3576,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ddsource: 'dd_debugger',
             level: 'error',
           })
-          assert.ok(diLog.ddtags.includes('git.repository_url:'))
-          assert.ok(diLog.ddtags.includes('git.commit.sha:'))
+          assert.ok(diLog.ddtags.includes('git.repository_url:'), `Got: ${inspect(diLog.ddtags)}`)
+          assert.ok(diLog.ddtags.includes('git.commit.sha:'), `Got: ${inspect(diLog.ddtags)}`)
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
           assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {

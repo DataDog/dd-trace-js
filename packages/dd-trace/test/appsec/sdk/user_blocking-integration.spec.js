@@ -6,7 +6,6 @@ const path = require('path')
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const blocking = require('../../../src/appsec/blocking')
 const { getConfigFresh } = require('../../helpers/config')
@@ -25,6 +24,7 @@ describe('user_blocking - Integration with the tracer', () => {
   let controller
   let appListener
   let port
+  let tracer
 
   function listener (req, res) {
     if (controller) {
@@ -33,7 +33,7 @@ describe('user_blocking - Integration with the tracer', () => {
   }
 
   before(async () => {
-    await agent.load('http')
+    tracer = await agent.load('http')
     http = require('http')
   })
 
@@ -52,7 +52,7 @@ describe('user_blocking - Integration with the tracer', () => {
     appsec.disable()
 
     appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('isUserBlocked', () => {
@@ -153,7 +153,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(ret, false)
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(!('appsec.blocked' in traces[0][0].meta) || traces[0][0].meta['appsec.blocked'] !== 'true')
+        assert.notStrictEqual(traces[0][0].meta['appsec.blocked'], 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         assert.strictEqual(traces[0][0].metrics['_dd.appsec.block.failed'], 1)
       }).then(done).catch(done)

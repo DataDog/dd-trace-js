@@ -5,6 +5,7 @@ const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -79,9 +80,12 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-            assert.ok(metadataDicts.length > 0)
+            assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
-              assert.ok(!Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS))
+              assert.ok(
+                !Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS),
+                `Available keys: ${inspect(Object.keys(metadata.test))}`
+              )
 
               assertObjectContains(metadata.test, {
                 [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
@@ -103,7 +107,9 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              // Creates a span after ci/init but before library configuration adds capability metadata.
+              NODE_OPTIONS:
+                '--import dd-trace/register.js -r dd-trace/ci/init -r ./ci-visibility/vitest-early-span',
               DD_TEST_SESSION_NAME: 'my-test-session-name',
             },
           }
@@ -368,10 +374,16 @@ versions.forEach((version) => {
 
               const coverageReport = payloads[0]
 
-              assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+              assert.ok(
+                coverageReport.headers['content-type'].includes('multipart/form-data'),
+                `Got: ${inspect(coverageReport.headers['content-type'])}`
+              )
 
               assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-              assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+              assert.ok(
+                coverageReport.coverageFile.content.includes('SF:'),
+                `Got: ${inspect(coverageReport.coverageFile.content)}`
+              ) // LCOV format
 
               assert.strictEqual(coverageReport.eventFile.name, 'event')
               assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')

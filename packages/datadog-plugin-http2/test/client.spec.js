@@ -56,7 +56,7 @@ describe('Plugin', () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without configuration', () => {

@@ -11,6 +11,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
+const { waitForTopicReady } = require('./helpers')
 
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
@@ -20,7 +21,7 @@ describe('Plugin', () => {
     this.timeout(30000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('confluentinc-kafka-javascript', module, (version) => {
@@ -38,8 +39,7 @@ describe('Plugin', () => {
           messages = [{ key: 'key1', value: 'test2' }]
 
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../dd-trace')
-          await agent.load('confluentinc-kafka-javascript')
+          tracer = await agent.load('confluentinc-kafka-javascript')
           const lib = require(`../../../versions/${module}@${version}`).get()
 
           // Store the module for later use
@@ -207,7 +207,8 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                assert.ok(parseInt(span.parent_id.toString()) > 0)
+                const parentId = parseInt(span.parent_id.toString())
+                assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
 
               let consumerReceiveMessagePromise
@@ -343,11 +344,10 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
-            await agent.load('confluentinc-kafka-javascript')
+            tracer = await agent.load('confluentinc-kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -534,7 +534,8 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                assert.ok(parseInt(span.parent_id.toString()) > 0)
+                const parentId = parseInt(span.parent_id.toString())
+                assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])
@@ -571,29 +572,4 @@ async function sendMessages (kafka, topic, messages) {
     messages,
   })
   await producer.disconnect()
-}
-
-async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
-  if (typeof admin?.fetchTopicMetadata !== 'function') return
-
-  const start = Date.now()
-  while ((Date.now() - start) < timeoutMs) {
-    try {
-      const meta = await admin.fetchTopicMetadata({ topics: [topic], timeout: 1000 })
-      const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
-
-      const partitions = topicMeta?.partitions
-      if (Array.isArray(partitions) &&
-          partitions.length > 0 &&
-          partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
-        return
-      }
-    } catch {
-      // Topic creation is async; metadata/leader errors can be transient.
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 50))
-  }
-
-  throw new Error(`Timeout: Topic "${topic}" metadata was not ready within ${timeoutMs}ms`)
 }

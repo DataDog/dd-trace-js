@@ -93,7 +93,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -501,7 +501,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -655,7 +655,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -697,13 +697,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
-          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 1 })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -751,18 +750,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
-        before(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full',
-          })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 0 })
         })
 
-        after(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -811,7 +804,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -852,7 +845,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -865,7 +858,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
@@ -898,7 +891,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -908,7 +900,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -947,7 +939,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -957,7 +948,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -970,7 +961,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')

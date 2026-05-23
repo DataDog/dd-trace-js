@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -20,7 +21,7 @@ describe('Plugin', () => {
   describe('amqp10', () => {
     before(() => agent.load('rhea'))
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('amqp10', 'amqp10', version => {
       beforeEach(() => {
@@ -146,7 +147,10 @@ describe('Plugin', () => {
             const promise = sender.send({ key: 'value' })
 
             return promise.then(() => {
-              assert.ok(!Object.hasOwn(promise, 'value') && ('value' in promise))
+              assert.ok(
+                !Object.hasOwn(promise, 'value') && ('value' in promise),
+                `Got: ${inspect(!Object.hasOwn(promise, 'value'))} && ${inspect('value' in promise)}`
+              )
             })
           })
 

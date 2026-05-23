@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('url')
+const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
 
@@ -93,7 +94,7 @@ describe('agent/url', () => {
       // IPv6 addresses get wrapped in brackets by URL constructor
       assert.strictEqual(result.hostname, '[::1]')
       assert.strictEqual(result.port, '8126')
-      assert.ok(result.href.includes('[::1]:8126'))
+      assert.ok(result.href.includes('[::1]:8126'), `Got: ${inspect(result.href)}`)
     })
   })
 })
