@@ -21,6 +21,15 @@ module.exports = {
     {
       name: 'zod',
       versions: ['>=3.25.75'],
+      // `ai@4.0.2` declares `zod` as an optional peer (`^3.0.0`) and
+      // `@ai-sdk/openai@1.3.23+` declares it as a required peer. Yarn 1's flat
+      // hoist served the standalone `zod` workspace's copy from the workspace
+      // root to both sandboxes; bun's isolated linker honours each package's
+      // own manifest and skips optional peers entirely, so the `versions/ai@`
+      // sandbox lands without `zod` and `require('zod')` crashes at load time.
+      // `dep: true` injects `zod` as a direct dep of the `versions/ai@`
+      // sandbox so bun materialises it alongside `ai` in the isolated store.
+      dep: true,
     },
   ],
   apollo: [
