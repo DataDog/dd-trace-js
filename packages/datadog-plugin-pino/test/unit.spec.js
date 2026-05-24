@@ -119,5 +119,18 @@ describe('PinoPlugin', () => {
       messageCh.publish(data)
       assert.strictEqual(data.message.dd.trace_id, 'user-supplied')
     })
+
+    it('leaves the message untouched when the propagator emits no dd', () => {
+      const originalInject = tracer.inject
+      tracer.inject = () => {}
+      try {
+        const original = { msg: 'hello' }
+        const data = { message: original }
+        messageCh.publish(data)
+        assert.strictEqual(data.message, original)
+      } finally {
+        tracer.inject = originalInject
+      }
+    })
   })
 })

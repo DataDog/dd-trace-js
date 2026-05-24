@@ -1,72 +1,8 @@
 'use strict'
 
-const { LOG } = require('../../../../ext/formats')
-const { storage } = require('../../../datadog-core')
 const Plugin = require('./plugin')
 
-const legacyStorage = storage('legacy')
-
-/**
- * @param {object} message Caller-owned log record; never mutated.
- * @param {{ dd?: object }} holder Holds the `dd` fields injected by the tracer.
- */
-function messageProxy (message, holder) {
-  return new Proxy(message, {
-    get (target, key) {
-      if (shouldOverride(target, key)) {
-        return holder.dd
-      }
-
-      return target[key]
-    },
-    set (target, key, value) {
-      return Reflect.set(target, key, value)
-    },
-    ownKeys (target) {
-      const ownKeys = Reflect.ownKeys(target)
-      if (!Object.hasOwn(target, 'dd') && Reflect.isExtensible(target)) {
-        ownKeys.push('dd')
-      }
-      return ownKeys
-    },
-    getOwnPropertyDescriptor (target, p) {
-      return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
-    },
-  })
-}
-
-/**
- * @param {object} target
- * @param {string | symbol} p
- */
-function shouldOverride (target, p) {
-  return p === 'dd' && !Object.hasOwn(target, p) && Reflect.isExtensible(target)
-}
-
 class LogPlugin extends Plugin {
-  constructor (...args) {
-    super(...args)
-    this._addLogSubs()
-  }
-
-  /**
-   * Wire the log-injection subscriber. Subclasses (PinoPlugin) override this
-   * to subscribe to a different channel and inject `dd` without the Proxy
-   * round-trip when the underlying logger lets us splice the output JSON
-   * string directly.
-   */
-  _addLogSubs () {
-    this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
-      const span = legacyStorage.getStore()?.span
-
-      // NOTE: This needs to run whether or not there is a span
-      // so service, version, and env will always get injected.
-      const holder = {}
-      this.tracer.inject(span, LOG, holder)
-      arg.message = messageProxy(arg.message, holder)
-    })
-  }
-
   configure (config) {
     return super.configure({
       ...config,
@@ -76,4 +12,3 @@ class LogPlugin extends Plugin {
 }
 
 module.exports = LogPlugin
-module.exports.messageProxy = messageProxy

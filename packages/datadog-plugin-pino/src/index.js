@@ -1,50 +1,50 @@
 'use strict'
 
-const { LOG } = require('../../../ext/formats')
-const { storage } = require('../../datadog-core')
+const { buildHolder, messageProxy } = require('../../dd-trace/src/plugins/log_injection')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
-
-const legacyStorage = storage('legacy')
 
 class PinoPlugin extends LogPlugin {
   static id = 'pino'
 
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:pino:log:json', (payload) => this.handleJsonLine(payload))
+    this.addSub('apm:pino:log', (arg) => this.handlePrettyMessage(arg))
+  }
+
   /**
-   * Two subscribers split the work:
+   * Splice `,"dd":<json>` into the JSON line pino has already produced.
+   * The caller-owned message object is never observed -- user Proxies and
+   * custom serialisers see nothing because there is no mutation to see.
    *
-   *  - `apm:pino:log:json` is the hot path. Pino publishes the JSON line it
-   *    just produced, and we splice `,"dd":<json>` in before the closing
-   *    brace. The caller-owned message object is never observed, so a
-   *    user `Proxy` (or custom serializer) cannot see our mutation -- there
-   *    is no mutation to see.
-   *  - `apm:pino:log` is the pretty-print path. `pino-pretty` (bundled with
-   *    pino 5/7, separate package on >=8) reads the original message object
-   *    rather than the JSON line, so the splice above is invisible to it.
-   *    The base `LogPlugin._addLogSubs` already wires this channel to wrap
-   *    the object in a `Proxy` that exposes a virtual `dd` field, so reuse
-   *    it via `super._addLogSubs()`.
-   *
-   * @override
+   * @param {{ line: string }} payload
    */
-  _addLogSubs () {
-    this.addSub('apm:pino:log:json', (payload) => {
-      const holder = {}
-      this.tracer.inject(legacyStorage.getStore()?.span, LOG, holder)
-      if (!holder.dd) return
+  handleJsonLine (payload) {
+    const holder = buildHolder(this.tracer)
+    if (!holder) return
 
-      // Pino emits compact JSON ending in `}\n` or `}`. Splice
-      // `,"dd":<json>` (or `"dd":<json>` for a `{}`-empty message) in
-      // before the closing brace.
-      const line = payload.line
-      const lastClose = line.lastIndexOf('}')
-      if (lastClose < 1) return
+    const line = payload.line
+    const lastClose = line.lastIndexOf('}')
+    if (lastClose < 1) return
 
-      const ddJson = JSON.stringify(holder.dd)
-      const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
-      payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
-    })
+    const ddJson = JSON.stringify(holder.dd)
+    const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
+    payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
+  }
 
-    super._addLogSubs()
+  /**
+   * `pino-pretty` (bundled with pino 5/7, separate package on >=8) reads
+   * the original message object rather than the JSON line, so the splice
+   * above is invisible to it. Wrap the message in a Proxy that exposes a
+   * virtual `dd` field for the prettifier to pick up.
+   *
+   * @param {{ message: object }} arg
+   */
+  handlePrettyMessage (arg) {
+    const holder = buildHolder(this.tracer)
+    if (!holder) return
+
+    arg.message = messageProxy(arg.message, holder)
   }
 }
 
