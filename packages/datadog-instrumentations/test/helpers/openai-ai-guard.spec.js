@@ -76,6 +76,78 @@ describe('openai-ai-guard helper', () => {
       assert.strictEqual(p1, p2)
       return Promise.all([p1, p2])
     })
+
+    it('uses `instructions` alone when the first developer message has empty content', () => {
+      const guard = aiGuard.createGuard(
+        'responses',
+        {
+          input: [{ type: 'message', role: 'developer', content: '' }],
+          instructions: 'Be brief.',
+        },
+        false
+      )
+      assert.deepStrictEqual(guard.inputMessages, [{ role: 'developer', content: 'Be brief.' }])
+    })
+
+    it('prepends `instructions` as a new developer message when first message is a user turn', () => {
+      const guard = aiGuard.createGuard(
+        'responses',
+        {
+          input: [{ type: 'message', role: 'user', content: 'hello' }],
+          instructions: 'Be brief.',
+        },
+        false
+      )
+      assert.deepStrictEqual(guard.inputMessages, [
+        { role: 'developer', content: 'Be brief.' },
+        { role: 'user', content: 'hello' },
+      ])
+    })
+
+    it('returns an `instructions`-only developer message when no input is provided', () => {
+      const guard = aiGuard.createGuard('responses', { instructions: 'Be brief.' }, false)
+      assert.deepStrictEqual(guard.inputMessages, [{ role: 'developer', content: 'Be brief.' }])
+    })
+
+    it('concatenates `instructions` with non-empty string content on the first developer message', () => {
+      const guard = aiGuard.createGuard(
+        'responses',
+        {
+          input: [{ type: 'message', role: 'system', content: 'existing rule' }],
+          instructions: 'Be brief.',
+        },
+        false
+      )
+      assert.deepStrictEqual(guard.inputMessages, [
+        { role: 'developer', content: 'Be brief.\n\nexisting rule' },
+      ])
+    })
+
+    it('prepends `instructions` as a text part when first developer message has array content', () => {
+      const guard = aiGuard.createGuard(
+        'responses',
+        {
+          input: [{
+            type: 'message',
+            role: 'developer',
+            content: [
+              { type: 'input_text', text: 'rule one' },
+              { type: 'input_image', image_url: 'http://example.com/x.png' },
+            ],
+          }],
+          instructions: 'Be brief.',
+        },
+        false
+      )
+      assert.strictEqual(guard.inputMessages.length, 1)
+      assert.strictEqual(guard.inputMessages[0].role, 'developer')
+      assert.deepStrictEqual(guard.inputMessages[0].content[0], { type: 'text', text: 'Be brief.' })
+    })
+
+    it('returns null when responses input is provided but contains only unsupported items', () => {
+      const guard = aiGuard.createGuard('responses', { input: [{ type: 'unknown' }] }, false)
+      assert.strictEqual(guard, null)
+    })
   })
 
   describe('evaluateOutput', () => {
@@ -91,6 +163,39 @@ describe('openai-ai-guard helper', () => {
 
       await aiGuard.evaluateOutput(guard, { choices: [] })
       assert.strictEqual(calls.length, beforeAfter, 'no After Model publish for empty output')
+    })
+
+    it('resolves without publishing when chat.completions body has no choices array', async () => {
+      const guard = aiGuard.createGuard(
+        'chat.completions',
+        { messages: [{ role: 'user', content: 'hi' }] },
+        false
+      )
+      await guard.getInputEval()
+      const beforeAfter = calls.length
+
+      await aiGuard.evaluateOutput(guard, {})
+      assert.strictEqual(calls.length, beforeAfter)
+    })
+
+    it('skips chat.completions choices whose message lacks any output fields', async () => {
+      const guard = aiGuard.createGuard(
+        'chat.completions',
+        { messages: [{ role: 'user', content: 'hi' }] },
+        false
+      )
+      await guard.getInputEval()
+      calls.length = 0
+
+      await aiGuard.evaluateOutput(guard, {
+        choices: [
+          { message: { role: 'assistant' } },
+          { message: { role: 'assistant', refusal: 'no' } },
+          { message: { role: 'assistant', function_call: { name: 'f', arguments: '{}' } } },
+          { message: { role: 'assistant', tool_calls: [{ id: 't', function: { name: 'f', arguments: '{}' } }] } },
+        ],
+      })
+      assert.strictEqual(calls.length, 3)
     })
 
     it('resolves without publishing when responses has empty output items', async () => {
@@ -179,6 +284,38 @@ describe('openai-ai-guard helper', () => {
       // Should not throw and should not add an asResponse method.
       aiGuard.wrapAsResponse(apiProm, guard)
       assert.strictEqual(typeof apiProm.asResponse, 'undefined')
+    })
+
+    it('gates the raw response on Before Model evaluation', async () => {
+      const guard = aiGuard.createGuard(
+        'chat.completions',
+        { messages: [{ role: 'user', content: 'hi' }] },
+        false
+      )
+      const rawResponse = { status: 200 }
+      const apiProm = { asResponse: () => Promise.resolve(rawResponse) }
+      aiGuard.wrapAsResponse(apiProm, guard)
+      const result = await apiProm.asResponse()
+      assert.strictEqual(result, rawResponse)
+      assert.strictEqual(calls.length, 1)
+    })
+
+    it('propagates Before Model rejection through asResponse', () => {
+      evaluateChannel.unsubscribe(handler)
+      const rejectHandler = ctx => ctx.reject(Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' }))
+      evaluateChannel.subscribe(rejectHandler)
+      const guard = aiGuard.createGuard(
+        'chat.completions',
+        { messages: [{ role: 'user', content: 'hi' }] },
+        false
+      )
+      const apiProm = { asResponse: () => Promise.resolve({ status: 200 }) }
+      aiGuard.wrapAsResponse(apiProm, guard)
+      return assert.rejects(apiProm.asResponse(), e => e.name === 'AIGuardAbortError')
+        .finally(() => {
+          evaluateChannel.unsubscribe(rejectHandler)
+          evaluateChannel.subscribe(handler)
+        })
     })
   })
 })
