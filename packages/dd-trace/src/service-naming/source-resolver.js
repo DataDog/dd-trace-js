@@ -10,8 +10,6 @@ const MANUAL = 'm'
  * `Span#finish` once all writes are in.
  *
  * Rules:
- * - no marker AND service.name equals the tracer default AND no svc_src set →
- *   nothing to reconcile (fast path)
  * - service.name equals the tracer default → clear any svc_src
  * - integration marker exists and equals current service.name → integration
  *   owns the value; leave the source label the integration set

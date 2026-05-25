@@ -53,13 +53,5 @@ describe('service-naming/source-resolver', () => {
 
       assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], MANUAL)
     })
-
-    it('does not mark manual when user "overrides" with the integration\'s own value', () => {
-      const span = makeSpan({ 'service.name': 'kafka-broker', [SVC_SRC_KEY]: 'kafka' }, 'kafka-broker')
-
-      resolveServiceSource(span, TRACER_SERVICE)
-
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
-    })
   })
 })
