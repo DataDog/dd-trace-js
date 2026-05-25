@@ -23,6 +23,9 @@ esbuildVersions.forEach((version) => {
       execSync(`rm -rf ${path.join(cwd, 'bun.lock')}`, { cwd })
       execSync('npm install -g yarn', { cwd })
 
+      // `@hono/node-server@2.x` declares `engines.node >= 20`. The matrix still exercises
+      // node-oldest (18), and the root `.yarnrc` that used to carry `ignore-engines true`
+      // is gone, so yarn would error out before we ever build. Pass the flag inline.
       execSync('yarn --ignore-engines', { cwd })
     })
 
