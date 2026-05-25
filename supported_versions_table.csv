@@ -2,9 +2,9 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @anthropic-ai/sdk,anthropic,0.14.0,0.96.0,True
 @apollo/gateway,apollo,2.3.0,2.14.0,True
 @aws-sdk/smithy-client,aws-sdk,3.0.0,3.374.0,True
-@azure/cosmos,azure-cosmos,4.4.1,4.9.2,True
+@azure/cosmos,azure-cosmos,4.4.1,4.9.3,True
 @azure/event-hubs,azure-event-hubs,6.0.0,6.0.4,True
-@azure/functions,azure-functions,4.0.0,4.14.0,True
+@azure/functions,azure-functions,4.0.0,4.16.0,True
 @azure/service-bus,azure-service-bus,7.9.2,7.9.5,True
 @confluentinc/kafka-javascript,confluentinc-kafka-javascript,1.0.0,1.9.0,True
 @cucumber/cucumber,cucumber,7.0.0,12.9.0,True
@@ -27,7 +27,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True
 @redis/client,redis,1.1.0,5.12.1,True
-@smithy/smithy-client,aws-sdk,1.0.3,4.13.3,True
+@smithy/smithy-client,aws-sdk,1.0.3,4.13.4,True
 @vitest/runner,vitest,1.6.0,4.1.6,True
 aerospike,aerospike,4.0.0,6.7.0,True
 ai,ai,4.0.0,6.0.185,True
