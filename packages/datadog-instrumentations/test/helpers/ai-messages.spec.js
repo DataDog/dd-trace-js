@@ -784,9 +784,8 @@ describe('ai-messages', () => {
     })
 
     it('should surface a text marker for file variables with no file_id, file_url, or filename', () => {
-      // Pins the `?? FILE_FALLBACK` fallback in `openAIResponseFileContentPart`. If that fallback
-      // ever changes, the function-level FILE_FALLBACK branch above the dead-code line must be
-      // reinstated to keep file variables observable to AI Guard.
+      // Locks the `?? FILE_FALLBACK` fallback in openAIResponseFileContentPart so file variables
+      // with no usable fields stay observable to AI Guard.
       const prompt = { id: 'pmpt_1', variables: { policy: { type: 'input_file' } } }
       assert.deepStrictEqual(convertOpenAIResponsePromptToMessages(prompt), [
         { role: 'user', content: '[file]' },
