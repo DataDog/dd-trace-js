@@ -20,11 +20,11 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
     if (ErrorType) span.setTag('error.type', ErrorType)
     if (Array.isArray(StackTrace)) span.setTag('error.stack', StackTrace.join('\n'))
 
-    ctx._ddRetryStepSpan = span
+    ctx.retryStepSpan = span
   }
 
   asyncEnd (ctx) {
-    ctx._ddRetryStepSpan?.finish()
+    ctx.retryStepSpan?.finish()
   }
 }
 
