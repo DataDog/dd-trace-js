@@ -41,7 +41,7 @@ describe('esm', () => {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `expected payload to be an array, got ${typeof payload}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'cosmosdb.query'), true)
         })
 

@@ -10,7 +10,7 @@ const {
   hookFile,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage,
+  curl,
   assertObjectContains,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
@@ -55,37 +55,38 @@ describe('esm', () => {
     })
 
     it('propagates cosmosdb writes to azure function trigger', async () => {
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/writeToCosmos', ({ headers, payload }) => {
-        assert.ok(Array.isArray(payload), 'trace payload should be an array of traces')
+      const isHttpInvokeGroup = group =>
+        group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'GET /api/writeToCosmos')
+      const isTriggerGroup = group =>
+        group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1')
 
-        const allSpans = payload.filter(Array.isArray).flat()
+      const groups = await agent.collectGroups({
+        trigger: () => curl('http://127.0.0.1:7071/api/writeToCosmos'),
+        predicate: group => isHttpInvokeGroup(group) || isTriggerGroup(group),
+        expectedCount: 2,
+        timeout: 120000,
+      })
 
-        const httpWriteInvoke = allSpans.find(
-          s =>
-            s?.name === 'azure.functions.invoke' &&
-            (typeof s.resource === 'string' && s.resource === 'GET /api/writeToCosmos')
-        )
-        assert.ok(httpWriteInvoke, 'expected writeToCosmos HTTP invoke span')
+      const httpGroup = groups.find(isHttpInvokeGroup)
+      const triggerGroup = groups.find(isTriggerGroup)
 
-        const cosmosQueryCount = allSpans.filter(s => s?.name === 'cosmosdb.query').length
-        assert.ok(cosmosQueryCount >= 2, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
+      assert.ok(httpGroup, 'expected writeToCosmos HTTP invoke span')
+      assert.ok(triggerGroup, 'expected CosmosDB trigger invoke span')
 
-        const triggerInvoke = allSpans.find(
-          s =>
-            s?.name === 'azure.functions.invoke' &&
-            (typeof s.resource === 'string' && s.resource === 'CosmosDB cosmosDBTrigger1')
-        )
-        assert.ok(triggerInvoke, 'expected CosmosDB trigger invoke span')
+      const cosmosQueryCount = httpGroup.filter(s => s?.name === 'cosmosdb.query').length
+      assert.ok(cosmosQueryCount >= 2, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
 
-        assertObjectContains(triggerInvoke, {
-          name: 'azure.functions.invoke',
-          resource: 'CosmosDB cosmosDBTrigger1',
-          type: 'serverless',
-          meta: {
-            'aas.function.trigger': 'CosmosDB',
-            'aas.function.name': 'cosmosDBTrigger1',
-          },
-        })
+      const triggerSpan = triggerGroup.find(
+        s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1'
+      )
+      assertObjectContains(triggerSpan, {
+        name: 'azure.functions.invoke',
+        resource: 'CosmosDB cosmosDBTrigger1',
+        type: 'serverless',
+        meta: {
+          'aas.function.trigger': 'CosmosDB',
+          'aas.function.name': 'cosmosDBTrigger1',
+        },
       })
     }).timeout(120000)
   })
