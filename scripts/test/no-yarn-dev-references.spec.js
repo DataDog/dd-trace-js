@@ -9,6 +9,8 @@ const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const yaml = require('yaml')
+
 const repoRoot = path.resolve(__dirname, '..', '..')
 
 const ALLOWLIST_EXACT = new Set([
@@ -127,5 +129,45 @@ describe('no yarn dev references', function () {
     }
 
     assert.deepStrictEqual(offendingMatches, [])
+  })
+
+  it('enforces frozen installs and release-age cooldowns', () => {
+    const installAction = fs.readFileSync(path.join(repoRoot, '.github/actions/install/action.yml'), 'utf8')
+    assert.match(installAction, /command: bun install --frozen-lockfile --linker=hoisted/)
+    assert.doesNotMatch(installAction, /command: bun install [^\n]*--trust/)
+
+    const rootBunConfig = fs.readFileSync(path.join(repoRoot, 'bunfig.toml'), 'utf8')
+    assert.match(rootBunConfig, /^minimumReleaseAge = 259200$/m)
+    assert.doesNotMatch(rootBunConfig, /@datadog\/\*/)
+    for (const packageName of [
+      '@datadog/flagging-core',
+      '@datadog/libdatadog',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/native-metrics',
+      '@datadog/openfeature-node-server',
+      '@datadog/pprof',
+      '@datadog/wasm-js-rewriter',
+    ]) {
+      assert.ok(rootBunConfig.includes(`"${packageName}"`), `${packageName} must bypass the release-age gate`)
+    }
+
+    const versionsBunConfig = fs.readFileSync(path.join(repoRoot, 'versions/bunfig.toml'), 'utf8')
+    assert.match(versionsBunConfig, /^minimumReleaseAge = 259200$/m)
+
+    const dependabot = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/dependabot.yml'), 'utf8'))
+    let bunUpdate
+    let actionUsesNpm = false
+    for (const update of dependabot.updates) {
+      if (update['package-ecosystem'] === 'bun') {
+        bunUpdate = update
+      } else if (update['package-ecosystem'] === 'npm' &&
+        update.directory === '/.github/actions/datadog-ci') {
+        actionUsesNpm = true
+      }
+    }
+    assert.ok(bunUpdate)
+    assert.deepStrictEqual(bunUpdate.directories, ['/', '/docs'])
+    assert.strictEqual(actionUsesNpm, true)
   })
 })
