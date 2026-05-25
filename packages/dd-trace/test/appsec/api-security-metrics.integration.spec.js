@@ -58,7 +58,10 @@ describe('API Security Telemetry metrics', () => {
           if (!schemaMetric) return
 
           assert.strictEqual(schemaMetric.type, 'count')
-          assert.ok(schemaMetric.tags.includes('framework:express'))
+          assert.ok(
+            schemaMetric.tags.includes('framework:express'),
+            `expected request.schema tags to include framework:express, got ${JSON.stringify(schemaMetric.tags)}`
+          )
           metricReceived = true
         },
         requestType: 'generate-metrics',
