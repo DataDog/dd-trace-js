@@ -48,7 +48,6 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   getLineCoverageBitmap,
-  hashCoverageFilePath,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -286,7 +285,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       }])
       receiver.setSkippableCoverage({
-        [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
+        'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
       })
 
       const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
@@ -488,8 +487,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       ])
       receiver.setSkippableCoverage({
-        [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
-        [hashCoverageFilePath('ci-visibility/unskippable-test/test-unskippable.js')]: coveredSkippedLines,
+        'ci-visibility/unskippable-test/test-to-skip.js': coveredSkippedLines,
+        'ci-visibility/unskippable-test/test-unskippable.js': coveredSkippedLines,
       })
 
       const eventsPromise = receiver
@@ -558,7 +557,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       ])
       receiver.setSkippableCoverage({
-        [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+        'ci-visibility/unskippable-test/test-to-skip.js': coveredSkippedLines,
       })
 
       const eventsPromise = receiver
@@ -690,7 +689,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       }])
       receiver.setSkippableCoverage({
-        [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
+        'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
       })
 
       const eventsPromise = receiver
@@ -812,8 +811,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       }])
       receiver.setSkippableCoverage({
-        [hashCoverageFilePath('ci-visibility/test-total-code-coverage/test-skipped.js')]: coveredSkippedLines,
-        [hashCoverageFilePath('ci-visibility/test-total-code-coverage/unused-dependency.js')]: coveredSkippedLines,
+        'ci-visibility/test-total-code-coverage/test-skipped.js': coveredSkippedLines,
+        'ci-visibility/test-total-code-coverage/unused-dependency.js': coveredSkippedLines,
       })
 
       const eventsPromise = receiver
