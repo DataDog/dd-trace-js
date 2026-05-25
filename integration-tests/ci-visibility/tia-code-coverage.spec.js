@@ -78,13 +78,19 @@ describe('TIA code coverage', function () {
     }
   })
 
-  async function runFramework ({ framework, suitesToSkip = [], skippableCoverage = {} }) {
-    const receiver = await new FakeCiVisIntake().start()
-    receiver.setSettings({
+  async function runFramework ({
+    framework,
+    suitesToSkip = [],
+    skippableCoverage = {},
+    settings = {
       itr_enabled: true,
       code_coverage: true,
       tests_skipping: true,
-    })
+    },
+    expectSuiteCoverage = true,
+  }) {
+    const receiver = await new FakeCiVisIntake().start()
+    receiver.setSettings(settings)
     receiver.setSuitesToSkip(suitesToSkip)
     receiver.setSkippableCoverage(skippableCoverage)
 
@@ -115,13 +121,17 @@ describe('TIA code coverage', function () {
         const coverages = getCoverageEvents(payloads)
         const suiteCoverage = coverages.find(coverage => coverage.test_suite_id)
         const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
-        const coveredRunSource = coverages
+        const coveredFile = coverages
           .flatMap(coverage => coverage.files)
-          .find(file => file.filename === RUN_SOURCE)
+          .find(file => file.bitmap)
 
-        assert.ok(suiteCoverage, `suite code coverage should be reported:\n${output}`)
+        if (expectSuiteCoverage) {
+          assert.ok(suiteCoverage, `suite code coverage should be reported:\n${output}`)
+        } else {
+          assert.strictEqual(suiteCoverage, undefined, `suite code coverage should not be reported:\n${output}`)
+        }
         assert.ok(sessionCoverage, `session executable-line coverage should be reported:\n${output}`)
-        assert.ok(coveredRunSource?.bitmap, `covered files should report line coverage bitmaps:\n${output}`)
+        assert.ok(coveredFile?.bitmap, `covered files should report line coverage bitmaps:\n${output}`)
 
         coverageResult = coverages
       })
@@ -221,6 +231,32 @@ describe('TIA code coverage', function () {
     })
   }
 
+  it('does not alter jest coverage when suite skipping is disabled', async () => {
+    const framework = FRAMEWORKS[0]
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const result = await runFramework({
+      framework,
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+        },
+      }],
+      skippableCoverage: {
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+      },
+      settings: {
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      },
+    })
+
+    assert.notStrictEqual(result.isTiaSkipped, 'true')
+    assert.strictEqual(result.skippedSuites.length, 0)
+    assert.strictEqual(result.codeCoverageLinesPct, result.stdoutCodeCoverageLinesPct)
+  })
+
   it('keeps jest total code coverage stable when all suites are skippable with collectCoverageFrom', async () => {
     const framework = {
       ...FRAMEWORKS[0],
@@ -260,10 +296,11 @@ describe('TIA code coverage', function () {
         [RUN_SOURCE]: coveredSkippedLines,
         [SKIPPED_SOURCE]: coveredSkippedLines,
       },
+      expectSuiteCoverage: false,
     })
 
     assert.strictEqual(skippedWithCoverage.isTiaSkipped, 'true')
-    assert.strictEqual(skippedWithCoverage.skippedSuites.length, 1)
+    assert.strictEqual(skippedWithCoverage.skippedSuites.length, 2)
     assert.strictEqual(skippedWithCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
   })
@@ -308,10 +345,11 @@ describe('TIA code coverage', function () {
         [RUN_SOURCE]: coveredSkippedLines,
         [SKIPPED_SOURCE]: coveredSkippedLines,
       },
+      expectSuiteCoverage: false,
     })
 
     assert.strictEqual(skippedCoverage.isTiaSkipped, 'true')
-    assert.strictEqual(skippedCoverage.skippedSuites.length, 1)
+    assert.strictEqual(skippedCoverage.skippedSuites.length, 2)
     assert.strictEqual(skippedCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
     assert.strictEqual(skippedCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.strictEqual(skippedCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
@@ -363,10 +401,11 @@ describe('TIA code coverage', function () {
         [SKIPPED_SOURCE]: coveredSkippedLines,
         [EXTRA_SOURCE]: coveredSkippedLines,
       },
+      expectSuiteCoverage: false,
     })
 
     assert.strictEqual(broaderCoverage.isTiaSkipped, 'true')
-    assert.strictEqual(broaderCoverage.skippedSuites.length, 1)
+    assert.strictEqual(broaderCoverage.skippedSuites.length, 2)
     assert.strictEqual(broaderCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
     assert.strictEqual(broaderCoverage.stdoutCodeCoverageLinesPct, 100)
     assert.strictEqual(broaderCoverage.codeCoverageLinesPct, 100)

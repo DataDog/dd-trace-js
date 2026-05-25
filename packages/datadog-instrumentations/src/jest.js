@@ -114,6 +114,7 @@ let modifiedFiles = {}
 let repositoryRoot
 let lastCoverageMap
 let lastCoverageMapRootDir
+let coverageBackfillContexts
 let activeTestSuiteAbsolutePath
 let isConsoleErrorWrapped = false
 
@@ -1170,20 +1171,47 @@ function addCoverageBackfillFilesToConfigs (configs) {
   }))
 }
 
+function addCoverageBackfillFilesToGlobalConfig (globalConfig) {
+  return {
+    ...globalConfig,
+    collectCoverageFrom: [...new Set([
+      ...(globalConfig.collectCoverageFrom || []),
+      ...Object.keys(skippableSuitesCoverage),
+    ])],
+  }
+}
+
+function getTestContexts (tests) {
+  if (!tests?.length) return
+
+  const contexts = new Set()
+  for (const test of tests) {
+    if (test.context) {
+      contexts.add(test.context)
+    }
+  }
+  return contexts.size ? contexts : undefined
+}
+
+function getCoverageBackfillContexts (contexts) {
+  return contexts?.size ? contexts : coverageBackfillContexts || contexts
+}
+
+function resetSuiteSkippingRunState () {
+  isSuitesSkipped = false
+  numSkippedSuites = 0
+  hasUnskippableSuites = false
+  hasForcedToRunSuites = false
+  hasFilteredSkippableSuites = false
+  skippedSuitesCoverage = {}
+  lastCoverageMap = undefined
+  lastCoverageMapRootDir = undefined
+  coverageBackfillContexts = undefined
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
-  const localSuites = originalTests.map(test => getTestSuitePath(test.path, suitePathRoot))
-  let jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
-  if (isCodeCoverageEnabled && jestSuitesToRun.suitesToRun.length === 0) {
-    // Jest does not run its coverage reporter when zero suites are scheduled. Keep a small
-    // anchor sample so setup files and the reporter run, but backfill every skippable suite.
-    // TODO: replace this with a fully synthetic coverage-map/reporting path so all skippable
-    // suites can be skipped without relying on anchor tests to initialize Jest coverage.
-    const anchorSuiteCount = Math.min(1, Math.max(1, localSuites.length - 1))
-    const anchorSuites = new Set(localSuites.slice(0, anchorSuiteCount))
-    const skippableSuitesWithCoverageAnchor = skippableSuites.filter(suite => !anchorSuites.has(suite))
-    jestSuitesToRun = getJestSuitesToRun(skippableSuitesWithCoverageAnchor, originalTests, suitePathRoot)
-  }
+  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
   hasFilteredSkippableSuites = true
   log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
@@ -1194,6 +1222,9 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   skippedSuitesCoverage = isSuitesSkipped && isCodeCoverageEnabled && hasSkippableSuitesCoverage()
     ? skippableSuitesCoverage
     : {}
+  coverageBackfillContexts = isSuitesSkipped && isCodeCoverageEnabled
+    ? getTestContexts(originalTests)
+    : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
 
@@ -1236,6 +1267,7 @@ function wrapCoverageReporter (CoverageReporter) {
       }
 
       const rootDir = repositoryRoot || this._globalConfig?.rootDir || process.cwd()
+      args[0] = getCoverageBackfillContexts(args[0])
       const result = addUntestedFiles.apply(this, args)
       if (!isSuitesSkipped || !isCodeCoverageEnabled) return result
 
@@ -1251,14 +1283,15 @@ function wrapCoverageReporter (CoverageReporter) {
   }
 
   shimmer.wrap(CoverageReporter.prototype, 'onRunComplete', onRunComplete => function (contexts, results) {
-    const rootDir = getRepositoryRootFromContexts(contexts, this._globalConfig?.rootDir)
+    const coverageContexts = getCoverageBackfillContexts(contexts)
+    const rootDir = getRepositoryRootFromContexts(coverageContexts, this._globalConfig?.rootDir)
     const coverageMap = results?.coverageMap || this._coverageMap
     if (isSuitesSkipped && isCodeCoverageEnabled) {
       applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
     }
     lastCoverageMap = coverageMap
     lastCoverageMapRootDir = rootDir
-    return onRunComplete.apply(this, arguments)
+    return onRunComplete.call(this, coverageContexts, results)
   })
 }
 
@@ -1339,13 +1372,7 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
     }
 
     if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
-      // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
-      // The reason for this is the following:
-      // The tests for different shards are likely being run in different CI jobs so
-      // the requests to the skippable endpoint might be done at different times and their responses might be different.
-      // If the skippable endpoint is returning different suites and we filter the list of tests here,
-      // the base list of tests that is used for sharding might be different,
-      // causing the shards to potentially run the same suite.
+      // When Jest sharding is enabled, filter after Jest picks this process's shard.
       return testPaths
     }
     const { tests } = testPaths
@@ -1374,6 +1401,8 @@ function getCliWrapper (isNewJestVersion) {
       if (!libraryConfigurationCh.hasSubscribers) {
         return runCLI.apply(this, arguments)
       }
+
+      resetSuiteSkippingRunState()
 
       try {
         const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
@@ -1722,9 +1751,7 @@ function getCliWrapper (isNewJestVersion) {
 
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
-      numSkippedSuites = 0
-      lastCoverageMap = undefined
-      lastCoverageMapRootDir = undefined
+      resetSuiteSkippingRunState()
 
       return result
     }, {
@@ -1965,17 +1992,23 @@ function configureTestEnvironment (readConfigsResult) {
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
-  const configs = readConfigsResult.configs.map(config => ({
-    ...config,
-    testEnvironmentOptions: {
-      ...config.testEnvironmentOptions,
-      _ddRepositoryRoot: repositoryRoot,
-      _ddTestCodeCoverageEnabled: isCodeCoverageEnabled,
-    },
-  }))
-  readConfigsResult.configs = isCodeCoverageEnabled && isSuitesSkippingEnabled && hasSkippableSuitesCoverage()
+  const configs = readConfigsResult.configs.map(config => {
+    const testEnvironmentOptions = config.testEnvironmentOptions || {}
+    testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
+    testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+
+    return {
+      ...config,
+      testEnvironmentOptions,
+    }
+  })
+  const shouldBackfillCoverage = isCodeCoverageEnabled && isSuitesSkippingEnabled && hasSkippableSuitesCoverage()
+  readConfigsResult.configs = shouldBackfillCoverage
     ? addCoverageBackfillFilesToConfigs(configs)
     : configs
+  if (shouldBackfillCoverage) {
+    readConfigsResult.globalConfig = addCoverageBackfillFilesToGlobalConfig(readConfigsResult.globalConfig)
+  }
   testSessionConfigurationCh.publish(readConfigsResult.configs.map(config => config.testEnvironmentOptions))
 
   isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
@@ -2031,6 +2064,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddIsEarlyFlakeDetectionEnabled',
   '_ddEarlyFlakeDetectionSlowTestRetries',
   '_ddRepositoryRoot',
+  '_ddTestCodeCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
   '_ddItrSkippingEnabledTags',
