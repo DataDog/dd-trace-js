@@ -60,10 +60,10 @@ function runCovered (command) {
 const warmup = runCovered([process.execPath, 'init'])
 if (warmup !== 0) process.exit(warmup)
 
-// Resolve the package manager the same way the npm/yarn lifecycle would. `npm_execpath` is set
-// when invoked through a package script (the real CI path); fall back to yarn, the repo's PM.
+// Resolve npm the same way the package-script lifecycle does. `npm_execpath` is set
+// on the real CI path; direct invocations fall back to npm from PATH.
 const pmExecpath = process.env.npm_execpath
-const runner = pmExecpath ? [process.execPath, pmExecpath] : ['yarn']
+const runner = pmExecpath ? [process.execPath, pmExecpath] : ['npm']
 const testStatus = runCovered([...runner, 'run', script, ...extraArgs])
 
 convertV8DirToReport(v8Dir, reportDir)
