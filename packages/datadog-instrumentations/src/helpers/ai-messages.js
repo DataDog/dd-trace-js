@@ -340,7 +340,6 @@ function openAIResponsePromptVariableToMessageContent (value) {
   const content = openAIResponseContentToMessageContent([part])
   if (content != null) return content
   if (part.type === 'input_image') return IMAGE_FALLBACK
-  if (part.type === 'input_file') return FILE_FALLBACK
 }
 
 /**

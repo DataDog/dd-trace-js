@@ -783,6 +783,16 @@ describe('ai-messages', () => {
       ])
     })
 
+    it('should surface a text marker for file variables with no file_id, file_url, or filename', () => {
+      // Pins the `?? FILE_FALLBACK` fallback in `openAIResponseFileContentPart`. If that fallback
+      // ever changes, the function-level FILE_FALLBACK branch above the dead-code line must be
+      // reinstated to keep file variables observable to AI Guard.
+      const prompt = { id: 'pmpt_1', variables: { policy: { type: 'input_file' } } }
+      assert.deepStrictEqual(convertOpenAIResponsePromptToMessages(prompt), [
+        { role: 'user', content: '[file]' },
+      ])
+    })
+
     it('should resolve image variables backed by file_id through the content normalizer', () => {
       const prompt = { id: 'pmpt_1', variables: { screenshot: { type: 'input_image', file_id: 'file_42' } } }
       assert.deepStrictEqual(convertOpenAIResponsePromptToMessages(prompt), [
