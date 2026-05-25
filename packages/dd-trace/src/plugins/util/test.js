@@ -1,6 +1,5 @@
 'use strict'
 
-const { createHash } = require('node:crypto')
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
@@ -424,10 +423,7 @@ module.exports = {
   getLineCoverageBitmap,
   getRelativeCoverageFiles,
   applySkippedCoverageToCoverage,
-  getSafeSkippableSuites,
-  getSkippedSuitesCoverage,
   getTestCoverageLinesPercentage,
-  hashCoverageFilePath,
   mergeCoverageBitmaps,
   resetCoverage,
   mergeCoverage,
@@ -1168,12 +1164,6 @@ function countCoveredExecutableBits (coveredBitmap, executableBitmap) {
   return count
 }
 
-const SHA256_HASH_RE = /^[a-f0-9]{64}$/i
-
-function hashCoverageFilePath (filename) {
-  return createHash('sha256').update(filename).digest('hex')
-}
-
 function getCoverageFileBitmap (bitmap) {
   if (!bitmap) return
   if (Buffer.isBuffer(bitmap)) return bitmap
@@ -1191,83 +1181,22 @@ function addCoverageFilesToMap (files, targetMap, rootDir) {
     if (!bitmap) continue
 
     const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
-    const hash = hashCoverageFilePath(filename)
-    targetMap.set(hash, mergeCoverageBitmaps(targetMap.get(hash), bitmap))
+    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
   }
 }
 
 function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   if (!skippedCoverage) return
 
-  for (const [filenameOrHash, bitmap] of Object.entries(skippedCoverage)) {
+  for (const [filename, bitmap] of Object.entries(skippedCoverage)) {
     const coverageBitmap = getCoverageFileBitmap(bitmap)
     if (!coverageBitmap) continue
-    const filename = filenameOrHash.startsWith('/') ? filenameOrHash.slice(1) : filenameOrHash
-    const hash = SHA256_HASH_RE.test(filename) ? filename : hashCoverageFilePath(filename)
-    targetMap.set(hash, mergeCoverageBitmaps(targetMap.get(hash), coverageBitmap))
+    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), coverageBitmap))
   }
 }
 
 function hasSkippedCoverage (skippedCoverage) {
   return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
-}
-
-function getLocalSuiteSet (localSuites) {
-  const localSuiteSet = new Set()
-  for (const suite of localSuites) {
-    if (suite) localSuiteSet.add(suite)
-  }
-  return localSuiteSet
-}
-
-function getLocalSkippableSuites (skippableSuites, localSuites) {
-  const localSuiteSet = getLocalSuiteSet(localSuites)
-  const localSkippableSuites = []
-
-  for (const suite of skippableSuites || []) {
-    if (localSuiteSet.has(suite)) {
-      localSkippableSuites.push(suite)
-    }
-  }
-
-  return localSkippableSuites
-}
-
-/**
- * Returns skippable suites that are safe to skip for the current local run.
- * @param {object} params
- * @param {string[]} params.skippableSuites
- * @param {object} params.skippedCoverage
- * @param {string[]} params.localSuites
- * @param {boolean} params.isCodeCoverageEnabled
- * @returns {string[]}
- */
-function getSafeSkippableSuites ({
-  skippableSuites,
-  skippedCoverage,
-  localSuites,
-  isCodeCoverageEnabled,
-}) {
-  if (!isCodeCoverageEnabled) return skippableSuites || []
-  if (!hasSkippedCoverage(skippedCoverage)) return []
-  return getLocalSkippableSuites(skippableSuites, localSuites)
-}
-
-/**
- * Returns backend coverage only when there are suites actually skipped in this run.
- * @param {object} params
- * @param {string[]} params.skippedSuites
- * @param {object} params.skippedCoverage
- * @param {boolean} params.isCodeCoverageEnabled
- * @returns {object}
- */
-function getSkippedSuitesCoverage ({
-  skippedSuites,
-  skippedCoverage,
-  isCodeCoverageEnabled,
-}) {
-  if (!isCodeCoverageEnabled || !skippedSuites?.length || !hasSkippedCoverage(skippedCoverage)) return {}
-  return skippedCoverage
 }
 
 function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
@@ -1281,9 +1210,9 @@ function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
   let totalExecutableLines = 0
   let totalCoveredLines = 0
 
-  for (const [hash, executableLines] of executableLinesByFile) {
+  for (const [filename, executableLines] of executableLinesByFile) {
     totalExecutableLines += countBitmapBits(executableLines)
-    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(hash), executableLines)
+    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
   }
 
   return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
@@ -1296,10 +1225,10 @@ function isLineCoveredByBitmap (bitmap, line) {
   return byteIndex < bitmap.length && !!(bitmap[byteIndex] & (1 << (line % 8)))
 }
 
-function getSkippedCoverageByHash (skippedCoverage) {
-  const skippedCoverageByHash = new Map()
-  addSkippedCoverageToMap(skippedCoverage, skippedCoverageByHash)
-  return skippedCoverageByHash
+function getSkippedCoverageByFilename (skippedCoverage) {
+  const skippedCoverageByFilename = new Map()
+  addSkippedCoverageToMap(skippedCoverage, skippedCoverageByFilename)
+  return skippedCoverageByFilename
 }
 
 function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
@@ -1326,12 +1255,12 @@ function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
   if (!hasSkippedCoverage(skippedCoverage)) return false
 
   const coverageMap = getCoverageMap(coverage)
-  const skippedCoverageByHash = getSkippedCoverageByHash(skippedCoverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
   let updated = false
 
   for (const filename of coverageMap.files()) {
     const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
-    const skippedBitmap = skippedCoverageByHash.get(hashCoverageFilePath(relativeFilename))
+    const skippedBitmap = skippedCoverageByFilename.get(relativeFilename)
     if (!skippedBitmap) continue
 
     const fileCoverage = coverageMap.fileCoverageFor(filename)

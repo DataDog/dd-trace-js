@@ -44,45 +44,13 @@ const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-n
 const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
-function mergeCoverageBitmap (targetBitmap, bitmap) {
-  if (!targetBitmap) return bitmap
-
-  const targetBuffer = Buffer.from(targetBitmap, 'base64')
-  const bitmapBuffer = Buffer.from(bitmap, 'base64')
-  const mergedBuffer = Buffer.alloc(Math.max(targetBuffer.length, bitmapBuffer.length))
-
-  targetBuffer.copy(mergedBuffer)
-  for (let i = 0; i < bitmapBuffer.length; i++) {
-    mergedBuffer[i] |= bitmapBuffer[i]
-  }
-
-  return mergedBuffer.toString('base64')
-}
-
-function mergeCoverage (targetCoverage, coverage) {
-  if (!coverage || typeof coverage !== 'object') return
-
-  for (const [filename, bitmap] of Object.entries(coverage)) {
-    if (typeof bitmap !== 'string') continue
-    targetCoverage[filename] = mergeCoverageBitmap(targetCoverage[filename], bitmap)
-  }
-}
-
 function getSkippableResponse () {
   const meta = { correlation_id: correlationId }
-  const data = suitesToSkip.map(item => {
-    if (!item.attributes?.coverage) return item
-
-    const { coverage: _coverage, ...attributes } = item.attributes
-    return { ...item, attributes }
-  })
-  const coverage = {}
-  mergeCoverage(coverage, skippableCoverage)
-  if (Object.keys(coverage).length) {
-    meta.coverage = coverage
+  if (Object.keys(skippableCoverage).length) {
+    meta.coverage = skippableCoverage
   }
 
-  return { data, meta }
+  return { data: suitesToSkip, meta }
 }
 
 let settings = DEFAULT_SETTINGS

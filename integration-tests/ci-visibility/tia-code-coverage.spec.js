@@ -185,13 +185,17 @@ describe('TIA code coverage', function () {
         }],
       })
 
-      assert.strictEqual(skippedWithoutCoverage.isTiaSkipped, 'false')
-      assert.strictEqual(skippedWithoutCoverage.skippedSuites.length, 0)
+      assert.strictEqual(skippedWithoutCoverage.isTiaSkipped, 'true')
+      assert.strictEqual(skippedWithoutCoverage.skippedSuites.length, 1)
+      assert.strictEqual(skippedWithoutCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
       assert.strictEqual(
         skippedWithoutCoverage.codeCoverageLinesPct,
         skippedWithoutCoverage.stdoutCodeCoverageLinesPct
       )
-      assert.strictEqual(skippedWithoutCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+      assert.ok(
+        skippedWithoutCoverage.codeCoverageLinesPct < baseline.codeCoverageLinesPct,
+        `expected ${skippedWithoutCoverage.codeCoverageLinesPct} to be lower than ${baseline.codeCoverageLinesPct}`
+      )
 
       const skippedWithCoverage = await runFramework({
         framework,
@@ -368,7 +372,7 @@ describe('TIA code coverage', function () {
     assert.strictEqual(broaderCoverage.codeCoverageLinesPct, 100)
   })
 
-  it('skips when path coverage cannot be seeded in Jest stdout', async () => {
+  it('skips when backend coverage has no configured collectCoverageFrom', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       getEnv: () => ({

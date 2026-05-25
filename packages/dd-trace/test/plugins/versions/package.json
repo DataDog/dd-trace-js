@@ -129,7 +129,6 @@
     "iovalkey": "0.3.3",
     "jest": "30.4.2",
     "jest-circus": "30.4.2",
-    "jest-cli": "30.4.2",
     "jest-config": "30.4.2",
     "jest-environment-jsdom": "30.4.1",
     "jest-environment-node": "30.4.1",

@@ -23,7 +23,6 @@ const {
   getLineCoverageBitmap,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
-  hashCoverageFilePath,
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
@@ -41,7 +40,6 @@ const {
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
-  getSafeSkippableSuites,
   getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
 
@@ -209,44 +207,6 @@ describe('getTestSuitePath', () => {
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     assert.strictEqual(testSuitePath, sourceRoot)
-  })
-})
-
-describe('getSafeSkippableSuites', () => {
-  it('returns all skippable suites when code coverage is disabled', () => {
-    assert.deepStrictEqual(
-      getSafeSkippableSuites({
-        skippableSuites: ['suite-a.js', 'suite-b.js'],
-        skippedCoverage: {},
-        localSuites: ['suite-a.js'],
-        isCodeCoverageEnabled: false,
-      }),
-      ['suite-a.js', 'suite-b.js']
-    )
-  })
-
-  it('returns no skippable suites when code coverage is enabled without skipped coverage', () => {
-    assert.deepStrictEqual(
-      getSafeSkippableSuites({
-        skippableSuites: ['suite-a.js'],
-        skippedCoverage: {},
-        localSuites: ['suite-a.js'],
-        isCodeCoverageEnabled: true,
-      }),
-      []
-    )
-  })
-
-  it('returns local skippable suites when code coverage is enabled and the response includes non-local suites', () => {
-    assert.deepStrictEqual(
-      getSafeSkippableSuites({
-        skippableSuites: ['suite-a.js', 'suite-outside-run.js', 'suite-b.js'],
-        skippedCoverage: { hash: 'bitmap' },
-        localSuites: ['suite-a.js', 'suite-b.js'],
-        isCodeCoverageEnabled: true,
-      }),
-      ['suite-a.js', 'suite-b.js']
-    )
   })
 })
 
@@ -991,18 +951,7 @@ describe('coverage utils', () => {
 
     it('calculates total coverage using skipped-suite coverage bitmaps', () => {
       const skippedCoverage = {
-        [hashCoverageFilePath('file.js')]: getLineCoverageBitmap({
-          2: 1,
-          3: 1,
-        }, true).toString('base64'),
-      }
-
-      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
-    })
-
-    it('calculates total coverage using skipped-suite coverage keyed by filename', () => {
-      const skippedCoverage = {
-        '/file.js': getLineCoverageBitmap({
+        'file.js': getLineCoverageBitmap({
           2: 1,
           3: 1,
         }, true).toString('base64'),
@@ -1014,7 +963,7 @@ describe('coverage utils', () => {
     it('applies skipped-suite coverage to an Istanbul coverage map', () => {
       const coverageMap = istanbul.createCoverageMap(partialCoverage)
       const skippedCoverage = {
-        [hashCoverageFilePath('file.js')]: getLineCoverageBitmap({
+        'file.js': getLineCoverageBitmap({
           2: 1,
           3: 1,
         }, true).toString('base64'),
