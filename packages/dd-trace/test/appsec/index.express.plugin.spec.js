@@ -30,7 +30,7 @@ withVersions('express', 'express', version => {
     let paramCallbackSpy /** @type {SinonSpy} */
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'router', 'http'], { client: false })
     })
 
     before((done) => {
@@ -198,7 +198,7 @@ withVersions('express', 'express', version => {
     let server, requestBody, axios
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'router', 'http'], { client: false })
     })
 
     before((done) => {
@@ -263,7 +263,7 @@ withVersions('express', 'express', version => {
     let config, server, axios
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'router', 'http'], { client: false })
     })
 
     before((done) => {
