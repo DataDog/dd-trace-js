@@ -78,8 +78,6 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
-  getLineCoverageBitmap,
-  hashCoverageFilePath,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -92,26 +90,6 @@ function assertItrSkippingEnabledTags (events, expected) {
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
   const test = events.find(event => event.type === 'test').content
   assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
-}
-
-function getLinesBitmapBase64 (startLine, endLine) {
-  const lineCoverage = {}
-  for (let line = startLine; line <= endLine; line++) {
-    lineCoverage[line] = 1
-  }
-  return getLineCoverageBitmap(lineCoverage, true).toString('base64')
-}
-
-function getSkippableSuite (suite) {
-  return {
-    type: 'suite',
-    attributes: {
-      suite,
-      coverage: {
-        [hashCoverageFilePath(suite)]: getLinesBitmapBase64(1, 20),
-      },
-    },
-  }
 }
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
@@ -785,9 +763,12 @@ describe(`cucumber@${version} commonJS`, () => {
 
         it('can skip suites received by the intelligent test runner API and still reports code coverage',
           (done) => {
-            receiver.setSuitesToSkip([
-              getSkippableSuite(`${featuresPath}farewell.feature`),
-            ])
+            receiver.setSuitesToSkip([{
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            }])
 
             const skippableRequestPromise = receiver
               .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
@@ -945,8 +926,18 @@ describe(`cucumber@${version} commonJS`, () => {
           })
 
           receiver.setSuitesToSkip([
-            getSkippableSuite(`${featuresPath}farewell.feature`),
-            getSkippableSuite(`${featuresPath}greetings.feature`),
+            {
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}greetings.feature`,
+              },
+            },
           ])
 
           const eventsPromise = receiver
@@ -1003,7 +994,12 @@ describe(`cucumber@${version} commonJS`, () => {
           })
 
           receiver.setSuitesToSkip([
-            getSkippableSuite(`${featuresPath}farewell.feature`),
+            {
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            },
           ])
 
           const eventsPromise = receiver
@@ -1202,9 +1198,12 @@ describe(`cucumber@${version} commonJS`, () => {
         })
 
         onlyLatestIt('can skip suites in parallel mode', async () => {
-          receiver.setSuitesToSkip([
-            getSkippableSuite(`${featuresPath}farewell.feature`),
-          ])
+          receiver.setSuitesToSkip([{
+            type: 'suite',
+            attributes: {
+              suite: `${featuresPath}farewell.feature`,
+            },
+          }])
 
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

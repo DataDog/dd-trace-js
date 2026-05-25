@@ -182,14 +182,13 @@ module.exports = class CiPlugin extends Plugin {
       return ctx.currentStore
     })
 
-    this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ testBundle, onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter?.getSkippableSuites) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(
         {
           ...this.testConfiguration,
-          testBundle,
           isCodeCoverageEnabled: this.libraryConfig?.isCodeCoverageEnabled,
         },
         (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
@@ -205,14 +204,13 @@ module.exports = class CiPlugin extends Plugin {
       )
     })
 
-    this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir, testBundle }) => {
+    this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir }) => {
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, this.constructor.id)
       const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, this.constructor.id)
 
       this.command = command
       this.frameworkVersion = frameworkVersion
-      this.testBundle = testBundle
       // only for playwright
       this.rootDir = rootDir
 
@@ -239,8 +237,6 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata,
-          ...(testBundle ? { [TEST_MODULE]: testBundle } : {}),
-          ...(testBundle ? { 'test.bundle': testBundle } : {}),
         },
         integrationName: this.constructor.id,
       })
@@ -257,8 +253,6 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata,
-          ...(testBundle ? { [TEST_MODULE]: testBundle } : {}),
-          ...(testBundle ? { 'test.bundle': testBundle } : {}),
           ...getSessionRequestErrorTags(this.testSessionSpan),
         },
         integrationName: this.constructor.id,
@@ -272,8 +266,6 @@ module.exports = class CiPlugin extends Plugin {
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
-          ...(this.testBundle ? { [TEST_MODULE]: this.testBundle } : {}),
-          ...(this.testBundle ? { 'test.bundle': this.testBundle } : {}),
           ...getSessionRequestErrorTags(this.testSessionSpan),
           ...getSessionItrSkippingEnabledTags(this.testSessionSpan),
         }

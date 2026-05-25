@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
-const { inspect } = require('node:util')
 
 const {
   sandboxCwd,
@@ -20,7 +19,7 @@ const {
   hashCoverageFilePath,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-const FIXTURE_ROOT = 'ci-visibility/itr-code-coverage'
+const FIXTURE_ROOT = 'ci-visibility/tia-code-coverage'
 const RUN_SUITE = `${FIXTURE_ROOT}/test-run.js`
 const SKIPPED_SUITE = `${FIXTURE_ROOT}/test-skipped.js`
 const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
@@ -51,10 +50,9 @@ const FRAMEWORKS = [
   {
     name: 'jest',
     skippedSuite: SKIPPED_SUITE,
-    command: 'node ./ci-visibility/run-jest.js',
+    command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
     getEnv: () => ({
       TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-      TEST_BUNDLE: FIXTURE_ROOT,
       COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
       ENABLE_CODE_COVERAGE: '1',
       COVERAGE_REPORTERS: 'text-summary',
@@ -62,7 +60,7 @@ const FRAMEWORKS = [
   },
 ]
 
-describe('ITR code coverage', function () {
+describe('TIA code coverage', function () {
   let cwd
   let childProcess
 
@@ -80,7 +78,7 @@ describe('ITR code coverage', function () {
     }
   })
 
-  async function runFramework ({ framework, suitesToSkip = [], assertSkippableRequest }) {
+  async function runFramework ({ framework, suitesToSkip = [], skippableCoverage = {} }) {
     const receiver = await new FakeCiVisIntake().start()
     receiver.setSettings({
       itr_enabled: true,
@@ -88,6 +86,7 @@ describe('ITR code coverage', function () {
       tests_skipping: true,
     })
     receiver.setSuitesToSkip(suitesToSkip)
+    receiver.setSkippableCoverage(skippableCoverage)
 
     let eventsResult
     let coverageResult
@@ -106,7 +105,7 @@ describe('ITR code coverage', function () {
 
         eventsResult = {
           codeCoverageLinesPct: testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT],
-          isItrSkipped: testSession.meta[TEST_ITR_TESTS_SKIPPED],
+          isTiaSkipped: testSession.meta[TEST_ITR_TESTS_SKIPPED],
           skippedSuites,
         }
       })
@@ -126,12 +125,6 @@ describe('ITR code coverage', function () {
 
         coverageResult = coverages
       })
-    const skippableRequestPromise = assertSkippableRequest
-      ? receiver
-        .payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
-        .then(request => assertSkippableRequest(request, () => output))
-      : Promise.resolve()
-
     childProcess = exec(
       framework.command,
       {
@@ -158,7 +151,6 @@ describe('ITR code coverage', function () {
         once(childProcess, 'exit'),
         stdoutEndPromise,
         stderrEndPromise,
-        skippableRequestPromise,
       ])
       assert.strictEqual(exitCode, 0)
 
@@ -177,7 +169,7 @@ describe('ITR code coverage', function () {
     it(`keeps ${framework.name} total code coverage stable with skipped coverage`, async () => {
       const baseline = await runFramework({ framework })
 
-      assert.strictEqual(baseline.isItrSkipped, 'false')
+      assert.strictEqual(baseline.isTiaSkipped, 'false')
       assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
       assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
       assert.ok(baseline.codeCoverageLinesPct < 100, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
@@ -193,7 +185,7 @@ describe('ITR code coverage', function () {
         }],
       })
 
-      assert.strictEqual(skippedWithoutCoverage.isItrSkipped, 'false')
+      assert.strictEqual(skippedWithoutCoverage.isTiaSkipped, 'false')
       assert.strictEqual(skippedWithoutCoverage.skippedSuites.length, 0)
       assert.strictEqual(
         skippedWithoutCoverage.codeCoverageLinesPct,
@@ -207,14 +199,14 @@ describe('ITR code coverage', function () {
           type: 'suite',
           attributes: {
             suite: framework.skippedSuite,
-            coverage: {
-              [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
-            },
           },
         }],
+        skippableCoverage: {
+          [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
+        },
       })
 
-      assert.strictEqual(skippedWithCoverage.isItrSkipped, 'true')
+      assert.strictEqual(skippedWithCoverage.isTiaSkipped, 'true')
       assert.strictEqual(skippedWithCoverage.skippedSuites.length, 1)
       assert.strictEqual(skippedWithCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
       assert.strictEqual(
@@ -239,43 +231,34 @@ describe('ITR code coverage', function () {
     }
     const baseline = await runFramework({ framework })
 
-    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
     assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
     const coveredSkippedLines = getLinesBitmapBase64(1, 20)
     const skippedWithCoverage = await runFramework({
       framework,
-      assertSkippableRequest: (request, getOutput) => {
-        assert.strictEqual(
-          request.payload.data.attributes.configurations['test.bundle'],
-          FIXTURE_ROOT,
-          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
-        )
-      },
       suitesToSkip: [
         {
           type: 'suite',
           attributes: {
             suite: RUN_SUITE,
-            coverage: {
-              [RUN_SOURCE]: coveredSkippedLines,
-            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: SKIPPED_SUITE,
-            coverage: {
-              [SKIPPED_SOURCE]: coveredSkippedLines,
-            },
           },
         },
       ],
+      skippableCoverage: {
+        [RUN_SOURCE]: coveredSkippedLines,
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+      },
     })
 
-    assert.strictEqual(skippedWithCoverage.isItrSkipped, 'true')
+    assert.strictEqual(skippedWithCoverage.isTiaSkipped, 'true')
     assert.strictEqual(skippedWithCoverage.skippedSuites.length, 1)
     assert.strictEqual(skippedWithCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
@@ -296,43 +279,34 @@ describe('ITR code coverage', function () {
     }
     const baseline = await runFramework({ framework })
 
-    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
     assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
     const coveredSkippedLines = getLinesBitmapBase64(1, 20)
     const skippedCoverage = await runFramework({
       framework,
-      assertSkippableRequest: (request, getOutput) => {
-        assert.strictEqual(
-          request.payload.data.attributes.configurations['test.bundle'],
-          FIXTURE_ROOT,
-          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
-        )
-      },
       suitesToSkip: [
         {
           type: 'suite',
           attributes: {
             suite: RUN_SUITE,
-            coverage: {
-              [RUN_SOURCE]: coveredSkippedLines,
-            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: SKIPPED_SUITE,
-            coverage: {
-              [SKIPPED_SOURCE]: coveredSkippedLines,
-            },
           },
         },
       ],
+      skippableCoverage: {
+        [RUN_SOURCE]: coveredSkippedLines,
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+      },
     })
 
-    assert.strictEqual(skippedCoverage.isItrSkipped, 'true')
+    assert.strictEqual(skippedCoverage.isTiaSkipped, 'true')
     assert.strictEqual(skippedCoverage.skippedSuites.length, 1)
     assert.strictEqual(skippedCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
     assert.strictEqual(skippedCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
@@ -353,94 +327,48 @@ describe('ITR code coverage', function () {
     }
     const baseline = await runFramework({ framework })
 
-    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
     assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
     const coveredSkippedLines = getLinesBitmapBase64(1, 20)
     const broaderCoverage = await runFramework({
       framework,
-      assertSkippableRequest: (request, getOutput) => {
-        assert.strictEqual(
-          request.payload.data.attributes.configurations['test.bundle'],
-          FIXTURE_ROOT,
-          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
-        )
-      },
       suitesToSkip: [
         {
           type: 'suite',
           attributes: {
             suite: RUN_SUITE,
-            coverage: {
-              [RUN_SOURCE]: coveredSkippedLines,
-            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: SKIPPED_SUITE,
-            coverage: {
-              [SKIPPED_SOURCE]: coveredSkippedLines,
-            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/other-suite/test-outside-local-run.js',
-            coverage: {
-              'ci-visibility/other-suite/src/outside-local-run.js': coveredSkippedLines,
-            },
           },
         },
       ],
+      skippableCoverage: {
+        [RUN_SOURCE]: coveredSkippedLines,
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+        'ci-visibility/other-suite/src/outside-local-run.js': coveredSkippedLines,
+      },
     })
 
-    assert.strictEqual(broaderCoverage.isItrSkipped, 'true')
+    assert.strictEqual(broaderCoverage.isTiaSkipped, 'true')
     assert.strictEqual(broaderCoverage.skippedSuites.length, 1)
     assert.strictEqual(broaderCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
     assert.strictEqual(broaderCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.strictEqual(broaderCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
   })
 
-  it('skips when scoped hash coverage cannot be seeded in Jest stdout', async () => {
-    const framework = {
-      ...FRAMEWORKS[0],
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        TEST_BUNDLE: FIXTURE_ROOT,
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-      }),
-    }
-    const baseline = await runFramework({ framework })
-
-    assert.strictEqual(baseline.isItrSkipped, 'false')
-    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
-
-    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
-    const unseedableCoverage = await runFramework({
-      framework,
-      suitesToSkip: [{
-        type: 'suite',
-        attributes: {
-          suite: SKIPPED_SUITE,
-          coverage: {
-            [hashCoverageFilePath(SKIPPED_SOURCE)]: coveredSkippedLines,
-          },
-        },
-      }],
-    })
-
-    assert.strictEqual(unseedableCoverage.isItrSkipped, 'true')
-    assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
-    assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
-  })
-
-  it('skips when unscoped hash coverage cannot be seeded in Jest stdout', async () => {
+  it('skips when hash coverage cannot be seeded in Jest stdout', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       getEnv: () => ({
@@ -451,7 +379,7 @@ describe('ITR code coverage', function () {
     }
     const baseline = await runFramework({ framework })
 
-    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
     assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
@@ -462,19 +390,53 @@ describe('ITR code coverage', function () {
         type: 'suite',
         attributes: {
           suite: SKIPPED_SUITE,
-          coverage: {
-            [SKIPPED_SOURCE]: coveredSkippedLines,
-          },
         },
       }],
+      skippableCoverage: {
+        [hashCoverageFilePath(SKIPPED_SOURCE)]: coveredSkippedLines,
+      },
     })
 
-    assert.strictEqual(unseedableCoverage.isItrSkipped, 'true')
+    assert.strictEqual(unseedableCoverage.isTiaSkipped, 'true')
     assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
     assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
   })
 
-  it('keeps jest coverage stable when a cli pattern is not a bundle path', async () => {
+  it('skips when path coverage cannot be seeded in Jest stdout', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const unseedableCoverage = await runFramework({
+      framework,
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+        },
+      }],
+      skippableCoverage: {
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+      },
+    })
+
+    assert.strictEqual(unseedableCoverage.isTiaSkipped, 'true')
+    assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
+    assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+  })
+
+  it('keeps jest coverage stable when a cli pattern is not a directory path', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}/test-`,
@@ -487,32 +449,25 @@ describe('ITR code coverage', function () {
     }
     const baseline = await runFramework({ framework })
 
-    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
     assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
     const coveredSkippedLines = getLinesBitmapBase64(1, 20)
     const unscopedPatternRun = await runFramework({
       framework,
-      assertSkippableRequest: (request, getOutput) => {
-        assert.strictEqual(
-          request.payload.data.attributes.configurations['test.bundle'],
-          'jest',
-          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
-        )
-      },
       suitesToSkip: [{
         type: 'suite',
         attributes: {
           suite: SKIPPED_SUITE,
-          coverage: {
-            [SKIPPED_SOURCE]: coveredSkippedLines,
-          },
         },
       }],
+      skippableCoverage: {
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+      },
     })
 
-    assert.strictEqual(unscopedPatternRun.isItrSkipped, 'true')
+    assert.strictEqual(unscopedPatternRun.isTiaSkipped, 'true')
     assert.strictEqual(unscopedPatternRun.skippedSuites.length, 1)
     assert.strictEqual(unscopedPatternRun.skippedSuites[0].meta[TEST_STATUS], 'skip')
     assert.strictEqual(unscopedPatternRun.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)

@@ -82,9 +82,7 @@ if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
 
-if (process.env.TEST_BUNDLE) {
-  options._ = [process.env.TEST_BUNDLE]
-} else if (process.argv.length > 2) {
+if (process.argv.length > 2) {
   options._ = process.argv.slice(2)
 }
 

@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
+const DEFAULT_SKIPPABLE_COVERAGE = {}
 const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_KNOWN_TESTS_RESPONSE_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
@@ -68,21 +69,15 @@ function mergeCoverage (targetCoverage, coverage) {
 }
 
 function getSkippableResponse () {
-  const coverage = {}
+  const meta = { correlation_id: correlationId }
   const data = suitesToSkip.map(item => {
-    const suiteCoverage = item.attributes?.coverage
-    mergeCoverage(coverage, suiteCoverage)
-
-    if (!suiteCoverage) return item
+    if (!item.attributes?.coverage) return item
 
     const { coverage: _coverage, ...attributes } = item.attributes
-    return {
-      ...item,
-      attributes,
-    }
+    return { ...item, attributes }
   })
-
-  const meta = { correlation_id: correlationId }
+  const coverage = {}
+  mergeCoverage(coverage, skippableCoverage)
   if (Object.keys(coverage).length) {
     meta.coverage = coverage
   }
@@ -93,6 +88,7 @@ function getSkippableResponse () {
 let settings = DEFAULT_SETTINGS
 let settingsResponseStatusCode = 200
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
+let skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
@@ -123,6 +119,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSuitesToSkip (newSuitesToSkip) {
     suitesToSkip = newSuitesToSkip
+  }
+
+  setSkippableCoverage (newSkippableCoverage) {
+    skippableCoverage = newSkippableCoverage
   }
 
   setItrCorrelationId (newCorrelationId) {
@@ -397,6 +397,7 @@ class FakeCiVisIntake extends FakeAgent {
     settings = DEFAULT_SETTINGS
     settingsResponseStatusCode = 200
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
+    skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
     knownTestsPageIndex = 0

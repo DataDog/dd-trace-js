@@ -54,13 +54,12 @@ function getSkippableSuites ({
   runtimeName,
   runtimeVersion,
   custom,
-  testBundle,
   testLevel = 'suite',
   isCodeCoverageEnabled = false,
 }, done) {
   const cacheKey = buildCacheKey('skippable', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, testLevel, custom, testBundle, isCodeCoverageEnabled,
+    runtimeName, runtimeVersion, testLevel, custom, isCodeCoverageEnabled,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {
@@ -79,7 +78,6 @@ function getSkippableSuites ({
       runtimeName,
       runtimeVersion,
       custom,
-      testBundle,
       testLevel,
       isCodeCoverageEnabled,
       cacheKey: activeCacheKey,
@@ -108,7 +106,6 @@ function getSkippableSuites ({
  * @param {string} params.runtimeName
  * @param {string} params.runtimeVersion
  * @param {object} [params.custom]
- * @param {string} [params.testBundle]
  * @param {string} [params.testLevel]
  * @param {boolean} [params.isCodeCoverageEnabled]
  * @param {string | null} params.cacheKey
@@ -129,7 +126,6 @@ function fetchFromApi ({
   runtimeName,
   runtimeVersion,
   custom,
-  testBundle,
   testLevel,
   isCodeCoverageEnabled,
   cacheKey,
@@ -171,7 +167,6 @@ function fetchFromApi ({
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
           'runtime.version': runtimeVersion,
-          'test.bundle': testBundle,
           custom,
         },
         service,
@@ -205,14 +200,10 @@ function fetchFromApi ({
           attributes: {
             suite,
             name,
-            coverage: suiteCoverage,
             _is_missing_line_code_coverage: isMissingLineCodeCoverage,
           },
         } of skippableItems) {
-          const hasSuiteCoverage = !!suiteCoverage && Object.keys(suiteCoverage).length > 0
-          mergeCoverage(coverage, suiteCoverage)
-
-          if (isCodeCoverageEnabled && !hasCoverage && !hasSuiteCoverage) continue
+          if (isCodeCoverageEnabled && !hasCoverage) continue
           if (isCodeCoverageEnabled && isMissingLineCodeCoverage) continue
 
           skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })

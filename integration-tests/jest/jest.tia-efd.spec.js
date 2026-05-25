@@ -283,11 +283,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
-          coverage: {
-            [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
-          },
         },
       }])
+      receiver.setSkippableCoverage({
+        [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
+      })
 
       const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
       const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
@@ -346,25 +346,23 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('marks the test session as skipped if every suite is skipped', (done) => {
-      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
       receiver.setSuitesToSkip(
         [
           {
             type: 'suite',
             attributes: {
               suite: 'ci-visibility/test/ci-visibility-test.js',
-              coverage: {
-                [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: coveredSkippedLines,
-              },
             },
           },
           {
             type: 'suite',
             attributes: {
               suite: 'ci-visibility/test/ci-visibility-test-2.js',
-              coverage: {
-                [hashCoverageFilePath('ci-visibility/test/ci-visibility-test-2.js')]: coveredSkippedLines,
-              },
             },
           },
         ]
@@ -480,21 +478,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-to-skip.js',
-            coverage: {
-              [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
-            },
           },
         },
         {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-unskippable.js',
-            coverage: {
-              [hashCoverageFilePath('ci-visibility/unskippable-test/test-unskippable.js')]: coveredSkippedLines,
-            },
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+        [hashCoverageFilePath('ci-visibility/unskippable-test/test-unskippable.js')]: coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -558,12 +554,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           type: 'suite',
           attributes: {
             suite: 'ci-visibility/unskippable-test/test-to-skip.js',
-            coverage: {
-              [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
-            },
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        [hashCoverageFilePath('ci-visibility/unskippable-test/test-to-skip.js')]: coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -691,11 +687,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
-          coverage: {
-            [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
-          },
         },
       }])
+      receiver.setSkippableCoverage({
+        [hashCoverageFilePath('ci-visibility/test/ci-visibility-test.js')]: getLinesBitmapBase64(1, 20),
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -813,12 +809,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test-total-code-coverage/test-skipped.js',
-          coverage: {
-            [hashCoverageFilePath('ci-visibility/test-total-code-coverage/test-skipped.js')]: coveredSkippedLines,
-            [hashCoverageFilePath('ci-visibility/test-total-code-coverage/unused-dependency.js')]: coveredSkippedLines,
-          },
         },
       }])
+      receiver.setSkippableCoverage({
+        [hashCoverageFilePath('ci-visibility/test-total-code-coverage/test-skipped.js')]: coveredSkippedLines,
+        [hashCoverageFilePath('ci-visibility/test-total-code-coverage/unused-dependency.js')]: coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -902,13 +898,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           type: 'suite',
           attributes: {
             suite,
-            coverage: {
-              [suite]: getLinesBitmapBase64(1, 11),
-              'ci-visibility/subproject/dependency.js': getLinesBitmapBase64(1, 5),
-            },
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        [suite]: getLinesBitmapBase64(1, 11),
+        'ci-visibility/subproject/dependency.js': getLinesBitmapBase64(1, 5),
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

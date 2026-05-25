@@ -178,7 +178,7 @@ jobs:
         jest-version: [oldest, latest]
         spec:
           - jest.core
-          - jest.itr-efd
+          - jest.tia-efd
           - jest.test-management
     name: integration-jest (${{ matrix.jest-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest

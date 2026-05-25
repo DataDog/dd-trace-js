@@ -17,7 +17,6 @@ const {
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
   TEST_COMMAND,
-  TEST_MODULE,
   TEST_FRAMEWORK_VERSION,
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
@@ -237,7 +236,6 @@ class JestPlugin extends CiPlugin {
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
-        _ddTestBundle: testBundle,
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
@@ -248,8 +246,6 @@ class JestPlugin extends CiPlugin {
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
-        ...(testBundle ? { [TEST_MODULE]: testBundle } : {}),
-        ...(testBundle ? { 'test.bundle': testBundle } : {}),
         // requestErrorTags from test env options may be undefined
         ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
         ...(itrSkippingEnabledTags !== undefined && itrSkippingEnabledTags !== null ? itrSkippingEnabledTags : {}),

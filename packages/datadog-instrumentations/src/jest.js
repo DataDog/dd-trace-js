@@ -3,7 +3,7 @@
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
-const { existsSync, readFileSync, statSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const { builtinModules, createRequire } = require('node:module')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
@@ -120,7 +120,6 @@ let lastCoverageMapRootDir
 let coverageBackfillCollectCoverageFrom
 let activeTestSuiteAbsolutePath
 let isConsoleErrorWrapped = false
-let jestTestBundle = 'jest'
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -159,7 +158,6 @@ const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0
 const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
-const JEST_TEST_BUNDLE = 'jest'
 const COVERAGE_BACKFILL_SOURCE_FILE_RE = /\.(?:[cm]?[jt]sx?|less|pegjs)$/
 const COVERAGE_BACKFILL_DECLARATION_FILE_RE = /\.d\.[cm]?ts$/
 const COVERAGE_BACKFILL_TEST_FILE_RE = /\.(?:integration|spec|test|unit)\.[cm]?[jt]sx?$/
@@ -168,63 +166,6 @@ const COVERAGE_BACKFILL_ANCHOR_SUITE_COUNT = 10
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
-
-function isJestBundlePath (candidate, rootDir) {
-  if (typeof candidate !== 'string' || candidate.length === 0) return false
-
-  try {
-    return statSync(path.resolve(rootDir || process.cwd(), candidate)).isDirectory()
-  } catch {
-    return false
-  }
-}
-
-function getJestTestBundleFromPatterns (patterns, rootDir, fallback = JEST_TEST_BUNDLE) {
-  if (patterns?.length === 1 && isJestBundlePath(patterns[0], rootDir)) return patterns[0]
-  return fallback
-}
-
-function getJestTestBundleFromConfig (globalConfig) {
-  const rootDir = globalConfig?.rootDir || process.cwd()
-  const nonFlagArgs = globalConfig?.nonFlagArgs
-  const testBundleFromArgs = getJestTestBundleFromPatterns(nonFlagArgs, rootDir)
-  if (testBundleFromArgs !== JEST_TEST_BUNDLE) return testBundleFromArgs
-
-  const testPathPatterns = globalConfig?.testPathPatterns
-  const patterns = Array.isArray(testPathPatterns)
-    ? testPathPatterns
-    : testPathPatterns?.patterns
-  const testBundleFromPatterns = getJestTestBundleFromPatterns(patterns, rootDir)
-  if (testBundleFromPatterns !== JEST_TEST_BUNDLE) return testBundleFromPatterns
-
-  const testRepositoryRoot = repositoryRoot || process.cwd()
-  const absoluteRootDir = path.resolve(rootDir)
-  if (
-    absoluteRootDir !== path.resolve(testRepositoryRoot) &&
-    isJestBundlePath(absoluteRootDir, testRepositoryRoot)
-  ) {
-    return getTestSuitePath(absoluteRootDir, testRepositoryRoot)
-  }
-
-  return JEST_TEST_BUNDLE
-}
-
-function getJestTestBundleFromArgv (argv) {
-  const testBundleFromArgs = getJestTestBundleFromPatterns(argv?._, repositoryRoot, jestTestBundle)
-  if (testBundleFromArgs !== jestTestBundle) return testBundleFromArgs
-
-  const rootDir = argv?.rootDir
-  const absoluteRootDir = rootDir && path.resolve(process.cwd(), rootDir)
-  if (
-    absoluteRootDir &&
-    absoluteRootDir !== process.cwd() &&
-    isJestBundlePath(rootDir, process.cwd())
-  ) {
-    return getTestSuitePath(absoluteRootDir, process.cwd())
-  }
-
-  return jestTestBundle
-}
 
 function getJestRepositoryRoot (readConfigsResult) {
   const configuredRepositoryRoot = readConfigsResult.configs
@@ -1754,8 +1695,6 @@ function getCliWrapper (isNewJestVersion) {
         log.error('Jest library configuration error', err)
       }
 
-      const currentJestTestBundle = getJestTestBundleFromArgv(arguments[0])
-
       const {
         knownTestsResponse,
         testManagementTestsResponse,
@@ -1766,7 +1705,7 @@ function getCliWrapper (isNewJestVersion) {
         isSuitesSkippingEnabled,
         getKnownTests: () => getChannelPromise(knownTestsCh),
         getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
-        getSkippableSuites: () => getChannelPromise(skippableSuitesCh, { testBundle: currentJestTestBundle }),
+        getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
       })
 
       if (isKnownTestsEnabled) {
@@ -1835,7 +1774,6 @@ function getCliWrapper (isNewJestVersion) {
       testSessionStartCh.publish({
         command: `jest ${processArgv}`,
         frameworkVersion: jestVersion,
-        testBundle: currentJestTestBundle,
       })
 
       const result = await runCLI.apply(this, arguments)
@@ -2346,7 +2284,6 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
-  jestTestBundle = getJestTestBundleFromConfig(readConfigsResult.globalConfig)
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   const { configs } = readConfigsResult
   testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
@@ -2355,7 +2292,6 @@ function configureTestEnvironment (readConfigsResult) {
   for (const config of configs) {
     config.testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
-    config.testEnvironmentOptions._ddTestBundle = jestTestBundle
   }
 
   isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
