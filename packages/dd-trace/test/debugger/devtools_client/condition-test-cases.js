@@ -110,6 +110,12 @@ const references = [
   // Old standard reserved words, no need to disallow them
   [{ ref: 'abstract' }, { abstract: 42 }, 42],
 
+  // `@`-prefixed identifiers are desugared to `$dd_<name>` so they translate to valid JS
+  { ast: { ref: '@it' }, expected: '$dd_it', execute: false },
+  { ast: { ref: '@key' }, expected: '$dd_key', execute: false },
+  { ast: { ref: '@value' }, expected: '$dd_value', execute: false },
+  { ast: { ref: '@foo' }, expected: '$dd_foo', execute: false },
+
   // Input sanitization
   {
     ast: { ref: 'break' },
@@ -169,6 +175,26 @@ const references = [
   {
     ast: { ref: 'throw new Error()' },
     expected: new SyntaxError('Illegal identifier: throw new Error()'),
+    execute: false,
+  },
+  {
+    ast: { ref: '@x; throw new Error("injected"); //' },
+    expected: new SyntaxError('Illegal identifier: @x; throw new Error("injected"); //'),
+    execute: false,
+  },
+  {
+    ast: { ref: '@x.y' },
+    expected: new SyntaxError('Illegal identifier: @x.y'),
+    execute: false,
+  },
+  {
+    ast: { ref: '@x-y' },
+    expected: new SyntaxError('Illegal identifier: @x-y'),
+    execute: false,
+  },
+  {
+    ast: { ref: '@(1)' },
+    expected: new SyntaxError('Illegal identifier: @(1)'),
     execute: false,
   },
 ]
@@ -364,32 +390,32 @@ const equality = [
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { gt: [{ ref: 'obj' }, 5] },
@@ -413,17 +439,17 @@ const equality = [
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
 
   [{ lt: [{ ref: 'num' }, 42] }, { num: 43 }, false],
@@ -437,17 +463,17 @@ const equality = [
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
 
   [{ le: [{ ref: 'num' }, 42] }, { num: 43 }, false],
@@ -461,17 +487,17 @@ const equality = [
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method'),
+    new Error('Possibility of side effect due to coercion methods'),
   ],
 ]
 
