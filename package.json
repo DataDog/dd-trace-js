@@ -44,7 +44,7 @@
     "test:esbuild:ci": "nyc --silent node init && nyc -- npm run test:esbuild",
     "test:webpack": "mocha \"packages/datadog-webpack/test/**/*.spec.js\"",
     "test:webpack:ci": "nyc --silent node init && nyc -- npm run test:webpack",
-    "test:instrumentations": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\"",
+    "test:instrumentations": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-instrumentations/test/helpers/@(${PLUGINS}|${PLUGINS}-*).spec.js\"",
     "test:instrumentations:ci": "yarn services && nyc --silent node init && nyc -- npm run test:instrumentations",
     "test:instrumentations:misc": "mocha \"packages/datadog-instrumentations/test/*/**/*.spec.js\"",
     "test:instrumentations:misc:ci": "nyc --silent node init && nyc -- npm run test:instrumentations:misc",
