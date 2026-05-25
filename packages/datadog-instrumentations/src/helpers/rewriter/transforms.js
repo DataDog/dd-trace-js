@@ -296,7 +296,7 @@ function wrapPromiseWithAsyncEnd (state, node) {
 
             const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
             if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
-              return __apm$asyncEndPromise.then(() => result);
+              return __apm$asyncEndPromise.then(() => result, () => result);
             }
 
             return result;

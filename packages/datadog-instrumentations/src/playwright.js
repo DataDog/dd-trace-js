@@ -411,8 +411,7 @@ function getAbsolutePath (filePath) {
   if (!filePath || path.isAbsolute(filePath)) {
     return filePath
   }
-  const baseDir = rootDir || getValueFromEnvSources('DD_PLAYWRIGHT_WORKER_ROOT_DIR') || process.cwd()
-  return path.join(baseDir, filePath)
+  return path.join(rootDir, filePath)
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
@@ -1405,7 +1404,7 @@ createRootSuiteCh.subscribe({
     if (ctx.error) {
       return
     }
-    processRootSuite(ctx.result || ctx.arguments?.[0])
+    processRootSuite(ctx.result)
   },
 })
 
@@ -1706,8 +1705,6 @@ function prepareProcessHostStartRunner (processHost) {
     ...processHost._extraEnv,
     // Used to detect that we're in a playwright worker
     DD_PLAYWRIGHT_WORKER: '1',
-    // Worker processes load their own instrumentation instance, so pass the parent-computed config root.
-    DD_PLAYWRIGHT_WORKER_ROOT_DIR: rootDir,
   }
 }
 
@@ -1795,10 +1792,8 @@ addHook({
 }, coreBundle => coreBundle)
 
 function instrumentWorkerMainMethods (workerMain) {
-  if (!workerMain || workerMain[kDdPlaywrightWorkerInstrumented]) {
-    return workerMain
-  }
-  if (typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function') {
+  if (!workerMain || workerMain[kDdPlaywrightWorkerInstrumented] ||
+      typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function') {
     return workerMain
   }
 
