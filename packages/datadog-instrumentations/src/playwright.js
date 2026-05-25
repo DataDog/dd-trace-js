@@ -2,8 +2,8 @@
 
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
+const realClearTimeout = clearTimeout
 
-const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const satisfies = require('../../../vendor/dist/semifies')
 
@@ -60,6 +60,7 @@ const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
 const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
+const DD_PROPERTIES_TIMEOUT = 5000
 
 let applyRepeatEachIndex = null
 
@@ -405,13 +406,6 @@ function getSuiteType (test, type) {
 
 function isSuiteEntry (entry) {
   return entry.constructor.name === 'Suite' || entry.constructor.name === '_Suite'
-}
-
-function getAbsolutePath (filePath) {
-  if (!filePath || path.isAbsolute(filePath)) {
-    return filePath
-  }
-  return path.join(rootDir, filePath)
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
@@ -1404,7 +1398,7 @@ createRootSuiteCh.subscribe({
     if (ctx.error) {
       return
     }
-    processRootSuite(ctx.result)
+    processRootSuite(ctx.result || ctx.arguments?.[0])
   },
 })
 
@@ -1816,14 +1810,12 @@ function instrumentWorkerMainMethods (workerMain) {
     steps = []
 
     const {
-      _requireFile,
+      _requireFile: testSuiteAbsolutePath,
       location: {
-        file: testSourceFile,
+        file: testSourceFileAbsolutePath,
         line: testSourceLine,
       },
     } = test
-    const testSuiteAbsolutePath = getAbsolutePath(_requireFile)
-    const testSourceFileAbsolutePath = getAbsolutePath(testSourceFile)
     let res
 
     let testInfo
@@ -1846,20 +1838,21 @@ function instrumentWorkerMainMethods (workerMain) {
     // this during Playwright's testEnd event, which can happen before _runTest
     // resolves in 1.60 when retry clones run across multiple workers.
     let hasDdProperties = false
+    const ddPropertiesDeferred = {}
     const ddPropertiesPromise = new Promise(resolve => {
-      const messageHandler = ({ type, testId, properties }) => {
-        if (type === DD_PROPERTIES_RESPONSE && testId === test.id) {
-          hasDdProperties = true
-          if (properties) {
-            Object.assign(test, properties)
-          }
-          process.removeListener('message', messageHandler)
-          resolve()
-        }
-      }
-
-      process.on('message', messageHandler)
+      ddPropertiesDeferred.resolve = resolve
     })
+    const ddPropertiesMessageHandler = ({ type, testId, properties }) => {
+      if (type === DD_PROPERTIES_RESPONSE && testId === test.id) {
+        hasDdProperties = true
+        if (properties) {
+          Object.assign(test, properties)
+        }
+        process.removeListener('message', ddPropertiesMessageHandler)
+        ddPropertiesDeferred.resolve()
+      }
+    }
+    process.on('message', ddPropertiesMessageHandler)
 
     // TODO - In the future we may need to implement a mechanism to send test properties
     // to the worker process before _runTest is called
@@ -1938,6 +1931,9 @@ function instrumentWorkerMainMethods (workerMain) {
         type: DD_PROPERTIES_REQUEST,
         testId: test.id,
       })
+    } else if (!hasDdProperties) {
+      process.removeListener('message', ddPropertiesMessageHandler)
+      ddPropertiesDeferred.resolve()
     }
 
     // testInfo.errors could be better than "error",
@@ -1954,8 +1950,17 @@ function instrumentWorkerMainMethods (workerMain) {
       onDone = resolve
     })
 
-    // Wait for the properties to be received
-    await ddPropertiesPromise
+    // Wait for the properties to be received, but do not block the worker forever if IPC fails.
+    const ddPropertiesTimeoutPromise = new Promise(resolve => {
+      const ddPropertiesTimeout = realSetTimeout(() => {
+        process.removeListener('message', ddPropertiesMessageHandler)
+        resolve()
+      }, DD_PROPERTIES_TIMEOUT)
+      ddPropertiesPromise.then(() => {
+        realClearTimeout(ddPropertiesTimeout)
+      })
+    })
+    await Promise.race([ddPropertiesPromise, ddPropertiesTimeoutPromise])
 
     const finalStatus = getFinalStatus({
       isFinalExecution: test._ddIsFinalExecution,

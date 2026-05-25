@@ -9,8 +9,10 @@ module.exports = [
       versionRange: '>=1.60.0',
       filePath: 'lib/runner/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="Dispatcher"] > ClassExpression, ClassDeclaration[id.name="Dispatcher"]' +
-      ' > ClassBody > MethodDefinition[kind="method"][key.name="run"] > FunctionExpression[async]',
+    astQuery: 'VariableDeclarator[id.name="Dispatcher"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="run"] > FunctionExpression[async], ' +
+      'ClassDeclaration[id.name="Dispatcher"] > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="run"] > FunctionExpression[async]',
     functionQuery: {
       methodName: 'run',
       kind: 'Async',
@@ -63,10 +65,12 @@ module.exports = [
       versionRange: '>=1.60.0',
       filePath: 'lib/coreBundle.js',
     },
-    astQuery: 'AssignmentExpression[left.name="Page2"] > ClassExpression, ' +
-      'VariableDeclarator[id.name="Page2"] > ClassExpression, '+
-      'ClassDeclaration[id.name="Page2"]' +
-      ' > ClassBody > MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async]',
+    astQuery: 'AssignmentExpression[left.name="Page2"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async], ' +
+      'VariableDeclarator[id.name="Page2"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async], ' +
+      'ClassDeclaration[id.name="Page2"] > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async]',
     functionQuery: {
       methodName: 'goto',
       kind: 'Async',
