@@ -23,12 +23,12 @@ module.exports = {
       versions: ['>=3.25.75'],
       // `ai@4.0.2` declares `zod` as an optional peer (`^3.0.0`) and
       // `@ai-sdk/openai@1.3.23+` declares it as a required peer. Yarn 1's flat
-      // hoist served the standalone `zod` workspace's copy from the workspace
-      // root to both sandboxes; bun's isolated linker honours each package's
-      // own manifest and skips optional peers entirely, so the `versions/ai@`
-      // sandbox lands without `zod` and `require('zod')` crashes at load time.
-      // `dep: true` injects `zod` as a direct dep of the `versions/ai@`
-      // sandbox so bun materialises it alongside `ai` in the isolated store.
+      // hoist served the workspace root's `zod` to both consumers; bun's
+      // isolated linker honours each package's own manifest and skips optional
+      // peers entirely, so without `dep: true` the `versions/ai@` sandbox
+      // lands without `zod` and `require('zod')` crashes at load time. The
+      // matching `zod-to-json-schema` override in `install_plugin_modules.js`
+      // keeps the transitive zod chain on a `zod@3`-compatible version.
       dep: true,
     },
   ],
@@ -264,12 +264,15 @@ module.exports = {
   // `google-auth-library` is a regular transitive of `@google-cloud/vertexai`,
   // so under bun's isolated linker it lives in vertexai's private store and
   // isn't reachable from the workspace root. Inject it as a direct dep of
-  // every vertexai sandbox so the test's `getExport` lookup resolves
-  // (the same shape as the bedrock-runtime fix above).
+  // every vertexai sandbox so the test's `getExport` lookup resolves.
+  // Pin to vertexai's own `^9.0.0` range (every published version still
+  // declares it) so bun dedupes the direct dep and the SDK's transitive to
+  // a single physical `.bun/google-auth-library@9.x.y` entry — the prototype
+  // stub only propagates to the SDK when both resolve to the same realpath.
   '@google-cloud/vertexai': [
     {
       name: 'google-auth-library',
-      version: '*',
+      version: '^9.0.0',
       dep: true,
       forced: true,
     },
