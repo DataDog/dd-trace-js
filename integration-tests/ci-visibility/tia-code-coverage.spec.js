@@ -16,7 +16,6 @@ const {
   TEST_SKIPPED_BY_ITR,
   TEST_STATUS,
   getLineCoverageBitmap,
-  hashCoverageFilePath,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const FIXTURE_ROOT = 'ci-visibility/tia-code-coverage'
@@ -24,6 +23,7 @@ const RUN_SUITE = `${FIXTURE_ROOT}/test-run.js`
 const SKIPPED_SUITE = `${FIXTURE_ROOT}/test-skipped.js`
 const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
 const SKIPPED_SOURCE = `${FIXTURE_ROOT}/src/skipped-dependency.js`
+const EXTRA_SOURCE = `${FIXTURE_ROOT}/src/uncovered-dependency.js`
 const LINE_PCT_RE = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
 
 function getLinesBitmapBase64 (startLine, endLine) {
@@ -313,7 +313,7 @@ describe('TIA code coverage', function () {
     assert.strictEqual(skippedCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
   })
 
-  it('keeps jest coverage stable when the backend response includes suites outside the local run', async () => {
+  it('uses backend coverage outside the local run as the jest coverage base', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
@@ -357,49 +357,15 @@ describe('TIA code coverage', function () {
       skippableCoverage: {
         [RUN_SOURCE]: coveredSkippedLines,
         [SKIPPED_SOURCE]: coveredSkippedLines,
-        'ci-visibility/other-suite/src/outside-local-run.js': coveredSkippedLines,
+        [EXTRA_SOURCE]: coveredSkippedLines,
       },
     })
 
     assert.strictEqual(broaderCoverage.isTiaSkipped, 'true')
     assert.strictEqual(broaderCoverage.skippedSuites.length, 1)
     assert.strictEqual(broaderCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
-    assert.strictEqual(broaderCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.strictEqual(broaderCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
-  })
-
-  it('skips when hash coverage cannot be seeded in Jest stdout', async () => {
-    const framework = {
-      ...FRAMEWORKS[0],
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-      }),
-    }
-    const baseline = await runFramework({ framework })
-
-    assert.strictEqual(baseline.isTiaSkipped, 'false')
-    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
-
-    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
-    const unseedableCoverage = await runFramework({
-      framework,
-      suitesToSkip: [{
-        type: 'suite',
-        attributes: {
-          suite: SKIPPED_SUITE,
-        },
-      }],
-      skippableCoverage: {
-        [hashCoverageFilePath(SKIPPED_SOURCE)]: coveredSkippedLines,
-      },
-    })
-
-    assert.strictEqual(unseedableCoverage.isTiaSkipped, 'true')
-    assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
-    assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+    assert.strictEqual(broaderCoverage.stdoutCodeCoverageLinesPct, 100)
+    assert.strictEqual(broaderCoverage.codeCoverageLinesPct, 100)
   })
 
   it('skips when path coverage cannot be seeded in Jest stdout', async () => {

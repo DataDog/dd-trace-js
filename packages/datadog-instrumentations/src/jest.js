@@ -1161,12 +1161,6 @@ function getRepositoryRootFromTest (test, fallbackRootDir) {
   return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
 }
 
-function resolveJestDependency (context, from, dependency) {
-  try {
-    return context.resolver.resolveModule(from, dependency)
-  } catch {}
-}
-
 function getCoverageBackfillRelativeFile (file, rootDir) {
   if (!file || !file.startsWith(rootDir)) return
 
@@ -1208,129 +1202,17 @@ function getCoverageBackfillCoveredFiles (rootDir) {
   return coveredFiles
 }
 
-function addDependenciesToCoveragePatterns ({
-  context,
-  file,
-  rootDir,
-  coveragePatterns,
-  visited,
-  coveredFiles,
-  includeUncoveredFile,
-}) {
-  if (!file || visited.has(file)) return
-  visited.add(file)
-
-  const relativeFile = getCoverageBackfillRelativeFile(file, rootDir)
-  if (!relativeFile) return
-
-  const coverageFilePattern = getCoverageBackfillFilePattern(file, rootDir)
-  const hasCoveredFiles = coveredFiles.size > 0
-  const isCoveredFile = hasCoveredFiles && coveredFiles.has(coverageFilePattern)
-  if (coverageFilePattern && (!hasCoveredFiles || isCoveredFile || includeUncoveredFile)) {
-    coveragePatterns.add(coverageFilePattern)
-  }
-
-  const dependencies = context.hasteFS?.getDependencies?.(file)
-  if (!dependencies?.length) return
-
-  for (const dependency of dependencies) {
-    const resolvedDependency = resolveJestDependency(context, file, dependency)
-    if (!resolvedDependency || !resolvedDependency.startsWith(rootDir)) continue
-    addDependenciesToCoveragePatterns({
-      context,
-      file: resolvedDependency,
-      rootDir,
-      coveragePatterns,
-      visited,
-      coveredFiles,
-      includeUncoveredFile: !hasCoveredFiles || isCoveredFile || COVERAGE_BACKFILL_TEST_FILE_RE.test(relativeFile),
-    })
-  }
-}
-
-function collectCoveragePatternsFromFile ({
-  context,
-  file,
-  rootDir,
-  coveredFiles,
-}) {
-  const coveragePatterns = new Set()
-  addDependenciesToCoveragePatterns({
-    context,
-    file,
-    rootDir,
-    coveragePatterns,
-    visited: new Set(),
-    coveredFiles,
-    includeUncoveredFile: false,
-  })
-  return coveragePatterns
-}
-
-function collectExcludedCoveragePatterns ({
-  context,
-  skippableSuites,
-  localSuites,
-  rootDir,
-  coveredFiles,
-}) {
-  const localSuiteSet = new Set(localSuites)
-  const excludedPatterns = new Set()
-
-  for (const suite of skippableSuites) {
-    if (localSuiteSet.has(suite)) continue
-
-    const file = path.join(rootDir, suite)
-    const coveragePatterns = collectCoveragePatternsFromFile({
-      context,
-      file,
-      rootDir,
-      coveredFiles,
-    })
-    for (const coveragePattern of coveragePatterns) {
-      excludedPatterns.add(coveragePattern)
-    }
-  }
-
-  return excludedPatterns
-}
-
 function getCoverageBackfillCollectCoverageFrom ({
-  originalTests,
   skippedSuites,
-  skippableSuites,
-  localSuites,
   rootDir,
 }) {
   if (!skippedSuites.length) return
 
-  const skippedSuiteSet = new Set(skippedSuites)
-  const coveragePatterns = new Set()
-  const visited = new Set()
+  // Backend coverage is an aggregate for the skippable response. Seed every local
+  // source file it names so Istanbul can apply covered-line bitmaps to files that
+  // did not run in this Jest process.
   const coveredFiles = getCoverageBackfillCoveredFiles(rootDir)
-  const excludedCoveragePatterns = collectExcludedCoveragePatterns({
-    context: originalTests[0]?.context,
-    skippableSuites,
-    localSuites,
-    rootDir,
-    coveredFiles,
-  })
-
-  for (const test of originalTests) {
-    const testSuite = getTestSuitePath(test.path, rootDir)
-    if (!skippedSuiteSet.has(testSuite)) continue
-    addDependenciesToCoveragePatterns({
-      context: test.context,
-      file: test.path,
-      rootDir,
-      coveragePatterns,
-      visited,
-      coveredFiles,
-      includeUncoveredFile: false,
-    })
-  }
-
-  return [...coveragePatterns].filter(coveragePattern => !excludedCoveragePatterns.has(coveragePattern))
+  return coveredFiles.size ? [...coveredFiles] : undefined
 }
 
 function getCoverageBackfillAbsoluteFiles (rootDir, contextRootDir) {
@@ -1475,10 +1357,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
   const nextCoverageBackfillCollectCoverageFrom = getCoverageBackfillCollectCoverageFrom({
-    originalTests,
     skippedSuites: coverageBackfillSuites,
-    skippableSuites,
-    localSuites,
     rootDir: suitePathRoot,
   })
   const nextSkippedSuitesCoverage = getSkippedSuitesCoverage({

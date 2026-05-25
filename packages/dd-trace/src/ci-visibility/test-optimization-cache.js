@@ -66,7 +66,7 @@ function writeSettingsToCache (settings) {
 
 /**
  * Writes backend coverage for actually skipped suites to the shared coverage backfill cache.
- * @param {object} coverageBackfill - Backend coverage bitmap data keyed by hashed or relative file path.
+ * @param {object} coverageBackfill - Backend coverage bitmap data keyed by repository-relative file path.
  */
 function writeCoverageBackfillToCache (coverageBackfill) {
   const coverageBackfillCachePath = getCoverageBackfillCachePath()
@@ -83,7 +83,7 @@ function writeCoverageBackfillToCache (coverageBackfill) {
 
 /**
  * Reads backend coverage for actually skipped suites from the shared coverage backfill cache.
- * @returns {object|undefined} Coverage bitmap data keyed by hashed or relative file path.
+ * @returns {object|undefined} Coverage bitmap data keyed by repository-relative file path.
  */
 function readCoverageBackfillFromCache () {
   const coverageBackfillCachePath = getCoverageBackfillCachePath()
