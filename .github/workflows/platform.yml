@@ -60,7 +60,19 @@ jobs:
       - run: mkdir -p /tmp/app
       - run: npm i -g pnpm
         if: matrix.manager.name == 'pnpm'
-      - run: cd /tmp/app && ${{ matrix.manager.install }} /tmp/dd-trace.tgz
+      # Wrapped in nick-fields/retry to bound the worst case: on this PR
+      # the bun matrix entry has been stalling indefinitely at `Resolving
+      # dependencies` on the consumer install, matching the symptom in
+      # oven-sh/bun#5831. The four other package managers finish in ~3-5s
+      # against the same dd-trace.tgz, so a 2-minute per-attempt cap is
+      # generous for the happy path and tight enough that a stalled bun
+      # retries quickly instead of holding the job for 6 hours.
+      - uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 2
+          retry_wait_seconds: 5
+          command: cd /tmp/app && ${{ matrix.manager.install }} /tmp/dd-trace.tgz
       - run: echo "require('dd-trace').init()" >> /tmp/app/index.js
       - run: node /tmp/app
 
