@@ -65,15 +65,15 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         }
 
         runtimeMetrics = sinon.spy({
-          start () {},
-          stop () {},
-          track () {},
-          boolean () {},
-          histogram () {},
-          count () {},
-          gauge () {},
-          increment () {},
-          decrement () {},
+          start () { },
+          stop () { },
+          track () { },
+          boolean () { },
+          histogram () { },
+          count () { },
+          gauge () { },
+          increment () { },
+          decrement () { },
         })
 
         proxy = proxyquire('../src/runtime_metrics', {
@@ -177,6 +177,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
             flush: client.flush.bind(client),
+            sendTelemetry: client.sendTelemetry.bind(client),
+            recordMetric: client.recordMetric.bind(client),
           }
         })
 
@@ -187,6 +189,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           increment: sinon.spy(),
           histogram: sinon.spy(),
           flush: sinon.spy(),
+          sendTelemetry: sinon.spy(),
+          recordMetric: sinon.spy(),
         }
 
         const proxiedObject = {
@@ -508,6 +512,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: sinon.spy(),
             histogram: sinon.spy(),
             flush: sinon.spy(),
+            sendTelemetry: sinon.spy(),
+            recordMetric: sinon.spy(),
           }
 
           const LocalClient = sinon.spy(function () {
@@ -516,6 +522,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
               increment: localClient.increment,
               histogram: localClient.histogram,
               flush: localClient.flush,
+              sendTelemetry: localClient.sendTelemetry,
+              recordMetric: localClient.recordMetric,
             }
           })
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
@@ -554,6 +562,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: sinon.spy(),
             histogram: sinon.spy(),
             flush: sinon.spy(),
+            sendTelemetry: sinon.spy(),
+            recordMetric: sinon.spy(),
           }
 
           const LocalClient = sinon.spy(function () {
@@ -562,6 +572,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
               increment: localClient.increment,
               histogram: localClient.histogram,
               flush: localClient.flush,
+              sendTelemetry: localClient.sendTelemetry,
+              recordMetric: localClient.recordMetric,
             }
           })
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
@@ -958,6 +970,8 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
       increment: sinon.spy(),
       histogram: sinon.spy(),
       flush: sinon.spy(),
+      sendTelemetry: sinon.spy(),
+      recordMetric: sinon.spy(),
     }
 
     const LocalClient = sinon.spy(function () {
@@ -966,6 +980,8 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
         increment: localClient.increment,
         histogram: localClient.histogram,
         flush: localClient.flush,
+        sendTelemetry: localClient.sendTelemetry,
+        recordMetric: localClient.recordMetric,
       }
     })
     LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig

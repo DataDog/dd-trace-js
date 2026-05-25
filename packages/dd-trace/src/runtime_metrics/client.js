@@ -24,7 +24,7 @@ function createMetricsClient (config) {
     }
   }
 
-  return new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+  return new MetricsAggregationClient(new DogStatsDClient({ ...clientConfig, telemetry: true }))
 }
 
 module.exports = { createMetricsClient }
