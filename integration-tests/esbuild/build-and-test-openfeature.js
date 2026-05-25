@@ -29,7 +29,7 @@ async function main () {
     assert.strictEqual(
       isResolvable('@datadog/openfeature-node-server', __dirname),
       true,
-      'the optional peer must be installed for this scenario; run `yarn install` with devDependencies'
+      'the optional peer must be installed for this scenario; run `bun install` with devDependencies'
     )
 
     await esbuild.build({
