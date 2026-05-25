@@ -49,15 +49,15 @@ function createGarbage (count = 50) {
         }
 
         runtimeMetrics = sinon.spy({
-          start () {},
-          stop () {},
-          track () {},
-          boolean () {},
-          histogram () {},
-          count () {},
-          gauge () {},
-          increment () {},
-          decrement () {},
+          start () { },
+          stop () { },
+          track () { },
+          boolean () { },
+          histogram () { },
+          count () { },
+          gauge () { },
+          increment () { },
+          decrement () { },
         })
 
         proxy = proxyquire('../src/runtime_metrics', {
@@ -161,6 +161,8 @@ function createGarbage (count = 50) {
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
             flush: client.flush.bind(client),
+            sendTelemetry: client.sendTelemetry.bind(client),
+            recordMetric: client.recordMetric.bind(client),
           }
         })
 
@@ -171,6 +173,8 @@ function createGarbage (count = 50) {
           increment: sinon.spy(),
           histogram: sinon.spy(),
           flush: sinon.spy(),
+          sendTelemetry: sinon.spy(),
+          recordMetric: sinon.spy(),
         }
 
         const proxiedObject = {
@@ -487,6 +491,8 @@ function createGarbage (count = 50) {
             increment: sinon.spy(),
             histogram: sinon.spy(),
             flush: sinon.spy(),
+            sendTelemetry: sinon.spy(),
+            recordMetric: sinon.spy(),
           }
 
           const LocalClient = sinon.spy(function () {
@@ -495,6 +501,8 @@ function createGarbage (count = 50) {
               increment: localClient.increment,
               histogram: localClient.histogram,
               flush: localClient.flush,
+              sendTelemetry: localClient.sendTelemetry,
+              recordMetric: localClient.recordMetric,
             }
           })
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
