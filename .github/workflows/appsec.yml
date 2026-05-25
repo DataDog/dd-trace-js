@@ -32,7 +32,7 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
@@ -53,13 +53,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
@@ -82,7 +82,9 @@ jobs:
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+        with:
+          cache: "true"
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node-crash-report
         if: failure()
       - uses: ./.github/actions/coverage
@@ -118,9 +120,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
@@ -152,9 +154,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
@@ -186,9 +188,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
@@ -211,9 +213,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
@@ -236,9 +238,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
@@ -261,9 +263,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
@@ -292,9 +294,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
@@ -323,9 +325,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
@@ -347,13 +349,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
@@ -400,7 +402,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean || matrix.range }}
@@ -423,9 +425,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
@@ -452,7 +454,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:appsec:coverage
+      - run: npm run test:integration:appsec:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-integration-${{ matrix.version }}
@@ -474,9 +476,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
@@ -498,9 +500,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
@@ -523,9 +525,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
@@ -566,9 +568,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
@@ -590,9 +592,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-stripe

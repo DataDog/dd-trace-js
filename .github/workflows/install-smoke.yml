@@ -1,4 +1,4 @@
-name: Debugger
+name: Install smoke test
 
 on:
   pull_request:
@@ -12,30 +12,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ubuntu:
-    name: ${{ github.workflow }} / ubuntu (node-${{ matrix.version }})
-    strategy:
-      fail-fast: false
-      matrix:
-        version: [oldest, maintenance, active, latest]
+  pino-sandbox:
+    name: Sandbox install (pino)
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    env:
+      _DD_IGNORE_ENGINES: 'true'
+      PLUGINS: pino
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
         with:
-          version: ${{ matrix.version }}
+          version: oldest
       - uses: ./.github/actions/install
-      - run: npm run test:code-origin:ci
-      - run: npm run test:debugger:ci
-      - run: npm run test:integration:debugger:coverage
-      - uses: ./.github/actions/coverage
-        with:
-          flags: debugger-ubuntu-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - name: Synthesize and install per-version sandboxes
+        run: npm run services
+      - name: Assert sandbox version resolution
+        run: npm run test:scripts
+      - name: Smoke-test the pino plugin against the sandbox
+        run: npm run test:plugins -- --grep "should not alter the default behavior"
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

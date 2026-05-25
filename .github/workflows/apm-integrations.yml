@@ -77,11 +77,10 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - run: yarn config set ignore-engines true
       - name: Install dependencies
         uses: ./.github/actions/install
       - name: Run tests
-        run: yarn test:plugins:ci
+        run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
@@ -227,13 +226,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
@@ -302,7 +301,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
@@ -365,8 +364,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
-      - run: yarn test:plugins:ci --ignore-engines
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
@@ -398,13 +396,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
@@ -434,7 +432,7 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
@@ -477,7 +475,7 @@ jobs:
           # Bounded at 30s so an Xvfb crash fails fast instead of hanging.
           timeout 30 bash -c 'until xdpyinfo -display :99 >/dev/null 2>&1; do sleep 0.1; done'
       # Point Electron at the virtual display started above.
-      - run: DISPLAY=:99 yarn test:plugins:ci
+      - run: DISPLAY=:99 npm run test:plugins:ci
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -491,7 +489,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
 
   express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -621,7 +619,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
@@ -643,13 +641,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
@@ -701,7 +699,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
@@ -946,13 +944,13 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
@@ -995,7 +993,7 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-next-${{ matrix.range }}
@@ -1068,9 +1066,8 @@ jobs:
           sudo ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
           sudo sh -c "echo /opt/oracle/instantclient_19_28 > /etc/ld.so.conf.d/oracle-instantclient.conf"
           sudo ldconfig
-      - run: yarn config set ignore-engines true
-      - run: yarn services --ignore-engines
-      - run: yarn test:plugins:ci --ignore-engines
+      - run: npm run services
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -1180,7 +1177,7 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - name: Run tests
-        run: yarn test:plugins:ci
+        run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
@@ -1284,9 +1281,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/oldest-maintenance-lts
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-restify
@@ -1348,7 +1345,7 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
@@ -1380,8 +1377,8 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious

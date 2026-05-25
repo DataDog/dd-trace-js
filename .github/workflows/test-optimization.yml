@@ -32,7 +32,7 @@ jobs:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - name: Test Optimization Performance Overhead Test
-        run: yarn bench:e2e:test-optimization
+        run: npm run bench:e2e:test-optimization
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           TEST_ENVIRONMENT_REF_TO_TEST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -66,7 +66,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - run: yarn test:integration:testopt:coverage
+      - run: npm run test:integration:testopt:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
@@ -164,7 +164,7 @@ jobs:
         # The Playwright job runs in a container where the checkout can be owned by a different UID.
         # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - run: yarn test:integration:playwright:coverage
+      - run: npm run test:integration:playwright:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
@@ -195,7 +195,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:mocha:coverage
+      - run: npm run test:integration:mocha:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
@@ -231,7 +231,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:jest:coverage
+      - run: npm run test:integration:jest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
@@ -275,7 +275,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:cucumber:coverage
+      - run: npm run test:integration:cucumber:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
@@ -322,7 +322,7 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
-      - run: yarn test:integration:selenium:coverage
+      - run: npm run test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
@@ -392,8 +392,7 @@ jobs:
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
-      - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress:coverage --ignore-engines
+      - run: npm run test:integration:cypress:coverage
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: "-r ./ci/init"
@@ -431,7 +430,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:vitest:coverage
+      - run: npm run test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}

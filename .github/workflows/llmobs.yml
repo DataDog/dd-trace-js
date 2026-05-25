@@ -38,7 +38,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:llmobs:sdk:ci
+      - run: npm run test:llmobs:sdk:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -71,8 +71,8 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -100,12 +100,12 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -133,10 +133,10 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -164,12 +164,12 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -197,12 +197,12 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -230,12 +230,12 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -263,12 +263,12 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:

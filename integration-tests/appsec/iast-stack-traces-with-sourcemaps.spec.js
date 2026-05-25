@@ -17,7 +17,6 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
 
     appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
 
-    childProcess.execSync('yarn || yarn', { cwd })
     childProcess.execSync('npx tsc', {
       cwd: appDir,
     })

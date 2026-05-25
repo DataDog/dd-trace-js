@@ -21,6 +21,15 @@ module.exports = {
     {
       name: 'zod',
       versions: ['>=3.25.75'],
+      // `ai@4.0.2` declares `zod` as an optional peer (`^3.0.0`) and
+      // `@ai-sdk/openai@1.3.23+` declares it as a required peer. Yarn 1's flat
+      // hoist served the workspace root's `zod` to both consumers; bun's
+      // isolated linker honours each package's own manifest and skips optional
+      // peers entirely, so without `dep: true` the `versions/ai@` sandbox
+      // lands without `zod` and `require('zod')` crashes at load time. The
+      // matching `zod-to-json-schema` override in `install_plugin_modules.js`
+      // keeps the transitive zod chain on a `zod@3`-compatible version.
+      dep: true,
     },
   ],
   apollo: [
@@ -219,6 +228,53 @@ module.exports = {
     {
       name: 'google-gax',
       versions: ['3.5.7'],
+    },
+  ],
+  // pubsub@1.2.0's `pubsub.js` source-requires `@grpc/grpc-js` without declaring
+  // it; the parent-walk resolution can land on a different `@grpc/grpc-js`
+  // instance than the one its nested google-gax@1.15.4 uses (`~1.3.6`), and the
+  // credentials produced fail the `instanceof ChannelCredentials` check across
+  // module instances. Force the matching range as a direct dep of every pubsub
+  // sandbox so the workspace root resolves to one consistent copy.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      version: '~1.3.6',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The bedrock-runtime tests reach into `@smithy/node-http-handler` directly
+  // through `versions/@aws-sdk/client-bedrock-runtime@*/index.js.get(...)`.
+  // Under bun's isolated linker that transitive sits only inside aws-sdk's
+  // private store and isn't reachable from the workspace root, so inject it
+  // as a direct dep of every bedrock-runtime sandbox. The constructor and
+  // `send()` API of `@smithy/node-http-handler` have been stable across v2-v4,
+  // so letting bun pick the latest is enough for what the test needs.
+  '@aws-sdk/client-bedrock-runtime': [
+    {
+      name: '@smithy/node-http-handler',
+      version: '*',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The vertex-ai test stubs `GoogleAuth.prototype.getAccessToken` via
+  // `require('versions/@google-cloud/vertexai@<ver>').get('google-auth-library/...')`.
+  // `google-auth-library` is a regular transitive of `@google-cloud/vertexai`,
+  // so under bun's isolated linker it lives in vertexai's private store and
+  // isn't reachable from the workspace root. Inject it as a direct dep of
+  // every vertexai sandbox so the test's `getExport` lookup resolves.
+  // Pin to vertexai's own `^9.0.0` range (every published version still
+  // declares it) so bun dedupes the direct dep and the SDK's transitive to
+  // a single physical `.bun/google-auth-library@9.x.y` entry — the prototype
+  // stub only propagates to the SDK when both resolve to the same realpath.
+  '@google-cloud/vertexai': [
+    {
+      name: 'google-auth-library',
+      version: '^9.0.0',
+      dep: true,
+      forced: true,
     },
   ],
   genai: [
@@ -435,8 +491,16 @@ module.exports = {
   ],
   moleculer: [
     {
+      // bluebird is a runtime fallback in moleculer's transit/util layer; the
+      // package's manifest does not list it, so inject it as a direct dep of
+      // each moleculer sandbox via `dep: true, forced: true`. Under bun's
+      // isolated linker that lands bluebird at
+      // `versions/moleculer@<ver>/node_modules/bluebird`, where moleculer's
+      // require() walk from the central .bun store finds it.
       name: 'bluebird',
       versions: ['3.7.2'],
+      dep: true,
+      forced: true,
     },
   ],
   'mongodb-core': [

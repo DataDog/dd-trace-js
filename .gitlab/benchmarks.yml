@@ -19,6 +19,19 @@ variables:
       interruptible: false
     - interruptible: true
   timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
+  before_script:
+    # The benchmarking-platform image is rebuilt from master and does not yet
+    # ship bun. Every dev-tooling install path (the root `bun install`, the
+    # `npm run services` plugin sandbox setup, sirun's `runall.sh` bun fallback)
+    # needs `bun` on `PATH`, so install it here. The official installer
+    # downloads a `.zip`, so make sure `unzip` is present before the curl|bash
+    # — Ubuntu's stock image does not include it. Drop this block once the
+    # image bakes bun in.
+    - if ! command -v bun >/dev/null 2>&1; then
+        command -v unzip >/dev/null 2>&1 || (apt-get update >/dev/null && apt-get install -y --no-install-recommends unzip);
+        curl -fsSL https://bun.sh/install | bash || (sleep 60 && curl -fsSL https://bun.sh/install | bash);
+      fi
+    - export PATH="$HOME/.bun/bin:$PATH"
   script:
     - git clone --branch dd-trace-js https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
     - bp-runner bp-runner.yml --debug

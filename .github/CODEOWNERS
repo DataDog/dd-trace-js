@@ -255,6 +255,8 @@
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
+/.github/workflows/install-smoke.yml @DataDog/lang-platform-js
+/docs/ @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless

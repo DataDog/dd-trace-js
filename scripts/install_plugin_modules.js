@@ -1,6 +1,8 @@
 'use strict'
 
+const { execFileSync } = require('child_process')
 const { createHash } = require('crypto')
+const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
@@ -21,9 +23,27 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+// Per-process cache of `bun pm view` lookups so a matrix run doesn't hit the registry twice
+// for the same `<name>@<range>` pair across the script's two install passes.
+const resolvedRangeCache = new Map()
+// Names of every package the synthesized workspaces install, both directly (via
+// `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
+// Bun runs lifecycle scripts only for packages listed in the workspace root's
+// `trustedDependencies`; native plugins (`aerospike`, `@confluentinc/kafka-javascript`,
+// `pg-native`, ...) need their `install`/`postinstall` to compile, otherwise
+// `node-gyp`'s `bindings` package fails to find the `.node` file at test time.
+// Bun's `trustedDependencies` does not transitively allow nested packages, so
+// transitively-required native modules (e.g. `pg-native` → `libpq`) need their
+// own entry here.
+const trustedDependencies = new Set([
+  // `pg-native` ships JS bindings only; the actual native build sits in `libpq`,
+  // whose `install` script invokes `node-gyp` to produce `addon.node`.
+  'libpq',
+])
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
+    trustedDependencies.add(thing.name)
     if (thing.dep) {
       const depsArr = externalDeps.get(external)
       if (depsArr) {
@@ -38,10 +58,38 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
+  invalidateCacheOnNodeAbiChange()
   await assertPrerequisites()
   install()
   await assertPeerDependencies(join(__dirname, '..', 'versions'))
   install()
+}
+
+/**
+ * Bun's isolated linker keeps a single shared copy of every package under
+ * `versions/node_modules/.bun/<name>@<ver>/`, so a native binding compiled
+ * during the first `npm run services` (under one Node major) is reused
+ * verbatim on the second invocation (under a different Node major) and
+ * crashes with `undefined symbol` at load time. Per-workspace nested
+ * `node_modules` (the layout the previous package manager used) rebuilt the
+ * binding on every install pass and never hit this. Wipe the central store
+ * when the Node ABI changes so the next `bun install --trust` reruns
+ * lifecycle scripts and rebuilds against the live runtime.
+ */
+function invalidateCacheOnNodeAbiChange () {
+  const versionsDir = join(__dirname, '..', 'versions')
+  const nodeAbiFile = join(versionsDir, '.node-abi')
+  const currentAbi = process.versions.modules
+  let recordedAbi = ''
+  try {
+    recordedAbi = readFileSync(nodeAbiFile, 'utf8').trim()
+  } catch {}
+  if (recordedAbi && recordedAbi !== currentAbi && existsSync(join(versionsDir, 'node_modules'))) {
+    rmSync(join(versionsDir, 'node_modules'), { recursive: true, force: true })
+    rmSync(join(versionsDir, 'bun.lock'), { force: true })
+  }
+  mkdirSync(versionsDir, { recursive: true })
+  writeFileSync(nodeAbiFile, currentAbi)
 }
 
 async function assertPrerequisites () {
@@ -94,25 +142,24 @@ async function assertInstrumentation (instrumentation, external, pluginName) {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
       // eslint-disable-next-line no-await-in-loop
-      await assertModules(instrumentation.name, result.version, external)
+      await assertModules(instrumentation.name, result.version)
     }
 
     // eslint-disable-next-line no-await-in-loop
-    await assertModules(instrumentation.name, version, external)
+    await assertModules(instrumentation.name, version)
   }
 }
 
 /**
  * @param {string} name
  * @param {string} version
- * @param {boolean} external
  */
-async function assertModules (name, version, external) {
+async function assertModules (name, version) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
   await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external),
+    assertPackage(name, null, version),
+    assertPackage(name, version, version),
   ])
 }
 
@@ -128,13 +175,13 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage (name, version, dependencyVersionRange) {
   // Early return to prevent filePaths from being installed, their non path counterparts should suffice
   if (isRelativeRequire(name)) return
+  trustedDependencies.add(name)
   const dependencies = {
-    [name]: getCappedRange(name, dependencyVersionRange),
+    [name]: resolveLatestSatisfying(name, getCappedRange(name, dependencyVersionRange)),
   }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(Boolean).join('-'),
@@ -142,16 +189,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     license: 'BSD-3-Clause',
     private: true,
     dependencies,
-  }
-
-  if (name === 'aerospike') {
-    pkg.installConfig = {
-      hoistingLimits: 'workspaces',
-    }
-  } else if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**'],
-    }
   }
 
   addFolderToWorkspaces(name, version)
@@ -193,7 +230,7 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     let pkgJsonPath
     let pkgJson
 
-    for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+    for (const { dep, name, node, forced, version } of externalDeps.get(externalName)) {
       if (node && !semver.satisfies(process.versions.node, node)) {
         continue
       }
@@ -207,18 +244,19 @@ async function assertPeerDependencies (rootFolder, parent = '') {
           if (dep === externalName) {
             versionPkgJson.dependencies[name] = pkgJson.version
           } else {
-            versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
+            const range = pkgJson[section][name].includes('||')
               // Use the first version in the list (as npm does by default)
               ? pkgJson[section][name].split('||')[0].trim()
               // Only one version available so use that.
               : pkgJson[section][name]
+            versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, range)
           }
           break
         }
       }
 
       if (!versionPkgJson.dependencies[name] && forced) {
-        versionPkgJson.dependencies[name] = latests[name]
+        versionPkgJson.dependencies[name] = version || latests[name]
       }
     }
 
@@ -255,9 +293,28 @@ function isGeneratedWorkspace (entry, parent = '') {
  * @param {string|null} version
  */
 async function assertIndex (name, version) {
+  // `require.resolve('<name>/package.json')` works for the common case but
+  // throws `ERR_PACKAGE_PATH_NOT_EXPORTED` for packages that ship an `exports`
+  // map without a `./package.json` entry (moleculer, react, ...). Walking
+  // `module.paths` mirrors `requirePackageJson` and stays exports-blind.
   const index = `'use strict'
 
+const path = require('path')
+const fs = require('fs')
+
 const requirePackageJson = require('${requirePackageJsonPath}')
+
+/**
+ * @param {string} id
+ * @returns {string}
+ */
+function findPkgJsonPath (id) {
+  for (const modulePath of module.paths) {
+    const candidate = path.join(modulePath, id, 'package.json')
+    if (fs.existsSync(candidate)) return candidate
+  }
+  throw new Error('could not find ' + id + '/package.json')
+}
 
 module.exports = {
   /**
@@ -280,7 +337,7 @@ module.exports = {
    * @param {string} [id] The module id to resolve.
    * @returns {string | never} The resolved package.json path.
    */
-  pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
+  pkgJsonPath (id) { return findPkgJsonPath(id || '${name}') },
   /**
    * Resolve the package's version for a module id.
    *
@@ -294,15 +351,66 @@ module.exports = {
 
 async function assertWorkspaces () {
   await assertFolder()
-  await writeFile(filename(null, null, 'package.json'), JSON.stringify({
-    name: 'versions',
-    version: '1.0.0',
-    license: 'BSD-3-Clause',
-    private: true,
-    workspaces: {
-      packages: [...workspaces].sort(),
-    },
-  }, null, 2) + '\n')
+  await Promise.all([
+    writeFile(filename(null, null, 'package.json'), JSON.stringify({
+      name: 'versions',
+      version: '1.0.0',
+      license: 'BSD-3-Clause',
+      private: true,
+      workspaces: {
+        packages: [...workspaces].sort(),
+      },
+      // `@langchain/openai` is a transitive of `langchain` that the langchain
+      // plugin specs require directly from each `langchain@<version>` sandbox.
+      // The isolated linker does not hoist transitives to the workspace root,
+      // so pin it here. 0.0.34 is the version the recorded cassettes match
+      // (`OpenAI/JS 4.x` request shape); newer pins need their own cassettes.
+      dependencies: {
+        '@langchain/openai': '0.0.34',
+      },
+      // Workspace-wide overrides to repair packages whose published manifest
+      // declares a transitive that the package's own runtime code does not
+      // actually accept. The previous package manager's flat hoist masked
+      // this by always serving the highest workspace-installed version of
+      // the transitive; bun's isolated linker honours each package's
+      // declared range and lands the wrong major in the per-package store.
+      // - `q@2.0.0` declares `collections@^2.0.0`, but `q.js` does
+      //   `require('collections/shim')`; `shim.js` ships only in
+      //   `collections@>=5`, so without this override `q@2`'s spec crashes
+      //   with `Cannot find module 'collections/shim'`.
+      // - `@langchain/openai@0.0.34`'s manifest declares
+      //   `@langchain/core: >0.1.56 <0.3.0`. The recorded openai cassettes
+      //   (and the langchain regression specs that send a JSON-message input)
+      //   only succeed when bun lands a `0.2.x` core, which is the highest
+      //   version in that range. Bun's linker picks the lowest satisfying
+      //   version under some conditions (it lands `0.1.63` on the github
+      //   runner image but `0.2.36` on macOS), so pin the floor explicitly
+      //   for the langchain-openai pair without affecting the
+      //   `@langchain/openai@1.x.x` peer constraint resolved elsewhere in
+      //   the workspace.
+      // - `zod-to-json-schema@>=3.25.0` switched its zod imports to the
+      //   `zod/v3` subpath, which only exists in `zod@>=3.25.32` and
+      //   `zod@>=4`. `@ai-sdk/ui-utils` (the `ai@4.0.2` UI helper) declares
+      //   `zod-to-json-schema: ^3.0.0` and pulls in `zod@^3.0.0` itself, so
+      //   the isolated linker lands `zod-to-json-schema@3.25.2` next to a
+      //   `zod@3.23.x` that has no `/v3` subpath, crashing at load time
+      //   with `Package subpath './v3' is not defined`. The previous
+      //   package manager hid this because its flat hoist served the
+      //   workspace root's `zod@4` to every consumer. Pin the transitive
+      //   globally to the last 3.x release that still imports from `zod`
+      //   directly so the `ai@4.x` sandbox loads; the only other consumer
+      //   (`langchain`/`langgraph`) declares `zod-to-json-schema >=3.0.0`
+      //   and `<3.25.0` satisfies that range too. Bun does not support
+      //   nested override keys (oven-sh/bun#6608), so a flat key is
+      //   required here even though only the ai sandbox needs it.
+      overrides: {
+        collections: '^5.0.0',
+        '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
+        'zod-to-json-schema': '<3.25.0',
+      },
+      trustedDependencies: [...trustedDependencies].sort(),
+    }, null, 2) + '\n'),
+  ])
 }
 
 /**
@@ -310,11 +418,134 @@ async function assertWorkspaces () {
  */
 function install (retry = true) {
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    // versions/bunfig.toml pins `linker = "isolated"`, which gives every sandbox
+    // its own node_modules tree. Several plugin specs hard-code paths into
+    // `versions/<plugin>@<ver>/node_modules/<plugin>/<internal>` (kafkajs reaches
+    // into `src/broker`, next reads `package.json`, rhea pulls `lib/session.js`);
+    // under isolated bun creates a symlink at that path that resolves to the
+    // central store, so the lookups work. Cross-workspace dependencies
+    // (moleculer's runtime `require('bluebird')` fallback, etc.) are wired
+    // through `externals.js` `dep: true, forced: true` so they land as a direct
+    // dep of the consuming sandbox rather than as a sibling workspace.
+    exec('bun install --trust', { cwd: folder() })
   } catch (err) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
   }
+  pruneAmbiguousBunCentralSymlinks()
+}
+
+/**
+ * Bun's isolated linker keeps a central deduplicated
+ * `versions/node_modules/.bun/node_modules/` directory holding one symlink per
+ * package, pointing at whichever installed version is highest. The directory
+ * sits in Node's resolution path from inside `.bun/<pkg>@<ver>/node_modules/<pkg>/...`,
+ * so when several incompatible majors of a package are installed across
+ * sandboxes (e.g. `pino-pretty@1.0.1` for `pino@5` plus `pino-pretty@13.1.3`
+ * for `pino-pretty@>=3`), `pino@5`'s `require('pino-pretty')` picks up the
+ * central `13.1.3` symlink and crashes with `pretty is not a function` —
+ * which deadlocks the test process because the throw happens inside an
+ * internal pino write loop.
+ *
+ * The previous package manager's nohoist-everything per-workspace layout
+ * never had this leak: each sandbox's resolution stopped at the version its
+ * own devDependency declared. Mirror that here by removing the central
+ * symlink only for packages that have more than one major installed in the
+ * `.bun/` store. Single-version packages (e.g. `collections`, `sqlite3`,
+ * `@grpc/proto-loader`) keep their hoisted symlink so the legitimate
+ * transitive lookups every sandbox relies on still work.
+ */
+function pruneAmbiguousBunCentralSymlinks () {
+  const dotBun = join(__dirname, '..', 'versions', 'node_modules', '.bun')
+  const central = join(dotBun, 'node_modules')
+  if (!existsSync(central)) return
+
+  const installedMajors = collectInstalledMajors(dotBun)
+  for (const [pkg, majors] of installedMajors) {
+    if (majors.size <= 1) continue
+    rmSync(join(central, pkg), { recursive: true, force: true })
+  }
+}
+
+/**
+ * Build `<package-name> -> Set<majorVersion>` from the names of
+ * `versions/node_modules/.bun/<name>@<version>/` directories. Scoped
+ * packages encode the slash as `+` in the central store
+ * (`@grpc+proto-loader@1.2.3`), so reverse that for the key lookup.
+ *
+ * @param {string} dotBun
+ * @returns {Map<string, Set<string>>}
+ */
+function collectInstalledMajors (dotBun) {
+  /** @type {Map<string, Set<string>>} */
+  const byName = new Map()
+  for (const entry of readdirSync(dotBun)) {
+    if (entry === 'node_modules') continue
+    const at = entry.lastIndexOf('@')
+    if (at <= 0) continue
+    const rawName = entry.slice(0, at)
+    const version = entry.slice(at + 1)
+    if (!version) continue
+    const major = version.split('.')[0]
+    const name = rawName.replace('+', '/')
+    let majors = byName.get(name)
+    if (!majors) {
+      majors = new Set()
+      byName.set(name, majors)
+    }
+    majors.add(major)
+  }
+  return byName
+}
+
+/**
+ * Resolve a semver range to the highest published version satisfying it.
+ *
+ * `bun pm view <pkg>@<range> version` returns the lowest matching version,
+ * not the highest — the opposite of what the previous package manager picked
+ * and what every plugin regression test relied on. Without taking the highest
+ * we install ancient transitives that, for instance, ship `pino-pretty@1.0.1`
+ * into `versions/pino@5.0.0/` (where pino's `prettyPrint: true` then
+ * deadlocks the test process) and `@langchain/core@0.1.x` into the
+ * langchain sandbox (where `coerceMessageLikeToMessage` rejects the
+ * JSON-message regression test). Pull the full version list and use
+ * `semver.maxSatisfying` so resolution matches the previous tool's choice.
+ *
+ * @param {string} name
+ * @param {string} range
+ * @returns {string}
+ */
+function resolveLatestSatisfying (name, range) {
+  if (semver.valid(range)) return range
+  const cacheKey = `${name}@${range}`
+  const cached = resolvedRangeCache.get(cacheKey)
+  if (cached) return cached
+  let versions
+  try {
+    const stdout = execFileSync('bun', ['pm', 'view', name, 'versions', '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+    versions = JSON.parse(stdout)
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
+    return range
+  }
+  if (!Array.isArray(versions) || versions.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`bun pm view returned no versions for ${name}: ${JSON.stringify(versions)}; ` +
+      'deferring to install-time resolution')
+    return range
+  }
+  const resolved = semver.maxSatisfying(versions, range, { includePrerelease: false })
+  if (!resolved) {
+    // eslint-disable-next-line no-console
+    console.warn(`no published ${name} version satisfies ${range}; deferring to install-time resolution`)
+    return range
+  }
+  resolvedRangeCache.set(cacheKey, resolved)
+  return resolved
 }
 
 /**

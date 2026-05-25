@@ -31,9 +31,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:esbuild:ci
+      - run: npm run test:esbuild:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:esbuild:ci
+      - run: npm run test:esbuild:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
@@ -49,9 +49,9 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:webpack:ci
+      - run: npm run test:webpack:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:webpack:ci
+      - run: npm run test:webpack:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-webpack
@@ -145,8 +145,9 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
-      - run: yarn test:instrumentations:ci --ignore-engines
+      - env:
+          _DD_IGNORE_ENGINES: 'true'
+        run: npm run test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}-${{ matrix.node-version }}
@@ -272,7 +273,7 @@ jobs:
           max_attempts: 5
           timeout_minutes: 15
           retry_wait_seconds: 20
-          command: yarn test:instrumentations:ci
+          command: npm run test:instrumentations:ci
       - uses: ./.github/actions/node/latest
       - name: Run instrumentation tests (latest, with retries)
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
@@ -280,7 +281,7 @@ jobs:
           max_attempts: 5
           timeout_minutes: 15
           retry_wait_seconds: 20
-          command: yarn test:instrumentations:ci
+          command: npm run test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}
@@ -504,16 +505,16 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:instrumentations:misc:ci
+      - run: npm run test:instrumentations:misc:ci
         shell: bash
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:instrumentations:misc:ci
+      - run: npm run test:instrumentations:misc:ci
         shell: bash
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:instrumentations:misc:ci
+      - run: npm run test:instrumentations:misc:ci
         shell: bash
       - uses: ./.github/actions/node/latest
-      - run: yarn test:instrumentations:misc:ci
+      - run: npm run test:instrumentations:misc:ci
         shell: bash
       - uses: ./.github/actions/coverage
         with:
@@ -544,9 +545,9 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:esbuild:coverage
-        env:
+      - env:
           ESBUILD_VERSION: ${{ matrix.esbuild_version }}
+        run: npm run test:integration:esbuild:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-integration-esbuild-${{ matrix.esbuild_version }}-${{ matrix.version }}
@@ -578,7 +579,7 @@ jobs:
       # TODO: Webpack bundles dd-trace into a single file with the customer code, so the
       # NYC counters end up bundled too and the bootstrap can't find them at the original
       # paths. Switch to `:coverage` once the harness handles bundled output.
-      - run: yarn test:integration:webpack
+      - run: npm run test:integration:webpack
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

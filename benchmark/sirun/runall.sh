@@ -30,11 +30,23 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
+# Install bun at the script level so subsequent `npm run services` /
+# `node ./scripts/install_plugin_modules.js` invocations from inside the
+# benchmark loop find it on `PATH` too. Doing the install inside a subshell
+# leaks the `export` and the benchmark process group loses access to bun
+# the moment the subshell exits. The bun installer pipes a `.zip` through
+# `unzip`, so install that first when the image lacks it (the
+# benchmarking-platform `ubuntu:22.04` base does not ship `unzip`).
+if ! command -v bun >/dev/null 2>&1; then
+  command -v unzip >/dev/null 2>&1 || (apt-get update >/dev/null && apt-get install -y --no-install-recommends unzip)
+  curl -fsSL https://bun.sh/install | bash || (sleep 60 && curl -fsSL https://bun.sh/install | bash)
+fi
+export PATH="$HOME/.bun/bin:$PATH"
+
 (
   cd ../../ &&
-  npm install --global yarn || (sleep 60 && npm install --global yarn) \
-    && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
-    && PLUGINS="bluebird|q|graphql|express" yarn services
+  (bun install || (sleep 60 && bun install)) \
+    && PLUGINS="bluebird|q|graphql|express" npm run services
 )
 
 (

@@ -7,10 +7,10 @@ runs:
       id: dd-sts
     - uses: ./.github/actions/node/oldest-maintenance-lts
     - uses: ./.github/actions/install
-    - run: yarn test:instrumentations:ci
+    - run: npm run test:instrumentations:ci
       shell: bash
     - uses: ./.github/actions/node/latest
-    - run: yarn test:instrumentations:ci
+    - run: npm run test:instrumentations:ci
       shell: bash
     - uses: ./.github/actions/coverage
       with:

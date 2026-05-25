@@ -1,9 +1,28 @@
 name: Install dependencies
 description: Install dependencies
+inputs:
+  cache:
+    description: Restore and save the bun-install output tar between runs of this workflow/job.
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
-    - uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+    - id: install-cache
+      if: inputs.cache == 'true'
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        # `bun install` runs `prepare`, which `cd vendor && npm ci --include=dev` runs
+        # `node rspack` and lands the bundled artefacts under `vendor/dist`. Both
+        # `vendor/package-lock.json` and `bun.lock` feed the install graph, so the cache
+        # key has to invalidate when either moves.
+        key: install-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('bun.lock', 'vendor/package-lock.json') }}-v3
+        path: install-cache.tar
+    - if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: tar -xf install-cache.tar
+    - if: inputs.cache != 'true' || steps.install-cache.outputs.cache-hit != 'true'
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       env:
         _DD_IGNORE_ENGINES: 'true'
       with:
@@ -11,3 +30,9 @@ runs:
         timeout_minutes: 5
         retry_wait_seconds: 30
         command: bun install --linker=hoisted --trust --network-concurrency 8
+    - if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit != 'true'
+      shell: bash
+      # `node_modules` alone misses `vendor/dist/*` (produced by the rspack postinstall)
+      # and `vendor/node_modules` (needed for it to re-run on the next miss); without
+      # them, every cache-hit job fails to require `vendor/dist/limiter` and friends.
+      run: tar -cf install-cache.tar node_modules vendor/node_modules vendor/dist
