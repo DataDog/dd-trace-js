@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 
 const {
   sandboxCwd,
@@ -20,6 +21,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const FIXTURE_ROOT = 'ci-visibility/itr-code-coverage'
+const RUN_SUITE = `${FIXTURE_ROOT}/test-run.js`
 const SKIPPED_SUITE = `${FIXTURE_ROOT}/test-skipped.js`
 const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
 const SKIPPED_SOURCE = `${FIXTURE_ROOT}/src/skipped-dependency.js`
@@ -52,6 +54,7 @@ const FRAMEWORKS = [
     command: 'node ./ci-visibility/run-jest.js',
     getEnv: () => ({
       TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+      TEST_BUNDLE: FIXTURE_ROOT,
       COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
       ENABLE_CODE_COVERAGE: '1',
       COVERAGE_REPORTERS: 'text-summary',
@@ -77,7 +80,7 @@ describe('ITR code coverage', function () {
     }
   })
 
-  async function runFramework ({ framework, suitesToSkip = [] }) {
+  async function runFramework ({ framework, suitesToSkip = [], assertSkippableRequest }) {
     const receiver = await new FakeCiVisIntake().start()
     receiver.setSettings({
       itr_enabled: true,
@@ -93,7 +96,9 @@ describe('ITR code coverage', function () {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSessionEvent = events.find(event => event.type === 'test_session_end')
+        assert.ok(testSessionEvent, `test session event should be reported:\n${output}`)
+        const testSession = testSessionEvent.content
         const skippedSuites = events
           .filter(event => event.type === 'test_suite_end')
           .map(event => event.content)
@@ -115,12 +120,17 @@ describe('ITR code coverage', function () {
           .flatMap(coverage => coverage.files)
           .find(file => file.filename === RUN_SOURCE)
 
-        assert.ok(suiteCoverage, 'suite code coverage should be reported')
-        assert.ok(sessionCoverage, 'session executable-line coverage should be reported')
-        assert.ok(coveredRunSource?.bitmap, 'covered files should report line coverage bitmaps')
+        assert.ok(suiteCoverage, `suite code coverage should be reported:\n${output}`)
+        assert.ok(sessionCoverage, `session executable-line coverage should be reported:\n${output}`)
+        assert.ok(coveredRunSource?.bitmap, `covered files should report line coverage bitmaps:\n${output}`)
 
         coverageResult = coverages
       })
+    const skippableRequestPromise = assertSkippableRequest
+      ? receiver
+        .payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
+        .then(request => assertSkippableRequest(request, () => output))
+      : Promise.resolve()
 
     childProcess = exec(
       framework.command,
@@ -148,6 +158,7 @@ describe('ITR code coverage', function () {
         once(childProcess, 'exit'),
         stdoutEndPromise,
         stderrEndPromise,
+        skippableRequestPromise,
       ])
       assert.strictEqual(exitCode, 0)
 
@@ -168,9 +179,9 @@ describe('ITR code coverage', function () {
 
       assert.strictEqual(baseline.isItrSkipped, 'false')
       assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-      assert.ok(baseline.codeCoverageLinesPct > 0)
-      assert.ok(baseline.codeCoverageLinesPct < 100)
-      assert.ok(baseline.coverages.length > 0)
+      assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+      assert.ok(baseline.codeCoverageLinesPct < 100, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+      assert.ok(baseline.coverages.length > 0, 'baseline should report coverage payloads')
 
       const skippedWithoutCoverage = await runFramework({
         framework,
@@ -197,7 +208,7 @@ describe('ITR code coverage', function () {
           attributes: {
             suite: framework.skippedSuite,
             coverage: {
-              [hashCoverageFilePath(SKIPPED_SOURCE)]: getLinesBitmapBase64(1, 20),
+              [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
             },
           },
         }],
@@ -213,4 +224,298 @@ describe('ITR code coverage', function () {
       assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     })
   }
+
+  it('keeps jest total code coverage stable when all suites are skippable with collectCoverageFrom', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+        USE_JEST_RUN: '1',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const skippedWithCoverage = await runFramework({
+      framework,
+      assertSkippableRequest: (request, getOutput) => {
+        assert.strictEqual(
+          request.payload.data.attributes.configurations['test.bundle'],
+          FIXTURE_ROOT,
+          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
+        )
+      },
+      suitesToSkip: [
+        {
+          type: 'suite',
+          attributes: {
+            suite: RUN_SUITE,
+            coverage: {
+              [RUN_SOURCE]: coveredSkippedLines,
+            },
+          },
+        },
+        {
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+            coverage: {
+              [SKIPPED_SOURCE]: coveredSkippedLines,
+            },
+          },
+        },
+      ],
+    })
+
+    assert.strictEqual(skippedWithCoverage.isItrSkipped, 'true')
+    assert.strictEqual(skippedWithCoverage.skippedSuites.length, 1)
+    assert.strictEqual(skippedWithCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+  })
+
+  it('keeps jest config-file coverage stable when collectCoverageFrom is missing', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        CONFIG_TEST_MATCH: `**/${FIXTURE_ROOT}/test-*.js`,
+        CONFIG_COLLECT_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+        USE_CONFIG_FILE: '1',
+        USE_JEST_RUN: '1',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const skippedCoverage = await runFramework({
+      framework,
+      assertSkippableRequest: (request, getOutput) => {
+        assert.strictEqual(
+          request.payload.data.attributes.configurations['test.bundle'],
+          FIXTURE_ROOT,
+          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
+        )
+      },
+      suitesToSkip: [
+        {
+          type: 'suite',
+          attributes: {
+            suite: RUN_SUITE,
+            coverage: {
+              [RUN_SOURCE]: coveredSkippedLines,
+            },
+          },
+        },
+        {
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+            coverage: {
+              [SKIPPED_SOURCE]: coveredSkippedLines,
+            },
+          },
+        },
+      ],
+    })
+
+    assert.strictEqual(skippedCoverage.isItrSkipped, 'true')
+    assert.strictEqual(skippedCoverage.skippedSuites.length, 1)
+    assert.strictEqual(skippedCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+    assert.strictEqual(skippedCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(skippedCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+  })
+
+  it('keeps jest coverage stable when the backend response includes suites outside the local run', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+        USE_JEST_RUN: '1',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const broaderCoverage = await runFramework({
+      framework,
+      assertSkippableRequest: (request, getOutput) => {
+        assert.strictEqual(
+          request.payload.data.attributes.configurations['test.bundle'],
+          FIXTURE_ROOT,
+          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
+        )
+      },
+      suitesToSkip: [
+        {
+          type: 'suite',
+          attributes: {
+            suite: RUN_SUITE,
+            coverage: {
+              [RUN_SOURCE]: coveredSkippedLines,
+            },
+          },
+        },
+        {
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+            coverage: {
+              [SKIPPED_SOURCE]: coveredSkippedLines,
+            },
+          },
+        },
+        {
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/other-suite/test-outside-local-run.js',
+            coverage: {
+              'ci-visibility/other-suite/src/outside-local-run.js': coveredSkippedLines,
+            },
+          },
+        },
+      ],
+    })
+
+    assert.strictEqual(broaderCoverage.isItrSkipped, 'true')
+    assert.strictEqual(broaderCoverage.skippedSuites.length, 1)
+    assert.strictEqual(broaderCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+    assert.strictEqual(broaderCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(broaderCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+  })
+
+  it('skips when scoped hash coverage cannot be seeded in Jest stdout', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        TEST_BUNDLE: FIXTURE_ROOT,
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const unseedableCoverage = await runFramework({
+      framework,
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+          coverage: {
+            [hashCoverageFilePath(SKIPPED_SOURCE)]: coveredSkippedLines,
+          },
+        },
+      }],
+    })
+
+    assert.strictEqual(unseedableCoverage.isItrSkipped, 'true')
+    assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
+    assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+  })
+
+  it('skips when unscoped hash coverage cannot be seeded in Jest stdout', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const unseedableCoverage = await runFramework({
+      framework,
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+          coverage: {
+            [SKIPPED_SOURCE]: coveredSkippedLines,
+          },
+        },
+      }],
+    })
+
+    assert.strictEqual(unseedableCoverage.isItrSkipped, 'true')
+    assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
+    assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+  })
+
+  it('keeps jest coverage stable when a cli pattern is not a bundle path', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}/test-`,
+      getEnv: () => ({
+        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+        USE_JEST_RUN: '1',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isItrSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const unscopedPatternRun = await runFramework({
+      framework,
+      assertSkippableRequest: (request, getOutput) => {
+        assert.strictEqual(
+          request.payload.data.attributes.configurations['test.bundle'],
+          'jest',
+          `${inspect(request.payload, { depth: 5 })}\n${getOutput()}`
+        )
+      },
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+          coverage: {
+            [SKIPPED_SOURCE]: coveredSkippedLines,
+          },
+        },
+      }],
+    })
+
+    assert.strictEqual(unscopedPatternRun.isItrSkipped, 'true')
+    assert.strictEqual(unscopedPatternRun.skippedSuites.length, 1)
+    assert.strictEqual(unscopedPatternRun.skippedSuites[0].meta[TEST_STATUS], 'skip')
+    assert.strictEqual(unscopedPatternRun.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(unscopedPatternRun.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+  })
 })

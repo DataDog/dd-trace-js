@@ -237,7 +237,7 @@ describe('getSafeSkippableSuites', () => {
     )
   })
 
-  it('returns only local skippable suites when code coverage is enabled', () => {
+  it('returns local skippable suites when code coverage is enabled and the response includes non-local suites', () => {
     assert.deepStrictEqual(
       getSafeSkippableSuites({
         skippableSuites: ['suite-a.js', 'suite-outside-run.js', 'suite-b.js'],

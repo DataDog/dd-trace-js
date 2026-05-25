@@ -2,6 +2,45 @@
 
 const jest = require('jest')
 
+function getJestRunArgs (options) {
+  const args = [
+    '--no-cache',
+    '--runInBand',
+  ]
+
+  if (process.env.USE_CONFIG_FILE) {
+    args.push('--config', require.resolve('../config-jest.js'))
+  } else {
+    args.push(
+      '--rootDir', process.cwd(),
+      '--testPathIgnorePatterns', options.testPathIgnorePatterns.join('|'),
+      '--modulePathIgnorePatterns', options.modulePathIgnorePatterns.join('|'),
+      '--testRegex', options.testRegex.source,
+      '--testRunner', options.testRunner,
+      '--testEnvironment', options.testEnvironment
+    )
+  }
+
+  if (options.coverage) {
+    args.push('--coverage')
+  }
+  if (options.collectCoverageFrom) {
+    for (const coveragePattern of options.collectCoverageFrom) {
+      args.push(`--collectCoverageFrom=${coveragePattern}`)
+    }
+  }
+  if (options._) {
+    args.push(...options._)
+  }
+  if (options.coverageReporters) {
+    for (const coverageReporter of options.coverageReporters) {
+      args.push(`--coverageReporters=${coverageReporter}`)
+    }
+  }
+
+  return args
+}
+
 const options = {
   projects: [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],
@@ -43,6 +82,12 @@ if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
 
+if (process.env.TEST_BUNDLE) {
+  options._ = [process.env.TEST_BUNDLE]
+} else if (process.argv.length > 2) {
+  options._ = process.argv.slice(2)
+}
+
 if (process.env.COVERAGE_REPORTERS) {
   options.coverageReporters = process.env.COVERAGE_REPORTERS.split(',')
 }
@@ -63,15 +108,22 @@ if (process.env.JEST_BAIL) {
   options.bail = true
 }
 
-jest.runCLI(
-  options,
-  options.projects
-).then((results) => {
-  if (process.send) {
-    process.send('finished')
-  }
-  if (process.env.SHOULD_CHECK_RESULTS) {
-    const exitCode = results.results.success ? 0 : 1
-    process.exit(exitCode)
-  }
-})
+if (process.env.USE_JEST_RUN) {
+  jest.run(getJestRunArgs(options)).catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error(error)
+  })
+} else {
+  jest.runCLI(
+    options,
+    options.projects
+  ).then((results) => {
+    if (process.send) {
+      process.send('finished')
+    }
+    if (process.env.SHOULD_CHECK_RESULTS) {
+      const exitCode = results.results.success ? 0 : 1
+      process.exit(exitCode)
+    }
+  })
+}

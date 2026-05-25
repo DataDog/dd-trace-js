@@ -118,7 +118,8 @@ function cacheKeyForParams (params) {
   return buildCacheKey('skippable', [
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
-    params.runtimeName, params.runtimeVersion, params.testLevel, params.custom, params.isCodeCoverageEnabled || false,
+    params.runtimeName, params.runtimeVersion, params.testLevel, params.custom, params.testBundle,
+    params.isCodeCoverageEnabled || false,
   ])
 }
 
@@ -157,6 +158,26 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should include test bundle in skippable request configurations', (done) => {
+    const params = { ...DEFAULT_PARAMS, testBundle: 'packages/app' }
+    cleanup(params)
+
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable', body => {
+        assert.strictEqual(body.data.attributes.configurations['test.bundle'], 'packages/app')
+        return true
+      })
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      cleanup(params)
       done()
     })
   })

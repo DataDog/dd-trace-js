@@ -281,7 +281,7 @@ class FakeCiVisIntake extends FakeAgent {
     app.post([
       '/api/v2/ci/tests/skippable',
       '/evp_proxy/:version/api/v2/ci/tests/skippable',
-    ], (req, res) => {
+    ], express.json(), (req, res) => {
       if (skippableSuitesResponseStatusCode < 200 || skippableSuitesResponseStatusCode >= 300) {
         res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({ errors: ['error'] }))
         return
@@ -289,6 +289,7 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(skippableSuitesResponseStatusCode).send(JSON.stringify(getSkippableResponse()))
       this.emit('message', {
         headers: req.headers,
+        payload: req.body,
         url: req.url,
       })
     })

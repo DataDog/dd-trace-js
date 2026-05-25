@@ -3,8 +3,8 @@
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
-const { readFileSync } = require('node:fs')
-const { builtinModules } = require('node:module')
+const { existsSync, readFileSync, statSync } = require('node:fs')
+const { builtinModules, createRequire } = require('node:module')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
@@ -115,8 +115,12 @@ let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 let repositoryRoot
+let lastCoverageMap
+let lastCoverageMapRootDir
+let coverageBackfillCollectCoverageFrom
 let activeTestSuiteAbsolutePath
 let isConsoleErrorWrapped = false
+let jestTestBundle = 'jest'
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -155,9 +159,80 @@ const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0
 const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
+const JEST_TEST_BUNDLE = 'jest'
+const COVERAGE_BACKFILL_SOURCE_FILE_RE = /\.(?:[cm]?[jt]sx?|less|pegjs)$/
+const COVERAGE_BACKFILL_DECLARATION_FILE_RE = /\.d\.[cm]?ts$/
+const COVERAGE_BACKFILL_TEST_FILE_RE = /\.(?:integration|spec|test|unit)\.[cm]?[jt]sx?$/
+const COVERAGE_BACKFILL_HASH_RE = /^[0-9a-f]{64}$/
+const COVERAGE_BACKFILL_ANCHOR_SUITE_COUNT = 10
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
+
+function isJestBundlePath (candidate, rootDir) {
+  if (typeof candidate !== 'string' || candidate.length === 0) return false
+
+  try {
+    return statSync(path.resolve(rootDir || process.cwd(), candidate)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function getJestTestBundleFromPatterns (patterns, rootDir, fallback = JEST_TEST_BUNDLE) {
+  if (patterns?.length === 1 && isJestBundlePath(patterns[0], rootDir)) return patterns[0]
+  return fallback
+}
+
+function getJestTestBundleFromConfig (globalConfig) {
+  const rootDir = globalConfig?.rootDir || process.cwd()
+  const nonFlagArgs = globalConfig?.nonFlagArgs
+  const testBundleFromArgs = getJestTestBundleFromPatterns(nonFlagArgs, rootDir)
+  if (testBundleFromArgs !== JEST_TEST_BUNDLE) return testBundleFromArgs
+
+  const testPathPatterns = globalConfig?.testPathPatterns
+  const patterns = Array.isArray(testPathPatterns)
+    ? testPathPatterns
+    : testPathPatterns?.patterns
+  const testBundleFromPatterns = getJestTestBundleFromPatterns(patterns, rootDir)
+  if (testBundleFromPatterns !== JEST_TEST_BUNDLE) return testBundleFromPatterns
+
+  const testRepositoryRoot = repositoryRoot || process.cwd()
+  const absoluteRootDir = path.resolve(rootDir)
+  if (
+    absoluteRootDir !== path.resolve(testRepositoryRoot) &&
+    isJestBundlePath(absoluteRootDir, testRepositoryRoot)
+  ) {
+    return getTestSuitePath(absoluteRootDir, testRepositoryRoot)
+  }
+
+  return JEST_TEST_BUNDLE
+}
+
+function getJestTestBundleFromArgv (argv) {
+  const testBundleFromArgs = getJestTestBundleFromPatterns(argv?._, repositoryRoot, jestTestBundle)
+  if (testBundleFromArgs !== jestTestBundle) return testBundleFromArgs
+
+  const rootDir = argv?.rootDir
+  const absoluteRootDir = rootDir && path.resolve(process.cwd(), rootDir)
+  if (
+    absoluteRootDir &&
+    absoluteRootDir !== process.cwd() &&
+    isJestBundlePath(rootDir, process.cwd())
+  ) {
+    return getTestSuitePath(absoluteRootDir, process.cwd())
+  }
+
+  return jestTestBundle
+}
+
+function getJestRepositoryRoot (readConfigsResult) {
+  const configuredRepositoryRoot = readConfigsResult.configs
+    ?.find(config => config.testEnvironmentOptions?._ddRepositoryRoot)
+    ?.testEnvironmentOptions._ddRepositoryRoot
+
+  return configuredRepositoryRoot || process.cwd()
+}
 
 /**
  * Sends suppressed quarantine test names from a worker process to the main process.
@@ -347,7 +422,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       super(config, context)
       const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
       this.rootDir = rootDir
-      this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
       this.hasSnapshotTests = undefined
@@ -360,6 +434,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
+      this.testSuite = getTestSuitePath(context.testPath, rootDir)
 
       // TODO: could we grab testPath from `this.getVmContext().expect.getState()` instead?
       // so we don't rely on context being passed (some custom test environment do not pass it)
@@ -1145,6 +1220,292 @@ function getRepositoryRootFromTest (test, fallbackRootDir) {
   return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
 }
 
+function resolveJestDependency (context, from, dependency) {
+  try {
+    return context.resolver.resolveModule(from, dependency)
+  } catch {}
+}
+
+function getCoverageBackfillRelativeFile (file, rootDir) {
+  if (!file || !file.startsWith(rootDir)) return
+
+  const relativeFile = getTestSuitePath(file, rootDir)
+  if (
+    relativeFile.startsWith('.') ||
+    relativeFile.startsWith('node_modules/') ||
+    relativeFile.includes('/node_modules/') ||
+    !COVERAGE_BACKFILL_SOURCE_FILE_RE.test(relativeFile) ||
+    COVERAGE_BACKFILL_DECLARATION_FILE_RE.test(relativeFile)
+  ) {
+    return
+  }
+
+  return relativeFile
+}
+
+function getCoverageBackfillFilePattern (file, rootDir) {
+  const relativeFile = getCoverageBackfillRelativeFile(file, rootDir)
+  if (!relativeFile || COVERAGE_BACKFILL_TEST_FILE_RE.test(relativeFile)) return
+
+  return relativeFile
+}
+
+function getCoverageBackfillCoveredFiles (rootDir) {
+  const coveredFiles = new Set()
+  for (const filename of Object.keys(skippableSuitesCoverage || {})) {
+    if (COVERAGE_BACKFILL_HASH_RE.test(filename)) continue
+
+    const relativeFilename = path.isAbsolute(filename)
+      ? getTestSuitePath(filename, rootDir)
+      : filename
+    const absoluteFilename = path.join(rootDir, relativeFilename)
+    const coverageFilePattern = getCoverageBackfillFilePattern(absoluteFilename, rootDir)
+    if (coverageFilePattern) {
+      coveredFiles.add(coverageFilePattern)
+    }
+  }
+  return coveredFiles
+}
+
+function addDependenciesToCoveragePatterns ({
+  context,
+  file,
+  rootDir,
+  coveragePatterns,
+  visited,
+  coveredFiles,
+  includeUncoveredFile,
+}) {
+  if (!file || visited.has(file)) return
+  visited.add(file)
+
+  const relativeFile = getCoverageBackfillRelativeFile(file, rootDir)
+  if (!relativeFile) return
+
+  const coverageFilePattern = getCoverageBackfillFilePattern(file, rootDir)
+  const hasCoveredFiles = coveredFiles.size > 0
+  const isCoveredFile = hasCoveredFiles && coveredFiles.has(coverageFilePattern)
+  if (coverageFilePattern && (!hasCoveredFiles || isCoveredFile || includeUncoveredFile)) {
+    coveragePatterns.add(coverageFilePattern)
+  }
+
+  const dependencies = context.hasteFS?.getDependencies?.(file)
+  if (!dependencies?.length) return
+
+  for (const dependency of dependencies) {
+    const resolvedDependency = resolveJestDependency(context, file, dependency)
+    if (!resolvedDependency || !resolvedDependency.startsWith(rootDir)) continue
+    addDependenciesToCoveragePatterns({
+      context,
+      file: resolvedDependency,
+      rootDir,
+      coveragePatterns,
+      visited,
+      coveredFiles,
+      includeUncoveredFile: !hasCoveredFiles || isCoveredFile || COVERAGE_BACKFILL_TEST_FILE_RE.test(relativeFile),
+    })
+  }
+}
+
+function collectCoveragePatternsFromFile ({
+  context,
+  file,
+  rootDir,
+  coveredFiles,
+}) {
+  const coveragePatterns = new Set()
+  addDependenciesToCoveragePatterns({
+    context,
+    file,
+    rootDir,
+    coveragePatterns,
+    visited: new Set(),
+    coveredFiles,
+    includeUncoveredFile: false,
+  })
+  return coveragePatterns
+}
+
+function collectExcludedCoveragePatterns ({
+  context,
+  skippableSuites,
+  localSuites,
+  rootDir,
+  coveredFiles,
+}) {
+  const localSuiteSet = new Set(localSuites)
+  const excludedPatterns = new Set()
+
+  for (const suite of skippableSuites) {
+    if (localSuiteSet.has(suite)) continue
+
+    const file = path.join(rootDir, suite)
+    const coveragePatterns = collectCoveragePatternsFromFile({
+      context,
+      file,
+      rootDir,
+      coveredFiles,
+    })
+    for (const coveragePattern of coveragePatterns) {
+      excludedPatterns.add(coveragePattern)
+    }
+  }
+
+  return excludedPatterns
+}
+
+function getCoverageBackfillCollectCoverageFrom ({
+  originalTests,
+  skippedSuites,
+  skippableSuites,
+  localSuites,
+  rootDir,
+}) {
+  if (!skippedSuites.length) return
+
+  const skippedSuiteSet = new Set(skippedSuites)
+  const coveragePatterns = new Set()
+  const visited = new Set()
+  const coveredFiles = getCoverageBackfillCoveredFiles(rootDir)
+  const excludedCoveragePatterns = collectExcludedCoveragePatterns({
+    context: originalTests[0]?.context,
+    skippableSuites,
+    localSuites,
+    rootDir,
+    coveredFiles,
+  })
+
+  for (const test of originalTests) {
+    const testSuite = getTestSuitePath(test.path, rootDir)
+    if (!skippedSuiteSet.has(testSuite)) continue
+    addDependenciesToCoveragePatterns({
+      context: test.context,
+      file: test.path,
+      rootDir,
+      coveragePatterns,
+      visited,
+      coveredFiles,
+      includeUncoveredFile: false,
+    })
+  }
+
+  return [...coveragePatterns].filter(coveragePattern => !excludedCoveragePatterns.has(coveragePattern))
+}
+
+function getCoverageBackfillAbsoluteFiles (rootDir, contextRootDir) {
+  const absoluteFiles = []
+  for (const file of coverageBackfillCollectCoverageFrom || []) {
+    const absoluteFile = path.join(rootDir, file)
+    if (
+      absoluteFile.startsWith(contextRootDir) &&
+      existsSync(absoluteFile)
+    ) {
+      absoluteFiles.push(absoluteFile)
+    }
+  }
+  return absoluteFiles
+}
+
+function getCoverageBackfillConfig (config) {
+  if (!config?.cacheDirectory) return config
+
+  return {
+    ...config,
+    cacheDirectory: path.join(config.cacheDirectory, 'dd-trace-coverage-backfill'),
+  }
+}
+
+function extractCoverageDataObject (code) {
+  const marker = 'var coverageData = '
+  const start = code.indexOf(marker)
+  if (start === -1) return
+
+  let depth = 0
+  let quote
+  let escaped = false
+  let index = start + marker.length
+  for (; index < code.length; index++) {
+    const char = code[index]
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === quote) {
+        quote = undefined
+      }
+      continue
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+    } else if (char === '{') {
+      depth++
+    } else if (char === '}') {
+      depth--
+      if (depth === 0) {
+        index++
+        break
+      }
+    }
+  }
+  if (depth !== 0) return
+
+  try {
+    // SWC's coverage plugin emits a plain object literal that istanbul-lib-instrument
+    // does not currently recognize via readInitialCoverage.
+    // eslint-disable-next-line no-new-func
+    return new Function(`return (${code.slice(start + marker.length, index)})`)()
+  } catch {}
+}
+
+function getCoverageDataFromCode (code, readInitialCoverage) {
+  return readInitialCoverage(code)?.coverageData || extractCoverageDataObject(code)
+}
+
+async function addCoverageBackfillUntestedFiles (coverageReporter, testContexts, rootDir, CoverageReporter) {
+  if (!coverageBackfillCollectCoverageFrom?.length || !coverageReporter?._coverageMap || !rootDir) return
+
+  const coverageWorkerRequire = createRequire(
+    `${path.join(path.dirname(CoverageReporter.filename), 'CoverageWorker')}.js`
+  )
+  const { createScriptTransformer } = coverageWorkerRequire('@jest/transform')
+  const { readInitialCoverage } = coverageWorkerRequire('istanbul-lib-instrument')
+  const { createFileCoverage } = coverageWorkerRequire('istanbul-lib-coverage')
+  const processedFiles = new Set()
+
+  for (const context of testContexts || []) {
+    const contextRootDir = context.config?.rootDir || rootDir
+    const files = getCoverageBackfillAbsoluteFiles(rootDir, contextRootDir)
+    if (files.length === 0) continue
+
+    const config = getCoverageBackfillConfig(context.config)
+    // eslint-disable-next-line no-await-in-loop
+    const transformer = await createScriptTransformer(config)
+
+    for (const file of files) {
+      if (processedFiles.has(file) || coverageReporter._coverageMap.data[file]) continue
+      processedFiles.add(file)
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const { code } = await transformer.transformSourceAsync(file, readFileSync(file, 'utf8'), {
+          instrument: true,
+          supportsDynamicImport: true,
+          supportsExportNamespaceFrom: true,
+          supportsStaticESM: true,
+          supportsTopLevelAwait: true,
+        })
+        const coverageData = getCoverageDataFromCode(code, readInitialCoverage)
+        if (coverageData) {
+          coverageReporter._coverageMap.addFileCoverage(createFileCoverage(coverageData))
+        }
+      } catch (err) {
+        log.warn('Error generating coverage backfill for %s: %s', file, err.message)
+      }
+    }
+  }
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
   const localSuites = originalTests.map(test => getTestSuitePath(test.path, suitePathRoot))
@@ -1154,19 +1515,41 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
     localSuites,
     isCodeCoverageEnabled,
   })
-  const jestSuitesToRun = getJestSuitesToRun(safeSkippableSuites, originalTests, suitePathRoot)
+  let jestSuitesToRun = getJestSuitesToRun(safeSkippableSuites, originalTests, suitePathRoot)
+  let coverageBackfillSuites = jestSuitesToRun.skippedSuites
+  if (isCodeCoverageEnabled && jestSuitesToRun.suitesToRun.length === 0) {
+    // Jest does not run its coverage reporter when zero suites are scheduled. Keep a small
+    // anchor sample so setup files and the reporter run, but backfill every skippable suite.
+    // TODO: replace this with a fully synthetic coverage-map/reporting path so all skippable
+    // suites can be skipped without relying on anchor tests to initialize Jest coverage.
+    const anchorSuiteCount = Math.min(COVERAGE_BACKFILL_ANCHOR_SUITE_COUNT, Math.max(1, localSuites.length - 1))
+    const anchorSuites = new Set(localSuites.slice(0, anchorSuiteCount))
+    const skippableSuitesWithCoverageAnchor = safeSkippableSuites.filter(suite => !anchorSuites.has(suite))
+    jestSuitesToRun = getJestSuitesToRun(skippableSuitesWithCoverageAnchor, originalTests, suitePathRoot)
+    coverageBackfillSuites = safeSkippableSuites
+  }
   hasFilteredSkippableSuites = true
   log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
-  isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
-  numSkippedSuites = jestSuitesToRun.skippedSuites.length
-  skippedSuitesCoverage = getSkippedSuitesCoverage({
-    skippedSuites: jestSuitesToRun.skippedSuites,
+  const nextCoverageBackfillCollectCoverageFrom = getCoverageBackfillCollectCoverageFrom({
+    originalTests,
+    skippedSuites: coverageBackfillSuites,
+    skippableSuites,
+    localSuites,
+    rootDir: suitePathRoot,
+  })
+  const nextSkippedSuitesCoverage = getSkippedSuitesCoverage({
+    skippedSuites: coverageBackfillSuites,
     skippedCoverage: skippableSuitesCoverage,
     isCodeCoverageEnabled,
   })
+
+  isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
+  numSkippedSuites = jestSuitesToRun.skippedSuites.length
+  coverageBackfillCollectCoverageFrom = nextCoverageBackfillCollectCoverageFrom
+  skippedSuitesCoverage = nextSkippedSuitesCoverage
   writeCoverageBackfillToCache(skippedSuitesCoverage)
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
@@ -1203,17 +1586,27 @@ function wrapCoverageReporter (CoverageReporter) {
   wrappedCoverageReporters.add(CoverageReporter)
   if (CoverageReporter.prototype._addUntestedFiles) {
     shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
+      if (isCodeCoverageEnabledBecauseOfUs) {
+        return Promise.resolve()
+      }
+
+      const rootDir = repositoryRoot || this._globalConfig?.rootDir || process.cwd()
       const result = addUntestedFiles.apply(this, args)
-      const applySkippedCoverage = () => {
-        applySkippedCoverageToJestCoverageMap(this._coverageMap, repositoryRoot || this._globalConfig?.rootDir)
+      const applyBackfillAndSkippedCoverage = () => {
+        return addCoverageBackfillUntestedFiles(this, args[0], rootDir, CoverageReporter).then(() => {
+          applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
+        })
       }
       if (result?.then) {
         return result.then(value => {
-          applySkippedCoverage()
-          return value
+          return applyBackfillAndSkippedCoverage().then(() => value)
         })
       }
-      applySkippedCoverage()
+      const backfillResult = applyBackfillAndSkippedCoverage()
+      if (backfillResult?.then) {
+        return backfillResult.then(() => result)
+      }
+      applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
       return result
     })
   }
@@ -1222,6 +1615,8 @@ function wrapCoverageReporter (CoverageReporter) {
     const rootDir = getRepositoryRootFromContexts(contexts, this._globalConfig?.rootDir)
     const coverageMap = results?.coverageMap || this._coverageMap
     applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
+    lastCoverageMap = coverageMap
+    lastCoverageMapRootDir = rootDir
     return onRunComplete.apply(this, arguments)
   })
 }
@@ -1359,6 +1754,8 @@ function getCliWrapper (isNewJestVersion) {
         log.error('Jest library configuration error', err)
       }
 
+      const currentJestTestBundle = getJestTestBundleFromArgv(arguments[0])
+
       const {
         knownTestsResponse,
         testManagementTestsResponse,
@@ -1369,7 +1766,7 @@ function getCliWrapper (isNewJestVersion) {
         isSuitesSkippingEnabled,
         getKnownTests: () => getChannelPromise(knownTestsCh),
         getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
-        getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+        getSkippableSuites: () => getChannelPromise(skippableSuitesCh, { testBundle: currentJestTestBundle }),
       })
 
       if (isKnownTestsEnabled) {
@@ -1435,13 +1832,17 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
+      testSessionStartCh.publish({
+        command: `jest ${processArgv}`,
+        frameworkVersion: jestVersion,
+        testBundle: currentJestTestBundle,
+      })
 
       const result = await runCLI.apply(this, arguments)
 
       const {
         results: {
-          coverageMap,
+          coverageMap: resultCoverageMap,
           numFailedTestSuites,
           numFailedTests,
           numRuntimeErrorTestSuites = 0,
@@ -1461,7 +1862,11 @@ function getCliWrapper (isNewJestVersion) {
 
       if (isUserCodeCoverageEnabled) {
         try {
-          const coverageRootDir = repositoryRoot || result.globalConfig?.rootDir || process.cwd()
+          const coverageMap = resultCoverageMap || lastCoverageMap
+          const coverageRootDir = repositoryRoot ||
+            lastCoverageMapRootDir ||
+            result.globalConfig?.rootDir ||
+            process.cwd()
           applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
           testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
             coverageMap,
@@ -1680,6 +2085,9 @@ function getCliWrapper (isNewJestVersion) {
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
       numSkippedSuites = 0
+      lastCoverageMap = undefined
+      lastCoverageMapRootDir = undefined
+      coverageBackfillCollectCoverageFrom = undefined
 
       return result
     }, {
@@ -1764,6 +2172,27 @@ addHook({
   })
   return sequencerPackage
 })
+
+function jestRunWrapper (jestPackage) {
+  const pkg = jestPackage.default ?? jestPackage
+  if (pkg?.run) {
+    shimmer.wrap(pkg, 'run', run => function (argv) {
+      void argv
+      return run.apply(this, arguments)
+    }, { replaceGetter: true })
+  }
+  return jestPackage
+}
+
+addHook({
+  name: 'jest',
+  versions: [MINIMUM_JEST_VERSION],
+}, jestRunWrapper)
+
+addHook({
+  name: 'jest-cli',
+  versions: [MINIMUM_JEST_VERSION],
+}, jestRunWrapper)
 
 addHook({
   name: '@jest/core',
@@ -1916,17 +2345,19 @@ addHook({
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
+  repositoryRoot = getJestRepositoryRoot(readConfigsResult)
+  jestTestBundle = getJestTestBundleFromConfig(readConfigsResult.globalConfig)
+  isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   const { configs } = readConfigsResult
   testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-  repositoryRoot = configs.find(config => config.testEnvironmentOptions?._ddRepositoryRoot)
-    ?.testEnvironmentOptions._ddRepositoryRoot || readConfigsResult.globalConfig.rootDir || process.cwd()
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   for (const config of configs) {
+    config.testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+    config.testEnvironmentOptions._ddTestBundle = jestTestBundle
   }
 
-  isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
 
   if (readConfigsResult.globalConfig.forceExit) {

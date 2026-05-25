@@ -892,7 +892,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     it('skips repository-relative suites when jest rootDir is a subproject', async () => {
       const suite = 'ci-visibility/subproject/subproject-test.js'
-      const outsideRunSuite = 'ci-visibility/subproject/not-in-this-jest-run.js'
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -904,17 +903,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           attributes: {
             suite,
             coverage: {
-              [hashCoverageFilePath(suite)]: getLinesBitmapBase64(1, 8),
-              [hashCoverageFilePath('ci-visibility/subproject/dependency.js')]: getLinesBitmapBase64(1, 3),
-            },
-          },
-        },
-        {
-          type: 'suite',
-          attributes: {
-            suite: outsideRunSuite,
-            coverage: {
-              [hashCoverageFilePath(outsideRunSuite)]: getLinesBitmapBase64(1, 8),
+              [suite]: getLinesBitmapBase64(1, 11),
+              'ci-visibility/subproject/dependency.js': getLinesBitmapBase64(1, 5),
             },
           },
         },
@@ -923,22 +913,28 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
+          const skippedSuites = events
+            .filter(event => event.type === 'test_suite_end')
+            .filter(event => event.content.meta[TEST_SKIPPED_BY_ITR] === 'true')
           const skippedSuite = events.find(event => {
             return event.type === 'test_suite_end' && event.content.resource === `test_suite.${suite}`
           }).content
           const testSession = events.find(event => event.type === 'test_session_end').content
 
+          assert.strictEqual(skippedSuites.length, 1)
           assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
           assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
         })
 
       childProcess = exec(
-        'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject',
+        'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject --coverage',
         {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            COLLECT_COVERAGE_FROM: 'subproject-test.js,subproject-test-2.js,dependency.js',
             PROJECTS: JSON.stringify([{
               testMatch: ['**/subproject-test*'],
               testEnvironment: 'node',
