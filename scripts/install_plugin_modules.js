@@ -466,18 +466,6 @@ async function assertWorkspaces () {
       },
       trustedDependencies: [...trustedDependencies].sort(),
     }, null, 2) + '\n'),
-    // Per-sandbox node_modules via bun's isolated linker. Several plugin specs
-    // hard-code paths into `versions/<plugin>@<ver>/node_modules/<plugin>/<internal>`
-    // (kafkajs reaches into `src/broker`, next reads `package.json`, rhea pulls
-    // `lib/session.js`); under isolated bun creates a symlink at that path that
-    // resolves to the central store, so the lookups work. Cross-workspace
-    // dependencies (moleculer's runtime `require('bluebird')` fallback, etc.) are
-    // wired through `externals.js` `dep: true, forced: true` so they land as a
-    // direct dep of the consuming sandbox rather than as a sibling workspace.
-    writeFile(filename(null, null, 'bunfig.toml'), `[install]
-linker = "isolated"
-saveTextLockfile = true
-`),
   ])
 }
 
@@ -490,6 +478,15 @@ saveTextLockfile = true
  */
 function install () {
   try {
+    // versions/bunfig.toml pins `linker = "isolated"`, which gives every sandbox
+    // its own node_modules tree. Several plugin specs hard-code paths into
+    // `versions/<plugin>@<ver>/node_modules/<plugin>/<internal>` (kafkajs reaches
+    // into `src/broker`, next reads `package.json`, rhea pulls `lib/session.js`);
+    // under isolated bun creates a symlink at that path that resolves to the
+    // central store, so the lookups work. Cross-workspace dependencies
+    // (moleculer's runtime `require('bluebird')` fallback, etc.) are wired
+    // through `externals.js` `dep: true, forced: true` so they land as a direct
+    // dep of the consuming sandbox rather than as a sibling workspace.
     retry(() => exec('bun install --trust', { cwd: folder() }), {
       onRetry: (error, attempt, delayMs) => process.stderr.write(
         `bun install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
