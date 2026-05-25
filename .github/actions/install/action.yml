@@ -29,7 +29,17 @@ runs:
         max_attempts: 3
         timeout_minutes: 5
         retry_wait_seconds: 30
-        command: bun install --linker=hoisted --trust --network-concurrency 8
+        # `--frozen-lockfile` makes CI fail the install step when `bun.lock` and
+        # `package.json` disagree (typical Dependabot bump, contributor who
+        # edited `package.json` without re-running `bun install`). Without it,
+        # the install would silently resolve fresh against the registry and the
+        # supply-chain pin in `bunfig.toml` (`minimumReleaseAge`) would be the
+        # only thing left protecting that run. The four native packages that
+        # need their `install` script to fetch the prebuilt binary live in
+        # `trustedDependencies` in `package.json` — the CLI's `--trust` flag is
+        # mutually exclusive with `--frozen-lockfile`, so the trust list has to
+        # be declarative.
+        command: bun install --frozen-lockfile --linker=hoisted --network-concurrency 8
     - if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit != 'true'
       shell: bash
       # `node_modules` alone misses `vendor/dist/*` (produced by the rspack postinstall)

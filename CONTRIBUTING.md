@@ -124,6 +124,35 @@ To install dependencies once you have Node and bun installed, run this in the pr
 $ bun install
 ```
 
+### Supply-chain hardening
+
+`bun install` (and the plugin sandbox install under `versions/`) waits **three days** before
+considering a freshly-published npm version. The window is set in `bunfig.toml` /
+`versions/bunfig.toml` via `minimumReleaseAge = 259200` and is meant to widen the gap in which
+a freshly-published compromised release gets caught and pulled from the registry before it lands
+in our installs. `@datadog/*` bypasses the wait — our publishing pipeline is the trust boundary
+for those, mirroring `.github/dependabot.yml`'s `cooldown.exclude`.
+
+CI runs `bun install --frozen-lockfile` (see `.github/actions/install/action.yml`); a `bun.lock`
+that disagrees with `package.json` fails the install step. If you change `package.json`, rerun
+`bun install` locally and commit the regenerated `bun.lock` in the same PR. Dependabot's npm
+PRs touch only `package.json`, so when they land they fail CI until a maintainer pulls the
+branch, runs `bun install`, and pushes the lock update — that step is intentional, it's the
+last point where a human eyeballs the resolved set before it ships.
+
+If a real advisory drops and the patched version is still inside the three-day window:
+
+1. Pull the package's release notes and confirm the version is the advisory's fixed one.
+2. Run `bun update <pkg>@<exact-version> --minimum-release-age=0` locally to bypass the wait
+   for that one resolve, then commit the regenerated `bun.lock`.
+3. In the PR description, link the advisory and call out that the override was deliberate. The
+   override stays on the maintainer's machine, never in `bunfig.toml`, so every bypass shows up
+   in a reviewable diff.
+
+For a package that needs a permanently shorter window (rare — usually an internal one whose
+publish cadence is faster than three days), add it to `minimumReleaseAgeExcludes` in
+`bunfig.toml` and explain why in the same commit.
+
 ## Coding Standards
 
 ### File Naming and Import Conventions
