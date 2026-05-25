@@ -62,8 +62,8 @@ const SKIPPABLE_RESPONSE_WITH_COVERAGE = {
   meta: {
     correlation_id: 'corr-123',
     coverage: {
-      hash1: 'gA==',
-      hash2: 'IA==',
+      'src/file1.js': 'gA==',
+      'src/file2.js': 'IA==',
     },
   },
 }
@@ -88,7 +88,7 @@ const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
   meta: {
     correlation_id: 'corr-123',
     coverage: {
-      hash1: 'gA==',
+      'src/file1.js': 'gA==',
     },
   },
 }
@@ -150,8 +150,8 @@ describe('get-skippable-suites', () => {
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
       assert.deepStrictEqual(coverage, {
-        hash1: 'gA==',
-        hash2: 'IA==',
+        'src/file1.js': 'gA==',
+        'src/file2.js': 'IA==',
       })
       done()
     })
@@ -168,8 +168,8 @@ describe('get-skippable-suites', () => {
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
       assert.deepStrictEqual(coverage, {
-        hash1: 'gA==',
-        hash2: 'IA==',
+        'src/file1.js': 'gA==',
+        'src/file2.js': 'IA==',
       })
       done()
     })

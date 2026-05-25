@@ -15,30 +15,6 @@ const {
 } = require('../../ci-visibility/telemetry')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 
-function mergeCoverageBitmap (targetBitmap, bitmap) {
-  if (!targetBitmap) return bitmap
-
-  const targetBuffer = Buffer.from(targetBitmap, 'base64')
-  const bitmapBuffer = Buffer.from(bitmap, 'base64')
-  const mergedBuffer = Buffer.alloc(Math.max(targetBuffer.length, bitmapBuffer.length))
-
-  targetBuffer.copy(mergedBuffer)
-  for (let i = 0; i < bitmapBuffer.length; i++) {
-    mergedBuffer[i] |= bitmapBuffer[i]
-  }
-
-  return mergedBuffer.toString('base64')
-}
-
-function mergeCoverage (targetCoverage, coverage) {
-  if (!coverage || typeof coverage !== 'object') return
-
-  for (const [filename, bitmap] of Object.entries(coverage)) {
-    if (typeof bitmap !== 'string') continue
-    targetCoverage[filename] = mergeCoverageBitmap(targetCoverage[filename], bitmap)
-  }
-}
-
 function getSkippableSuites ({
   url,
   isEvpProxy,
@@ -188,8 +164,7 @@ function fetchFromApi ({
     } else {
       try {
         const parsedResponse = JSON.parse(res)
-        const coverage = {}
-        mergeCoverage(coverage, parsedResponse.meta?.coverage)
+        const coverage = parsedResponse.meta?.coverage || {}
 
         const skippableItems = parsedResponse
           .data

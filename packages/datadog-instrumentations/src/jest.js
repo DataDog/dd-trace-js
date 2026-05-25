@@ -3,14 +3,13 @@
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
-const { existsSync, readFileSync } = require('node:fs')
-const { builtinModules, createRequire } = require('node:module')
+const { readFileSync } = require('node:fs')
+const { builtinModules } = require('node:module')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../dd-trace/src/log')
 const {
   getCoveredFilesFromCoverage,
@@ -45,6 +44,11 @@ const {
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
 } = require('../../datadog-plugin-jest/src/util')
+const {
+  COVERAGE_BACKFILL_ANCHOR_SUITE_COUNT,
+  addCoverageBackfillUntestedFiles,
+  getCoverageBackfillCollectCoverageFrom,
+} = require('./jest-coverage-backfill')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -158,11 +162,6 @@ const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0
 const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
-const COVERAGE_BACKFILL_SOURCE_FILE_RE = /\.(?:[cm]?[jt]sx?|less|pegjs)$/
-const COVERAGE_BACKFILL_DECLARATION_FILE_RE = /\.d\.[cm]?ts$/
-const COVERAGE_BACKFILL_TEST_FILE_RE = /\.(?:integration|spec|test|unit)\.[cm]?[jt]sx?$/
-const COVERAGE_BACKFILL_HASH_RE = /^[0-9a-f]{64}$/
-const COVERAGE_BACKFILL_ANCHOR_SUITE_COUNT = 10
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
@@ -1161,174 +1160,6 @@ function getRepositoryRootFromTest (test, fallbackRootDir) {
   return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
 }
 
-function getCoverageBackfillRelativeFile (file, rootDir) {
-  if (!file || !file.startsWith(rootDir)) return
-
-  const relativeFile = getTestSuitePath(file, rootDir)
-  if (
-    relativeFile.startsWith('.') ||
-    relativeFile.startsWith('node_modules/') ||
-    relativeFile.includes('/node_modules/') ||
-    !COVERAGE_BACKFILL_SOURCE_FILE_RE.test(relativeFile) ||
-    COVERAGE_BACKFILL_DECLARATION_FILE_RE.test(relativeFile)
-  ) {
-    return
-  }
-
-  return relativeFile
-}
-
-function getCoverageBackfillFilePattern (file, rootDir) {
-  const relativeFile = getCoverageBackfillRelativeFile(file, rootDir)
-  if (!relativeFile || COVERAGE_BACKFILL_TEST_FILE_RE.test(relativeFile)) return
-
-  return relativeFile
-}
-
-function getCoverageBackfillCoveredFiles (rootDir) {
-  const coveredFiles = new Set()
-  for (const filename of Object.keys(skippableSuitesCoverage || {})) {
-    if (COVERAGE_BACKFILL_HASH_RE.test(filename)) continue
-
-    const relativeFilename = path.isAbsolute(filename)
-      ? getTestSuitePath(filename, rootDir)
-      : filename
-    const absoluteFilename = path.join(rootDir, relativeFilename)
-    const coverageFilePattern = getCoverageBackfillFilePattern(absoluteFilename, rootDir)
-    if (coverageFilePattern) {
-      coveredFiles.add(coverageFilePattern)
-    }
-  }
-  return coveredFiles
-}
-
-function getCoverageBackfillCollectCoverageFrom ({
-  skippedSuites,
-  rootDir,
-}) {
-  if (!skippedSuites.length) return
-
-  // Backend coverage is an aggregate for the skippable response. Seed every local
-  // source file it names so Istanbul can apply covered-line bitmaps to files that
-  // did not run in this Jest process.
-  const coveredFiles = getCoverageBackfillCoveredFiles(rootDir)
-  return coveredFiles.size ? [...coveredFiles] : undefined
-}
-
-function getCoverageBackfillAbsoluteFiles (rootDir, contextRootDir) {
-  const absoluteFiles = []
-  for (const file of coverageBackfillCollectCoverageFrom || []) {
-    const absoluteFile = path.join(rootDir, file)
-    if (
-      absoluteFile.startsWith(contextRootDir) &&
-      existsSync(absoluteFile)
-    ) {
-      absoluteFiles.push(absoluteFile)
-    }
-  }
-  return absoluteFiles
-}
-
-function getCoverageBackfillConfig (config) {
-  if (!config?.cacheDirectory) return config
-
-  return {
-    ...config,
-    cacheDirectory: path.join(config.cacheDirectory, 'dd-trace-coverage-backfill'),
-  }
-}
-
-function extractCoverageDataObject (code) {
-  const marker = 'var coverageData = '
-  const start = code.indexOf(marker)
-  if (start === -1) return
-
-  let depth = 0
-  let quote
-  let escaped = false
-  let index = start + marker.length
-  for (; index < code.length; index++) {
-    const char = code[index]
-    if (quote) {
-      if (escaped) {
-        escaped = false
-      } else if (char === '\\') {
-        escaped = true
-      } else if (char === quote) {
-        quote = undefined
-      }
-      continue
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-    } else if (char === '{') {
-      depth++
-    } else if (char === '}') {
-      depth--
-      if (depth === 0) {
-        index++
-        break
-      }
-    }
-  }
-  if (depth !== 0) return
-
-  try {
-    // SWC's coverage plugin emits a plain object literal that istanbul-lib-instrument
-    // does not currently recognize via readInitialCoverage.
-    // eslint-disable-next-line no-new-func
-    return new Function(`return (${code.slice(start + marker.length, index)})`)()
-  } catch {}
-}
-
-function getCoverageDataFromCode (code, readInitialCoverage) {
-  return readInitialCoverage(code)?.coverageData || extractCoverageDataObject(code)
-}
-
-async function addCoverageBackfillUntestedFiles (coverageReporter, testContexts, rootDir, CoverageReporter) {
-  if (!coverageBackfillCollectCoverageFrom?.length || !coverageReporter?._coverageMap || !rootDir) return
-
-  const coverageWorkerRequire = createRequire(
-    `${path.join(path.dirname(CoverageReporter.filename), 'CoverageWorker')}.js`
-  )
-  const { createScriptTransformer } = coverageWorkerRequire('@jest/transform')
-  const { readInitialCoverage } = coverageWorkerRequire('istanbul-lib-instrument')
-  const { createFileCoverage } = coverageWorkerRequire('istanbul-lib-coverage')
-  const processedFiles = new Set()
-
-  for (const context of testContexts || []) {
-    const contextRootDir = context.config?.rootDir || rootDir
-    const files = getCoverageBackfillAbsoluteFiles(rootDir, contextRootDir)
-    if (files.length === 0) continue
-
-    const config = getCoverageBackfillConfig(context.config)
-    // eslint-disable-next-line no-await-in-loop
-    const transformer = await createScriptTransformer(config)
-
-    for (const file of files) {
-      if (processedFiles.has(file) || coverageReporter._coverageMap.data[file]) continue
-      processedFiles.add(file)
-
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const { code } = await transformer.transformSourceAsync(file, readFileSync(file, 'utf8'), {
-          instrument: true,
-          supportsDynamicImport: true,
-          supportsExportNamespaceFrom: true,
-          supportsStaticESM: true,
-          supportsTopLevelAwait: true,
-        })
-        const coverageData = getCoverageDataFromCode(code, readInitialCoverage)
-        if (coverageData) {
-          coverageReporter._coverageMap.addFileCoverage(createFileCoverage(coverageData))
-        }
-      } catch (err) {
-        log.warn('Error generating coverage backfill for %s: %s', file, err.message)
-      }
-    }
-  }
-}
-
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
   const localSuites = originalTests.map(test => getTestSuitePath(test.path, suitePathRoot))
@@ -1358,6 +1189,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
   const nextCoverageBackfillCollectCoverageFrom = getCoverageBackfillCollectCoverageFrom({
     skippedSuites: coverageBackfillSuites,
+    skippedCoverage: skippableSuitesCoverage,
     rootDir: suitePathRoot,
   })
   const nextSkippedSuitesCoverage = getSkippedSuitesCoverage({
@@ -1370,7 +1202,6 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
   coverageBackfillCollectCoverageFrom = nextCoverageBackfillCollectCoverageFrom
   skippedSuitesCoverage = nextSkippedSuitesCoverage
-  writeCoverageBackfillToCache(skippedSuitesCoverage)
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
 
@@ -1413,7 +1244,13 @@ function wrapCoverageReporter (CoverageReporter) {
       const rootDir = repositoryRoot || this._globalConfig?.rootDir || process.cwd()
       const result = addUntestedFiles.apply(this, args)
       const applyBackfillAndSkippedCoverage = () => {
-        return addCoverageBackfillUntestedFiles(this, args[0], rootDir, CoverageReporter).then(() => {
+        return addCoverageBackfillUntestedFiles({
+          coverageReporter: this,
+          testContexts: args[0],
+          rootDir,
+          CoverageReporter,
+          collectCoverageFrom: coverageBackfillCollectCoverageFrom,
+        }).then(() => {
           applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
         })
       }

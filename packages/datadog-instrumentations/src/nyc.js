@@ -2,44 +2,11 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const {
-  readCoverageBackfillFromCache,
-  setupSettingsCachePath,
-} = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
-const { applySkippedCoverageToCoverage } = require('../../dd-trace/src/plugins/util/test')
+const { setupSettingsCachePath } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const { addHook, channel } = require('./helpers/instrument')
 
 const codeCoverageWrapCh = channel('ci:nyc:wrap')
 const codeCoverageReportCh = channel('ci:nyc:report')
-const backfilledNycInstances = new WeakSet()
-
-function applyCoverageBackfill (coverageBackfill, rootDir, coverageMap) {
-  applySkippedCoverageToCoverage(coverageMap, coverageBackfill, rootDir)
-  return coverageMap
-}
-
-function applyCachedCoverageBackfillToNycReport (nycInstance) {
-  if (
-    backfilledNycInstances.has(nycInstance) ||
-    !nycInstance?.getCoverageMapFromAllCoverageFiles
-  ) {
-    return
-  }
-
-  const coverageBackfill = readCoverageBackfillFromCache()
-  if (!coverageBackfill || Object.keys(coverageBackfill).length === 0) {
-    return
-  }
-
-  backfilledNycInstances.add(nycInstance)
-  shimmer.wrap(nycInstance, 'getCoverageMapFromAllCoverageFiles', getCoverageMap => function (...args) {
-    const coverageMapResult = getCoverageMap.apply(this, args)
-    const applyCachedCoverageBackfill = applyCoverageBackfill.bind(null, coverageBackfill, nycInstance.cwd)
-    return coverageMapResult?.then
-      ? coverageMapResult.then(applyCachedCoverageBackfill)
-      : applyCachedCoverageBackfill(coverageMapResult)
-  })
-}
 
 addHook({
   name: 'nyc',
@@ -65,8 +32,6 @@ addHook({
 
   // `report` is an async function, so we wait for it to complete before publishing
   shimmer.wrap(nycPackage.prototype, 'report', report => function (...args) {
-    applyCachedCoverageBackfillToNycReport(this)
-
     if (!codeCoverageReportCh.hasSubscribers) {
       return report.apply(this, args)
     }
