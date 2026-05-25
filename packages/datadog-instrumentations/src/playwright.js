@@ -1779,12 +1779,6 @@ addHook({
   return pagePackage
 })
 
-addHook({
-  name: 'playwright-core',
-  file: 'lib/coreBundle.js',
-  versions: ['>=1.60.0'],
-}, coreBundle => coreBundle)
-
 function instrumentWorkerMainMethods (workerMain) {
   if (!workerMain || workerMain[kDdPlaywrightWorkerInstrumented] ||
       typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function') {

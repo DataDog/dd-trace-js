@@ -26,7 +26,9 @@ module.exports = [
       filePath: 'lib/runner/index.js',
     },
     astQuery: 'VariableDeclarator[id.name="Dispatcher"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[key.name="_createWorker"] > FunctionExpression',
+      'MethodDefinition[kind="method"][key.name="_createWorker"] > FunctionExpression, ' +
+      'ClassDeclaration[id.name="Dispatcher"] > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="_createWorker"] > FunctionExpression',
     functionQuery: {
       methodName: '_createWorker',
       kind: 'Sync',
@@ -40,7 +42,9 @@ module.exports = [
       filePath: 'lib/runner/index.js',
     },
     astQuery: 'VariableDeclarator[id.name="ProcessHost"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[key.name="startRunner"] > FunctionExpression[async]',
+      'MethodDefinition[kind="method"][key.name="startRunner"] > FunctionExpression[async], ' +
+      'ClassDeclaration[id.name="ProcessHost"] > ClassBody > ' +
+      'MethodDefinition[kind="method"][key.name="startRunner"] > FunctionExpression[async]',
     functionQuery: {
       methodName: 'startRunner',
       kind: 'Async',
