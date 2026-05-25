@@ -23,7 +23,7 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 const requirePackageJson = require(requirePackageJsonPath)
 
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
-// descriptors (EMFILE). yarn install itself dominates the wall-clock, so a moderate cap costs nothing.
+// descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
