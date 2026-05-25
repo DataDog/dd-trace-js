@@ -72,7 +72,7 @@ function sampleRequest (req, res, record = false) {
   const resolved = resolveSamplingKey(req, res)
   if (!resolved) return SamplingDecision.SKIP
 
-  if (!resolved.route) {
+  if (resolved.route === null) {
     if (resolved.status === 404 || isBlocked(res)) return SamplingDecision.SKIP
     return SamplingDecision.MISSING_ROUTE
   }
@@ -108,17 +108,23 @@ function resolveSamplingKey (req, res) {
   const context = web.getContext(req)
   const route = getRouteOrEndpoint(context, status)
 
-  return { method, status, route, key: method + route + status }
+  // route === null signals "no route information at all". An empty string is still a valid
+  // route (dd-trace-js represents the express root path '/' as an empty path segment).
+  return { method, status, route, key: method + (route ?? '') + status }
 }
 
 function getRouteOrEndpoint (context, statusCode) {
-  // First try to get the route from the context paths
-  const route = context?.paths?.join('') || ''
-  if (route) {
-    return route
+  // The router plugin populates `context.paths` whenever the framework matched something.
+  // For express's root '/' route the matched path is normalized to '' (see datadog-plugin-router),
+  // so `paths.length > 0` is the signal that the framework provided route information — even when
+  // the joined string is empty. An empty `paths` array means no router involvement at all.
+  const paths = context?.paths
+  if (paths !== undefined && paths.length > 0) {
+    return paths.join('')
   }
 
-  // If route is not available, fallback to http.endpoint
+  // No router involvement; fall back to the http.endpoint tag (skipping 404s, which legitimately
+  // have no endpoint).
   if (statusCode !== 404) {
     const endpoint = context?.span?.context()?.getTag('http.endpoint')
     if (endpoint) {
@@ -126,7 +132,7 @@ function getRouteOrEndpoint (context, statusCode) {
     }
   }
 
-  return ''
+  return null
 }
 
 function getSpanPriority (span) {
