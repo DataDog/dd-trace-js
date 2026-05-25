@@ -39,6 +39,7 @@ for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
 }
 
+
 function rewrite (content, filename, format) {
   if (!content) return content
   if (!filename.includes('node_modules')) return content

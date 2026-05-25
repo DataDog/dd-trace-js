@@ -1,6 +1,12 @@
 'use strict'
 
-// TODO: Move traceIterator to Orchestrion.
+// Custom transforms registered via InstrumentationMatcher.addTransform().
+//
+// Use this file for transforms that are not yet supported upstream in
+// @apm-js-collab/code-transformer (Orchestrion) or that cannot land there
+// for dd-trace-specific reasons. Once a transform is available natively in
+// the library, replace the custom registration with the built-in option and
+// remove the entry here.
 
 const { parse, query, traverse } = require('./compiler')
 
