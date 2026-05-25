@@ -17,11 +17,6 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
 
     appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
 
-    // The root `.yarnrc` that used to carry `ignore-engines true` is gone. The current
-    // sandbox deps happen to be clean on every supported Node version, so pass the flag
-    // inline to keep the contract explicit and stop a future dep bump from silently
-    // breaking the node-oldest matrix. Keep the retry pattern for transient registry blips.
-    childProcess.execSync('yarn --ignore-engines || yarn --ignore-engines', { cwd })
     childProcess.execSync('npx tsc', {
       cwd: appDir,
     })
