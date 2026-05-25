@@ -4,10 +4,12 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
 
+const { SamplingDecision } = require('../../../src/appsec/api_security/sampler')
+
 describe('API Security domain', () => {
   describe('reportRequest', () => {
     let apiSecurity
-    let sampler, web, telemetry, blocking, reporter
+    let sampler, web, telemetry, reporter
     let req, res
 
     beforeEach(() => {
@@ -15,8 +17,7 @@ describe('API Security domain', () => {
         configure: sinon.stub(),
         disable: sinon.stub(),
         sampleRequest: sinon.stub(),
-        isEnabled: sinon.stub().returns(true),
-        hasRoute: sinon.stub().returns(true),
+        SamplingDecision,
       }
 
       web = {
@@ -31,10 +32,6 @@ describe('API Security domain', () => {
         incrementApiSecMissingRouteMetric: sinon.stub(),
       }
 
-      blocking = {
-        isBlocked: sinon.stub().returns(false),
-      }
-
       reporter = {
         isSchemaAttribute: (key) => key.startsWith('_dd.appsec.s.'),
       }
@@ -42,7 +39,6 @@ describe('API Security domain', () => {
       apiSecurity = proxyquire('../../../src/appsec/api_security', {
         './sampler': sampler,
         '../../plugins/util/web': web,
-        '../blocking': blocking,
         '../reporter': reporter,
         '../telemetry': telemetry,
       })
@@ -51,80 +47,27 @@ describe('API Security domain', () => {
       res = { statusCode: 200 }
     })
 
-    it('emits nothing when API security is disabled', () => {
-      sampler.isEnabled.returns(false)
-
-      apiSecurity.reportRequest(req, res, {
-        sampled: true,
-        wafResult: { attributes: { '_dd.appsec.s.req.body': [] } },
-      })
+    it('emits nothing on SKIP decision', () => {
+      apiSecurity.reportRequest(req, res, SamplingDecision.SKIP, { attributes: { '_dd.appsec.s.req.body': [] } })
 
       sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
       sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
       sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
     })
 
-    it('emits nothing on 404 responses', () => {
-      res.statusCode = 404
-      sampler.hasRoute.returns(false)
-
-      apiSecurity.reportRequest(req, res, { sampled: false, wafResult: undefined })
-
-      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
-    })
-
-    it('emits nothing on blocked responses', () => {
-      blocking.isBlocked.returns(true)
-      sampler.hasRoute.returns(false)
-
-      apiSecurity.reportRequest(req, res, { sampled: false, wafResult: undefined })
-
-      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
-    })
-
-    it('emits missing_route with framework when no route is available', () => {
-      sampler.hasRoute.returns(false)
-
-      apiSecurity.reportRequest(req, res, { sampled: false, wafResult: undefined })
+    it('emits missing_route with framework tag on MISSING_ROUTE decision', () => {
+      apiSecurity.reportRequest(req, res, SamplingDecision.MISSING_ROUTE, undefined)
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, 'express')
       sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
       sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
     })
 
-    it('emits only missing_route when route is missing, even if schema was attempted (mutual exclusion)', () => {
-      sampler.hasRoute.returns(false)
-
-      apiSecurity.reportRequest(req, res, {
-        sampled: true,
-        wafResult: { attributes: { '_dd.appsec.s.req.body': [] } },
-      })
-
-      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, 'express')
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
-    })
-
-    it('emits nothing when route exists but request was not sampled', () => {
-      apiSecurity.reportRequest(req, res, { sampled: false, wafResult: undefined })
-
-      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
-      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
-    })
-
-    it('emits request.schema when WAF returned schema attributes', () => {
-      apiSecurity.reportRequest(req, res, {
-        sampled: true,
-        wafResult: {
-          attributes: {
-            '_dd.appsec.s.req.body': [],
-            '_dd.appsec.s.req.headers': [],
-          },
+    it('emits request.schema on SAMPLE decision when WAF returned schema attributes', () => {
+      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, {
+        attributes: {
+          '_dd.appsec.s.req.body': [],
+          '_dd.appsec.s.req.headers': [],
         },
       })
 
@@ -133,25 +76,22 @@ describe('API Security domain', () => {
       sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
     })
 
-    it('emits request.no_schema when WAF returned attributes without any schema', () => {
-      apiSecurity.reportRequest(req, res, {
-        sampled: true,
-        wafResult: { attributes: { 'some.other.attribute': 'value' } },
-      })
+    it('emits request.no_schema on SAMPLE decision when WAF returned attributes without any schema', () => {
+      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: { 'some.other.attribute': 'value' } })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'express')
       sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
       sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
     })
 
-    it('emits request.no_schema when WAF returned no attributes', () => {
-      apiSecurity.reportRequest(req, res, { sampled: true, wafResult: { attributes: undefined } })
+    it('emits request.no_schema on SAMPLE decision when WAF returned no attributes', () => {
+      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: undefined })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'express')
     })
 
-    it('emits request.no_schema when wafResult is undefined', () => {
-      apiSecurity.reportRequest(req, res, { sampled: true, wafResult: undefined })
+    it('emits request.no_schema on SAMPLE decision when wafResult is undefined', () => {
+      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, undefined)
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'express')
     })
@@ -161,10 +101,7 @@ describe('API Security domain', () => {
         context: () => ({ _tags: { component: 'Next JS' } }),
       })
 
-      apiSecurity.reportRequest(req, res, {
-        sampled: true,
-        wafResult: { attributes: { '_dd.appsec.s.req.body': [] } },
-      })
+      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: { '_dd.appsec.s.req.body': [] } })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestSchemaMetric, 'Next JS')
     })

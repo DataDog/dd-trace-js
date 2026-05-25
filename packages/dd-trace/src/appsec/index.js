@@ -233,8 +233,8 @@ function incomingHttpEndTranslator ({ req, res }) {
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
 
-  const sampled = apiSecurity.sampleRequest(req, res, true)
-  if (sampled) {
+  const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
+  if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
@@ -243,7 +243,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     wafResult = waf.run({ persistent }, req)
   }
 
-  apiSecurity.reportRequest(req, res, { sampled, wafResult })
+  apiSecurity.reportRequest(req, res, apiSecSamplingDecision, wafResult)
 
   waf.disposeContext(req)
 
@@ -343,7 +343,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
 
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecurity.sampleRequest(req, res)) return
+  if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({

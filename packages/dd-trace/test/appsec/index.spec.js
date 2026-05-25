@@ -918,7 +918,7 @@ describe('AppSec Index', function () {
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
-        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => false)
+        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => apiSecurity.SamplingDecision.SKIP)
         const req = {}
         const res = {}
 
@@ -929,7 +929,7 @@ describe('AppSec Index', function () {
       })
 
       it('should call to the waf if it is a sampled request', () => {
-        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => true)
+        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => apiSecurity.SamplingDecision.SAMPLE)
         const req = {}
         const res = {}
         const body = {}

@@ -6,8 +6,15 @@ const log = require('../../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../../ext/priority')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
+const { isBlocked } = require('../blocking')
 
 const MAX_SIZE = 4096
+
+const SamplingDecision = Object.freeze({
+  SAMPLE: 'sample',
+  MISSING_ROUTE: 'missing_route',
+  SKIP: 'skip',
+})
 
 let enabled
 let asmStandaloneEnabled
@@ -36,16 +43,17 @@ function disable () {
   sampledRequests?.clear()
 }
 
-function sampleRequest (req, res, force = false) {
-  if (!enabled) return false
-
-  const key = computeKey(req, res)
-  if (!key) return false
-
-  if (isSampled(key)) return false
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
+ * @returns {'sample' | 'missing_route' | 'skip'}
+ */
+function sampleRequest (req, res, record = false) {
+  if (!enabled) return SamplingDecision.SKIP
 
   const rootSpan = web.root(req)
-  if (!rootSpan) return false
+  if (!rootSpan) return SamplingDecision.SKIP
 
   if (asmStandaloneEnabled) {
     keepTrace(rootSpan, ASM)
@@ -57,19 +65,50 @@ function sampleRequest (req, res, force = false) {
     }
 
     if (priority === AUTO_REJECT || priority === USER_REJECT) {
-      return false
+      return SamplingDecision.SKIP
     }
   }
 
-  if (force) {
-    sampledRequests.set(key, undefined)
+  const resolved = resolveSamplingKey(req, res)
+  if (!resolved) return SamplingDecision.SKIP
+
+  if (!resolved.route) {
+    if (resolved.status === 404 || isBlocked(res)) return SamplingDecision.SKIP
+    return SamplingDecision.MISSING_ROUTE
   }
 
-  return true
+  if (sampledRequests.has(resolved.key)) return SamplingDecision.SKIP
+
+  if (record) {
+    sampledRequests.set(resolved.key, undefined)
+  }
+
+  return SamplingDecision.SAMPLE
 }
 
-function isSampled (key) {
-  return sampledRequests.has(key)
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @returns {boolean} Whether this request's endpoint is currently recorded in the TTL cache.
+ */
+function wasSampled (req, res) {
+  const resolved = resolveSamplingKey(req, res)
+  return resolved !== null && sampledRequests.has(resolved.key)
+}
+
+function resolveSamplingKey (req, res) {
+  const method = req.method
+  const status = res.statusCode
+
+  if (!method || !status) {
+    log.warn('[ASM] Unsupported groupkey for API security')
+    return null
+  }
+
+  const context = web.getContext(req)
+  const route = getRouteOrEndpoint(context, status)
+
+  return { method, status, route, key: method + route + status }
 }
 
 function getRouteOrEndpoint (context, statusCode) {
@@ -90,30 +129,6 @@ function getRouteOrEndpoint (context, statusCode) {
   return ''
 }
 
-function computeKey (req, res) {
-  const method = req.method
-  const status = res.statusCode
-
-  if (!method || !status) {
-    log.warn('[ASM] Unsupported groupkey for API security')
-    return null
-  }
-
-  const context = web.getContext(req)
-  const route = getRouteOrEndpoint(context, status)
-
-  return method + route + status
-}
-
-function isEnabled () {
-  return !!enabled
-}
-
-function hasRoute (req, res) {
-  const context = web.getContext(req)
-  return !!getRouteOrEndpoint(context, res.statusCode)
-}
-
 function getSpanPriority (span) {
   const spanContext = span.context?.()
   return spanContext._sampling?.priority
@@ -123,8 +138,6 @@ module.exports = {
   configure,
   disable,
   sampleRequest,
-  isSampled,
-  computeKey,
-  isEnabled,
-  hasRoute,
+  wasSampled,
+  SamplingDecision,
 }
