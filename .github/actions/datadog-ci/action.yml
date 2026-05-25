@@ -10,9 +10,10 @@ runs:
 
     # Stay on npm here so the action works in container jobs that lack `unzip`
     # (the playwright matrix runs in `ghcr.io/datadog/dd-trace-js/playwright-tools`,
-    # which ships without it and breaks `oven-sh/setup-bun`). `package.json` pins
-    # `@datadog/datadog-ci` to an exact version, so the lockfile-less install is
-    # reproducible.
+    # which ships without it and breaks `oven-sh/setup-bun`). `npm ci` consumes
+    # the committed `package-lock.json`, pinning the tarball integrity hash so a
+    # republished `@datadog/datadog-ci` at the same version number cannot land
+    # without an explicit lockfile update.
     - uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       with:
         max_attempts: 3
@@ -20,7 +21,7 @@ runs:
         retry_wait_seconds: 30
         command: |
           cd ${{ github.workspace }}/.github/actions/datadog-ci
-          npm install --no-save --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
 
     - shell: bash
       run: echo "${{ github.workspace }}/.github/actions/datadog-ci/node_modules/.bin" >> $GITHUB_PATH
