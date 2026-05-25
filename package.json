@@ -242,5 +242,12 @@
     "v8-to-istanbul": "^9.0.0",
     "workerpool": "^10.0.3",
     "yaml": "^2.9.0"
-  }
+  },
+  "trustedDependencies": [
+    "@datadog/native-appsec",
+    "@datadog/native-iast-taint-tracking",
+    "@datadog/native-metrics",
+    "@datadog/pprof",
+    "bun"
+  ]
 }

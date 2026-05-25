@@ -162,6 +162,37 @@ To install dependencies once you have Node and bun installed, run this in the pr
 $ bun install
 ```
 
+### Supply-chain hardening
+
+`bun install` (and the plugin sandbox install under `versions/`) waits **three days** before
+considering a freshly-published npm version. The window is set in `bunfig.toml` /
+`versions/bunfig.toml` via `minimumReleaseAge = 259200` and is meant to widen the gap in which
+a freshly-published compromised release gets caught and pulled from the registry before it lands
+in our installs. The Datadog-owned packages listed in the root `minimumReleaseAgeExcludes` bypass
+the wait because our publishing pipeline is their trust boundary. Bun 1.3.14 only supports exact
+package names in this list; it does not expand the `@datadog/*` pattern used by Dependabot.
+
+CI runs `bun install --frozen-lockfile` (see `.github/actions/install/action.yml`); a `bun.lock`
+that disagrees with `package.json` fails the install step. If you change `package.json`, rerun
+`bun install` locally and commit the regenerated `bun.lock` in the same PR. Dependabot uses its
+Bun ecosystem for the root and `docs/`, so its PRs update each manifest and lockfile together.
+Its five-day cooldown applies to version updates but not security updates; a security PR can
+therefore lock a freshly-published fix, and frozen CI installs that reviewed lock without resolving
+against the registry.
+
+If a real advisory drops and the patched version is still inside the three-day window:
+
+1. Pull the package's release notes and confirm the version is the advisory's fixed one.
+2. Run `bun update <pkg>@<exact-version> --minimum-release-age=0` locally to bypass the wait
+   for that one resolve, then commit the regenerated `bun.lock`.
+3. In the PR description, link the advisory and call out that the override was deliberate. The
+   override stays on the maintainer's machine, never in `bunfig.toml`, so every bypass shows up
+   in a reviewable diff.
+
+For a package that needs a permanently shorter window (rare — usually an internal one whose
+publish cadence is faster than three days), add its exact name to `minimumReleaseAgeExcludes` in
+`bunfig.toml` and explain why in the same commit.
+
 ## Coding Standards
 
 ### File Naming and Import Conventions
@@ -447,7 +478,7 @@ You can also run the tests for multiple plugins at once by separating them with 
 PLUGINS="amqplib|pino" npm run test:plugins
 ```
 
-The necessary shell commands for the setup can also be executed at once by the `npm run env` script.
+The necessary shell commands for the setup can also be executed at once with `npm run env`.
 
 ### Other Unit Tests
 

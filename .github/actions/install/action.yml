@@ -8,4 +8,4 @@ runs:
         max_attempts: 3
         timeout_minutes: 5
         retry_wait_seconds: 30
-        command: bun install --linker=hoisted --trust --network-concurrency 8
+        command: bun install --frozen-lockfile --linker=hoisted --network-concurrency 8
