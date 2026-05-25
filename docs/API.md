@@ -32,6 +32,7 @@ tracer.use('pg', {
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
+<h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
@@ -115,6 +116,7 @@ tracer.use('pg', {
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+* [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -263,7 +264,10 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['sharedb.action'], 'fetch')
               assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
               assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'Snapshot Fetch Failure')
-              assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
+              assert.ok(
+                Object.hasOwn(traces[0][0].meta, ERROR_STACK),
+                `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+              )
               assert.strictEqual(traces[0][0].meta.component, 'sharedb')
             })
               .then(done)

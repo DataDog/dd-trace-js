@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('node:url')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -242,7 +243,7 @@ describe('AgentlessExporter', () => {
       assert.strictEqual(result, false)
       sinon.assert.calledOnce(log.error)
       const call = log.error.getCall(0)
-      assert.ok(call.args[0].includes('Invalid URL'))
+      assert.ok(call.args[0].includes('Invalid URL'), `Got: ${inspect(call.args[0])}`)
       // Invalid URL is passed as second argument (printf-style)
       assert.strictEqual(call.args[1], 'not-a-valid-url')
       sinon.assert.notCalled(writer.setUrl)

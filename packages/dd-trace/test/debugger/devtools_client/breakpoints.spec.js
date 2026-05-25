@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -441,8 +442,14 @@ describe('breakpoints', function () {
           { name: 'myVar', expression: 'myVar' },
           { name: 'obj.foo' },
         ])
-        assert.ok(probe.compiledCaptureExpressions[1].expression.includes('myObj'))
-        assert.ok(probe.compiledCaptureExpressions[1].expression.includes('myProp'))
+        assert.ok(
+          probe.compiledCaptureExpressions[1].expression.includes('myObj'),
+          `Got: ${inspect(probe.compiledCaptureExpressions[1].expression)}`
+        )
+        assert.ok(
+          probe.compiledCaptureExpressions[1].expression.includes('myProp'),
+          `Got: ${inspect(probe.compiledCaptureExpressions[1].expression)}`
+        )
       })
 
       it('should store per-expression capture limits', async function () {

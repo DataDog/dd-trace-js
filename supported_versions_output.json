@@ -21,6 +21,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@azure/cosmos",
+    "integration": "azure-cosmos",
+    "minimum_tracer_supported": "4.4.1",
+    "max_tracer_supported": "4.9.2",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@aws/durable-execution-sdk-js",
     "integration": "aws-durable-execution-sdk-js",
     "minimum_tracer_supported": "1.1.0",
@@ -150,14 +157,14 @@
     "dependency": "@langchain/core",
     "integration": "langchain",
     "minimum_tracer_supported": "0.1.0",
-    "max_tracer_supported": "1.1.46",
+    "max_tracer_supported": "1.1.47",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@langchain/langgraph",
     "integration": "langgraph",
     "minimum_tracer_supported": "1.1.2",
-    "max_tracer_supported": "1.3.0",
+    "max_tracer_supported": "1.3.1",
     "auto-instrumented": "True"
   },
   {
@@ -220,7 +227,7 @@
     "dependency": "ai",
     "integration": "ai",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "6.0.184",
+    "max_tracer_supported": "6.0.185",
     "auto-instrumented": "True"
   },
   {
