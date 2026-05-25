@@ -206,7 +206,7 @@
     "dependency": "@vitest/runner",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.6",
+    "max_tracer_supported": "4.1.7",
     "auto-instrumented": "True"
   },
   {
@@ -493,7 +493,7 @@
     "dependency": "mocha",
     "integration": "mocha",
     "minimum_tracer_supported": "8.0.0",
-    "max_tracer_supported": "11.7.5",
+    "max_tracer_supported": "11.7.6",
     "auto-instrumented": "True"
   },
   {
@@ -640,7 +640,7 @@
     "dependency": "playwright",
     "integration": "playwright",
     "minimum_tracer_supported": "1.38.0",
-    "max_tracer_supported": "1.59.1",
+    "max_tracer_supported": "1.60.0",
     "auto-instrumented": "True"
   },
   {
@@ -717,7 +717,7 @@
     "dependency": "vitest",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.6",
+    "max_tracer_supported": "4.1.7",
     "auto-instrumented": "True"
   },
   {
