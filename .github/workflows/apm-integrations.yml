@@ -475,7 +475,7 @@ jobs:
           # Bounded at 30s so an Xvfb crash fails fast instead of hanging.
           timeout 30 bash -c 'until xdpyinfo -display :99 >/dev/null 2>&1; do sleep 0.1; done'
       # Point Electron at the virtual display started above.
-      - run: DISPLAY=:99 yarn test:plugins:ci
+      - run: DISPLAY=:99 npm run test:plugins:ci
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

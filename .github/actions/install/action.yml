@@ -1,23 +1,31 @@
 name: Install dependencies
 description: Install dependencies
+inputs:
+  cache:
+    description: Restore and save node_modules.tar between runs of this workflow/job.
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
     - id: install-cache
+      if: inputs.cache == 'true'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         key: install-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('bun.lock') }}-v2
         path: node_modules.tar
-      if: inputs.cache == 'true'
-    - run: tar -xf node_modules.tar
+    - if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit == 'true'
       shell: bash
-      if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit == 'true'
-      # Retry in case of server error from registry.
-      # Wait 60 seconds to give the registry server time to heal.
-    - run: bun install --linker=hoisted --trust || sleep 60 && bun install --linker=hoisted --trust
-      shell: bash
+      run: tar -xf node_modules.tar
+    - if: inputs.cache != 'true' || steps.install-cache.outputs.cache-hit != 'true'
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       env:
         _DD_IGNORE_ENGINES: 'true'
-    - run: tar -cf node_modules.tar node_modules
+      with:
+        max_attempts: 3
+        timeout_minutes: 5
+        retry_wait_seconds: 30
+        command: bun install --linker=hoisted --trust --network-concurrency 8
+    - if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit != 'true'
       shell: bash
-      if: inputs.cache == 'true' && steps.install-cache.outputs.cache-hit != 'true'
+      run: tar -cf node_modules.tar node_modules

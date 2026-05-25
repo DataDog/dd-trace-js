@@ -174,7 +174,7 @@ jobs:
       - uses: ./.github/actions/install
       # Disable core dumps since crashtracking tests intentionally abort
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:crashtracking
+      - run: npm run test:integration:crashtracking
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
