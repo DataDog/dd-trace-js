@@ -1,5 +1,5 @@
 FROM oven/bun:1.3.1 AS bun
-FROM node:24-bookworm-slim
+FROM node:24.14.1-bookworm-slim
 ARG PLAYWRIGHT_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
