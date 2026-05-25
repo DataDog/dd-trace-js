@@ -49,7 +49,7 @@ const transforms = module.exports = {
 
   traceAsyncIterator: traceAny,
   traceIterator: traceAny,
-  tracePromiseWithAsyncEnd: traceAny,
+  waitForAsyncEnd,
 }
 
 function traceAny (state, node, _parent, ancestry) {
@@ -118,7 +118,7 @@ function traceInstanceMethod (state, node, program) {
   // Extract only right-hand side function of line 2.
   const fn = ctorBody[1].expression.right
 
-  fn.async = operator === 'tracePromise' || operator === 'tracePromiseWithAsyncEnd'
+  fn.async = operator === 'tracePromise'
   fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` }, program)
 
   wrapSuper(state, fn)
@@ -131,7 +131,6 @@ function wrap (state, node, program) {
 
   if (operator === 'traceAsyncIterator') return wrapIterator(state, node, program)
   if (operator === 'traceIterator') return wrapIterator(state, node, program)
-  if (operator === 'tracePromiseWithAsyncEnd') return wrapPromiseWithAsyncEnd(state, node)
 }
 
 function wrapSuper (_state, node) {
@@ -248,80 +247,35 @@ function wrapIterator (state, node, program) {
 }
 
 /**
- * @param {{ channelName: string, moduleVersion: string }} state
- * @param {import('estree').FunctionExpression | import('estree').Identifier} node
- * @returns {import('estree').BlockStatement}
+ * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`
+ * wrapper's native-Promise fulfillment handler.
+ *
+ * @param {object} _state
+ * @param {import('estree').CallExpression} node
+ * @returns {void}
  */
-function wrapPromiseWithAsyncEnd (state, node) {
-  const { channelName, moduleVersion } = state
-  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+function waitForAsyncEnd (_state, node) {
+  const onFulfilled = node.arguments[0]
+  const statements = onFulfilled?.body?.body
 
-  const wrapper = parse(`
+  if (!statements || query(onFulfilled.body, '[id.name=__apm$asyncEndPromise]').length > 0) {
+    return
+  }
+
+  const returnIndex = statements.findIndex(statement => (
+    statement.type === 'ReturnStatement' && statement.argument?.name === 'result'
+  ))
+
+  if (returnIndex === -1) return
+
+  const waitStatements = parse(`
     function wrapper () {
-      const __apm$traced = () => {
-        const __apm$wrapped = () => {};
-        return __apm$wrapped.apply(this, arguments);
-      };
-
-      if (
-        !${channelVariable}.start.hasSubscribers &&
-        !${channelVariable}.asyncStart.hasSubscribers &&
-        !${channelVariable}.asyncEnd.hasSubscribers &&
-        !${channelVariable}.end.hasSubscribers &&
-        !${channelVariable}.error.hasSubscribers
-      ) {
-        return __apm$traced();
+      const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
+      if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
+        return __apm$asyncEndPromise.then(() => result, () => result);
       }
-
-      const __apm$ctx = {
-        arguments,
-        self: this,
-        moduleVersion: "${moduleVersion}"
-      };
-
-      return ${channelVariable}.start.runStores(__apm$ctx, () => {
-        try {
-          const __apm$promise = __apm$traced();
-
-          if (!__apm$promise || typeof __apm$promise.then !== 'function') {
-            __apm$ctx.result = __apm$promise;
-            return __apm$promise;
-          }
-
-          return __apm$promise.then(result => {
-            __apm$ctx.result = result;
-
-            ${channelVariable}.asyncStart.publish(__apm$ctx);
-            ${channelVariable}.asyncEnd.publish(__apm$ctx);
-
-            const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
-            if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
-              return __apm$asyncEndPromise.then(() => result, () => result);
-            }
-
-            return result;
-          }, err => {
-            __apm$ctx.error = err;
-
-            ${channelVariable}.error.publish(__apm$ctx);
-            ${channelVariable}.asyncStart.publish(__apm$ctx);
-            ${channelVariable}.asyncEnd.publish(__apm$ctx);
-
-            throw err;
-          });
-        } catch (err) {
-          __apm$ctx.error = err;
-          ${channelVariable}.error.publish(__apm$ctx);
-          throw err;
-        } finally {
-          ${channelVariable}.end.publish(__apm$ctx);
-        }
-      });
     }
-  `).body[0].body // Extract only block statement of function body.
+  `).body[0].body.body
 
-  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
-  query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
-
-  return wrapper
+  statements.splice(returnIndex, 0, ...waitStatements)
 }

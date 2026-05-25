@@ -5,7 +5,7 @@ const { join } = require('path')
 const { pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-const { traceAsyncIterator, traceIterator, tracePromiseWithAsyncEnd } = require('./transforms')
+const { waitForAsyncEnd, traceAsyncIterator, traceIterator } = require('./transforms')
 const instrumentations = require('./instrumentations')
 
 // `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
@@ -36,7 +36,7 @@ const matcherEsm = create(instrumentations, dcPolyfillEsm)
 for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('traceIterator', traceIterator)
   matcher.addTransform('traceAsyncIterator', traceAsyncIterator)
-  matcher.addTransform('tracePromiseWithAsyncEnd', tracePromiseWithAsyncEnd)
+  matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
 }
 
 function rewrite (content, filename, format) {

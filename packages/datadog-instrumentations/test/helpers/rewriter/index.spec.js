@@ -274,7 +274,16 @@ describe('check-require-cache', () => {
             kind: 'Async',
           },
           channelName: 'trace_promise_async_end',
-          transform: 'tracePromiseWithAsyncEnd',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end.js',
+          },
+          astQuery: 'ReturnStatement > CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+          channelName: 'trace_promise_async_end',
+          transform: 'waitForAsyncEnd',
         },
         {
           module: {

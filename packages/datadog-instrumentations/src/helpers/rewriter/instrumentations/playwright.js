@@ -9,11 +9,8 @@ module.exports = [
       versionRange: '>=1.60.0',
       filePath: 'lib/runner/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="Dispatcher"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="run"] > FunctionExpression[async], ' +
-      'ClassDeclaration[id.name="Dispatcher"] > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="run"] > FunctionExpression[async]',
     functionQuery: {
+      className: 'Dispatcher',
       methodName: 'run',
       kind: 'Async',
     },
@@ -25,11 +22,8 @@ module.exports = [
       versionRange: '>=1.60.0',
       filePath: 'lib/runner/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="Dispatcher"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="_createWorker"] > FunctionExpression, ' +
-      'ClassDeclaration[id.name="Dispatcher"] > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="_createWorker"] > FunctionExpression',
     functionQuery: {
+      className: 'Dispatcher',
       methodName: '_createWorker',
       kind: 'Sync',
     },
@@ -41,11 +35,8 @@ module.exports = [
       versionRange: '>=1.60.0',
       filePath: 'lib/runner/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="ProcessHost"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="startRunner"] > FunctionExpression[async], ' +
-      'ClassDeclaration[id.name="ProcessHost"] > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="startRunner"] > FunctionExpression[async]',
     functionQuery: {
+      className: 'ProcessHost',
       methodName: 'startRunner',
       kind: 'Async',
     },
@@ -80,6 +71,15 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'Page_goto',
-    transform: 'tracePromiseWithAsyncEnd',
+  },
+  {
+    module: {
+      name: 'playwright-core',
+      versionRange: '>=1.60.0',
+      filePath: 'lib/coreBundle.js',
+    },
+    astQuery: 'ReturnStatement > CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'Page_goto',
+    transform: 'waitForAsyncEnd',
   },
 ]
