@@ -30,7 +30,6 @@ const ALLOWLIST_EXACT = new Set([
   // User-PM test fixtures: yarn runs as the user's package manager inside the sandbox under test.
   'packages/dd-trace/test/appsec/next.utils.js',
   'integration-tests/esbuild/openfeature.spec.js',
-  'integration-tests/appsec/iast-stack-traces-with-sourcemaps.spec.js',
   'integration-tests/ci-visibility/test-optimization-startup.spec.js',
   'integration-tests/helpers/index.js',
   'packages/dd-trace/test/plugins/versions/package.json',
