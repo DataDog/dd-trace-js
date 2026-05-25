@@ -230,5 +230,12 @@
     "typescript": "^6.0.3",
     "workerpool": "^10.0.2",
     "yaml": "^2.9.0"
-  }
+  },
+  "trustedDependencies": [
+    "@datadog/native-appsec",
+    "@datadog/native-iast-taint-tracking",
+    "@datadog/native-metrics",
+    "@datadog/pprof",
+    "bun"
+  ]
 }

@@ -1,3 +1,10 @@
 [install]
 linker = "isolated"
 saveTextLockfile = true
+
+# Same three-day cooldown as the root bunfig: the plugin sandboxes pull deps
+# from the public npm registry on every test run, so without the filter a
+# freshly-published bad release of a plugin or its transitive dep would land
+# in the matrix on the first CI run after publish.
+minimumReleaseAge = 259200
+minimumReleaseAgeExcludes = ["@datadog/*"]

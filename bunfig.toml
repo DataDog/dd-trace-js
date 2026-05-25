@@ -1,3 +1,14 @@
 [install]
 saveTextLockfile = true
 linker = "hoisted"
+
+# Reject npm package versions younger than three days to widen the window in
+# which a freshly-published compromised release is caught and pulled from the
+# registry before it lands in our installs. `@datadog/*` bypasses the wait
+# because our own publishing pipeline is the trust boundary, not npm's clock.
+# Mirror `.github/dependabot.yml`'s `cooldown.exclude` so the two policies do
+# not disagree. For an urgent advisory whose patch is still within the window,
+# run `bun update <pkg> --minimum-release-age=0` locally and commit the lock;
+# the override stays out of `bunfig.toml` so every bypass shows up in a PR.
+minimumReleaseAge = 259200
+minimumReleaseAgeExcludes = ["@datadog/*"]
