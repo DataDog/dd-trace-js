@@ -13,8 +13,8 @@
  *
  * Idempotent — applies the change once, then no-ops while the sentinel
  * comment is present in the file. Fails loudly if the locked upstream code
- * shape changes so a future yarn upgrade can't silently leave the patch
- * unapplied.
+ * shape changes so a future dependency upgrade can't silently leave the
+ * patch unapplied.
  *
  * Wired to the `prepare` lifecycle so the script never fires on consumer
  * installs of the published tarball — the script itself is not in the
