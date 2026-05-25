@@ -20,6 +20,13 @@ const ALLOWLIST_EXACT = new Set([
   'requirements.json',
   '.gitlab/requirements_block.json',
 
+  // CI scaffolding: verify-exercised-tests parses workflow `run:` strings and unwraps the
+  // `nick-fields/retry` wrapper. It still has to find where the wrapped command starts past
+  // any inline env-assignment prefix, and a stray `yarn` invocation in a future workflow has
+  // to be recognised so the assignments before it get attributed correctly. The detection is
+  // structural, not an invocation — there is no `yarn` process spawned by this script.
+  'scripts/verify-exercised-tests.js',
+
   // User-PM test fixtures: yarn runs as the user's package manager inside the sandbox under test.
   'packages/dd-trace/test/appsec/next.utils.js',
   'integration-tests/esbuild/openfeature.spec.js',
