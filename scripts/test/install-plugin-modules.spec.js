@@ -9,7 +9,6 @@ const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const { createRequire } = require('node:module')
-const os = require('node:os')
 const path = require('node:path')
 
 // eslint-disable-next-line n/no-restricted-require
@@ -18,7 +17,12 @@ const semver = require('semver')
 const repoRoot = path.resolve(__dirname, '..', '..')
 const installScript = path.join(repoRoot, 'scripts', 'install_plugin_modules.js')
 const versionsDir = path.join(repoRoot, 'versions')
-const bunBinDir = path.join(os.homedir(), '.bun', 'bin')
+// Resolve the runtime location of bun. CI installs bun two different ways (the official
+// `~/.bun/bin/bun` install script on dev machines and `npm install -g bun@<ver>` in the
+// `actions/node` composite, which lands it under `npm prefix -g`), so a hard-coded path
+// would silently fail on whichever environment doesn't match. Honour `BUN_BIN` for
+// explicit overrides, fall back to a `which bun` lookup against the current PATH.
+const bunBinDir = path.dirname(resolveBunBinary())
 
 describe('scripts/install_plugin_modules.js', function () {
   this.timeout(180_000)
@@ -79,3 +83,11 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.deepStrictEqual(resolvedVersions, expectedVersions)
   })
 })
+
+function resolveBunBinary () {
+  if (process.env.BUN_BIN) return process.env.BUN_BIN
+  const result = spawnSync('sh', ['-c', 'command -v bun'], { encoding: 'utf8' })
+  const located = result.stdout.trim()
+  assert.ok(located, `could not locate bun on PATH (stderr: ${result.stderr.trim()})`)
+  return located
+}

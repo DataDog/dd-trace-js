@@ -15,7 +15,8 @@
  * body changes, the bumped sentinel makes it replace a stale dd-trace-js patch
  * in place, so existing installs self-heal on the next `prepare` instead of
  * keeping the old body. Fails loudly only if the upstream `getLineCoverage()`
- * shape changes, so a future yarn upgrade can't silently leave it unapplied.
+ * shape changes, so a future dependency upgrade can't silently leave it
+ * unapplied.
  *
  * Wired to the `prepare` lifecycle so the script never fires on consumer
  * installs of the published tarball — the script itself is not in the
