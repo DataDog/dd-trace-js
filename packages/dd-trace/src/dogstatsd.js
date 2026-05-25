@@ -17,6 +17,7 @@ const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
 const TYPE_HISTOGRAM = 'h'
+const TYPE_LABEL = { c: 'count', g: 'gauge', d: 'distribution', h: 'histogram' }
 
 /**
  * @import { DogStatsD } from "../../../index.d.ts"
@@ -25,6 +26,24 @@ const TYPE_HISTOGRAM = 'h'
 class DogStatsDClient {
   #lookup
   #tagsPrefix
+  #telemetryEnabled
+
+  #metricsSent = 0
+  #metricsByType = {
+    [TYPE_COUNTER]: 0,
+    [TYPE_GAUGE]: 0,
+    [TYPE_DISTRIBUTION]: 0,
+    [TYPE_HISTOGRAM]: 0,
+  }
+
+  #bytesSent = 0
+  #bytesDropped = 0
+  #packetsSent = 0
+  #packetsDropped = 0
+
+  #metrics = { message: '', offset: 0, queue: [] }
+  #telemetry = { message: '', offset: 0, queue: [] }
+
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -35,14 +54,14 @@ class DogStatsDClient {
       }
     }
 
+    // Disable self-telemetry by default
+    this.#telemetryEnabled = options?.telemetry ?? false
+
     this._host = options.host
     this._family = isIP(this._host)
     this._port = options.port
     this._tags = options.tags
     this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
-    this._queue = []
-    this._buffer = ''
-    this._offset = 0
     this._udp4 = this._socket('udp4')
     this._udp6 = this._socket('udp6')
   }
@@ -67,23 +86,94 @@ class DogStatsDClient {
     this._add(stat, value, TYPE_HISTOGRAM, tags)
   }
 
-  flush () {
-    const queue = this._enqueue()
+  /**
+   * Flushes the metrics to the agent
+   *
+   * @param {boolean} [telemetry] - whether the payload is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  flush (telemetry = false) {
+    this._enqueue(telemetry)
+    const state = telemetry ? this.#telemetry : this.#metrics
+    const queue = state.queue
 
     if (queue.length === 0) return
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
-    this._queue = []
+    state.queue = []
 
     if (this._httpOptions) {
-      this._sendHttp(queue)
+      this._sendHttp(queue, telemetry)
     } else {
-      this._sendUdp(queue)
+      this._sendUdp(queue, telemetry)
     }
   }
 
-  _sendHttp (queue) {
+  /**
+   * Send self-telemetry metrics to the agent and reset the counters
+   *
+   * @memberof DogStatsDClient
+   */
+  sendTelemetry () {
+    if (!this.#telemetryEnabled) return
+
+    // Snapshot for async I/O
+    const snapshot = {
+      metrics: this.#metricsSent,
+      metricsByType: this.#metricsByType,
+      bytesSent: this.#bytesSent,
+      bytesDropped: this.#bytesDropped,
+      packetsSent: this.#packetsSent,
+      packetsDropped: this.#packetsDropped,
+    }
+
+    this.#metricsSent = 0
+    this.#metricsByType = {
+      [TYPE_COUNTER]: 0,
+      [TYPE_GAUGE]: 0,
+      [TYPE_DISTRIBUTION]: 0,
+      [TYPE_HISTOGRAM]: 0,
+    }
+    this.#bytesSent = 0
+    this.#bytesDropped = 0
+    this.#packetsSent = 0
+    this.#packetsDropped = 0
+
+    this._add('datadog.dogstatsd.client.metrics', snapshot.metrics, TYPE_COUNTER, [], true)
+    for (const [type, value] of Object.entries(snapshot.metricsByType)) {
+      const label = TYPE_LABEL[type]
+      this._add('datadog.dogstatsd.client.metrics_by_type', value, TYPE_COUNTER, [`metrics_type:${label}`], true)
+    }
+    this._add('datadog.dogstatsd.client.bytes_sent', snapshot.bytesSent, TYPE_COUNTER, [], true)
+    this._add('datadog.dogstatsd.client.bytes_dropped', snapshot.bytesDropped, TYPE_COUNTER, [], true)
+    this._add('datadog.dogstatsd.client.packets_sent', snapshot.packetsSent, TYPE_COUNTER, [], true)
+    this._add('datadog.dogstatsd.client.packets_dropped', snapshot.packetsDropped, TYPE_COUNTER, [], true)
+
+    this.flush(true)
+  }
+
+  /**
+   * Update self-telemetry counters.
+   *
+   * @param {string} type - The type of metric to record
+   * @memberof DogStatsDClient
+   */
+  recordMetric (type) {
+    if (!this.#telemetryEnabled) return
+
+    this.#metricsSent++
+    this.#metricsByType[type]++
+  }
+
+  /**
+   * Send metrics to the agent via HTTP
+   *
+   * @param {Buffer[]} queue - The metrics to send
+   * @param {boolean} [telemetry] - Whether the payload is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  _sendHttp (queue, telemetry = false) {
     const buffer = Buffer.concat(queue)
     request(buffer, this._httpOptions, (err) => {
       if (err) {
@@ -95,36 +185,83 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this._httpOptions = undefined
         }
-        this._sendUdp(queue)
+        this._sendUdp(queue, telemetry)
+      } else if (this.#telemetryEnabled && !telemetry) {
+        this.#bytesSent += buffer.length
+        this.#packetsSent++
       }
     })
   }
 
-  _sendUdp (queue) {
+  /**
+   * Send metrics to the agent via UDP
+   *
+   * @param {Buffer[]} queue - The metrics to send
+   * @param {boolean} [telemetry] - Whether the payload is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  _sendUdp (queue, telemetry = false) {
     // dgram resolves the local address via the instrumented dns.lookup when it
     // binds on first send; the noop store keeps that self-traffic off the trace.
     legacyStorage.run({ noop: true }, () => {
       if (this._family === 0) {
         this.#lookup(this._host, (error, address, family) => {
-          if (error) return log.error('DogStatsDClient: Host not found', error)
-          this._sendUdpFromQueue(queue, address, family)
+          if (error) {
+            if (this.#telemetryEnabled && !telemetry) {
+              const bytes = queue.reduce((sum, buffer) => sum + buffer.length, 0)
+              this.#bytesDropped += bytes
+              this.#packetsDropped += queue.length
+            }
+            return log.error('DogStatsDClient: Host not found', error)
+          }
+          this._sendUdpFromQueue(queue, address, family, telemetry)
         })
       } else {
-        this._sendUdpFromQueue(queue, this._host, this._family)
+        this._sendUdpFromQueue(queue, this._host, this._family, telemetry)
       }
     })
   }
 
-  _sendUdpFromQueue (queue, address, family) {
+  /**
+   * Send metrics to the agent via UDP from queue
+   *
+   * @param {Buffer[]} queue - The metrics to send
+   * @param {string} address - The address to send the metrics to
+   * @param {number} family - The family of the address
+   * @param {boolean} [telemetry] - Whether the payload is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  _sendUdpFromQueue (queue, address, family, telemetry = false) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
     for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
-      socket.send(buffer, 0, buffer.length, this._port, address)
+      socket.send(buffer, 0, buffer.length, this._port, address, (err) => {
+        if (err) {
+          if (this.#telemetryEnabled && !telemetry) {
+            this.#bytesDropped += buffer.length
+            this.#packetsDropped++
+          }
+          log.error('DogStatsDClient: UDP error', err)
+        } else if (this.#telemetryEnabled && !telemetry) {
+          this.#bytesSent += buffer.length
+          this.#packetsSent++
+        }
+      })
     }
   }
 
-  _add (stat, value, type, tags) {
+  /**
+   * Add a metric to the queue
+   *
+   * @param {string} stat - The metric name
+   * @param {number} value - The metric value
+   * @param {string} type - The metric type
+   * @param {string[]} tags - The metric tags
+   * @param {boolean} [telemetry] - Whether the metric is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  _add (stat, value, type, tags, telemetry = false) {
     let message = `${stat}:${value}|${type}`
 
     if (tags?.length) {
@@ -139,28 +276,39 @@ class DogStatsDClient {
       message += `|c:${entityId}`
     }
 
-    this._write(`${message}\n`)
+    this._write(`${message}\n`, telemetry)
   }
 
-  _write (message) {
+  /**
+   * Write a message to the queue
+   *
+   * @param {string} message - The message to write
+   * @param {boolean} [telemetry] - Whether the message is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  _write (message, telemetry = false) {
     const offset = Buffer.byteLength(message)
-
-    if (this._offset + offset > MAX_BUFFER_SIZE) {
-      this._enqueue()
+    const state = telemetry ? this.#telemetry : this.#metrics
+    if (state.offset + offset > MAX_BUFFER_SIZE) {
+      this._enqueue(telemetry)
     }
-
-    this._offset += offset
-    this._buffer += message
+    state.offset += offset
+    state.message += message
   }
 
-  _enqueue () {
-    if (this._offset > 0) {
-      this._queue.push(Buffer.from(this._buffer))
-      this._buffer = ''
-      this._offset = 0
+  /**
+   * Enqueue a message to the queue
+   *
+   * @param {boolean} [telemetry] - Whether the message is self-telemetry or not
+   * @memberof DogStatsDClient
+   */
+  _enqueue (telemetry = false) {
+    const state = telemetry ? this.#telemetry : this.#metrics
+    if (state.offset > 0) {
+      state.queue.push(Buffer.from(state.message))
+      state.message = ''
+      state.offset = 0
     }
-
-    return this._queue
   }
 
   _socket (type) {
@@ -218,6 +366,7 @@ class MetricsAggregationClient {
     this._captureHistograms()
 
     this._client.flush()
+    this._client.sendTelemetry()
   }
 
   reset () {
@@ -229,6 +378,7 @@ class MetricsAggregationClient {
   // TODO: Aggregate with a histogram and send the buckets to the client.
   distribution (name, value, tags) {
     this._client.distribution(name, value, tags)
+    this._client.recordMetric(TYPE_DISTRIBUTION)
   }
 
   boolean (name, value, tags) {
@@ -243,6 +393,7 @@ class MetricsAggregationClient {
     }
 
     node.value.record(value)
+    this._client.recordMetric(TYPE_HISTOGRAM)
   }
 
   count (name, count, tags = [], monotonic = true) {
@@ -255,12 +406,14 @@ class MetricsAggregationClient {
     const node = this._ensureTree(container, name, tags, 0)
 
     node.value += count
+    this._client.recordMetric(TYPE_COUNTER)
   }
 
   gauge (name, value, tags) {
     const node = this._ensureTree(this._gauges, name, tags, 0)
 
     node.value = value
+    this._client.recordMetric(TYPE_GAUGE)
   }
 
   increment (name, count = 1, tags) {
@@ -362,7 +515,7 @@ class CustomMetrics {
   #client
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
-    this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    this.#client = new MetricsAggregationClient(new DogStatsDClient({ ...clientConfig, telemetry: true }))
 
     const flush = this.flush.bind(this)
 
