@@ -4,7 +4,7 @@
 const realSetTimeout = setTimeout
 
 const { readFileSync } = require('node:fs')
-const { builtinModules } = require('node:module')
+const { builtinModules, createRequire } = require('node:module')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
@@ -116,6 +116,8 @@ let repositoryRoot
 let lastCoverageMap
 let lastCoverageMapRootDir
 let coverageBackfillContexts
+let coverageBackfillFiles
+let coverageReporterClass
 let activeTestSuiteAbsolutePath
 let isConsoleErrorWrapped = false
 
@@ -1160,26 +1162,184 @@ function hasSkippableSuitesCoverage () {
     Object.keys(skippableSuitesCoverage).length > 0
 }
 
-function addCoverageBackfillFilesToConfigs (configs) {
-  const coverageFiles = Object.keys(skippableSuitesCoverage)
-
-  return configs.map(config => ({
-    ...config,
-    collectCoverageFrom: [...new Set([
-      ...(config.collectCoverageFrom || []),
-      ...coverageFiles,
-    ])],
-  }))
+// Normalize backend meta.coverage paths so Jest can transform them from the repository root.
+function getCoverageBackfillFiles (rootDir) {
+  const files = []
+  for (const filename of Object.keys(skippableSuitesCoverage || {})) {
+    const relativeFilename = path.isAbsolute(filename)
+      ? getTestSuitePath(filename, rootDir)
+      : filename
+    files.push(relativeFilename)
+  }
+  return files
 }
 
-function addCoverageBackfillFilesToGlobalConfig (globalConfig) {
+// Keep synthetic transforms out of Jest's regular cache namespace.
+function getCoverageBackfillConfig (config) {
+  if (!config?.cacheDirectory) return config
+
   return {
-    ...globalConfig,
-    collectCoverageFrom: [...new Set([
-      ...(globalConfig.collectCoverageFrom || []),
-      ...Object.keys(skippableSuitesCoverage),
-    ])],
+    ...config,
+    cacheDirectory: path.join(config.cacheDirectory, 'dd-trace-coverage-backfill'),
   }
+}
+
+function getCoverageBackfillRequire (testContexts, CoverageReporter) {
+  const coverageReporterFilename = CoverageReporter?.filename || coverageReporterClass?.filename
+  if (coverageReporterFilename) {
+    return createRequire(`${path.join(path.dirname(coverageReporterFilename), 'CoverageWorker')}.js`)
+  }
+
+  for (const context of testContexts || []) {
+    const rootDir = context?.config?.rootDir
+    if (!rootDir) continue
+
+    try {
+      return createRequire(path.join(rootDir, 'package.json'))
+    } catch {
+      // Try the next project context.
+    }
+  }
+
+  return require
+}
+
+function getCoverageBackfillDependencies (testContexts, CoverageReporter) {
+  const coverageWorkerRequire = getCoverageBackfillRequire(testContexts, CoverageReporter)
+
+  return {
+    createCoverageMap: coverageWorkerRequire('istanbul-lib-coverage').createCoverageMap,
+    createFileCoverage: coverageWorkerRequire('istanbul-lib-coverage').createFileCoverage,
+    createScriptTransformer: coverageWorkerRequire('@jest/transform').createScriptTransformer,
+    readInitialCoverage: coverageWorkerRequire('istanbul-lib-instrument').readInitialCoverage,
+  }
+}
+
+// Some transformers expose Istanbul coverage as a literal that readInitialCoverage does not parse.
+function extractCoverageDataObject (code) {
+  const marker = 'var coverageData = '
+  const start = code.indexOf(marker)
+  if (start === -1) return
+
+  let depth = 0
+  let quote
+  let escaped = false
+  let index = start + marker.length
+  for (; index < code.length; index++) {
+    const char = code[index]
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === quote) {
+        quote = undefined
+      }
+      continue
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+    } else if (char === '{') {
+      depth++
+    } else if (char === '}') {
+      depth--
+      if (depth === 0) {
+        index++
+        break
+      }
+    }
+  }
+  if (depth !== 0) return
+
+  try {
+    // Some transformers emit a plain coverageData object literal that readInitialCoverage does not recognize.
+    // eslint-disable-next-line no-new-func
+    return new Function(`return (${code.slice(start + marker.length, index)})`)()
+  } catch {
+    // Ignore transformer output that does not contain parseable Istanbul metadata.
+  }
+}
+
+// Read the Istanbul file metadata emitted by Jest's transformer.
+function getCoverageDataFromCode (code, readInitialCoverage) {
+  return readInitialCoverage(code)?.coverageData || extractCoverageDataObject(code)
+}
+
+// Seed Jest's coverage map with files that did not run locally but are covered by backend meta.coverage.
+async function addCoverageBackfillUntestedFiles (coverageMap, testContexts, rootDir, CoverageReporter) {
+  if (!coverageBackfillFiles?.length || !coverageMap || !rootDir) return
+
+  let createFileCoverage, createScriptTransformer, readInitialCoverage
+  try {
+    ({
+      createFileCoverage,
+      createScriptTransformer,
+      readInitialCoverage,
+    } = getCoverageBackfillDependencies(testContexts, CoverageReporter))
+  } catch {
+    return
+  }
+  const processedFiles = new Set()
+
+  for (const context of testContexts || []) {
+    const config = getCoverageBackfillConfig(context.config)
+    // eslint-disable-next-line no-await-in-loop
+    const transformer = await createScriptTransformer(config)
+
+    for (const file of coverageBackfillFiles) {
+      const absoluteFile = path.isAbsolute(file) ? file : path.join(rootDir, file)
+      if (processedFiles.has(absoluteFile) || coverageMap.data[absoluteFile]) continue
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const { code } = await transformer.transformSourceAsync(absoluteFile, readFileSync(absoluteFile, 'utf8'), {
+          instrument: true,
+          supportsDynamicImport: true,
+          supportsExportNamespaceFrom: true,
+          supportsStaticESM: true,
+          supportsTopLevelAwait: true,
+        })
+        const coverageData = getCoverageDataFromCode(code, readInitialCoverage)
+        if (coverageData) {
+          coverageMap.addFileCoverage(createFileCoverage(coverageData))
+          processedFiles.add(absoluteFile)
+        }
+      } catch {
+        // Missing files or files unsupported by this Jest project cannot contribute executable-line metadata.
+      }
+    }
+  }
+}
+
+async function getBackfilledCoverageMap (testContexts, rootDir) {
+  const { createCoverageMap } = getCoverageBackfillDependencies(testContexts)
+  const coverageMap = createCoverageMap({})
+
+  await addCoverageBackfillUntestedFiles(coverageMap, testContexts, rootDir)
+  applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
+
+  return coverageMap
+}
+
+async function synthesizeSkippedCoverageReport (result) {
+  if (!isUserCodeCoverageEnabled || !isSuitesSkipped || !coverageBackfillFiles?.length) return
+  if (result?.results?.numTotalTestSuites !== 0 || result.results.coverageMap) return
+
+  const coverageContexts = getCoverageBackfillContexts()
+  if (!coverageContexts?.size) return
+
+  const rootDir = getRepositoryRootFromContexts(coverageContexts, result.globalConfig?.rootDir)
+
+  if (coverageReporterClass) {
+    const CoverageReporter = coverageReporterClass
+    const coverageReporter = new CoverageReporter(result.globalConfig, {})
+    await coverageReporter.onRunComplete(coverageContexts, result.results)
+  } else {
+    result.results.coverageMap = await getBackfilledCoverageMap(coverageContexts, rootDir)
+  }
+
+  lastCoverageMap = result.results.coverageMap || lastCoverageMap
+  lastCoverageMapRootDir = rootDir
 }
 
 function getTestContexts (tests) {
@@ -1208,6 +1368,7 @@ function resetSuiteSkippingRunState () {
   lastCoverageMap = undefined
   lastCoverageMapRootDir = undefined
   coverageBackfillContexts = undefined
+  coverageBackfillFiles = undefined
 }
 
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
@@ -1225,6 +1386,9 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
     : {}
   coverageBackfillContexts = isSuitesSkipped && isCodeCoverageEnabled
     ? getTestContexts(originalTests)
+    : undefined
+  coverageBackfillFiles = isSuitesSkipped && isCodeCoverageEnabled && hasSkippableSuitesCoverage()
+    ? getCoverageBackfillFiles(suitePathRoot)
     : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
@@ -1260,6 +1424,7 @@ function wrapCoverageReporter (CoverageReporter) {
     return
   }
 
+  coverageReporterClass = CoverageReporter
   wrappedCoverageReporters.add(CoverageReporter)
   if (CoverageReporter.prototype._addUntestedFiles) {
     shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
@@ -1272,22 +1437,27 @@ function wrapCoverageReporter (CoverageReporter) {
       const result = addUntestedFiles.apply(this, args)
       if (!isSuitesSkipped || !isCodeCoverageEnabled) return result
 
-      if (result?.then) {
-        return result.then(value => {
+      const addBackfillAndApplyCoverage = () => {
+        return addCoverageBackfillUntestedFiles(this._coverageMap, args[0], rootDir, CoverageReporter).then(() => {
           applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
-          return value
         })
       }
-      applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
-      return result
+
+      if (result?.then) {
+        return result.then(value => {
+          return addBackfillAndApplyCoverage().then(() => value)
+        })
+      }
+      return addBackfillAndApplyCoverage().then(() => result)
     })
   }
 
-  shimmer.wrap(CoverageReporter.prototype, 'onRunComplete', onRunComplete => function (contexts, results) {
+  shimmer.wrap(CoverageReporter.prototype, 'onRunComplete', onRunComplete => async function (contexts, results) {
     const coverageContexts = getCoverageBackfillContexts(contexts)
     const rootDir = getRepositoryRootFromContexts(coverageContexts, this._globalConfig?.rootDir)
     const coverageMap = results?.coverageMap || this._coverageMap
     if (isSuitesSkipped && isCodeCoverageEnabled) {
+      await addCoverageBackfillUntestedFiles(coverageMap, coverageContexts, rootDir, CoverageReporter)
       applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
     }
     lastCoverageMap = coverageMap
@@ -1511,6 +1681,12 @@ function getCliWrapper (isNewJestVersion) {
       })
 
       const result = await runCLI.apply(this, arguments)
+
+      try {
+        await synthesizeSkippedCoverageReport(result)
+      } catch (err) {
+        log.error('Error synthesizing Jest coverage report for skipped suites', err)
+      }
 
       const {
         results: {
@@ -2015,13 +2191,7 @@ function configureTestEnvironment (readConfigsResult) {
       testEnvironmentOptions,
     }
   })
-  const shouldBackfillCoverage = isCodeCoverageEnabled && isSuitesSkippingEnabled && hasSkippableSuitesCoverage()
-  readConfigsResult.configs = shouldBackfillCoverage
-    ? addCoverageBackfillFilesToConfigs(configs)
-    : configs
-  if (shouldBackfillCoverage) {
-    readConfigsResult.globalConfig = addCoverageBackfillFilesToGlobalConfig(readConfigsResult.globalConfig)
-  }
+  readConfigsResult.configs = configs
   testSessionConfigurationCh.publish(readConfigsResult.configs.map(config => config.testEnvironmentOptions))
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
 

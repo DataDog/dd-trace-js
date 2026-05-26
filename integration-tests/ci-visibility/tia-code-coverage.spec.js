@@ -321,10 +321,9 @@ describe('TIA code coverage', function () {
     assert.strictEqual(result.codeCoverageLinesPct, result.stdoutCodeCoverageLinesPct)
   })
 
-  // Zero-local-suite path: every suite that Jest would run is skipped by TIA. There is no suite coverage payload,
-  // so session coverage and Jest stdout have to be reconstructed from backend meta.coverage plus Jest's coverage
-  // machinery.
-  it('keeps jest total code coverage stable when all local suites are skipped', async () => {
+  // Zero-local-suite path: every suite that Jest would run is returned as skippable. No suite should run here;
+  // instead, we synthesize the Jest coverage report from backend meta.coverage and the local Jest config.
+  it('keeps jest total code coverage stable when all local suites are skippable', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
@@ -431,8 +430,8 @@ describe('TIA code coverage', function () {
   // Customers can enable Jest coverage without collectCoverageFrom. These cases keep that absence explicit so we
   // do not accidentally make TIA coverage backfill depend on users configuring collection globs.
   context('without collectCoverageFrom', () => {
-    // Config-file coverage still has enough Jest coverage machinery to publish totals. Backend coverage should
-    // fill the skipped files and keep the result aligned with the baseline.
+    // Config-file coverage still has enough Jest coverage machinery to publish totals. Backend coverage fills the
+    // skipped files and keeps the result aligned with the baseline without running a suite.
     it('keeps jest config-file coverage stable', async () => {
       const framework = {
         ...FRAMEWORKS[0],
