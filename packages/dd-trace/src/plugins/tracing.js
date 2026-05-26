@@ -99,13 +99,11 @@ class TracingPlugin extends Plugin {
       const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
 
       if (this[event]) {
-        this.addTraceSub(event, message => {
-          this[event](message)
-        })
+        this.addTraceSub(event, this[event].bind(this))
       }
 
       if (this[bindName]) {
-        this.addTraceBind(event, message => this[bindName](message))
+        this.addTraceBind(event, this[bindName].bind(this))
       }
     }
   }
@@ -149,7 +147,7 @@ class TracingPlugin extends Plugin {
    * @param {import('../../../..').Span} [span]
    */
   addError (error, span = this.activeSpan) {
-    if (span && !span._spanContext._tags.error) {
+    if (span && !span.context().getTag('error')) {
       // Errors may be wrapped in a context.
       span.setTag('error', error?.error || error || 1)
     }

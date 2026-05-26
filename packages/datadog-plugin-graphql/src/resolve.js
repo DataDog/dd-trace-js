@@ -41,6 +41,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
+    let namedReturnType = info.returnType
+    while (namedReturnType.ofType) namedReturnType = namedReturnType.ofType
+
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${info.fieldName}:${info.returnType}`,
@@ -49,7 +52,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       meta: {
         'graphql.field.name': info.fieldName,
         'graphql.field.path': computedPathString,
-        'graphql.field.type': info.returnType.name,
+        'graphql.field.type': namedReturnType.name,
         'graphql.source': source,
       },
     }, fieldCtx)

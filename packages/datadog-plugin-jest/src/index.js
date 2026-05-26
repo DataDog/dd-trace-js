@@ -194,7 +194,7 @@ class JestPlugin extends CiPlugin {
       for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
-        config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestCommand = this.testSessionSpan.context().getTag(TEST_COMMAND)
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
@@ -596,7 +596,7 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
-    const skippingEnabled = testSuiteSpan?.context()._tags?.[TEST_ITR_SKIPPING_ENABLED]
+    const skippingEnabled = testSuiteSpan?.context()?.getTag?.(TEST_ITR_SKIPPING_ENABLED)
     if (skippingEnabled !== undefined) {
       extraTags[TEST_ITR_SKIPPING_ENABLED] = skippingEnabled
     }

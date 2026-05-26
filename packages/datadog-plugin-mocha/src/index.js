@@ -152,7 +152,7 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!testSuiteSpan.context()._tags[TEST_STATUS]) {
+        if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
         testSuiteSpan.finish()

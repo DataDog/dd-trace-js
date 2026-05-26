@@ -22,7 +22,7 @@ function finish (ctx) {
 
 addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
-    return function wrappedExecute (dbQuery, ...args) {
+    return function wrappedExecute (dbQuery) {
       if (!startChannel.hasSubscribers) {
         return execute.apply(this, arguments)
       }
@@ -72,6 +72,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       }
 
       return startChannel.runStores(ctx, () => {
+        arguments[0] = ctx.injected
         try {
           let result = execute.apply(this, arguments)
 

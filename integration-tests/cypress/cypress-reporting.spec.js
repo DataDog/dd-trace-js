@@ -305,6 +305,86 @@ moduleTypes.forEach(({
       })
     }
 
+    it('creates cypress.step spans for each command', async () => {
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
+      const specToRun = 'cypress/e2e/commands.cy.js'
+
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const passTestEvent = events.find(
+            event => event.type === 'test' && event.content.resource.includes('runs well-known commands')
+          )
+          const failTestEvent = events.find(
+            event => event.type === 'test' && event.content.resource.includes('fails on a step')
+          )
+          assert.ok(passTestEvent, 'passing cypress.test event exists')
+          assert.ok(failTestEvent, 'failing cypress.test event exists')
+
+          const stepEvents = events.filter(event => event.type === 'span' && event.content.name === 'cypress.step')
+          assert.ok(stepEvents.length > 0, 'cypress.step spans exist')
+
+          const visitStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'visit')
+          assert.ok(visitStep, 'visit step span exists')
+          assertObjectContains(visitStep.content, {
+            name: 'cypress.step',
+            resource: 'visit',
+            meta: { 'cypress.command': 'visit' },
+          })
+
+          const getStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'get')
+          assert.ok(getStep, 'get step span exists')
+          assertObjectContains(getStep.content, {
+            name: 'cypress.step',
+            resource: 'get',
+            meta: { 'cypress.command': 'get' },
+          })
+
+          const containsStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'contains')
+          assert.ok(containsStep, 'contains step span exists')
+
+          for (const stepEvent of stepEvents) {
+            const matchesPass = stepEvent.content.trace_id.toString() === passTestEvent.content.trace_id.toString()
+            const matchesFail = stepEvent.content.trace_id.toString() === failTestEvent.content.trace_id.toString()
+            assert.ok(matchesPass || matchesFail, 'step span trace_id matches one of the test trace_ids')
+          }
+
+          const failedStep = stepEvents.find(event =>
+            event.content.trace_id.toString() === failTestEvent.content.trace_id.toString() &&
+            event.content.meta[ERROR_MESSAGE]
+          )
+          assert.ok(failedStep, 'failed step span with error exists')
+          assert.ok(failedStep.content.meta[ERROR_MESSAGE], 'failed step has error message')
+          assert.ok(failedStep.content.meta[ERROR_TYPE], 'failed step has error type')
+        },
+        { hardTimeout: 60000 }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
     // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
     const over10It = (version !== '6.7.0') ? it : it.skip
     // Cypress <14 shipped an older ts-node ESM loader that doesn't implement the
