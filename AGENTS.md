@@ -297,6 +297,28 @@ Example: `feat(appsec): add new WAF rule`
 - Label: `semver-patch` (fixes only), `semver-minor` (new features), `semver-major` (breaking)
 - **All tests must pass - all-green policy, no exceptions**
 
+### Integration Labels
+
+When a PR touches a third-party integration, apply the matching `integration-<name>` GitHub label.
+
+**The label names the underlying *technology*, not the npm library.** Multiple plugin/instrumentation files often map to a single label, and the label name does not always match the plugin directory name. Examples:
+
+- `packages/datadog-plugin-mysql/` and `packages/datadog-plugin-mysql2/` → `integration-mysql` (both are MySQL clients)
+- `packages/datadog-plugin-tedious/` → `integration-tedious` (note: this one's a misnomer — tedious is a SQL Server driver, so semantically it covers MSSQL; use the label that actually exists)
+
+**Don't guess the label from the directory name.** Look it up:
+
+1. List candidates: `gh label list -L 300 --search integration-`
+2. If uncertain which label maps to the library, check recent merged PRs that touched the same plugin: `gh pr list --state merged --search "<path-or-keyword>" --json number,title,labels` and see what was applied last time.
+3. If no label exists for the technology, do **not** create one — flag it to the user; the label set is curated manually.
+
+Once identified:
+
+- Apply with: `gh pr edit <pr-number-or-url> --add-label integration-<name>`
+- One label per *technology* touched; a PR changing both `mysql` and `pg` plugins gets `integration-mysql` **and** `integration-pg`, but a PR changing both `mysql` and `mysql2` gets only `integration-mysql`.
+- Pure test-only changes (e.g. fixing a flaky spec) still count as touching the integration — apply the label.
+- Cross-cutting changes that incidentally affect an integration (e.g. a core `dd-trace` change that updates a plugin call site) do **not** need the label unless the integration's behavior actually changes.
+
 ## Vendoring Dependencies
 
 Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
