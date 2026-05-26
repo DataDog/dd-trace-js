@@ -191,7 +191,7 @@ describe('plugins/util/web', () => {
   describe('addError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -224,7 +224,7 @@ describe('plugins/util/web', () => {
   describe('addStatusError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -320,7 +320,7 @@ describe('plugins/util/web', () => {
   describe('http.endpoint tagging', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
@@ -368,7 +368,7 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
@@ -441,7 +441,7 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
@@ -509,7 +509,7 @@ describe('plugins/util/web', () => {
 
       web.startSpan(tracer, httpConfig, req, res, 'test.request')
       span = web.root(req)
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       assert.ok(Object.hasOwn(tags, 'http.url'))
       assert.ok(!Object.hasOwn(tags, USER_AGENT_TAG))
@@ -527,7 +527,7 @@ describe('plugins/util/web', () => {
 
       web.startSpan(tracer, httpConfig, req, res, 'test.request')
       span = web.root(req)
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.finishAll(web.getContext(req))
 
@@ -549,7 +549,7 @@ describe('plugins/util/web', () => {
 
       web.finishAll(web.getContext(req))
 
-      assert.ok(!Object.hasOwn(span.context()._tags, HTTP_CLIENT_IP))
+      assert.ok(!span.context().hasTag(HTTP_CLIENT_IP))
     })
 
     it('tags http.client_ip when clientIpEnabled is true', () => {
@@ -560,7 +560,7 @@ describe('plugins/util/web', () => {
 
       web.finishAll(web.getContext(req))
 
-      assert.strictEqual(span.context()._tags[HTTP_CLIENT_IP], '203.0.113.5')
+      assert.strictEqual(span.context().getTag(HTTP_CLIENT_IP), '203.0.113.5')
     })
   })
 
