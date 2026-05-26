@@ -495,17 +495,31 @@ describe('Span', () => {
       sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    it('should parse a key:value,key:value string via tagger', () => {
-      span.addTags('foo:bar,baz:qux')
-
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar,baz:qux')
-    })
-
     it('should ignore unsupported argument types', () => {
       const tagsBefore = { ...span.context().getTags() }
       span.addTags(42)
       span.addTags(null)
       span.addTags(undefined)
+
+      assert.deepStrictEqual(span.context().getTags(), tagsBefore)
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    const legacyAddTagsShape = DD_MAJOR < 6 ? it : it.skip
+    legacyAddTagsShape('still accepts string and array inputs via tagger on v5', () => {
+      span.addTags('foo:bar')
+      span.addTags([{ baz: 'qux' }])
+
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar')
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), [{ baz: 'qux' }])
+    })
+
+    const v6AddTagsShape = DD_MAJOR >= 6 ? it : it.skip
+    v6AddTagsShape('drops string and array inputs on v6', () => {
+      const tagsBefore = { ...span.context().getTags() }
+      span.addTags('foo:bar')
+      span.addTags([{ baz: 'qux' }])
 
       assert.deepStrictEqual(span.context().getTags(), tagsBefore)
       sinon.assert.notCalled(tagger.add)

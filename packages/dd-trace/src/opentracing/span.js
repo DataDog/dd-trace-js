@@ -215,25 +215,31 @@ class DatadogSpan {
   }
 
   addTags (keyValueMap) {
-    // Plugin callers only ever pass a plain object; skip the polymorphic
-    // `tagger.add` dispatch and write directly. The string branch is the
-    // `key:val,key:val` parser for `config.tags` / `options.tags` at init.
+    // v6 hot path: `Object.assign` straight onto the live tag map. The
+    // string and array shapes never appeared in the public TypeScript
+    // surface, and no internal v6 caller passes one (see MIGRATING.md).
+    // v5 still accepts both via `tagger.add` for `config.tags` /
+    // `options.tags` callers that pass `'key:val,key:val'` strings.
     const tags = this._spanContext.getTags()
-    if (keyValueMap !== null && typeof keyValueMap === 'object') {
-      Object.assign(tags, keyValueMap)
-    } else if (typeof keyValueMap === 'string') {
-      tagger.add(tags, keyValueMap)
-    } else {
-      return this
-    }
+    let mayChangeSamplingPriority
 
-    if (
-      this._spanContext._sampling.priority === undefined &&
-      (typeof keyValueMap === 'string' ||
+    if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
+      Object.assign(tags, keyValueMap)
+      mayChangeSamplingPriority =
         MANUAL_KEEP in keyValueMap ||
         MANUAL_DROP in keyValueMap ||
-        SAMPLING_PRIORITY in keyValueMap)
-    ) {
+        SAMPLING_PRIORITY in keyValueMap
+    } else {
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
+        tagger.add(tags, keyValueMap)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
+      }
+    }
+
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
 
