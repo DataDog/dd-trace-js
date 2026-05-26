@@ -66,14 +66,14 @@
     "dependency": "@elastic/elasticsearch",
     "integration": "elasticsearch",
     "minimum_tracer_supported": "5.6.16",
-    "max_tracer_supported": "9.4.0",
+    "max_tracer_supported": "9.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@elastic/transport",
     "integration": "elasticsearch",
     "minimum_tracer_supported": "8.0.0",
-    "max_tracer_supported": "9.3.5",
+    "max_tracer_supported": "9.3.6",
     "auto-instrumented": "True"
   },
   {
@@ -101,7 +101,7 @@
     "dependency": "@grpc/grpc-js",
     "integration": "grpc",
     "minimum_tracer_supported": "1.0.3",
-    "max_tracer_supported": "1.14.3",
+    "max_tracer_supported": "1.14.4",
     "auto-instrumented": "True"
   },
   {
@@ -255,7 +255,7 @@
     "dependency": "bullmq",
     "integration": "bullmq",
     "minimum_tracer_supported": "5.66.0",
-    "max_tracer_supported": "5.76.10",
+    "max_tracer_supported": "5.77.1",
     "auto-instrumented": "True"
   },
   {
@@ -325,7 +325,7 @@
     "dependency": "electron",
     "integration": "electron",
     "minimum_tracer_supported": "37.0.0",
-    "max_tracer_supported": "42.1.0",
+    "max_tracer_supported": "42.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -367,7 +367,7 @@
     "dependency": "hono",
     "integration": "hono",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.12.19",
+    "max_tracer_supported": "4.12.22",
     "auto-instrumented": "True"
   },
   {
@@ -458,7 +458,7 @@
     "dependency": "koa",
     "integration": "koa",
     "minimum_tracer_supported": "2.0.0",
-    "max_tracer_supported": "3.2.0",
+    "max_tracer_supported": "3.2.1",
     "auto-instrumented": "True"
   },
   {
@@ -472,7 +472,7 @@
     "dependency": "mariadb",
     "integration": "mariadb",
     "minimum_tracer_supported": "2.0.4",
-    "max_tracer_supported": "3.4.5",
+    "max_tracer_supported": "3.5.2",
     "auto-instrumented": "True"
   },
   {
@@ -647,7 +647,7 @@
     "dependency": "protobufjs",
     "integration": "protobufjs",
     "minimum_tracer_supported": "6.8.0",
-    "max_tracer_supported": "8.4.0",
+    "max_tracer_supported": "8.4.2",
     "auto-instrumented": "True"
   },
   {
@@ -738,7 +738,7 @@
     "dependency": "ws",
     "integration": "ws",
     "minimum_tracer_supported": "8.0.0",
-    "max_tracer_supported": "8.20.1",
+    "max_tracer_supported": "8.21.0",
     "auto-instrumented": "True"
   }
 ]
