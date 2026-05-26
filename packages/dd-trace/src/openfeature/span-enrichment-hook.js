@@ -61,13 +61,12 @@ class SpanEnrichmentHook {
    *
    * @param {object} hookContext - Hook context containing the flag key and evaluation context
    * @param {string} hookContext.flagKey - The flag key being evaluated
-   * @param {object} [hookContext.evaluationContext] - Evaluation context
-   * @param {string} [hookContext.evaluationContext.targetingKey] - Targeting key
+   * @param {object} [hookContext.context] - Evaluation context
+   * @param {string} [hookContext.context.targetingKey] - Targeting key
    * @param {object} evaluationDetails - Full evaluation details including flag metadata
    * @param {object} [evaluationDetails.flagMetadata] - Metadata from the provider
    * @param {number} [evaluationDetails.flagMetadata.__dd_split_serial_id] - Serial ID from UFC split
-   * @param {boolean} [evaluationDetails.flagMetadata.__dd_do_log] - Whether to log subject (preferred)
-   * @param {boolean} [evaluationDetails.flagMetadata.doLog] - Whether to log subject (deprecated)
+   * @param {boolean} [evaluationDetails.flagMetadata.__dd_do_log] - Whether to log subject
    * @param {string} [evaluationDetails.reason] - Evaluation reason
    * @param {boolean|string|number|object} [evaluationDetails.value] - Evaluated value
    * @returns {void}
