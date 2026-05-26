@@ -22,7 +22,7 @@ function checkUserAndSetUser (tracer, user) {
 
   const rootSpan = getRootSpan()
   if (rootSpan) {
-    if (!rootSpan.context()._tags['usr.id']) {
+    if (!rootSpan.context().getTag('usr.id')) {
       setUserTags(user, rootSpan)
     }
   } else {
