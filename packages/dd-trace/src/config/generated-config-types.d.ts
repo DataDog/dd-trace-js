@@ -428,6 +428,9 @@ export interface GeneratedConfig {
     flaggingProvider: {
       enabled: boolean;
       initializationTimeoutMs: number;
+      spanEnrichment: {
+        enabled: boolean;
+      };
     };
   };
   flakyTestRetriesCount: number;

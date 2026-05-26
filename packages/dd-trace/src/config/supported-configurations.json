@@ -773,6 +773,16 @@
         "default": "false"
       }
     ],
+    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.flaggingProvider.spanEnrichment.enabled"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
       {
         "implementation": "B",

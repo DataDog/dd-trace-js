@@ -33,6 +33,9 @@ describe('FlaggingProvider', () => {
         flaggingProvider: {
           enabled: true,
           initializationTimeoutMs: 30_000,
+          spanEnrichment: {
+            enabled: true,
+          },
         },
       },
     }
@@ -129,28 +132,65 @@ describe('FlaggingProvider', () => {
       sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
     })
 
-    it('should create SpanEnrichmentHook with tracer', () => {
+    it('should create SpanEnrichmentHook with tracer when span enrichment is enabled', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
       sinon.assert.calledOnceWithExactly(mockSpanEnrichmentHookClass, mockTracer)
     })
 
-    it('should register EvalMetricsHook and SpanEnrichmentHook as hooks', () => {
+    it('should not create SpanEnrichmentHook when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.notCalled(mockSpanEnrichmentHookClass)
+    })
+
+    it('should not create SpanEnrichmentHook when spanEnrichment config is missing', () => {
+      delete mockConfig.experimental.flaggingProvider.spanEnrichment
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.notCalled(mockSpanEnrichmentHookClass)
+    })
+
+    it('should register EvalMetricsHook and SpanEnrichmentHook as hooks when enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 2)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
       assert.strictEqual(provider.hooks[1], mockSpanEnrichmentHook)
     })
+
+    it('should only register EvalMetricsHook when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.hooks.length, 1)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+    })
+
+    it('should log debug message when span enrichment is enabled', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledWith(log.debug, '%s span enrichment enabled', 'FlaggingProvider')
+    })
   })
 
   describe('onClose', () => {
-    it('should call destroy on SpanEnrichmentHook', () => {
+    it('should call destroy on SpanEnrichmentHook when enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       provider.onClose()
 
       sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
+    })
+
+    it('should not throw when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.notCalled(mockSpanEnrichmentHook.destroy)
     })
   })
 

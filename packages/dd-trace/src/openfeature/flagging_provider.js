@@ -29,8 +29,13 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._tracer = tracer
     this._config = config
 
-    this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
-    this.hooks.push(new EvalMetricsHook(config), this.#spanEnrichmentHook)
+    this.hooks.push(new EvalMetricsHook(config))
+
+    if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
+      this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
+      this.hooks.push(this.#spanEnrichmentHook)
+      log.debug('%s span enrichment enabled', this.constructor.name)
+    }
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.experimental.flaggingProvider.initializationTimeoutMs)
@@ -41,7 +46,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
-    this.#spanEnrichmentHook.destroy()
+    this.#spanEnrichmentHook?.destroy()
   }
 
   /**
