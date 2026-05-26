@@ -45,7 +45,14 @@ function createMockDdSpan ({ ended = false } = {}) {
       events.push({ name, attributes, startTime })
     },
     setOperationName (name) { operationName = name },
-    context () { return { _tags: tags } },
+    context () {
+      return {
+        _tags: tags,
+        getTag: (key) => tags[key],
+        getTags: () => tags,
+        setTag: (key, value) => { tags[key] = value },
+      }
+    },
 
     // Read-only inspection handles for assertions.
     get tags () { return tags },

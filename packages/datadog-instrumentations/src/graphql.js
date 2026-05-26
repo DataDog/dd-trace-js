@@ -1,5 +1,7 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
@@ -10,7 +12,13 @@ const ddGlobal = globalThis[Symbol.for('dd-trace')]
 
 /** cached objects */
 
+// `contexts` is the fast resolver-side lookup; `executeCtx` is the fallback
+// when `contextValue` is a primitive and cannot key a WeakMap.
 const contexts = new WeakMap()
+const executeCtx = new AsyncLocalStorage()
+// Tracks normalized args already instrumented in an outer wrap so graphql-yoga
+// (which stacks `execute` + `normalizedExecutor`) only emits one span per call.
+const instrumentedArgs = new WeakSet()
 const documentSources = new WeakMap()
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
@@ -62,14 +70,17 @@ function getOperation (document, operationName) {
 function normalizeArgs (args, defaultFieldResolver) {
   if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
 
-  args[0].contextValue ||= {}
-  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
+  const original = args[0]
+  const normalized = {
+    ...original,
+    fieldResolver: wrapResolve(original.fieldResolver || defaultFieldResolver),
+  }
 
-  return args[0]
+  args[0] = normalized
+  return normalized
 }
 
 function normalizePositional (args, defaultFieldResolver) {
-  args[3] = args[3] || {} // contextValue
   args[6] = wrapResolve(args[6] || defaultFieldResolver) // fieldResolver
   args.length = Math.max(args.length, 7)
 
@@ -82,6 +93,12 @@ function normalizePositional (args, defaultFieldResolver) {
     operationName: args[5],
     fieldResolver: args[6],
   }
+}
+
+// `WeakMap.set` throws `TypeError` on a non-object key; `get`/`has`/`delete`
+// silently miss. Skip the WeakMap entirely for non-keyable `contextValue`.
+function isWeakMapKey (value) {
+  return value !== null && typeof value === 'object'
 }
 
 function wrapParse (parse) {
@@ -155,14 +172,21 @@ function wrapExecute (execute) {
         return exe.apply(this, arguments)
       }
 
+      // The outer wrap leaves its normalized args object in `arguments[0]`; on
+      // graphql-yoga's inner wrap that reference is already known here.
+      if (instrumentedArgs.has(arguments[0])) {
+        return exe.apply(this, arguments)
+      }
+
       const args = normalizeArgs(arguments, defaultFieldResolver)
       const schema = args.schema
       const document = args.document
       const source = documentSources.get(document)
       const contextValue = args.contextValue
+      const keyable = isWeakMapKey(contextValue)
       const operation = getOperation(document, args.operationName)
 
-      if (contexts.has(contextValue)) {
+      if (keyable && contexts.has(contextValue)) {
         return exe.apply(this, arguments)
       }
 
@@ -175,15 +199,19 @@ function wrapExecute (execute) {
         abortController: new AbortController(),
       }
 
+      // Only the object form leaves a stable single-object handle in
+      // `arguments[0]` for the inner wrap to see.
+      if (args === arguments[0]) instrumentedArgs.add(args)
+
       return startExecuteCh.runStores(ctx, () => {
         if (schema) {
           wrapFields(schema._queryType)
           wrapFields(schema._mutationType)
         }
 
-        contexts.set(contextValue, ctx)
+        if (keyable) contexts.set(contextValue, ctx)
 
-        return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
+        const finish = (err, res) => {
           if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
 
           const error = err || (res && res.errors && res.errors[0])
@@ -194,8 +222,16 @@ function wrapExecute (execute) {
           }
 
           ctx.res = res
+          if (keyable) contexts.delete(contextValue)
+          instrumentedArgs.delete(args)
           finishExecuteCh.publish(ctx)
-        })
+        }
+
+        // Skip the ALS entry on the common object-`contextValue` path; the
+        // resolver reaches `ctx` via the WeakMap there.
+        return keyable
+          ? callInAsyncScope(exe, this, arguments, ctx.abortController, finish)
+          : executeCtx.run(ctx, () => callInAsyncScope(exe, this, arguments, ctx.abortController, finish))
       })
     }
   }
@@ -207,7 +243,9 @@ function wrapResolve (resolve) {
   function resolveAsync (source, args, contextValue, info) {
     if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
 
-    const ctx = contexts.get(contextValue)
+    // `WeakMap.get(primitive)` returns `undefined`, so the fallback covers
+    // executes that ran with a primitive `contextValue`.
+    const ctx = contexts.get(contextValue) ?? executeCtx.getStore()
 
     if (!ctx) return resolve.apply(this, arguments)
 
@@ -343,6 +381,11 @@ addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor =>
   return executor
 })
 
+// TODO(BridgeAR): graphql >=17.0.0-alpha.9 routes execute() through
+// experimentalExecuteIncrementally(), bypassing this hook. The same
+// function returns { initialResult, subsequentResults } for @defer /
+// @stream which callInAsyncScope does not handle — execute finishes
+// before the streamed payloads land.
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
   shimmer.wrap(execute, 'execute', wrapExecute(execute))
   return execute

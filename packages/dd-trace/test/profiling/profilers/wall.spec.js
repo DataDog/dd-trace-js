@@ -737,7 +737,13 @@ describe('profilers/native/wall', () => {
     function makeWebSpan () {
       const tags = {}
       const spanId = {}
-      const ctx = { _tags: tags, _spanId: spanId, _parentId: null, _trace: { started: [] } }
+      const ctx = {
+        _tags: tags,
+        _spanId: spanId,
+        _parentId: null,
+        _trace: { started: [] },
+        getTags () { return this._tags },
+      }
       const span = { context: () => ctx }
       ctx._trace.started.push(span)
       return { span, tags, spanId }
@@ -746,7 +752,13 @@ describe('profilers/native/wall', () => {
     function makeChildSpan (webSpanId, webSpan) {
       const tags = { 'span.type': 'router' }
       const spanId = {}
-      const ctx = { _tags: tags, _spanId: spanId, _parentId: webSpanId, _trace: { started: [webSpan] } }
+      const ctx = {
+        _tags: tags,
+        _spanId: spanId,
+        _parentId: webSpanId,
+        _trace: { started: [webSpan] },
+        getTags () { return this._tags },
+      }
       const span = { context: () => ctx }
       ctx._trace.started.push(span)
       return { span, tags }
