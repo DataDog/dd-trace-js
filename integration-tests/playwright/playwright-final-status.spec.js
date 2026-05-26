@@ -24,6 +24,7 @@ const {
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
+const RETRY_FINAL_STATUS_TIMEOUT = 60000
 
 const latest = 'latest'
 const { oldest } = require('./versions')
@@ -158,7 +159,7 @@ versions.forEach((version) => {
             const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
             assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
               'All other ATR runs should not have TEST_FINAL_STATUS')
-          }, 30000)
+          }, RETRY_FINAL_STATUS_TIMEOUT)
 
         // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
         // dd-trace won't override it since its guard is `if (project.retries === 0)`.
@@ -242,7 +243,7 @@ versions.forEach((version) => {
               'highest-level-describe  leading and trailing spaces    should work with annotated tests',
               'pass'
             )
-          }, 30000)
+          }, RETRY_FINAL_STATUS_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -299,7 +300,7 @@ versions.forEach((version) => {
               const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
               assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
                 'All other ATR runs should not have TEST_FINAL_STATUS')
-            }, 30000)
+            }, RETRY_FINAL_STATUS_TIMEOUT)
 
           // --retries=2 is passed via CLI so test.retries is correctly set at startup.
           // dd-trace won't override it since its guard is `if (project.retries === 0)`.

@@ -7,4 +7,5 @@ module.exports = [
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
+  ...require('./playwright'),
 ]
