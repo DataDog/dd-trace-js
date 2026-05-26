@@ -98,9 +98,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
           $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe'
           New-Item -Path $key -Force | Out-Null
-          Set-ItemProperty -Path $key -Name DumpFolder -Type ExpandString -Value $dumpDir
-          Set-ItemProperty -Path $key -Name DumpType   -Type DWord        -Value 1   # 1 = minidump (small; full dump = 2 would risk runner disk pressure with DumpCount=20)
-          Set-ItemProperty -Path $key -Name DumpCount  -Type DWord        -Value 20
+          Set-ItemProperty -Path $key -Name DumpFolder      -Type ExpandString -Value $dumpDir
+          # DumpType=0 means "use CustomDumpFlags". Flags chosen for diagnosing native-binding
+          # teardown crashes (PROF-14469) without including heap memory:
+          #   0x0001 MiniDumpWithDataSegs        — module .data segments (V8/libc globals)
+          #   0x0004 MiniDumpWithHandleData      — process handle table
+          #   0x0020 MiniDumpWithUnloadedModules — modules unloaded before the crash
+          #   0x1000 MiniDumpWithThreadInfo      — per-thread CPU/start-address/affinity
+          Set-ItemProperty -Path $key -Name DumpType        -Type DWord        -Value 0
+          Set-ItemProperty -Path $key -Name CustomDumpFlags -Type DWord        -Value 0x1025
+          Set-ItemProperty -Path $key -Name DumpCount       -Type DWord        -Value 20
           "WER_DUMP_DIR=$dumpDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
