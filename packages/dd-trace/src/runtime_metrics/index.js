@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../log')
+
 let runtimeMetrics
 
 const noop = runtimeMetrics = {
@@ -26,7 +28,13 @@ module.exports = {
 
     Object.setPrototypeOf(module.exports, runtimeMetrics)
 
-    runtimeMetrics.start(config)
+    try {
+      runtimeMetrics.start(config)
+    } catch (err) {
+      // Unwind whatever managed to register so a partial init doesn't leak into the next start().
+      runtimeMetrics.stop()
+      log.error('Failed to start runtime metrics', err)
+    }
   },
 
   stop () {

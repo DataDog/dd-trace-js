@@ -1024,7 +1024,7 @@ describe('otlp_runtime_metrics', () => {
   it('registers all OTel-native metrics with spec-correct types and units', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
 
-    assert.deepStrictEqual(Object.keys(createdInstruments).sort(), Object.keys(SPEC).slice().sort())
+    assert.deepStrictEqual(Object.keys(createdInstruments).sort(), Object.keys(SPEC).sort())
     assert.strictEqual(batchCallbacks.length, 1, 'heap stats should register exactly one batch callback')
 
     for (const [name, { type, unit }] of Object.entries(SPEC)) {
@@ -1148,13 +1148,30 @@ describe('otlp_runtime_metrics', () => {
       },
       '../log': { debug () {}, error: errorLog },
     })
+    const dispatcher = proxyquire.noCallThru()('../src/runtime_metrics', {
+      './otlp_runtime_metrics': otlpMetricsFailing,
+      '../log': { error: errorLog },
+    })
 
-    otlpMetricsFailing.start({ runtimeMetrics: {} })
+    dispatcher.start({ runtimeMetrics: { enabled: true }, DD_METRICS_OTEL_ENABLED: true })
 
     assert.ok(createdBeforeFailure > 0, 'sanity: some instruments were registered before the throw')
     assert.ok(errorLog.calledOnce, 'failure should be logged via log.error')
-    assert.match(errorLog.firstCall.args[0], /Failed to start OTLP runtime metrics/)
-    otlpMetricsFailing.stop()
+    assert.match(errorLog.firstCall.args[0], /Failed to start runtime metrics/)
+    dispatcher.stop()
+  })
+
+  it('exposes the runtime-metrics surface as no-ops so callers can stay backend-agnostic', () => {
+    otlpMetrics.start({ runtimeMetrics: {} })
+    assert.strictEqual(typeof otlpMetrics.boolean, 'function', 'boolean should exist')
+    assert.strictEqual(typeof otlpMetrics.histogram, 'function', 'histogram should exist')
+    assert.strictEqual(typeof otlpMetrics.count, 'function', 'count should exist')
+    assert.strictEqual(typeof otlpMetrics.gauge, 'function', 'gauge should exist')
+    assert.strictEqual(typeof otlpMetrics.increment, 'function', 'increment should exist')
+    assert.strictEqual(typeof otlpMetrics.decrement, 'function', 'decrement should exist')
+    // track(span).finish() shape preserved so callers don't switch on the active backend.
+    const handle = otlpMetrics.track({})
+    assert.strictEqual(typeof handle?.finish, 'function', 'track().finish should be callable')
   })
 
   it('skips event loop metrics when disabled and is restartable', () => {
@@ -1177,8 +1194,10 @@ describe('otlp_runtime_metrics', () => {
 // asserting the wire shape (sum vs gauge) of every observable runtime metric.
 describe('OTLP runtime metrics — pipeline flow', () => {
   const SUM_NONMONOTONIC = new Set([
-    'v8js.memory.heap.used', 'v8js.memory.heap.limit',
-    'v8js.memory.heap.space.available_size', 'v8js.memory.heap.space.physical_size',
+    'v8js.memory.heap.used',
+    'v8js.memory.heap.limit',
+    'v8js.memory.heap.space.available_size',
+    'v8js.memory.heap.space.physical_size',
     'v8js.memory.heap.space.size',
   ])
   const SUM_MONOTONIC = new Set([
@@ -1186,12 +1205,16 @@ describe('OTLP runtime metrics — pipeline flow', () => {
   ])
   const GAUGE_METRICS = new Set([
     'v8js.resource.active',
-    'nodejs.eventloop.delay.min', 'nodejs.eventloop.delay.max', 'nodejs.eventloop.delay.mean',
-    'nodejs.eventloop.delay.stddev', 'nodejs.eventloop.delay.p50',
-    'nodejs.eventloop.delay.p90', 'nodejs.eventloop.delay.p99',
+    'nodejs.eventloop.delay.min',
+    'nodejs.eventloop.delay.max',
+    'nodejs.eventloop.delay.mean',
+    'nodejs.eventloop.delay.stddev',
+    'nodejs.eventloop.delay.p50',
+    'nodejs.eventloop.delay.p90',
+    'nodejs.eventloop.delay.p99',
     'nodejs.eventloop.utilization',
   ])
-  const OBSERVABLE_EXPECTED = [...SUM_NONMONOTONIC, ...SUM_MONOTONIC, ...GAUGE_METRICS]
+  const OBSERVABLE_EXPECTED = [...SUM_NONMONOTONIC, ...SUM_MONOTONIC, ...GAUGE_METRICS].sort()
 
   class CapturingExporter {
     constructor () { this.exports = [] }
@@ -1242,7 +1265,7 @@ describe('OTLP runtime metrics — pipeline flow', () => {
 
     const { wire, scopeName } = collectWire()
 
-    assert.deepStrictEqual(Object.keys(wire).sort(), OBSERVABLE_EXPECTED.slice().sort())
+    assert.deepStrictEqual(Object.keys(wire).sort(), OBSERVABLE_EXPECTED)
     assert.strictEqual(scopeName, 'datadog.runtime_metrics')
 
     for (const name of OBSERVABLE_EXPECTED) {

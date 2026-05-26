@@ -178,10 +178,10 @@ class PeriodicMetricReader {
     const out = []
     for (const { callback, instruments } of this.#batchCallbacks) {
       const result = {
-        observe: (instrument, value, attributes = {}) => {
-          if (!instruments.has(instrument)) return
-          if (typeof instrument._recordObservation !== 'function') return
-          out.push(instrument._recordObservation(value, attributes))
+        observe: (instrument, value, attributes) => {
+          if (instruments.has(instrument)) {
+            out.push(instrument.createMeasurement(instrument.type, value, attributes))
+          }
         },
       }
       try {
@@ -628,12 +628,13 @@ class MetricAggregator {
 }
 
 /**
- * Duck-types an observable instrument by checking for the internal observation hook.
+ * Duck-types an observable instrument by checking for the public surface used during collection.
  * @param {object} x
  * @returns {boolean}
  */
 function isObservableInstrument (x) {
-  return x !== null && typeof x === 'object' && typeof x._recordObservation === 'function'
+  return x !== null && typeof x === 'object' &&
+    typeof x.createMeasurement === 'function' && typeof x.type === 'string'
 }
 
 /**
