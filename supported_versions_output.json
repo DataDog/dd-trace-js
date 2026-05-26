@@ -94,7 +94,7 @@
     "dependency": "@google/genai",
     "integration": "google-genai",
     "minimum_tracer_supported": "1.19.0",
-    "max_tracer_supported": "2.5.0",
+    "max_tracer_supported": "2.6.0",
     "auto-instrumented": "True"
   },
   {
@@ -220,7 +220,7 @@
     "dependency": "ai",
     "integration": "ai",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "6.0.190",
+    "max_tracer_supported": "6.0.191",
     "auto-instrumented": "True"
   },
   {
