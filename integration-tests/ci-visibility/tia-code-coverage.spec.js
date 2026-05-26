@@ -128,6 +128,13 @@ describe('TIA code coverage', function () {
     let eventsResult
     let coverageResult
     let output = ''
+    let receivedSkippableRequest = false
+    const skippableRequestListener = ({ url }) => {
+      if (url.endsWith('/api/v2/ci/tests/skippable')) {
+        receivedSkippableRequest = true
+      }
+    }
+    receiver.on('message', skippableRequestListener)
 
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -207,9 +214,11 @@ describe('TIA code coverage', function () {
         ...eventsResult,
         coverages: coverageResult,
         output,
+        receivedSkippableRequest,
         stdoutCodeCoverageLinesPct: getLinePctFromOutput(output),
       }
     } finally {
+      receiver.off('message', skippableRequestListener)
       await receiver.stop()
     }
   }
@@ -319,6 +328,37 @@ describe('TIA code coverage', function () {
     assert.strictEqual(result.isTiaSkipped, 'false')
     assert.strictEqual(result.skippedSuites.length, 0)
     assert.strictEqual(result.codeCoverageLinesPct, result.stdoutCodeCoverageLinesPct)
+  })
+
+  // TIA is the top-level gate for suite skipping. Even if a malformed settings response has tests_skipping=true,
+  // disabling TIA must avoid the skippable request and leave ordinary Jest coverage untouched.
+  it('does not request skippable suites or backfill coverage when TIA is disabled', async () => {
+    const framework = FRAMEWORKS[0]
+    const baseline = await runFramework({ framework })
+    const result = await runFramework({
+      framework,
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+        },
+      }],
+      skippableCoverage: {
+        [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
+      },
+      settings: {
+        itr_enabled: false,
+        code_coverage: true,
+        tests_skipping: true,
+      },
+      expectSessionCoverage: false,
+    })
+
+    assert.strictEqual(result.receivedSkippableRequest, false)
+    assert.strictEqual(result.isTiaSkipped, 'false')
+    assert.strictEqual(result.skippedSuites.length, 0)
+    assert.strictEqual(result.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
   })
 
   // Zero-local-suite path: every suite that Jest would run is returned as skippable. No suite should run here;

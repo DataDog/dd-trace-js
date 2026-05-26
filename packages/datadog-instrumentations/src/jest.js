@@ -1322,7 +1322,7 @@ async function getBackfilledCoverageMap (testContexts, rootDir) {
 }
 
 async function synthesizeSkippedCoverageReport (result) {
-  if (!isUserCodeCoverageEnabled || !isSuitesSkipped || !coverageBackfillFiles?.length) return
+  if (!isItrEnabled || !isUserCodeCoverageEnabled || !isSuitesSkipped || !coverageBackfillFiles?.length) return
   if (result?.results?.numTotalTestSuites !== 0 || result.results.coverageMap) return
 
   const coverageContexts = getCoverageBackfillContexts()
@@ -1372,6 +1372,8 @@ function resetSuiteSkippingRunState () {
 }
 
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
+  if (!isItrEnabled || !isSuitesSkippingEnabled) return originalTests
+
   const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
   const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
   hasFilteredSkippableSuites = true
@@ -1585,7 +1587,7 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isItrEnabled = libraryConfig.isItrEnabled
-          isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isSuitesSkippingEnabled = isItrEnabled && libraryConfig.isSuitesSkippingEnabled
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
