@@ -15,6 +15,7 @@ const {
   TEST_COMMAND,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_FRAMEWORK_VERSION,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
@@ -235,6 +236,7 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             Object.assign(formattedSpan.meta, this.getSessionRequestErrorTags())
             formattedSpan.meta[TEST_COMMAND] = this.command
+            formattedSpan.meta[TEST_FRAMEWORK_VERSION] = this.frameworkVersion
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
             const testSuite = this._testSuiteSpansByTestSuiteAbsolutePath.get(
