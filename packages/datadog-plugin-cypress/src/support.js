@@ -272,6 +272,11 @@ beforeEach(function () {
     if (shouldSkip) {
       this.skip()
     }
+  }).then(() => {
+    // Clear any commands accumulated during DD-owned setup (e.g. setCookie, RUM restart)
+    // so they are not reported as user test steps.
+    currentTestCommands = []
+    commandStartTimes.clear()
   })
 })
 
@@ -349,6 +354,9 @@ afterEach(function () {
     testInfo.testSourceStack = invocationDetails.stack
   } catch {}
 
+  // Snapshot before any DD-owned Cypress commands so they are not reported as test steps.
+  const commandsToReport = currentTestCommands.slice()
+
   const rum = safeGetRum(originalWindow)
   if (rum) {
     testInfo.isRUMActive = true
@@ -370,5 +378,5 @@ afterEach(function () {
     suppressedTestFailures.delete(testName)
   }
 
-  cy.task('dd:afterEach', { test: testInfo, coverage, commands: currentTestCommands })
+  cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport })
 })
