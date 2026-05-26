@@ -109,6 +109,21 @@ jobs:
           Set-ItemProperty -Path $key -Name CustomDumpFlags -Type DWord        -Value 0x1025
           Set-ItemProperty -Path $key -Name DumpCount       -Type DWord        -Value 20
           "WER_DUMP_DIR=$dumpDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # Defense-in-depth: blank known-sensitive env vars before tests so that
+      # if any of them ever do end up in the test process env (today they
+      # don't, but it's one workflow edit away), they cannot reach a published
+      # minidump artifact via module data segments or static state.
+      - name: Scrub sensitive env before tests
+        shell: pwsh
+        run: |
+          @(
+            'DD_API_KEY',
+            'DD_APP_KEY',
+            'DD_APPLICATION_KEY',
+            'GITHUB_TOKEN',
+            'NODE_AUTH_TOKEN',
+            'NPM_TOKEN'
+          ) | ForEach-Object { "$_=" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
       - uses: ./.github/actions/node-crash-report
