@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -110,12 +111,16 @@ describe('Plugin', () => {
 
           it('should skip instrumentation for invalid arguments', (done) => {
             const checkError = (e) => {
-              assert.ok([
+              const expectedMessages = [
                 // depending on version of node
                 'Cannot read property \'toString\' of undefined',
                 'Cannot read properties of undefined (reading \'toString\')',
                 'parsing failure', // sdk 4
-              ].includes(e.message))
+              ]
+              assert.ok(
+                expectedMessages.includes(e.message),
+                `Expected error message in ${inspect(expectedMessages)}, got ${inspect(e.message)}`
+              )
               done()
             }
             try {

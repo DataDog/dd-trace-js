@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const { performance } = require('perf_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const dc = require('dc-polyfill')
@@ -405,6 +406,130 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
+        it('should instrument every execute even when the args object is reused', async () => {
+          const startChannel = dc.channel('apm:graphql:execute:start')
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const args = { schema, document, contextValue: {} }
+
+          let starts = 0
+          const handler = () => { starts++ }
+          startChannel.subscribe(handler)
+
+          try {
+            await graphql.execute(args)
+            await graphql.execute(args)
+            assert.strictEqual(starts, 2)
+          } finally {
+            startChannel.unsubscribe(handler)
+          }
+        })
+
+        it('should not add fieldResolver to a frozen caller-owned execute args object', async () => {
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const args = Object.freeze({ schema, document, contextValue: {} })
+
+          assert.ok(await graphql.execute(args), 'execute returned a result')
+          assert.ok(!Object.hasOwn(args, 'fieldResolver'),
+            'instrumentation must not add fieldResolver to caller args')
+        })
+
+        it('should not overwrite the caller-supplied fieldResolver on the execute args object', async () => {
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+
+          assert.ok(await graphql.execute(args), 'execute returned a result')
+          assert.strictEqual(args.fieldResolver, callerFieldResolver,
+            'instrumentation must not overwrite the caller-supplied fieldResolver')
+        })
+
+        describe('preserves the caller-supplied contextValue', () => {
+          let recordingSchema
+          let recordedContext
+
+          beforeEach(() => {
+            recordedContext = []
+            recordingSchema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({
+                name: 'Query',
+                fields: {
+                  ctx: {
+                    type: graphql.GraphQLString,
+                    resolve: (_source, _args, contextValue) => {
+                      recordedContext.push(contextValue)
+                      return 'ok'
+                    },
+                  },
+                },
+              }),
+            })
+          })
+
+          for (const contextValue of [false, 0, '', null, undefined, 42, 'request-1', Symbol('ctx')]) {
+            const label = String(contextValue) || typeof contextValue
+
+            it(`forwards ${label} to resolvers (object form)`, async () => {
+              const document = graphql.parse('{ ctx }')
+
+              const result = await graphql.execute({ schema: recordingSchema, document, contextValue })
+
+              assert.strictEqual(result.data?.ctx, 'ok')
+              assert.strictEqual(recordedContext.length, 1)
+              assert.strictEqual(recordedContext[0], contextValue,
+                'resolver must receive the caller-supplied contextValue unchanged')
+            })
+
+            // graphql >=16 dropped positional execute(); see PR 2904 below.
+            if (!semver.intersects(version, '>=16')) {
+              it(`forwards ${label} to resolvers (positional form)`, async () => {
+                const document = graphql.parse('{ ctx }')
+
+                const result = await graphql.execute(recordingSchema, document, undefined, contextValue)
+
+                assert.strictEqual(result.data?.ctx, 'ok')
+                assert.strictEqual(recordedContext.length, 1)
+                assert.strictEqual(recordedContext[0], contextValue,
+                  'resolver must receive the caller-supplied contextValue unchanged')
+              })
+            }
+          }
+
+          it('emits the execute span for a primitive contextValue', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].error, 0)
+              })
+              .then(done)
+              .catch(done)
+
+            Promise.resolve(graphql.execute({
+              schema: recordingSchema,
+              document: graphql.parse('{ ctx }'),
+              contextValue: 'request-1',
+            })).catch(done)
+          })
+
+          it('emits resolver spans for a primitive contextValue', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const resolveSpan = spans.find(span => span.name === 'graphql.resolve')
+                assert.ok(resolveSpan, 'graphql.resolve span should be emitted')
+                assert.strictEqual(resolveSpan.meta['graphql.field.name'], 'ctx')
+              })
+              .then(done)
+              .catch(done)
+
+            Promise.resolve(graphql.execute({
+              schema: recordingSchema,
+              document: graphql.parse('{ ctx }'),
+              contextValue: 42,
+            })).catch(done)
+          })
+        })
+
         it('should not include variables by default', done => {
           const source = 'query MyQuery($who: String!) { hello(name: $who) }'
           const variableValues = { who: 'world' }
@@ -433,7 +558,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].resource, 'hello:String')
               assert.strictEqual(spans[1].type, 'graphql')
               assert.strictEqual(spans[1].error, 0)
-              assert.ok(Number(spans[1].duration) > 0)
+              assert.ok(Number(spans[1].duration) > 0, `Expected ${Number(spans[1].duration)} > 0`)
               assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
@@ -470,7 +595,10 @@ describe('Plugin', () => {
             graphql.graphql({ schema, source }),
           ])
 
-          assert.ok(!result.errors || result.errors.length === 0)
+          assert.ok(
+            !result.errors || result.errors.length === 0,
+            `Got errors: ${inspect(result.errors)}`
+          )
           assert.strictEqual(result.data.hello, 'world')
           // eslint-disable-next-line no-proto
           assert.strictEqual(result.data.__proto__, 'alias')
@@ -504,13 +632,13 @@ describe('Plugin', () => {
                   }
 
                   if (span.resource === 'fastAsyncField:String') {
-                    assert.ok(fastAsyncTime < slowAsyncTime)
+                    assert.ok(fastAsyncTime < slowAsyncTime, `Expected ${fastAsyncTime} < ${slowAsyncTime}`)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    assert.ok(slowAsyncTime < syncTime)
+                    assert.ok(slowAsyncTime < syncTime, `Expected ${slowAsyncTime} < ${syncTime}`)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    assert.ok(syncTime > slowAsyncTime)
+                    assert.ok(syncTime > slowAsyncTime, `Expected ${syncTime} > ${slowAsyncTime}`)
                     foundSyncFieldSpan = true
                   }
 
@@ -656,6 +784,7 @@ describe('Plugin', () => {
                 resource: 'friends:[Human]',
                 meta: {
                   'graphql.field.path': 'friends',
+                  'graphql.field.type': 'Human',
                 },
               })
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
@@ -665,6 +794,7 @@ describe('Plugin', () => {
                 resource: 'name:String',
                 meta: {
                   'graphql.field.path': 'friends.*.name',
+                  'graphql.field.type': 'String',
                 },
               })
               assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
@@ -674,6 +804,7 @@ describe('Plugin', () => {
                 resource: 'pets:[Pet!]',
                 meta: {
                   'graphql.field.path': 'friends.*.pets',
+                  'graphql.field.type': 'Pet',
                 },
               })
               assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
@@ -683,6 +814,7 @@ describe('Plugin', () => {
                 resource: 'name:String',
                 meta: {
                   'graphql.field.path': 'friends.*.pets.*.name',
+                  'graphql.field.type': 'String',
                 },
               })
               assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
@@ -1035,7 +1167,10 @@ describe('Plugin', () => {
               assert.ok(('startTime' in spanEvents[0]))
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(!Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.ok(
+                !Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+              )
               assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
@@ -1110,10 +1245,16 @@ describe('Plugin', () => {
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
               assert.strictEqual(spanEvents.length, 1)
-              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.ok(
+                Object.hasOwn(spanEvents[0], 'startTime'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0]))}`
+              )
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.ok(
+                Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+              )
               assert.strictEqual(spanEvents[0].attributes.message, 'test')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
               assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
@@ -1718,7 +1859,10 @@ describe('Plugin', () => {
             graphql.graphql({ schema, source }),
           ])
 
-          assert.ok(!result.errors || result.errors.length === 0)
+          assert.ok(
+            !result.errors || result.errors.length === 0,
+            `Got errors: ${inspect(result.errors)}`
+          )
           // eslint-disable-next-line no-proto
           assert.strictEqual(result.data.__proto__, 'alias')
         })
@@ -1848,9 +1992,10 @@ describe('Plugin', () => {
                 contextValue: params.contextValue,
                 variableValues: params.variableValues,
                 operationName: params.operationName,
-                fieldResolver: params.fieldResolver,
                 typeResolver: params.typeResolver,
               })
+              assert.strictEqual(typeof args.fieldResolver, 'function')
+              assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
               assert.strictEqual(res, result)
             })
             .then(done)

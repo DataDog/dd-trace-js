@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -281,7 +282,10 @@ moduleTypes.forEach(({
                 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
                 'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
               ])
-              assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+              assert.ok(
+                !tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr),
+                `Got: ${inspect(tests)}`
+              )
             }, { hardTimeout: 25000 })
 
         await Promise.all([

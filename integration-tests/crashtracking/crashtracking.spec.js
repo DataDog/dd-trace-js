@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
@@ -113,11 +114,11 @@ describeNotWindows('crashtracking integration', () => {
 
       // Ping
       assert.strictEqual(ping.kind, 'UnixSignal')
-      assert.ok(ping.message.includes('SIGABRT'))
+      assert.ok(ping.message.includes('SIGABRT'), `Got: ${inspect(ping.message)}`)
 
       // Full report
       assert.strictEqual(report.error.kind, 'UnixSignal')
-      assert.ok(report.error.message.includes('SIGABRT'))
+      assert.ok(report.error.message.includes('SIGABRT'), `Got: ${inspect(report.error.message)}`)
       assert.strictEqual(report.error.source_type, 'Crashtracking')
 
       // Stack frames
@@ -145,8 +146,11 @@ describeNotWindows('crashtracking integration', () => {
 
       // Full report
       assert.strictEqual(report.error.kind, 'UnhandledException')
-      assert.ok(report.error.message.includes('TypeError'))
-      assert.ok(report.error.message.includes('integration test uncaught exception'))
+      assert.ok(report.error.message.includes('TypeError'), `Got: ${inspect(report.error.message)}`)
+      assert.ok(
+        report.error.message.includes('integration test uncaught exception'),
+        `Got: ${inspect(report.error.message)}`
+      )
       assert.strictEqual(report.error.source_type, 'Crashtracking')
 
       // Stack frames JS frames carry file/line/column/function

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('crypto')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -14,6 +15,7 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { createTopicWithRetry } = require('./helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -70,7 +72,7 @@ describe('Plugin', () => {
           topicBIn = `topic-b-in-${randomUUID()}`
           topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
+          await createTopicWithRetry(admin, {
             waitForLeaders: true,
             topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
               topic,
@@ -78,6 +80,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             })),
           })
+          await admin.disconnect()
           expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
           expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })
@@ -141,7 +144,10 @@ describe('Plugin', () => {
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+            assert.ok(
+              Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
             recordCheckpointSpy.restore()
           })
 
@@ -154,7 +160,10 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             await consumer.run({
               eachMessage: async () => {
-                assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+                assert.ok(
+                  Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+                  `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+                )
                 recordCheckpointSpy.restore()
               },
             })

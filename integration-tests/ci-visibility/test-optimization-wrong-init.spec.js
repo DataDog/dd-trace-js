@@ -2,6 +2,7 @@
 
 const { once } = require('node:events')
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { exec } = require('child_process')
 
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
@@ -119,11 +120,9 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
         eventsPromise,
       ])
 
-      assert.ok(
-        processOutput.includes(
-          `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`
-        )
-      )
+      const reason = 'is not initialized because Test Optimization mode is not enabled.'
+      const expectedSubstring = `Plugin "${testFramework}" ${reason}`
+      assert.ok(processOutput.includes(expectedSubstring), `Got: ${inspect(processOutput)}`)
       assert.match(processOutput, new RegExp(expectedOutput))
     })
   })

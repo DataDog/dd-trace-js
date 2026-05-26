@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 const fs = require('node:fs')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -44,7 +45,7 @@ describe('CI Visibility Exporter', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
-        assert.ok(err == null)
+        assert.ok(err == null, `Expected ${err} == null`)
         assert.strictEqual(scope.isDone(), true)
         done()
       })
@@ -205,7 +206,7 @@ describe('CI Visibility Exporter', () => {
             isSuitesSkippingEnabled: true,
             isEarlyFlakeDetectionEnabled: false,
           })
-          assert.ok(err == null)
+          assert.ok(err == null, `Expected ${err} == null`)
           assert.strictEqual(scope.isDone(), true)
           done()
         })
@@ -582,7 +583,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
-        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
+        assert.ok(
+          !ciVisibilityExporter._traceBuffer.includes(trace),
+          `Got: ${inspect(ciVisibilityExporter._traceBuffer)}`
+        )
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
@@ -600,7 +604,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
-        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
+        assert.ok(
+          !ciVisibilityExporter._traceBuffer.includes(trace),
+          `Got: ${inspect(ciVisibilityExporter._traceBuffer)}`
+        )
         sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
     })
@@ -619,7 +626,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
         ciVisibilityExporter.export(trace)
-        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
+        assert.ok(
+          !ciVisibilityExporter._traceBuffer.includes(trace),
+          `Got: ${inspect(ciVisibilityExporter._traceBuffer)}`
+        )
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
@@ -648,7 +658,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter.exportCoverage(coverage)
-        assert.ok(!ciVisibilityExporter._coverageBuffer.includes(coverage))
+        assert.ok(
+          !ciVisibilityExporter._coverageBuffer.includes(coverage),
+          `Got: ${inspect(ciVisibilityExporter._coverageBuffer)}`
+        )
         sinon.assert.notCalled(ciVisibilityExporter._coverageWriter.append)
       })
     })
@@ -670,7 +683,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._canUseCiVisProtocol = true
 
         ciVisibilityExporter.exportCoverage(coverage)
-        assert.ok(!ciVisibilityExporter._coverageBuffer.includes(coverage))
+        assert.ok(
+          !ciVisibilityExporter._coverageBuffer.includes(coverage),
+          `Got: ${inspect(ciVisibilityExporter._coverageBuffer)}`
+        )
         sinon.assert.called(ciVisibilityExporter._coverageWriter.append)
       })
     })

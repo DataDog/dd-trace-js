@@ -43,7 +43,7 @@ function wrapResponseEmit (emit) {
       return emit.apply(this, arguments)
     }
 
-    if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
+    if ((eventName === 'finish' || eventName === 'close') && !requestFinishedSet.has(this)) {
       finishServerCh.publish({ req: this.req })
       requestFinishedSet.add(this)
     }
@@ -51,6 +51,7 @@ function wrapResponseEmit (emit) {
     return emit.apply(this, arguments)
   }
 }
+
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
@@ -61,8 +62,12 @@ function wrapEmit (emit) {
       res.req = req
 
       const abortController = new AbortController()
+      // Single ctx shared with `exitServerCh` below and forwarded by the
+      // server plugin to `incomingHttpRequestStart`; existing subscribers
+      // only read the message, so the reuse is safe.
+      const ctx = { req, res, abortController }
 
-      startServerCh.publish({ req, res, abortController })
+      startServerCh.publish(ctx)
 
       try {
         if (abortController.signal.aborted) {
@@ -76,7 +81,7 @@ function wrapEmit (emit) {
 
         throw err
       } finally {
-        exitServerCh.publish({ req })
+        exitServerCh.publish(ctx)
       }
     }
     return emit.apply(this, arguments)
@@ -107,7 +112,7 @@ function wrapWriteHead (writeHead) {
     }
 
     // this doesn't support explicit duplicate headers, but it's an edge case
-    const responseHeaders = Object.assign(this.getHeaders(), obj)
+    const responseHeaders = obj === undefined ? this.getHeaders() : Object.assign(this.getHeaders(), obj)
 
     startWriteHeadCh.publish({
       req: this.req,

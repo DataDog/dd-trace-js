@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
@@ -160,10 +161,10 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('WeakMap', function () {
-      assert.ok(Object.hasOwn(state, 'wmap'))
+      assert.ok(Object.hasOwn(state, 'wmap'), `Available keys: ${inspect(Object.keys(state))}`)
       assert.strictEqual(Object.keys(state.wmap).length, (['type', 'entries']).length)
-      assert.ok((['type', 'entries']).every(k => Object.hasOwn(state.wmap, k)))
-      assert.ok(Array.isArray(state.wmap.entries))
+      assert.ok((['type', 'entries']).every(k => Object.hasOwn(state.wmap, k)), `Got: ${inspect(['type', 'entries'])}`)
+      assert.ok(Array.isArray(state.wmap.entries), `Expected array, got ${inspect(state.wmap.entries)}`)
       state.wmap.entries = state.wmap.entries.sort((a, b) => a[1].value - b[1].value)
       assert.ok('wmap' in state)
       assert.deepStrictEqual(state.wmap, {
@@ -179,10 +180,13 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('WeakSet', function () {
-      assert.ok(Object.hasOwn(state, 'wset'))
+      assert.ok(Object.hasOwn(state, 'wset'), `Available keys: ${inspect(Object.keys(state))}`)
       assert.strictEqual(Object.keys(state.wset).length, (['type', 'elements']).length)
-      assert.ok((['type', 'elements']).every(k => Object.hasOwn(state.wset, k)))
-      assert.ok(Array.isArray(state.wset.elements))
+      assert.ok(
+        (['type', 'elements']).every(k => Object.hasOwn(state.wset, k)),
+        `Got: ${inspect(['type', 'elements'])}`
+      )
+      assert.ok(Array.isArray(state.wset.elements), `Expected array, got ${inspect(state.wset.elements)}`)
       state.wset.elements = state.wset.elements.sort((a, b) => a.fields.a.value - b.fields.a.value)
       assert.ok('wset' in state)
       assert.deepStrictEqual(state.wset, {
@@ -204,23 +208,32 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Error', function () {
-      assert.ok(Object.hasOwn(state, 'err'))
+      assert.ok(Object.hasOwn(state, 'err'), `Available keys: ${inspect(Object.keys(state))}`)
       assert.strictEqual(Object.keys(state.err).length, (['type', 'fields']).length)
-      assert.ok((['type', 'fields']).every(k => Object.hasOwn(state.err, k)))
+      assert.ok((['type', 'fields']).every(k => Object.hasOwn(state.err, k)), `Got: ${inspect(['type', 'fields'])}`)
       assert.strictEqual(state.err.type, 'CustomError')
-      assert.ok(typeof state.err.fields === 'object' && state.err.fields !== null)
+      assert.ok(
+        typeof state.err.fields === 'object' && state.err.fields !== null,
+        `Expected non-null object, got ${inspect(state.err.fields)}`
+      )
       assert.strictEqual(Object.keys(state.err.fields).length, (['stack', 'message', 'foo']).length)
-      assert.ok((['stack', 'message', 'foo']).every(k => Object.hasOwn(state.err.fields, k)))
+      assert.ok(
+        (['stack', 'message', 'foo']).every(k => Object.hasOwn(state.err.fields, k)),
+        `Got: ${inspect(['stack', 'message', 'foo'])}`
+      )
       assertObjectContains(state.err.fields, {
         message: { type: 'string', value: 'boom!' },
         foo: { type: 'number', value: '42' },
       })
       assert.strictEqual(Object.keys(state.err.fields.stack).length, (['type', 'value', 'truncated', 'size']).length)
-      assert.ok((['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(state.err.fields.stack, k)))
+      assert.ok(
+        (['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(state.err.fields.stack, k)),
+        `Got: ${inspect(['type', 'value', 'truncated', 'size'])}`
+      )
       assert.strictEqual(typeof state.err.fields.stack.value, 'string')
       assert.match(state.err.fields.stack.value, /^Error: boom!/)
       assert.strictEqual(typeof state.err.fields.stack.size, 'number')
-      assert.ok(((state.err.fields.stack.size) > (255)))
+      assert.ok(state.err.fields.stack.size > 255, `Expected ${state.err.fields.stack.size} > 255`)
       assertObjectContains(state.err.fields.stack, {
         type: 'string',
         truncated: true,
@@ -356,9 +369,9 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('circular reference in object', function () {
-      assert.ok(Object.hasOwn(state, 'circular'))
+      assert.ok(Object.hasOwn(state, 'circular'), `Available keys: ${inspect(Object.keys(state))}`)
       assert.strictEqual(state.circular.type, 'Object')
-      assert.ok(Object.hasOwn(state.circular, 'fields'))
+      assert.ok(Object.hasOwn(state.circular, 'fields'), `Available keys: ${inspect(Object.keys(state.circular))}`)
       // For the circular field, just check that at least one of the expected properties are present
       assertObjectContains(state.circular.fields, {
         regex: { type: 'RegExp', value: '/foo/' },

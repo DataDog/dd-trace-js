@@ -50,8 +50,8 @@ describe('git metadata tagging', () => {
       assert.strictEqual(firstSpan.meta[SCI_REPOSITORY_URL], DUMMY_REPOSITORY_URL)
 
       const secondSpan = payload[0][1]
-      assert.ok(secondSpan.meta[SCI_COMMIT_SHA] == null)
-      assert.ok(secondSpan.meta[SCI_REPOSITORY_URL] == null)
+      assert.ok(secondSpan.meta[SCI_COMMIT_SHA] == null, `Expected ${secondSpan.meta[SCI_COMMIT_SHA]} == null`)
+      assert.ok(secondSpan.meta[SCI_REPOSITORY_URL] == null, `Expected ${secondSpan.meta[SCI_REPOSITORY_URL]} == null`)
     })
   })
 })
