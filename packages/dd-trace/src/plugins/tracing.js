@@ -136,14 +136,13 @@ class TracingPlugin extends Plugin {
    *
    * Prefer {@link TracingPlugin#setServiceName} when the tag itself also needs to be written.
    *
-   * No-op when there is nothing meaningful to record — either no claim was made,
-   * or the claim is indistinguishable from the tracer's default service.
+   * No-op when there is nothing meaningful to record
    *
    * @param {import('../opentracing/span')} span Internal DatadogSpan instance.
    * @param {string|undefined} name Service name the integration is claiming.
    */
   stampIntegrationService (span, name) {
-    if (name === undefined || name === this.tracer._service) return
+    if (name === undefined) return
     span[INTEGRATION_SERVICE] = name
   }
 
