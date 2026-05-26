@@ -218,7 +218,10 @@ describe('Plugin', () => {
         beforeEach(done => {
           const server = http2.createServer(listener)
           appListener = server
-            .listen(port, 'localhost', () => done())
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         const spanProducerFn = (done) => {
@@ -313,7 +316,10 @@ describe('Plugin', () => {
         beforeEach(done => {
           const server = http2.createServer(listener)
           appListener = server
-            .listen(port, 'localhost', () => done())
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         it('should drop traces for blocklist route', done => {
