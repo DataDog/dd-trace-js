@@ -28,6 +28,7 @@ describe('kafkajs producer finish', () => {
     try {
       plugin.finish({
         currentStore: { span },
+        topic: 't',
         messages: [{ value: 'a' }, { value: 'b' }, { value: 'c' }],
         result: [
           { topicName: 't', partition: 2, baseOffset: '20' },
@@ -55,6 +56,7 @@ describe('kafkajs producer finish', () => {
     try {
       plugin.finish({
         currentStore: { span },
+        topic: 't',
         messages: [{ value: 'one' }],
         result: [{ topicName: 't', partition: 0, baseOffset: hugeOffset }],
       })
@@ -71,6 +73,7 @@ describe('kafkajs producer finish', () => {
     try {
       plugin.finish({
         currentStore: { span },
+        topic: 't',
         messages: [{ value: 'one' }],
         result: [{ topicName: 't', partition: 0, baseOffset: 0 }],
       })
@@ -79,6 +82,32 @@ describe('kafkajs producer finish', () => {
     }
     assert.equal(tags['kafka.messages.offsets'], JSON.stringify([{ partition: 0, start_offset: '0' }]))
     assert.equal(tags['kafka.message.offset'], '0')
+  })
+
+  it('keeps offsets isolated to ctx.topic in multi-topic sendBatch responses', () => {
+    const { plugin, span, tags, restore } = makeFinishHarness()
+    try {
+      plugin.finish({
+        currentStore: { span },
+        topic: 'a',
+        messages: [{ value: 'one' }, { value: 'two' }],
+        result: [
+          { topicName: 'a', partition: 0, baseOffset: '5' },
+          { topicName: 'b', partition: 0, baseOffset: '99' },
+          { topicName: 'a', partition: 1, baseOffset: '7' },
+        ],
+      })
+    } finally {
+      restore()
+    }
+    // Topic 'b' must not bleed into topic 'a''s span: the user query
+    // 'show me the offsets we wrote to topic a' has to match the broker.
+    assert.equal(tags['kafka.messages.offsets'], JSON.stringify([
+      { partition: 0, start_offset: '5' },
+      { partition: 1, start_offset: '7' },
+    ]))
+    assert.equal(tags['kafka.partition'], undefined)
+    assert.equal(tags['kafka.message.offset'], undefined)
   })
 })
 
