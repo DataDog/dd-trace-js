@@ -23,4 +23,8 @@ if (process.env.COVERAGE_REPORTERS) {
   config.coverageReporters = process.env.COVERAGE_REPORTERS.split(',')
 }
 
+if (process.env.CONFIG_TRANSFORM) {
+  config.transform = JSON.parse(process.env.CONFIG_TRANSFORM)
+}
+
 module.exports = config

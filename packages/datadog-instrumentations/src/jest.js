@@ -1184,31 +1184,19 @@ function getCoverageBackfillConfig (config) {
   }
 }
 
-function getCoverageBackfillRequire (testContexts, CoverageReporter) {
+function getCoverageBackfillRequire (CoverageReporter) {
   const coverageReporterFilename = CoverageReporter?.filename || coverageReporterClass?.filename
   if (coverageReporterFilename) {
     return createRequire(`${path.join(path.dirname(coverageReporterFilename), 'CoverageWorker')}.js`)
   }
 
-  for (const context of testContexts || []) {
-    const rootDir = context?.config?.rootDir
-    if (!rootDir) continue
-
-    try {
-      return createRequire(path.join(rootDir, 'package.json'))
-    } catch {
-      // Try the next project context.
-    }
-  }
-
   return require
 }
 
-function getCoverageBackfillDependencies (testContexts, CoverageReporter) {
-  const coverageWorkerRequire = getCoverageBackfillRequire(testContexts, CoverageReporter)
+function getCoverageBackfillDependencies (CoverageReporter) {
+  const coverageWorkerRequire = getCoverageBackfillRequire(CoverageReporter)
 
   return {
-    createCoverageMap: coverageWorkerRequire('istanbul-lib-coverage').createCoverageMap,
     createFileCoverage: coverageWorkerRequire('istanbul-lib-coverage').createFileCoverage,
     createScriptTransformer: coverageWorkerRequire('@jest/transform').createScriptTransformer,
     readInitialCoverage: coverageWorkerRequire('istanbul-lib-instrument').readInitialCoverage,
@@ -1275,7 +1263,7 @@ async function addCoverageBackfillUntestedFiles (coverageMap, testContexts, root
       createFileCoverage,
       createScriptTransformer,
       readInitialCoverage,
-    } = getCoverageBackfillDependencies(testContexts, CoverageReporter))
+    } = getCoverageBackfillDependencies(CoverageReporter))
   } catch {
     return
   }
@@ -1309,37 +1297,6 @@ async function addCoverageBackfillUntestedFiles (coverageMap, testContexts, root
       }
     }
   }
-}
-
-async function getBackfilledCoverageMap (testContexts, rootDir) {
-  const { createCoverageMap } = getCoverageBackfillDependencies(testContexts)
-  const coverageMap = createCoverageMap({})
-
-  await addCoverageBackfillUntestedFiles(coverageMap, testContexts, rootDir)
-  applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
-
-  return coverageMap
-}
-
-async function synthesizeSkippedCoverageReport (result) {
-  if (!isItrEnabled || !isUserCodeCoverageEnabled || !isSuitesSkipped || !coverageBackfillFiles?.length) return
-  if (result?.results?.numTotalTestSuites !== 0 || result.results.coverageMap) return
-
-  const coverageContexts = getCoverageBackfillContexts()
-  if (!coverageContexts?.size) return
-
-  const rootDir = getRepositoryRootFromContexts(coverageContexts, result.globalConfig?.rootDir)
-
-  if (coverageReporterClass) {
-    const CoverageReporter = coverageReporterClass
-    const coverageReporter = new CoverageReporter(result.globalConfig, {})
-    await coverageReporter.onRunComplete(coverageContexts, result.results)
-  } else {
-    result.results.coverageMap = await getBackfilledCoverageMap(coverageContexts, rootDir)
-  }
-
-  lastCoverageMap = result.results.coverageMap || lastCoverageMap
-  lastCoverageMapRootDir = rootDir
 }
 
 function getTestContexts (tests) {
@@ -1445,12 +1402,9 @@ function wrapCoverageReporter (CoverageReporter) {
         })
       }
 
-      if (result?.then) {
-        return result.then(value => {
-          return addBackfillAndApplyCoverage().then(() => value)
-        })
-      }
-      return addBackfillAndApplyCoverage().then(() => result)
+      return Promise.resolve(result).then(value => {
+        return addBackfillAndApplyCoverage().then(() => value)
+      })
     })
   }
 
@@ -1683,12 +1637,6 @@ function getCliWrapper (isNewJestVersion) {
       })
 
       const result = await runCLI.apply(this, arguments)
-
-      try {
-        await synthesizeSkippedCoverageReport(result)
-      } catch (err) {
-        log.error('Error synthesizing Jest coverage report for skipped suites', err)
-      }
 
       const {
         results: {
