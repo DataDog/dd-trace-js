@@ -249,13 +249,15 @@ function wrapResolve (resolve) {
 
     if (!ctx) return resolve.apply(this, arguments)
 
-    const field = assertField(ctx, info, args)
+    const field = ensureField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
-      field.ctx.error = err
-      field.ctx.info = info
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
+    return startResolveCh.runStores(field.ctx, () => {
+      return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
+        field.ctx.error = err
+        field.ctx.info = info
+        field.ctx.field = field
+        updateFieldCh.publish(field.ctx)
+      })
     })
   }
 
@@ -308,7 +310,7 @@ function pathToArray (path) {
   return flattened
 }
 
-function assertField (rootCtx, info, args) {
+function ensureField (rootCtx, info, args) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
@@ -319,11 +321,9 @@ function assertField (rootCtx, info, args) {
   let field = fields[pathString]
 
   if (!field) {
-    const fieldCtx = { info, rootCtx, args, path, pathString }
-    startResolveCh.publish(fieldCtx)
     field = fields[pathString] = {
       error: null,
-      ctx: fieldCtx,
+      ctx: { info, rootCtx, args, path, pathString },
     }
   }
 
