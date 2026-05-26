@@ -231,7 +231,7 @@ function recordException (ddSpan, exception, timeInput) {
     [ERROR_TYPE]: exception.name,
     [ERROR_MESSAGE]: exception.message,
     [ERROR_STACK]: exception.stack,
-    [IGNORE_OTEL_ERROR]: ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true,
+    [IGNORE_OTEL_ERROR]: ddSpan.context().getTag(IGNORE_OTEL_ERROR) ?? true,
   })
 
   const attributes = {}

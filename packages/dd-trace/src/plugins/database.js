@@ -49,7 +49,7 @@ class DatabasePlugin extends StoragePlugin {
    * @returns {string}
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
-    const spanTags = span.context()._tags
+    const spanTags = span.context().getTags()
     const dddb = spanTags['db.name']
     const ddh = spanTags['out.host']
     const cacheKey = `${dddb ?? ''}\0${ddh ?? ''}\0${serviceName ?? ''}`
@@ -91,7 +91,7 @@ class DatabasePlugin extends StoragePlugin {
       return null
     }
 
-    const peerData = this.getPeerService(span.context()._tags)
+    const peerData = this.getPeerService(span.context().getTags())
     const dbmService = this.#getDbmServiceName(serviceName, peerData)
     const servicePropagation = this.#createDBMPropagationCommentService(dbmService, span, peerData)
 
