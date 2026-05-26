@@ -196,6 +196,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@smithy/core",
+    "integration": "aws-sdk",
+    "minimum_tracer_supported": "3.24.0",
+    "max_tracer_supported": "3.24.2",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@smithy/smithy-client",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "1.0.3",

@@ -27,6 +27,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True
 @redis/client,redis,1.1.0,5.12.1,True
+@smithy/core,aws-sdk,3.24.0,3.24.2,True
 @smithy/smithy-client,aws-sdk,1.0.3,4.13.3,True
 @vitest/runner,vitest,1.6.0,4.1.6,True
 aerospike,aerospike,4.0.0,6.7.0,True
