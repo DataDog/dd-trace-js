@@ -5,6 +5,7 @@ module.exports = {
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
+  'dns/promises': () => require('../dns'),
   fs: { serverless: false, fn: () => require('../fs') },
   http: () => require('../http'),
   http2: () => require('../http2'),

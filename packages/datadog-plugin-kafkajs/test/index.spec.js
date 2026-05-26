@@ -329,6 +329,210 @@ describe('Plugin', () => {
           )
         })
 
+        describe('producer (sendBatch)', () => {
+          let topicA
+          let topicB
+
+          beforeEach(async () => {
+            topicA = `${testTopic}-batch-a`
+            topicB = `${testTopic}-batch-b`
+            const batchAdmin = kafka.admin()
+            await createTopicWithRetry(batchAdmin, {
+              waitForLeaders: true,
+              topics: [topicA, topicB].map(topic => ({
+                topic,
+                numPartitions: 1,
+                replicationFactor: 1,
+              })),
+            })
+            await batchAdmin.disconnect()
+          })
+
+          it('should emit one kafka.produce span per topicMessages entry', async () => {
+            // Per-topic offset isolation: the broker returns one aggregated
+            // response covering every topic in the batch; each span must tag
+            // only its own topic's (partition, offset) entries.
+            const topicAOffsets = JSON.stringify([{ partition: 0, start_offset: '0' }])
+            const topicBOffsets = JSON.stringify([{ partition: 0, start_offset: '0' }])
+
+            const topicASpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0].find(s =>
+                s.name === expectedSchema.send.opName && s.resource === topicA)
+              assert.ok(span, `no kafka.produce span for ${topicA}`)
+              assertObjectContains(span, {
+                service: expectedSchema.send.serviceName,
+                meta: {
+                  'span.kind': 'producer',
+                  component: 'kafkajs',
+                  'messaging.destination.name': topicA,
+                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
+                  'kafka.cluster_id': testKafkaClusterId,
+                  'kafka.messages.offsets': topicAOffsets,
+                },
+                metrics: { 'kafka.batch_size': 1 },
+                error: 0,
+              })
+            })
+
+            const topicBSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0].find(s =>
+                s.name === expectedSchema.send.opName && s.resource === topicB)
+              assert.ok(span, `no kafka.produce span for ${topicB}`)
+              assertObjectContains(span, {
+                resource: topicB,
+                meta: { 'kafka.messages.offsets': topicBOffsets },
+                metrics: { 'kafka.batch_size': 2 },
+                error: 0,
+              })
+            })
+
+            await sendBatch(kafka, [
+              { topic: topicA, messages: [{ key: 'a', value: 'msg-a' }] },
+              { topic: topicB, messages: [{ key: 'b1', value: 'msg-b1' }, { key: 'b2', value: 'msg-b2' }] },
+            ])
+
+            return Promise.all([topicASpanPromise, topicBSpanPromise])
+          })
+
+          it('should emit one span for a single-topic sendBatch (mirrors send)', async () => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const spans = traces[0].filter(s => s.name === expectedSchema.send.opName)
+              assert.strictEqual(spans.length, 1)
+              assertObjectContains(spans[0], {
+                service: expectedSchema.send.serviceName,
+                resource: topicA,
+                meta: {
+                  'span.kind': 'producer',
+                  component: 'kafkajs',
+                  'messaging.destination.name': topicA,
+                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
+                  'kafka.cluster_id': testKafkaClusterId,
+                },
+                metrics: { 'kafka.batch_size': 1 },
+                error: 0,
+              })
+            })
+
+            await sendBatch(kafka, [{ topic: topicA, messages: [{ key: 'k', value: 'v' }] }])
+
+            return expectedSpanPromise
+          })
+
+          it('should inject a distinct trace context into each topic\'s cloned messages', async () => {
+            const startCh = dc.channel('apm:kafkajs:produce:start')
+            const sentBatches = []
+            const captureStart = (ctx) => sentBatches.push({ topic: ctx.topic, messages: ctx.messages })
+            startCh.subscribe(captureStart)
+
+            try {
+              // Deep-freeze the user input so any boundary or plugin write to it throws.
+              const userTopicMessages = deepFreeze([
+                { topic: topicA, messages: [{ key: 'a', value: 'msg-a' }] },
+                { topic: topicB, messages: [{ key: 'b', value: 'msg-b' }] },
+              ])
+
+              await sendBatch(kafka, userTopicMessages)
+
+              assert.strictEqual(sentBatches.length, 2)
+              const aBatch = sentBatches.find(b => b.topic === topicA)
+              const bBatch = sentBatches.find(b => b.topic === topicB)
+              const aTraceId = aBatch.messages[0].headers['x-datadog-trace-id'].toString()
+              const bTraceId = bBatch.messages[0].headers['x-datadog-trace-id'].toString()
+              assert.ok(aTraceId)
+              assert.ok(bTraceId)
+              assert.notStrictEqual(aTraceId, bTraceId)
+            } finally {
+              startCh.unsubscribe(captureStart)
+            }
+          })
+
+          it('should tag error on every per-topic span when sendBatch rejects', async () => {
+            const errorSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0].find(s =>
+                s.name === expectedSchema.send.opName && s.resource === topicA)
+              assert.ok(span, `no kafka.produce span for ${topicA}`)
+              assert.strictEqual(span.error, 1)
+              assert.ok(span.meta[ERROR_MESSAGE])
+            })
+
+            const producer = kafka.producer()
+            await producer.connect()
+            await assert.rejects(producer.sendBatch({
+              topicMessages: [
+                { topic: topicA, messages: 'not-an-array' },
+              ],
+            }))
+            await producer.disconnect()
+
+            return errorSpanPromise
+          })
+
+          describe('when broker rejects headers with UNKNOWN_SERVER_ERROR', function () {
+            // kafkajs 1.4.0 is very slow when encountering errors
+            this.timeout(30000)
+
+            let produceStub
+            let producer
+            const error = Object.assign(
+              new Error('Simulated KafkaJSProtocolError UNKNOWN from Broker.produce stub'),
+              { name: 'KafkaJSProtocolError', type: 'UNKNOWN' }
+            )
+
+            beforeEach(async () => {
+              const otherKafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: ['127.0.0.1:9092'],
+                retry: { retries: 0 },
+              })
+              produceStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
+              producer = otherKafka.producer({ transactionTimeout: 10 })
+              await producer.connect()
+            })
+
+            afterEach(() => {
+              produceStub.restore()
+            })
+
+            it('disables header injection for later sendBatch calls', async () => {
+              const startCh = dc.channel('apm:kafkajs:produce:start')
+              const sentBatches = []
+              const captureStart = (ctx) => sentBatches.push({ topic: ctx.topic, messages: ctx.messages })
+              startCh.subscribe(captureStart)
+
+              const firstBatch = deepFreeze([{ key: 'k1', value: 'v1' }])
+              const secondBatch = deepFreeze([{ key: 'k2', value: 'v2' }])
+
+              try {
+                await assert.rejects(producer.sendBatch({
+                  topicMessages: [{ topic: topicA, messages: firstBatch }],
+                }), error)
+
+                // The first send injects trace headers into the cloned batch.
+                assert.ok(
+                  Object.hasOwn(sentBatches[0].messages[0].headers, 'x-datadog-trace-id'),
+                  `Available keys: ${inspect(Object.keys(sentBatches[0].messages[0].headers))}`
+                )
+
+                produceStub.restore()
+
+                const result2 = await producer.sendBatch({
+                  topicMessages: [{ topic: topicA, messages: secondBatch }],
+                })
+
+                // After UNKNOWN, header injection is disabled: cloned messages
+                // have no `headers` field at all, the user's frozen input is
+                // untouched, and brokers that reject any header field recover.
+                const [clonedAfterDisable] = sentBatches[1].messages
+                assert.notStrictEqual(clonedAfterDisable, secondBatch[0])
+                assert.strictEqual(Object.hasOwn(clonedAfterDisable, 'headers'), false)
+                assert.strictEqual(result2[0].errorCode, 0)
+              } finally {
+                startCh.unsubscribe(captureStart)
+              }
+            })
+          })
+        })
+
         describe('consumer (eachMessage)', () => {
           let consumer
 
@@ -662,4 +866,12 @@ async function sendMessages (kafka, topic, messages) {
     messages,
   })
   await producer.disconnect()
+}
+
+async function sendBatch (kafka, topicMessages) {
+  const producer = kafka.producer()
+  await producer.connect()
+  const result = await producer.sendBatch({ topicMessages })
+  await producer.disconnect()
+  return result
 }

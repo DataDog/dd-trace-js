@@ -101,6 +101,9 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       // response, only the starting offset.
       const offsets = []
       for (const entry of result) {
+        // sendBatch hands the same multi-topic response to every per-topic
+        // ctx; the span only owns its own topic's entries.
+        if (entry.topicName !== ctx.topic) continue
         const offsetAsLong = entry.offset ?? entry.baseOffset
         if (entry.partition === undefined || offsetAsLong === undefined) continue
         // Kafka offsets are 64-bit; coercing to Number loses precision past

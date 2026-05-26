@@ -62,6 +62,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
     const originalSend = producer.send
+    const originalSendBatch = producer.sendBatch
     const bootstrapServers = this._brokers
     const cluster = clientToCluster.get(producer)
 
@@ -75,33 +76,44 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       }
     }
 
-    producer.send = function (...args) {
-      if (!producerStartCh.hasSubscribers) {
-        return originalSend.apply(this, args)
-      }
-
-      // Fast path: kafkajs has fetched metadata, so versions and clusterId
-      // are already on the broker pool.
+    /**
+     * Resolve the negotiated clusterId once and hand it to `call`. Fast path reads
+     * `cluster.brokerPool.metadata` synchronously when kafkajs already fetched it.
+     * Slow path primes `refreshMetadataIfNecessary`, which `sharedPromiseTo`
+     * deduplicates with kafkajs's own internal fetch so total latency is unchanged.
+     *
+     * @param {(clusterId: string | undefined) => Promise<unknown>} call
+     */
+    const withClusterId = (call) => {
       const metadata = cluster?.brokerPool?.metadata
       if (metadata) {
         refreshHeaderSupport()
-        return runSend.call(this, args, metadata.clusterId)
+        return call(metadata.clusterId)
       }
-
-      // Slow path, taken at most once per producer connect cycle. Prime the
-      // metadata fetch kafkajs's send would do internally a few stack frames
-      // later. `sharedPromiseTo` collapses our call and kafkajs's call into a
-      // single round trip, so total latency is unchanged.
       if (typeof cluster?.refreshMetadataIfNecessary !== 'function') {
-        return runSend.call(this, args)
+        return call()
       }
       return cluster.refreshMetadataIfNecessary().then(
         () => {
           refreshHeaderSupport()
-          return runSend.call(this, args, cluster.brokerPool?.metadata?.clusterId)
+          return call(cluster.brokerPool?.metadata?.clusterId)
         },
-        () => runSend.call(this, args)
+        () => call()
       )
+    }
+
+    producer.send = function (...args) {
+      if (!producerStartCh.hasSubscribers) {
+        return originalSend.apply(this, args)
+      }
+      return withClusterId((clusterId) => runSend.call(this, args, clusterId))
+    }
+
+    producer.sendBatch = function (...args) {
+      if (!producerStartCh.hasSubscribers) {
+        return originalSendBatch.apply(this, args)
+      }
+      return withClusterId((clusterId) => runSendBatch.call(this, args, clusterId))
     }
 
     function runSend (args, clusterId) {
@@ -164,6 +176,98 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
           throw error
         }
       })
+    }
+
+    function runSendBatch (args, clusterId) {
+      const arg0 = args[0]
+      const inputTopicMessages = Array.isArray(arg0?.topicMessages) ? arg0.topicMessages : []
+      if (inputTopicMessages.length === 0) {
+        return originalSendBatch.apply(this, args)
+      }
+
+      // One ctx per topicMessages entry — kafkajs implements `send` as a single-entry
+      // `sendBatch` (`producer/messageProducer.js`), so one span per entry is the same
+      // unit `send` already produces. Cloning only happens for valid arrays so kafkajs
+      // still sees and rejects a caller's malformed `messages` field.
+      const outputEntries = new Array(inputTopicMessages.length)
+      const ctxList = []
+      let cloned = false
+      for (let i = 0; i < inputTopicMessages.length; i++) {
+        const entry = inputTopicMessages[i]
+        const topic = entry?.topic
+        const rawMessages = entry?.messages
+        let entryMessages = rawMessages
+        if (Array.isArray(rawMessages) && rawMessages.length > 0) {
+          entryMessages = cloneMessages(rawMessages, !disableHeaderInjection)
+          outputEntries[i] = { ...entry, messages: entryMessages }
+          cloned = true
+        } else {
+          outputEntries[i] = entry
+        }
+        ctxList.push({
+          bootstrapServers,
+          clusterId,
+          disableHeaderInjection,
+          messages: Array.isArray(entryMessages) ? entryMessages : [],
+          topic,
+        })
+      }
+      if (cloned) {
+        args[0] = { ...arg0, topicMessages: outputEntries }
+      }
+
+      for (const ctx of ctxList) {
+        producerStartCh.runStores(ctx, noop)
+      }
+
+      let result
+      try {
+        result = originalSendBatch.apply(this, args)
+      } catch (error) {
+        failProduceBatch(ctxList, error)
+        throw error
+      }
+
+      result.then(
+        (res) => {
+          for (const ctx of ctxList) {
+            ctx.result = res
+            producerFinishCh.publish(ctx)
+          }
+          // kafkajs returns a single aggregated response covering every topic;
+          // commit fires once so the plugin's `setOffset` loop runs once per
+          // entry of the response, not once per span.
+          producerCommitCh.publish(ctxList[0])
+        },
+        (error) => failProduceBatch(ctxList, error)
+      )
+
+      return result
+    }
+
+    /**
+     * Tag every open ctx with the shared error, then publish error + finish so the
+     * plugin closes each span. The mixed-version safety net (broker advertised
+     * Produce v3+ but the leader rejected the headers) fires at most once per
+     * failed batch and short-circuits subsequent sends to the disabled path.
+     *
+     * @param {Array<object>} ctxList
+     * @param {Error} error
+     */
+    function failProduceBatch (ctxList, error) {
+      if (error?.name === 'KafkaJSProtocolError' && error.type === 'UNKNOWN') {
+        disableHeaderInjection = true
+        refreshHeaderSupport = noop
+        log.error(
+          // eslint-disable-next-line @stylistic/max-len
+          'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+        )
+      }
+      for (const ctx of ctxList) {
+        ctx.error = error
+        producerErrorCh.publish(ctx)
+        producerFinishCh.publish(ctx)
+      }
     }
 
     return producer
