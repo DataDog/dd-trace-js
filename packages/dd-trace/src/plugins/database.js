@@ -103,7 +103,7 @@ class DatabasePlugin extends StoragePlugin {
       if (hashBase64) {
         dbmComment += `,ddsh='${hashBase64}'`
         // Add hash to span meta as a tag
-        span.setTag('_dd.dbm.propagation_hash', hashBase64)
+        span.setTag('_dd.propagated_hash', hashBase64)
       }
     }
 
