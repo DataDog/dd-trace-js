@@ -24,6 +24,7 @@ describe('profilers/native/wall', () => {
         start: sinon.stub(),
         stop: sinon.stub().returns(profile0),
         setContext: sinon.stub(),
+        getContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
           kSampleCount: 0,
@@ -719,6 +720,7 @@ describe('profilers/native/wall', () => {
         time: {
           ...pprof.time,
           setContext: sinon.stub(),
+          getContext: sinon.stub(),
         },
       }
 
@@ -908,6 +910,35 @@ describe('profilers/native/wall', () => {
       // Tags update should be a no-op since webTags is already set
       tagsUpdateCh.publish(webSpan)
       assert.strictEqual(ctx0.webTags, webSpanTags)
+
+      profiler.stop()
+    })
+
+    it('should skip setContext in ACF mode when current CPED context equals sampleContext', () => {
+      // Every native setContext in ACF mode allocates a fresh contextHolder
+      // (Object+Global), so repeated activations of the same span must short-
+      // circuit when the CPED already holds the cached profilingContext.
+      const { span: webSpan } = makeWebSpan()
+      const profiler = new WallProfiler({
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      currentStore = { span: webSpan }
+      enterCh.publish()
+      sinon.assert.calledOnce(localPprof.time.setContext)
+      const ctx0 = localPprof.time.setContext.firstCall.args[0]
+
+      // Simulate the CPED now holding ctx0 (which the native side would have
+      // done in response to the previous setContext call).
+      localPprof.time.getContext.returns(ctx0)
+
+      // Re-activation with the same span returns the cached ctx0 from
+      // #getProfilingContext → #enter must skip the native setContext call.
+      enterCh.publish()
+      sinon.assert.calledOnce(localPprof.time.setContext)
 
       profiler.stop()
     })
