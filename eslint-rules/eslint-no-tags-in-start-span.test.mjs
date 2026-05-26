@@ -34,7 +34,7 @@ ruleTester.run('eslint-no-tags-in-start-span', /** @type {import('eslint').Rule.
       errors: [{ messageId: 'noTagsInStartSpan' }],
     },
     {
-      code: "tracer.startSpan(name, { startTime, childOf, tags: { ...meta } })",
+      code: 'tracer.startSpan(name, { startTime, childOf, tags: { ...meta } })',
       errors: [{ messageId: 'noTagsInStartSpan' }],
     },
   ],

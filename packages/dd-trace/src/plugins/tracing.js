@@ -139,7 +139,7 @@ class TracingPlugin extends Plugin {
    * @param {string} name Service name the integration is claiming.
    */
   setServiceName (span, name) {
-    span._spanContext._tags['service.name'] = name
+    span._spanContext.getTags()['service.name'] = name
   }
 
   /**

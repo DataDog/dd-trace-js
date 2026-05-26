@@ -1456,11 +1456,11 @@ class CypressPlugin {
             const stepSpan = this.tracer.startSpan('cypress.step', {
               childOf: this.activeTestSpan,
               startTime,
-              tags: {
-                [COMPONENT]: 'cypress',
-                'cypress.command': command.name,
-                [RESOURCE_NAME]: command.name,
-              },
+            })
+            stepSpan._addTags({
+              [COMPONENT]: 'cypress',
+              'cypress.command': command.name,
+              [RESOURCE_NAME]: command.name,
             })
             if (command.error) {
               const errorObj = new Error(command.error.message || String(command.error))

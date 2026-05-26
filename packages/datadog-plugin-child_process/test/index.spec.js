@@ -34,6 +34,7 @@ describe('Child process plugin', () => {
       spanStub = {
         setTag: sinon.stub(),
         finish: sinon.stub(),
+        _addTags: sinon.stub(),
       }
 
       tracerStub = {
@@ -60,19 +61,19 @@ describe('Child process plugin', () => {
           {
             startTime: undefined,
             childOf: undefined,
-            tags: {
-              component: 'subprocess',
-              'service.name': 'test-service',
-              'resource.name': 'ls',
-              'span.kind': undefined,
-              'span.type': 'system',
-              '_dd.svc_src': 'opt.plugin',
-              'cmd.exec': JSON.stringify(['ls', '-l']),
-            },
             integrationName: 'child_process',
             links: undefined,
           }
         )
+        sinon.assert.calledOnceWithExactly(spanStub._addTags, {
+          component: 'subprocess',
+          'service.name': 'test-service',
+          'resource.name': 'ls',
+          'span.kind': undefined,
+          'span.type': 'system',
+          '_dd.svc_src': 'opt.plugin',
+          'cmd.exec': JSON.stringify(['ls', '-l']),
+        })
       })
 
       it('should call startSpan with cmd.shell property', () => {
@@ -85,19 +86,19 @@ describe('Child process plugin', () => {
           {
             startTime: undefined,
             childOf: undefined,
-            tags: {
-              component: 'subprocess',
-              'service.name': 'test-service',
-              'resource.name': 'sh',
-              'span.kind': undefined,
-              'span.type': 'system',
-              '_dd.svc_src': 'opt.plugin',
-              'cmd.shell': 'ls -l',
-            },
             integrationName: 'child_process',
             links: undefined,
           }
         )
+        sinon.assert.calledOnceWithExactly(spanStub._addTags, {
+          component: 'subprocess',
+          'service.name': 'test-service',
+          'resource.name': 'sh',
+          'span.kind': undefined,
+          'span.type': 'system',
+          '_dd.svc_src': 'opt.plugin',
+          'cmd.shell': 'ls -l',
+        })
       })
 
       it('should truncate last argument', () => {
@@ -112,20 +113,20 @@ describe('Child process plugin', () => {
           {
             startTime: undefined,
             childOf: undefined,
-            tags: {
-              component: 'subprocess',
-              'service.name': 'test-service',
-              'resource.name': 'echo',
-              'span.kind': undefined,
-              'span.type': 'system',
-              'cmd.exec': JSON.stringify(['echo', arg, '']),
-              '_dd.svc_src': 'opt.plugin',
-              'cmd.truncated': 'true',
-            },
             integrationName: 'child_process',
             links: undefined,
           }
         )
+        sinon.assert.calledOnceWithExactly(spanStub._addTags, {
+          component: 'subprocess',
+          'service.name': 'test-service',
+          'resource.name': 'echo',
+          'span.kind': undefined,
+          'span.type': 'system',
+          'cmd.exec': JSON.stringify(['echo', arg, '']),
+          '_dd.svc_src': 'opt.plugin',
+          'cmd.truncated': 'true',
+        })
       })
 
       it('should truncate path and blank last argument', () => {
@@ -140,20 +141,20 @@ describe('Child process plugin', () => {
           {
             startTime: undefined,
             childOf: undefined,
-            tags: {
-              component: 'subprocess',
-              'service.name': 'test-service',
-              'resource.name': 'sh',
-              'span.kind': undefined,
-              'span.type': 'system',
-              'cmd.shell': 'ls -l /h ',
-              '_dd.svc_src': 'opt.plugin',
-              'cmd.truncated': 'true',
-            },
             integrationName: 'child_process',
             links: undefined,
           }
         )
+        sinon.assert.calledOnceWithExactly(spanStub._addTags, {
+          component: 'subprocess',
+          'service.name': 'test-service',
+          'resource.name': 'sh',
+          'span.kind': undefined,
+          'span.type': 'system',
+          'cmd.shell': 'ls -l /h ',
+          '_dd.svc_src': 'opt.plugin',
+          'cmd.truncated': 'true',
+        })
       })
 
       it('should truncate first argument and blank the rest', () => {
@@ -169,20 +170,20 @@ describe('Child process plugin', () => {
           {
             startTime: undefined,
             childOf: undefined,
-            tags: {
-              component: 'subprocess',
-              'service.name': 'test-service',
-              'resource.name': 'ls',
-              'span.kind': undefined,
-              'span.type': 'system',
-              'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
-              '_dd.svc_src': 'opt.plugin',
-              'cmd.truncated': 'true',
-            },
             integrationName: 'child_process',
             links: undefined,
           }
         )
+        sinon.assert.calledOnceWithExactly(spanStub._addTags, {
+          component: 'subprocess',
+          'service.name': 'test-service',
+          'resource.name': 'ls',
+          'span.kind': undefined,
+          'span.type': 'system',
+          'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
+          '_dd.svc_src': 'opt.plugin',
+          'cmd.truncated': 'true',
+        })
       })
 
       it('should truncate last argument', () => {
@@ -198,20 +199,20 @@ describe('Child process plugin', () => {
           {
             startTime: undefined,
             childOf: undefined,
-            tags: {
-              component: 'subprocess',
-              'service.name': 'test-service',
-              'resource.name': 'sh',
-              'span.kind': undefined,
-              'span.type': 'system',
-              'cmd.shell': 'ls -l /home -t',
-              '_dd.svc_src': 'opt.plugin',
-              'cmd.truncated': 'true',
-            },
             integrationName: 'child_process',
             links: undefined,
           }
         )
+        sinon.assert.calledOnceWithExactly(spanStub._addTags, {
+          component: 'subprocess',
+          'service.name': 'test-service',
+          'resource.name': 'sh',
+          'span.kind': undefined,
+          'span.type': 'system',
+          'cmd.shell': 'ls -l /home -t',
+          '_dd.svc_src': 'opt.plugin',
+          'cmd.truncated': 'true',
+        })
       })
 
       it('should not crash if command is not a string', () => {

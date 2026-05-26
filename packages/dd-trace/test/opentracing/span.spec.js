@@ -485,7 +485,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('service.name', 'user-svc')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), {
         'service.name': 'user-svc',
         [SVC_SRC_KEY]: SVC_SRC_MANUAL,
       })
@@ -516,7 +516,7 @@ describe('Span', () => {
     it('should stamp manual svc_src when service.name is in the map', () => {
       span.addTags({ 'service.name': 'user-svc', foo: 'bar' })
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), {
         'service.name': 'user-svc',
         foo: 'bar',
         [SVC_SRC_KEY]: SVC_SRC_MANUAL,
@@ -567,11 +567,11 @@ describe('Span', () => {
       tracer._service = 'app'
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._tags['service.name'] = 'app'
-      span._spanContext._tags[SVC_SRC_KEY] = 'opt.plugin'
+      span._spanContext.getTags()['service.name'] = 'app'
+      span._spanContext.getTags()[SVC_SRC_KEY] = 'opt.plugin'
       span.finish()
 
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], undefined)
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), undefined)
     })
 
     it('should leave svc_src untouched when service.name differs from the tracer default', () => {
@@ -579,11 +579,11 @@ describe('Span', () => {
       tracer._service = 'app'
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._tags['service.name'] = 'kafka-broker'
-      span._spanContext._tags[SVC_SRC_KEY] = 'kafka'
+      span._spanContext.getTags()['service.name'] = 'kafka-broker'
+      span._spanContext.getTags()[SVC_SRC_KEY] = 'kafka'
       span.finish()
 
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), 'kafka')
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {

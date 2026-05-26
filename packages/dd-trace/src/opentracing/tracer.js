@@ -7,6 +7,7 @@ const formats = require('../../../../ext/formats')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../constants')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -15,7 +16,6 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
-const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../constants')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
