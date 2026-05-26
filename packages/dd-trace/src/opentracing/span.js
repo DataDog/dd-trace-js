@@ -11,6 +11,7 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const SpanContext = require('./span_context')
 
@@ -200,7 +201,16 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    this._spanContext._tags[key] = value
+
+    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
@@ -423,6 +433,10 @@ function createRegistry (type) {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)
     runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
   })
+}
+
+function isSamplingPriorityTag (key) {
+  return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
 }
 
 module.exports = DatadogSpan
