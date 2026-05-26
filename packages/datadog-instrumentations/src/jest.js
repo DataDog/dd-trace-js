@@ -93,6 +93,7 @@ let skippedSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
 let isCodeCoverageEnabledBecauseOfUs = false
+let isItrEnabled = false
 let isSuitesSkippingEnabled = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
@@ -1371,8 +1372,11 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
       }
     }
 
+    // When Jest sharding is enabled, filter after Jest picks this process's shard. Different shards usually run in
+    // different CI jobs, so their skippable requests can happen at different times and receive different responses.
+    // Filtering before Jest shards would make each job shard a different base test list, which can cause duplicate
+    // suite execution across shards.
     if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
-      // When Jest sharding is enabled, filter after Jest picks this process's shard.
       return testPaths
     }
     const { tests } = testPaths
@@ -1410,6 +1414,7 @@ function getCliWrapper (isNewJestVersion) {
         })
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+          isItrEnabled = libraryConfig.isItrEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
@@ -1526,6 +1531,7 @@ function getCliWrapper (isNewJestVersion) {
 
       let testCodeCoverageLinesTotal
       let testSessionCoverageFiles
+      const shouldReportTestSessionCoverage = isItrEnabled && isCodeCoverageEnabled
 
       if (isUserCodeCoverageEnabled) {
         try {
@@ -1534,16 +1540,20 @@ function getCliWrapper (isNewJestVersion) {
             repositoryRoot ||
             result.globalConfig?.rootDir ||
             process.cwd()
-          applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
+          if (isSuitesSkipped) {
+            applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
+          }
           testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
             coverageMap,
             undefined,
             coverageRootDir
           )
-          testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
-            filename: getTestSuitePath(filename, coverageRootDir),
-            bitmap,
-          }))
+          if (shouldReportTestSessionCoverage) {
+            testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
+              filename: getTestSuitePath(filename, coverageRootDir),
+              bitmap,
+            }))
+          }
         } catch {
           // ignore errors
         }
@@ -1854,15 +1864,23 @@ addHook({
   versions: [MINIMUM_JEST_VERSION],
 }, reporterDispatcherWrapper)
 
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/reporters',
+    file: 'build/coverage_reporter.js',
+    versions: ['>=24.8.0 <26.6.2'],
+  }, coverageReporterWrapper)
+}
+
 addHook({
   name: '@jest/reporters',
-  versions: [MINIMUM_JEST_VERSION],
+  versions: ['>=30.0.0'],
 }, reportersWrapper)
 
 addHook({
   name: '@jest/reporters',
   file: 'build/CoverageReporter.js',
-  versions: [MINIMUM_JEST_VERSION],
+  versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
 }, coverageReporterWrapper)
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
@@ -1897,18 +1915,13 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
 
-        const getFilesWithPath = (files) => files.map(file => {
-          if (typeof file === 'string') {
-            return getTestSuitePath(file, root)
-          }
-          return {
+        const coverageFiles = getCoveredFilesFromCoverage(environment.global.__coverage__)
+          .map(file => ({
             ...file,
             filename: getTestSuitePath(file.filename, root),
-          }
-        })
-
-        const coverageFiles = getFilesWithPath(getCoveredFilesFromCoverage(environment.global.__coverage__))
-        const mockedFiles = getFilesWithPath(getMockedFiles(environment.testSuiteAbsolutePath))
+          }))
+        const mockedFiles = getMockedFiles(environment.testSuiteAbsolutePath)
+          .map(file => getTestSuitePath(file, root))
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,

@@ -421,10 +421,8 @@ module.exports = {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
-  getRelativeCoverageFiles,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
-  mergeCoverageBitmaps,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
@@ -1075,18 +1073,6 @@ function getExecutableFilesFromCoverage (coverage) {
   }
 
   return coverageFiles
-}
-
-function getRelativeCoverageFiles (files, rootDir) {
-  return files.map(file => {
-    if (typeof file === 'string') {
-      return getTestSuitePath(file, rootDir)
-    }
-    return {
-      ...file,
-      filename: getTestSuitePath(file.filename, rootDir),
-    }
-  })
 }
 
 function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {

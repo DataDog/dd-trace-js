@@ -821,6 +821,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const testSession = events.find(event => event.type === 'test_session_end').content
 
           assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          // Jest still adds untested files to total coverage, including unused-dependency.js from the skipped
+          // suite. The result stays at 100% because backend meta.coverage backfills those skipped lines before the
+          // test session total is published.
           assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
         })
 

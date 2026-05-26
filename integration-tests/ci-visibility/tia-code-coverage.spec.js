@@ -25,6 +25,7 @@ const SKIPPED_SUITE = `${FIXTURE_ROOT}/test-skipped.js`
 const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
 const SKIPPED_SOURCE = `${FIXTURE_ROOT}/src/skipped-dependency.js`
 const EXTRA_SOURCE = `${FIXTURE_ROOT}/src/uncovered-dependency.js`
+const DEFAULT_COLLECT_COVERAGE_FROM = `${FIXTURE_ROOT}/src/**`
 const LINE_PCT_RE = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
 
 function getLinesBitmapBase64 (startLine, endLine) {
@@ -47,17 +48,45 @@ function getLinePctFromOutput (output) {
   return Number(match[1])
 }
 
+function getJestEnv ({
+  testsToRun = `${FIXTURE_ROOT}/test-`,
+  collectCoverageFrom = DEFAULT_COLLECT_COVERAGE_FROM,
+  useJestRun = false,
+  useConfigFile = false,
+  configTestMatch,
+  configCollectCoverage = false,
+} = {}) {
+  const env = {
+    TESTS_TO_RUN: testsToRun,
+    ENABLE_CODE_COVERAGE: '1',
+    COVERAGE_REPORTERS: 'text-summary',
+  }
+
+  if (collectCoverageFrom !== null) {
+    env.COLLECT_COVERAGE_FROM = collectCoverageFrom
+  }
+  if (useJestRun) {
+    env.USE_JEST_RUN = '1'
+  }
+  if (useConfigFile) {
+    env.USE_CONFIG_FILE = '1'
+  }
+  if (configTestMatch) {
+    env.CONFIG_TEST_MATCH = configTestMatch
+  }
+  if (configCollectCoverage) {
+    env.CONFIG_COLLECT_COVERAGE = '1'
+  }
+
+  return env
+}
+
 const FRAMEWORKS = [
   {
     name: 'jest',
     skippedSuite: SKIPPED_SUITE,
     command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
-    getEnv: () => ({
-      TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-      COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
-      ENABLE_CODE_COVERAGE: '1',
-      COVERAGE_REPORTERS: 'text-summary',
-    }),
+    getEnv: () => getJestEnv(),
   },
 ]
 
@@ -89,6 +118,7 @@ describe('TIA code coverage', function () {
       tests_skipping: true,
     },
     expectSuiteCoverage = true,
+    expectSessionCoverage = true,
   }) {
     const receiver = await new FakeCiVisIntake().start()
     receiver.setSettings(settings)
@@ -131,7 +161,15 @@ describe('TIA code coverage', function () {
         } else {
           assert.strictEqual(suiteCoverage, undefined, `suite code coverage should not be reported:\n${output}`)
         }
-        assert.ok(sessionCoverage, `session executable-line coverage should be reported:\n${output}`)
+        if (expectSessionCoverage) {
+          assert.ok(sessionCoverage, `session executable-line coverage should be reported:\n${output}`)
+        } else {
+          assert.strictEqual(
+            sessionCoverage,
+            undefined,
+            `session executable-line coverage should not be reported:\n${output}`
+          )
+        }
         assert.ok(coveredFile?.bitmap, `covered files should report line coverage bitmaps:\n${output}`)
 
         coverageResult = coverages
@@ -177,6 +215,8 @@ describe('TIA code coverage', function () {
   }
 
   for (const framework of FRAMEWORKS) {
+    // Mixed local run: one suite still executes and one suite is skipped. Without backend coverage the total
+    // drops; with meta.coverage backfill, both Jest stdout and the Datadog session metric return to baseline.
     it(`keeps ${framework.name} total code coverage stable with skipped coverage`, async () => {
       const baseline = await runFramework({ framework })
 
@@ -232,8 +272,11 @@ describe('TIA code coverage', function () {
     })
   }
 
+  // If suite skipping is disabled, a skippable response with meta.coverage must not alter the run. We compare
+  // against a no-skipping baseline, not just stdout vs. Datadog, to catch accidental backfill side effects.
   it('does not alter jest coverage when suite skipping is disabled', async () => {
     const framework = FRAMEWORKS[0]
+    const baseline = await runFramework({ framework })
     const coveredSkippedLines = getLinesBitmapBase64(1, 20)
     const result = await runFramework({
       framework,
@@ -256,19 +299,36 @@ describe('TIA code coverage', function () {
     assert.notStrictEqual(result.isTiaSkipped, 'true')
     assert.strictEqual(result.skippedSuites.length, 0)
     assert.strictEqual(result.codeCoverageLinesPct, result.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(result.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
   })
 
-  it('keeps jest total code coverage stable when all suites are skippable with collectCoverageFrom', async () => {
+  // Session-level executable coverage is only needed for TIA flows. When TIA is off, ordinary Jest coverage should
+  // not pay the extra coverage-map walk or send the extra CITESTCOV request.
+  it('does not report jest session coverage when TIA is disabled', async () => {
+    const result = await runFramework({
+      framework: FRAMEWORKS[0],
+      settings: {
+        itr_enabled: false,
+        code_coverage: true,
+        tests_skipping: false,
+      },
+      expectSessionCoverage: false,
+    })
+
+    assert.strictEqual(result.isTiaSkipped, 'false')
+    assert.strictEqual(result.skippedSuites.length, 0)
+    assert.strictEqual(result.codeCoverageLinesPct, result.stdoutCodeCoverageLinesPct)
+  })
+
+  // Zero-local-suite path: every suite that Jest would run is skipped by TIA. There is no suite coverage payload,
+  // so session coverage and Jest stdout have to be reconstructed from backend meta.coverage plus Jest's coverage
+  // machinery.
+  it('keeps jest total code coverage stable when all local suites are skipped', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-        USE_JEST_RUN: '1',
-      }),
+      getEnv: () => getJestEnv({ useJestRun: true }),
     }
     const baseline = await runFramework({ framework })
 
@@ -306,67 +366,14 @@ describe('TIA code coverage', function () {
     assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
   })
 
-  it('keeps jest config-file coverage stable when collectCoverageFrom is missing', async () => {
-    const framework = {
-      ...FRAMEWORKS[0],
-      command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        CONFIG_TEST_MATCH: `**/${FIXTURE_ROOT}/test-*.js`,
-        CONFIG_COLLECT_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-        USE_CONFIG_FILE: '1',
-        USE_JEST_RUN: '1',
-      }),
-    }
-    const baseline = await runFramework({ framework })
-
-    assert.strictEqual(baseline.isTiaSkipped, 'false')
-    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
-
-    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
-    const skippedCoverage = await runFramework({
-      framework,
-      suitesToSkip: [
-        {
-          type: 'suite',
-          attributes: {
-            suite: RUN_SUITE,
-          },
-        },
-        {
-          type: 'suite',
-          attributes: {
-            suite: SKIPPED_SUITE,
-          },
-        },
-      ],
-      skippableCoverage: {
-        [RUN_SOURCE]: coveredSkippedLines,
-        [SKIPPED_SOURCE]: coveredSkippedLines,
-      },
-      expectSuiteCoverage: false,
-    })
-
-    assert.strictEqual(skippedCoverage.isTiaSkipped, 'true')
-    assert.strictEqual(skippedCoverage.skippedSuites.length, 2)
-    assert.strictEqual(skippedCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
-    assert.strictEqual(skippedCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.strictEqual(skippedCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
-  })
-
+  // The backend returns aggregate meta.coverage for the skippable response, which can include suites outside this
+  // local Jest invocation. We apply that coverage as the session base because commit-level aggregation is the
+  // product target, even if a single shard/session reports broader coverage than it locally executed.
   it('uses backend coverage outside the local run as the jest coverage base', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        COLLECT_COVERAGE_FROM: `${FIXTURE_ROOT}/src/**`,
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-        USE_JEST_RUN: '1',
-      }),
+      getEnv: () => getJestEnv({ useJestRun: true }),
     }
     const baseline = await runFramework({ framework })
 
@@ -408,93 +415,155 @@ describe('TIA code coverage', function () {
     assert.strictEqual(broaderCoverage.isTiaSkipped, 'true')
     assert.strictEqual(broaderCoverage.skippedSuites.length, 2)
     assert.strictEqual(broaderCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+    assert.ok(
+      broaderCoverage.stdoutCodeCoverageLinesPct > baseline.stdoutCodeCoverageLinesPct,
+      `expected ${broaderCoverage.stdoutCodeCoverageLinesPct} to be higher than ` +
+        `${baseline.stdoutCodeCoverageLinesPct}`
+    )
+    assert.ok(
+      broaderCoverage.codeCoverageLinesPct > baseline.codeCoverageLinesPct,
+      `expected ${broaderCoverage.codeCoverageLinesPct} to be higher than ${baseline.codeCoverageLinesPct}`
+    )
     assert.strictEqual(broaderCoverage.stdoutCodeCoverageLinesPct, 100)
     assert.strictEqual(broaderCoverage.codeCoverageLinesPct, 100)
   })
 
-  it('skips when backend coverage has no configured collectCoverageFrom', async () => {
-    const framework = {
-      ...FRAMEWORKS[0],
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-      }),
-    }
-    const baseline = await runFramework({ framework })
+  // Customers can enable Jest coverage without collectCoverageFrom. These cases keep that absence explicit so we
+  // do not accidentally make TIA coverage backfill depend on users configuring collection globs.
+  context('without collectCoverageFrom', () => {
+    // Config-file coverage still has enough Jest coverage machinery to publish totals. Backend coverage should
+    // fill the skipped files and keep the result aligned with the baseline.
+    it('keeps jest config-file coverage stable', async () => {
+      const framework = {
+        ...FRAMEWORKS[0],
+        command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}`,
+        getEnv: () => getJestEnv({
+          collectCoverageFrom: null,
+          configTestMatch: `**/${FIXTURE_ROOT}/test-*.js`,
+          configCollectCoverage: true,
+          useConfigFile: true,
+          useJestRun: true,
+        }),
+      }
+      const baseline = await runFramework({ framework })
 
-    assert.strictEqual(baseline.isTiaSkipped, 'false')
-    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+      assert.strictEqual(baseline.isTiaSkipped, 'false')
+      assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+      assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
-    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
-    const unseedableCoverage = await runFramework({
-      framework,
-      suitesToSkip: [{
-        type: 'suite',
-        attributes: {
-          suite: SKIPPED_SUITE,
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+      const skippedCoverage = await runFramework({
+        framework,
+        suitesToSkip: [
+          {
+            type: 'suite',
+            attributes: {
+              suite: RUN_SUITE,
+            },
+          },
+          {
+            type: 'suite',
+            attributes: {
+              suite: SKIPPED_SUITE,
+            },
+          },
+        ],
+        skippableCoverage: {
+          [RUN_SOURCE]: coveredSkippedLines,
+          [SKIPPED_SOURCE]: coveredSkippedLines,
         },
-      }],
-      skippableCoverage: {
-        [SKIPPED_SOURCE]: coveredSkippedLines,
-      },
+        expectSuiteCoverage: false,
+      })
+
+      assert.strictEqual(skippedCoverage.isTiaSkipped, 'true')
+      assert.strictEqual(skippedCoverage.skippedSuites.length, 2)
+      assert.strictEqual(skippedCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(skippedCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+      assert.strictEqual(skippedCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
     })
 
-    assert.strictEqual(unseedableCoverage.isTiaSkipped, 'true')
-    assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
-    assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
-  })
+    // Missing collectCoverageFrom should not block the skip decision when backend line coverage is present. This
+    // mainly guards against treating the absence of a user glob as "unsafe to skip."
+    it('skips when backend coverage is available', async () => {
+      const framework = {
+        ...FRAMEWORKS[0],
+        getEnv: () => getJestEnv({ collectCoverageFrom: null }),
+      }
+      const baseline = await runFramework({ framework })
 
-  it('keeps jest coverage stable when a cli pattern is not a directory path', async () => {
-    const framework = {
-      ...FRAMEWORKS[0],
-      command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}/test-`,
-      getEnv: () => ({
-        TESTS_TO_RUN: `${FIXTURE_ROOT}/test-`,
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-        USE_JEST_RUN: '1',
-      }),
-    }
-    const baseline = await runFramework({ framework })
+      assert.strictEqual(baseline.isTiaSkipped, 'false')
+      assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+      assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
 
-    assert.strictEqual(baseline.isTiaSkipped, 'false')
-    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
-
-    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
-    const unscopedPatternRun = await runFramework({
-      framework,
-      suitesToSkip: [{
-        type: 'suite',
-        attributes: {
-          suite: SKIPPED_SUITE,
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+      const unseedableCoverage = await runFramework({
+        framework,
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        skippableCoverage: {
+          [SKIPPED_SOURCE]: coveredSkippedLines,
         },
-      }],
-      skippableCoverage: {
-        [SKIPPED_SOURCE]: coveredSkippedLines,
-      },
+      })
+
+      assert.strictEqual(unseedableCoverage.isTiaSkipped, 'true')
+      assert.strictEqual(unseedableCoverage.skippedSuites.length, 1)
+      assert.strictEqual(unseedableCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
     })
 
-    assert.strictEqual(unscopedPatternRun.isTiaSkipped, 'true')
-    assert.strictEqual(unscopedPatternRun.skippedSuites.length, 1)
-    assert.strictEqual(unscopedPatternRun.skippedSuites[0].meta[TEST_STATUS], 'skip')
-    assert.strictEqual(unscopedPatternRun.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
-    assert.strictEqual(unscopedPatternRun.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+    // A CLI test pattern can be a prefix or regex-like value rather than a directory. Backend file paths still give
+    // us the files to seed, so coverage should stay stable after skipping.
+    it('keeps jest coverage stable when a cli pattern is not a directory path', async () => {
+      const framework = {
+        ...FRAMEWORKS[0],
+        command: `node ./ci-visibility/run-jest.js ${FIXTURE_ROOT}/test-`,
+        getEnv: () => getJestEnv({
+          collectCoverageFrom: null,
+          useJestRun: true,
+        }),
+      }
+      const baseline = await runFramework({ framework })
+
+      assert.strictEqual(baseline.isTiaSkipped, 'false')
+      assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+      assert.ok(baseline.codeCoverageLinesPct > 0, `baseline coverage was ${baseline.codeCoverageLinesPct}`)
+
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+      const unscopedPatternRun = await runFramework({
+        framework,
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        skippableCoverage: {
+          [SKIPPED_SOURCE]: coveredSkippedLines,
+        },
+      })
+
+      assert.strictEqual(unscopedPatternRun.isTiaSkipped, 'true')
+      assert.strictEqual(unscopedPatternRun.skippedSuites.length, 1)
+      assert.strictEqual(unscopedPatternRun.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(unscopedPatternRun.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+      assert.strictEqual(unscopedPatternRun.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+    })
   })
 
+  // Jest can be launched below the repository root while backend suites and coverage use repository-relative paths.
+  // This catches regressions where coverage filenames become cwd-relative and stop matching backend meta.coverage.
   it('uses the repository root for jest coverage when launched from a subdirectory', async () => {
     const framework = {
       ...FRAMEWORKS[0],
       command: 'node ./run-jest.js tia-code-coverage',
       cwd: sandboxRoot => path.join(sandboxRoot, 'ci-visibility'),
-      getEnv: () => ({
-        TESTS_TO_RUN: 'tia-code-coverage/test-',
-        COLLECT_COVERAGE_FROM: 'tia-code-coverage/src/**',
-        ENABLE_CODE_COVERAGE: '1',
-        COVERAGE_REPORTERS: 'text-summary',
-        USE_JEST_RUN: '1',
+      getEnv: () => getJestEnv({
+        testsToRun: 'tia-code-coverage/test-',
+        collectCoverageFrom: 'tia-code-coverage/src/**',
+        useJestRun: true,
       }),
     }
     const baseline = await runFramework({ framework })
