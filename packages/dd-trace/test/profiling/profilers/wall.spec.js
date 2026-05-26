@@ -930,6 +930,5 @@ describe('profilers/native/wall', () => {
 
       profiler.stop()
     })
-
   })
 })
