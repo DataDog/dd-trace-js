@@ -99,13 +99,11 @@ class TracingPlugin extends Plugin {
       const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
 
       if (this[event]) {
-        this.addTraceSub(event, message => {
-          this[event](message)
-        })
+        this.addTraceSub(event, this[event].bind(this))
       }
 
       if (this[bindName]) {
-        this.addTraceBind(event, message => this[bindName](message))
+        this.addTraceBind(event, this[bindName].bind(this))
       }
     }
   }
