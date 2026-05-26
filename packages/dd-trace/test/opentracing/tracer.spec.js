@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const opentracing = require('opentracing')
 require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../../src/constants')
 const formats = require('../../../../ext/formats')
 
 const Reference = opentracing.Reference
@@ -42,6 +43,7 @@ describe('Tracer', () => {
 
     span = {
       _addTags: sinon.stub(),
+      setTag: sinon.stub(),
     }
     Span = sinon.stub().returns(span)
 
@@ -287,6 +289,34 @@ describe('Tracer', () => {
         links: undefined,
       })
       assert.strictEqual(testSpan, span)
+    })
+
+    it('stamps svc_src=m when tags.service is provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { service: 'override' } })
+
+      sinon.assert.calledWith(span.setTag, SVC_SRC_KEY, SVC_SRC_MANUAL)
+    })
+
+    it('stamps svc_src=m when tags["service.name"] is provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { 'service.name': 'override' } })
+
+      sinon.assert.calledWith(span.setTag, SVC_SRC_KEY, SVC_SRC_MANUAL)
+    })
+
+    it('does not stamp svc_src when no service tag is provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { component: 'foo' } })
+
+      sinon.assert.notCalled(span.setTag)
+    })
+
+    it('does not stamp svc_src when no tags are provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', {})
+
+      sinon.assert.notCalled(span.setTag)
     })
 
     it('should start a span with the trace ID generation configuration', () => {

@@ -276,12 +276,12 @@ class JestPlugin extends CiPlugin {
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata,
-        },
         integrationName: this.constructor.id,
+      })
+      this.testSuiteSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteMetadata,
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {

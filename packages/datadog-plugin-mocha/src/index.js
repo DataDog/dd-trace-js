@@ -129,12 +129,12 @@ class MochaPlugin extends CiPlugin {
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata,
-        },
         integrationName: this.constructor.id,
+      })
+      testSuiteSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteMetadata,
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {

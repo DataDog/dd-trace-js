@@ -145,11 +145,11 @@ class PlaywrightPlugin extends CiPlugin {
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
         childOf: this.testModuleSpan,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata,
-        },
+      })
+      testSuiteSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteMetadata,
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       ctx.parentStore = store
@@ -393,11 +393,11 @@ class PlaywrightPlugin extends CiPlugin {
         const stepSpan = this.tracer.startSpan('playwright.step', {
           childOf: span,
           startTime: stepStartTime,
-          tags: {
-            [COMPONENT]: this.constructor.id,
-            'playwright.step': step.title,
-            [RESOURCE_NAME]: step.title,
-          },
+        })
+        stepSpan._addTags({
+          [COMPONENT]: this.constructor.id,
+          'playwright.step': step.title,
+          [RESOURCE_NAME]: step.title,
         })
         if (step.error) {
           stepSpan.setTag('error', step.error)

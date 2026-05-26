@@ -172,6 +172,7 @@ describe('OuboundPlugin', () => {
       const tracerStub = {
         _tracer: {
           startSpan: sinon.stub().returns({
+            _addTags: sinon.spy(),
             addTags: sinon.spy(),
           }),
         },

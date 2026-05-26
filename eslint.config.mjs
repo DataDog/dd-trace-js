@@ -19,6 +19,7 @@ import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
+import eslintNoTagsInStartSpan from './eslint-rules/eslint-no-tags-in-start-span.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
@@ -385,6 +386,7 @@ export default [
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
+          'eslint-no-tags-in-start-span': eslintNoTagsInStartSpan,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
@@ -510,6 +512,7 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-no-tags-in-start-span': 'error',
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 

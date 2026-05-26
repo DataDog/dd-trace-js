@@ -15,6 +15,7 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../constants')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -88,6 +89,10 @@ class DatadogTracer {
 
     span._addTags(this._config.tags)
     span._addTags(options.tags)
+
+    if (options.tags && ('service' in options.tags || 'service.name' in options.tags)) {
+      span.setTag(SVC_SRC_KEY, SVC_SRC_MANUAL)
+    }
 
     return span
   }

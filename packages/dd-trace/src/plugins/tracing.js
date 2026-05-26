@@ -226,18 +226,19 @@ class TracingPlugin extends Plugin {
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
-      tags: {
-        [COMPONENT]: component,
-        'service.name': serviceName || tracer._service,
-        'resource.name': resource,
-        'span.kind': kind,
-        'span.type': type,
-        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
-        ...meta,
-        ...metrics,
-      },
       integrationName: integrationName || component,
       links: childOf?._links,
+    })
+
+    span._addTags({
+      [COMPONENT]: component,
+      'service.name': serviceName || tracer._service,
+      'resource.name': resource,
+      'span.kind': kind,
+      'span.type': type,
+      ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
+      ...meta,
+      ...metrics,
     })
 
     analyticsSampler.sample(span, config.measured)

@@ -114,10 +114,10 @@ class RouterPlugin extends WebPlugin {
     const span = this.tracer.startSpan(`${this.constructor.id}.middleware`, {
       childOf,
       integrationName: this.constructor.id,
-      tags: {
-        [COMPONENT]: this.constructor.id,
-        'resource.name': name || '<anonymous>',
-      },
+    })
+    span._addTags({
+      [COMPONENT]: this.constructor.id,
+      'resource.name': name || '<anonymous>',
     })
 
     analyticsSampler.sample(span, this.config.measured)

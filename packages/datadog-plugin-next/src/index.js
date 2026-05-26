@@ -26,16 +26,16 @@ class NextPlugin extends ServerPlugin {
 
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
-      tags: {
-        [COMPONENT]: this.constructor.id,
-        'service.name': serviceName,
-        'resource.name': req.method,
-        'span.type': 'web',
-        'span.kind': 'server',
-        'http.method': req.method,
-        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
-      },
       integrationName: this.constructor.id,
+    })
+    span._addTags({
+      [COMPONENT]: this.constructor.id,
+      'service.name': serviceName,
+      'resource.name': req.method,
+      'span.type': 'web',
+      'span.kind': 'server',
+      'http.method': req.method,
+      ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
     })
 
     analyticsSampler.sample(span, this.config.measured, true)

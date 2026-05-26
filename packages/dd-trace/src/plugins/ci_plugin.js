@@ -226,12 +226,12 @@ module.exports = class CiPlugin extends Plugin {
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testSessionSpanMetadata,
-        },
         integrationName: this.constructor.id,
+      })
+      this.testSessionSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testSessionSpanMetadata,
       })
       for (const { tag, value } of this._pendingRequestErrorTags) {
         this.testSessionSpan.setTag(tag, value)
@@ -242,13 +242,13 @@ module.exports = class CiPlugin extends Plugin {
 
       this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {
         childOf: this.testSessionSpan,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testModuleSpanMetadata,
-          ...getSessionRequestErrorTags(this.testSessionSpan),
-        },
         integrationName: this.constructor.id,
+      })
+      this.testModuleSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testModuleSpanMetadata,
+        ...getSessionRequestErrorTags(this.testSessionSpan),
       })
       setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
@@ -266,17 +266,18 @@ module.exports = class CiPlugin extends Plugin {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
         }
 
-        this.tracer.startSpan(`${this.constructor.id}.test_suite`, {
+        const skippedSuiteSpan = this.tracer.startSpan(`${this.constructor.id}.test_suite`, {
           childOf: this.testModuleSpan,
-          tags: {
-            [COMPONENT]: this.constructor.id,
-            ...this.testEnvironmentMetadata,
-            ...testSuiteMetadata,
-            [TEST_STATUS]: 'skip',
-            [TEST_SKIPPED_BY_ITR]: 'true',
-          },
           integrationName: this.constructor.id,
-        }).finish()
+        })
+        skippedSuiteSpan._addTags({
+          [COMPONENT]: this.constructor.id,
+          ...this.testEnvironmentMetadata,
+          ...testSuiteMetadata,
+          [TEST_STATUS]: 'skip',
+          [TEST_SKIPPED_BY_ITR]: 'true',
+        })
+        skippedSuiteSpan.finish()
       }
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
@@ -636,12 +637,12 @@ module.exports = class CiPlugin extends Plugin {
     const testSpan = this.tracer
       .startSpan(`${this.constructor.id}.test`, {
         childOf,
-        tags: {
-          ...this.testEnvironmentMetadata,
-          ...testTags,
-        },
         integrationName: this.constructor.id,
       })
+    testSpan._addTags({
+      ...this.testEnvironmentMetadata,
+      ...testTags,
+    })
 
     testSpan.context()._trace.origin = CI_APP_ORIGIN
 

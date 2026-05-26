@@ -18,9 +18,11 @@ describe('TracingPlugin', () => {
     let plugin
 
     beforeEach(() => {
-      startSpanSpy = sinon.stub().callsFake((_name, opts) => ({
-        _spanContext: { _tags: { ...opts.tags } },
-      }))
+      startSpanSpy = sinon.stub().callsFake(() => {
+        const span = { _spanContext: { _tags: {} } }
+        span._addTags = (tags) => Object.assign(span._spanContext._tags, tags)
+        return span
+      })
       plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
@@ -42,37 +44,22 @@ describe('TracingPlugin', () => {
     })
 
     it('sets SVC_SRC_KEY tag when service is provided as an object with source', () => {
-      plugin.startSpan('Test span', { service: { name: 'my-service', source: 'kafka' } })
+      const span = plugin.startSpan('Test span', { service: { name: 'my-service', source: 'kafka' } })
 
-      sinon.assert.calledWith(startSpanSpy,
-        'Test span',
-        sinon.match({
-          tags: sinon.match({
-            [SVC_SRC_KEY]: 'kafka',
-          }),
-        })
-      )
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
     })
 
     it('defaults SVC_SRC_KEY to opt.plugin when service is a plain string', () => {
       // This means the service name was provided from the config, so it should default to opt.plugin
-      plugin.startSpan('Test span', { service: 'my-service' })
+      const span = plugin.startSpan('Test span', { service: 'my-service' })
 
-      sinon.assert.calledWith(startSpanSpy,
-        'Test span',
-        sinon.match({
-          tags: sinon.match({
-            [SVC_SRC_KEY]: 'opt.plugin',
-          }),
-        })
-      )
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'opt.plugin')
     })
 
     it('does not set SVC_SRC_KEY tag when service is not provided', () => {
-      plugin.startSpan('Test span', {})
+      const span = plugin.startSpan('Test span', {})
 
-      const callArgs = startSpanSpy.firstCall.args[1]
-      assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
+      assert.ok(!(SVC_SRC_KEY in span._spanContext._tags), 'SVC_SRC_KEY should not be present when service is not provided')
     })
 
     it('keeps the integration source when the user does not override service.name', () => {
