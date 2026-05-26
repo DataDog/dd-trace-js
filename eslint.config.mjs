@@ -739,7 +739,8 @@ export default [
     },
     rules: {
       'eslint-rules/eslint-prefer-assert-match': 'error',
-      'eslint-rules/eslint-require-boolean-assert-message': 'error',
+      // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
+      'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
@@ -803,6 +804,15 @@ export default [
     rules: {
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
+    },
+  },
+  {
+    // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
+    // JSDoc type to `jsdoc/valid-types`. The shape is required by the plugin.
+    name: 'dd-trace/datadog-plugin-jest/fixtures',
+    files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
+    rules: {
+      'jsdoc/valid-types': 'off',
     },
   },
   {
