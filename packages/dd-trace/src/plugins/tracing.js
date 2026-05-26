@@ -131,7 +131,7 @@ class TracingPlugin extends Plugin {
    * @param {import('../../../..').Span} [span]
    */
   addError (error, span = this.activeSpan) {
-    if (span && !span._spanContext._tags.error) {
+    if (span && !span.context().getTag('error')) {
       // Errors may be wrapped in a context.
       span.setTag('error', error?.error || error || 1)
     }

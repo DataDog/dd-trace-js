@@ -45,7 +45,7 @@ function incrementLLMObsSpanStartCount (tags, value = 1) {
 
 function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span)
-  const spanTags = span.context()._tags
+  const spanTags = span.context().getTags()
 
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
   const hasSessionId = mlObsTags[SESSION_ID] != null
