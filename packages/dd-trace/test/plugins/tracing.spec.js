@@ -108,6 +108,17 @@ describe('TracingPlugin', () => {
 
       assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
     })
+
+    it('clears SVC_SRC_KEY when the user overrides service.name back to the tracer default', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
+
+      span._spanContext._tags['service.name'] = 'tracer-default'
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], undefined)
+    })
   })
 
   describe('stampIntegrationService method', () => {

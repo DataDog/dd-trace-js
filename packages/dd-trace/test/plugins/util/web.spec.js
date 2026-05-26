@@ -251,6 +251,49 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('setConfig service', () => {
+    const SVC_SRC_KEY = '_dd.svc_src'
+
+    beforeEach(() => {
+      req.url = '/'
+      web.plugin = null
+    })
+
+    it('writes service.name from config.service onto the span', () => {
+      const customConfig = web.normalizeConfig({ service: 'integration-svc' })
+
+      const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
+      const tags = span.context()._tags
+
+      assert.strictEqual(tags['service.name'], 'integration-svc')
+    })
+
+    it('stamps the integration claim so a user override is flagged manual at finish', () => {
+      const customConfig = web.normalizeConfig({ service: 'integration-svc' })
+
+      const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
+      const tags = span.context()._tags
+
+      span.setTag('service.name', 'user-override')
+      span.finish()
+
+      assert.strictEqual(tags['service.name'], 'user-override')
+      assert.strictEqual(tags[SVC_SRC_KEY], 'm')
+    })
+
+    it('does not stamp manual when the user does not override the integration service', () => {
+      const customConfig = web.normalizeConfig({ service: 'integration-svc' })
+
+      const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
+      const tags = span.context()._tags
+
+      span.finish()
+
+      assert.strictEqual(tags['service.name'], 'integration-svc')
+      assert.strictEqual(tags[SVC_SRC_KEY], undefined)
+    })
+  })
+
   describe('allowlistFilter', () => {
     beforeEach(() => {
       config = { allowlist: ['/_okay'] }
