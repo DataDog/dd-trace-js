@@ -29,26 +29,25 @@ function getOperationId (ctxImpl) {
 }
 
 /**
- * Returns the 1-indexed attempt number for the op the DurableContextImpl is about to run:
- * 1 for the original attempt, 2 for the first retry, etc., matching the AWS UI's
- * attempt-count convention. Defaults to 1 when no checkpoint exists yet (the very
- * first execution before the START checkpoint).
+ * Returns the 0-indexed attempt number for the op the DurableContextImpl is about to
+ * run: 0 for the original attempt, 1 for the first retry, 2 for the second, etc.
+ * Defaults to 0 when no checkpoint exists yet (the very first execution before any
+ * prior failures, before the START checkpoint).
  *
- * AIDEV-NOTE: In production the AWS Lambda Durable service reports StepDetails.Attempt
- * 1-indexed (1 for the first attempt, 2 after the first retry, etc.) — matching what
- * the AWS UI displays. Pass it through directly. The SDK's own testing framework
- * returns the value 0-indexed instead, so test snapshots may emit lower numbers than
- * prod for the same logical state.
+ * The production AWS Lambda Durable service stores StepDetails.Attempt as "number
+ * of prior failed attempts", so passing it through directly yields the correct
+ * 0-indexed semantic. The SDK's own internal use also matches this — it computes
+ * the current attempt count as `(stepData.StepDetails.Attempt || 0) + 1`.
  *
  * @param {object} [ctxImpl]
  * @returns {number}
  */
 function getOperationAttempt (ctxImpl) {
   const stepId = ctxImpl?.getNextStepId?.()
-  if (!stepId) return 1
+  if (!stepId) return 0
   const stepData = ctxImpl?._executionContext?.getStepData?.(stepId)
   const attempt = stepData?.StepDetails?.Attempt
-  return typeof attempt === 'number' ? Math.max(1, attempt) : 1
+  return typeof attempt === 'number' ? attempt : 0
 }
 
 /**
