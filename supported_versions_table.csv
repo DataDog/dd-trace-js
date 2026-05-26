@@ -27,6 +27,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True
 @redis/client,redis,1.1.0,5.12.1,True
+@smithy/core,aws-sdk,3.24.0,3.24.2,True
 @smithy/smithy-client,aws-sdk,1.0.3,4.13.3,True
 @vitest/runner,vitest,1.6.0,4.1.7,True
 aerospike,aerospike,4.0.0,6.7.0,True
@@ -72,9 +73,9 @@ microgateway-core,microgateway-core,2.1.0,3.3.7,True
 mocha,mocha,8.0.0,11.7.6,True
 mocha-each,mocha,2.0.1,2.0.1,True
 moleculer,moleculer,0.14.0,0.15.0,True
-mongodb,mongodb-core,3.3.0,7.0.0,True
+mongodb,mongodb-core,3.3.0,7.2.0,True
 mongodb-core,mongodb-core,2.0.0,3.2.7,True
-mongoose,mongoose,4.6.4,9.1.4,True
+mongoose,mongoose,4.6.4,9.6.2,True
 mysql,mysql,2.0.0,2.18.1,True
 mysql2,mysql2,1.0.0,3.22.3,True
 net,net,18.0.0,25.9.0,True
