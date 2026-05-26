@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
+const path = require('node:path')
 
 const {
   sandboxCwd,
@@ -138,7 +139,7 @@ describe('TIA code coverage', function () {
     childProcess = exec(
       framework.command,
       {
-        cwd,
+        cwd: framework.cwd ? framework.cwd(cwd) : cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           ...framework.getEnv(),
@@ -481,5 +482,47 @@ describe('TIA code coverage', function () {
     assert.strictEqual(unscopedPatternRun.skippedSuites[0].meta[TEST_STATUS], 'skip')
     assert.strictEqual(unscopedPatternRun.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
     assert.strictEqual(unscopedPatternRun.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+  })
+
+  it('uses the repository root for jest coverage when launched from a subdirectory', async () => {
+    const framework = {
+      ...FRAMEWORKS[0],
+      command: 'node ./run-jest.js tia-code-coverage',
+      cwd: sandboxRoot => path.join(sandboxRoot, 'ci-visibility'),
+      getEnv: () => ({
+        TESTS_TO_RUN: 'tia-code-coverage/test-',
+        COLLECT_COVERAGE_FROM: 'tia-code-coverage/src/**',
+        ENABLE_CODE_COVERAGE: '1',
+        COVERAGE_REPORTERS: 'text-summary',
+        USE_JEST_RUN: '1',
+      }),
+    }
+    const baseline = await runFramework({ framework })
+
+    assert.strictEqual(baseline.isTiaSkipped, 'false')
+    assert.strictEqual(baseline.codeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+
+    const coveredSkippedLines = getLinesBitmapBase64(1, 20)
+    const skippedWithCoverage = await runFramework({
+      framework,
+      suitesToSkip: [{
+        type: 'suite',
+        attributes: {
+          suite: SKIPPED_SUITE,
+        },
+      }],
+      skippableCoverage: {
+        [SKIPPED_SOURCE]: coveredSkippedLines,
+      },
+    })
+    const sessionCoverage = skippedWithCoverage.coverages.find(coverage => !coverage.test_suite_id)
+    const sessionCoverageFilenames = sessionCoverage.files.map(file => file.filename)
+
+    assert.strictEqual(skippedWithCoverage.isTiaSkipped, 'true')
+    assert.strictEqual(skippedWithCoverage.skippedSuites.length, 1)
+    assert.strictEqual(skippedWithCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+    assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+    assert.ok(sessionCoverageFilenames.includes(RUN_SOURCE))
+    assert.ok(sessionCoverageFilenames.includes(SKIPPED_SOURCE))
   })
 })

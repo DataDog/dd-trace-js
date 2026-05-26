@@ -1530,8 +1530,8 @@ function getCliWrapper (isNewJestVersion) {
       if (isUserCodeCoverageEnabled) {
         try {
           const coverageMap = resultCoverageMap || lastCoverageMap
-          const coverageRootDir = repositoryRoot ||
-            lastCoverageMapRootDir ||
+          const coverageRootDir = lastCoverageMapRootDir ||
+            repositoryRoot ||
             result.globalConfig?.rootDir ||
             process.cwd()
           applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
@@ -2010,6 +2010,7 @@ function configureTestEnvironment (readConfigsResult) {
     readConfigsResult.globalConfig = addCoverageBackfillFilesToGlobalConfig(readConfigsResult.globalConfig)
   }
   testSessionConfigurationCh.publish(readConfigsResult.configs.map(config => config.testEnvironmentOptions))
+  repositoryRoot = getJestRepositoryRoot(readConfigsResult)
 
   isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
 
