@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -161,8 +162,9 @@ describe('Span', () => {
     })
 
     assert.deepStrictEqual(span.context()._traceId, '123')
-    assert.ok(Object.hasOwn(span.context()._trace.tags, '_dd.p.tid'))
-    assert.match(span.context()._trace.tags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
+    const traceTags = span.context()._trace.tags
+    assert.ok(Object.hasOwn(traceTags, '_dd.p.tid'), `Available keys: ${inspect(Object.keys(traceTags))}`)
+    assert.match(traceTags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
   })
 
   it('should be published via dd-trace:span:start channel', () => {
@@ -217,7 +219,10 @@ describe('Span', () => {
 
       assert.ok('foo' in span.context()._baggageItems)
       assert.strictEqual(span.context()._baggageItems.foo, 'bar')
-      assert.ok(!('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar')
+      assert.ok(
+        !('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar',
+        `Got parent._baggageItems: ${inspect(parent._baggageItems)}`
+      )
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -247,7 +252,7 @@ describe('Span', () => {
       const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       span.addLink({ context: span2.context() })
-      assert.ok(Object.hasOwn(span, '_links'))
+      assert.ok(Object.hasOwn(span, '_links'), `Available keys: ${inspect(Object.keys(span))}`)
       assert.strictEqual(span._links.length, 1)
     })
 
@@ -446,7 +451,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), { foo: 'bar' })
     })
   })
 
@@ -460,7 +465,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), tags)
     })
 
     it('should sample based on the tags', () => {
@@ -507,7 +512,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
+      assertObjectContains(span._spanContext.getTags(), { '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {

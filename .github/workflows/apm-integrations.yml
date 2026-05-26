@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 # TODO: upstream jobs
@@ -158,6 +157,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+      # `plugins/upstream` only runs `test:plugins:upstream`, which is a non-glob suite runner;
+      # the in-tree `test/integration-test/*.spec.js` files would otherwise have no CI invocation
+      # whose glob expands to reach them.
+      - uses: ./.github/actions/plugins/integration-test
 
   body-parser:
     runs-on: ubuntu-latest
@@ -168,6 +171,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+      - uses: ./.github/actions/plugins/integration-test
 
   bullmq:
     runs-on: ubuntu-latest
@@ -442,12 +446,18 @@ jobs:
 
   electron:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: electron
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node
+        with:
+          version: '24.15'
       - uses: ./.github/actions/install
       # Ubuntu 24.04 tightened AppArmor defaults and now blocks unprivileged user
       # namespaces, which Electron's Chromium sandbox requires to run. Setting
@@ -457,13 +467,21 @@ jobs:
           sudo apt-get update
           # Xvfb provides a virtual X display so Electron (a GUI app) can start
           # on the headless CI runner without a physical screen.
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb x11-utils
           # Launch the virtual display on screen :99 with a 24-bit 1024×768
           # framebuffer. Output is discarded; the & backgrounds it so the step
           # does not block.
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          # Wait until the display is ready before proceeding, otherwise Electron
+          # can fail to connect to the display and the test beforeEach times out.
+          # Bounded at 30s so an Xvfb crash fails fast instead of hanging.
+          timeout 30 bash -c 'until xdpyinfo -display :99 >/dev/null 2>&1; do sleep 0.1; done'
       # Point Electron at the virtual display started above.
       - run: DISPLAY=:99 yarn test:plugins:ci
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   express:
     runs-on: ubuntu-latest
@@ -834,6 +852,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -851,6 +871,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   mongoose:
     runs-on: ubuntu-latest
@@ -867,6 +889,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   multer:
     runs-on: ubuntu-latest

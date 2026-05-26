@@ -1,17 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
-const tags = require('../../../../../ext/tags')
+const tagsExt = require('../../../../../ext/tags')
 
-const ERROR = tags.ERROR
-const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
-const HTTP_ROUTE = tags.HTTP_ROUTE
-const RESOURCE_NAME = tags.RESOURCE_NAME
+const ERROR = tagsExt.ERROR
+const HTTP_ENDPOINT = tagsExt.HTTP_ENDPOINT
+const HTTP_ROUTE = tagsExt.HTTP_ROUTE
+const RESOURCE_NAME = tagsExt.RESOURCE_NAME
 
 describe('plugins/util/web', () => {
   let web
@@ -52,15 +53,18 @@ describe('plugins/util/web', () => {
     it('should set the correct defaults', () => {
       const config = web.normalizeConfig({})
 
-      assert.ok(Object.hasOwn(config, 'headers'))
-      assert.ok(Array.isArray(config.headers))
-      assert.ok(Object.hasOwn(config, 'validateStatus'))
+      assert.ok(Object.hasOwn(config, 'headers'), `Available keys: ${inspect(Object.keys(config))}`)
+      assert.ok(Array.isArray(config.headers), `Expected array, got ${inspect(config.headers)}`)
+      assert.ok(Object.hasOwn(config, 'validateStatus'), `Available keys: ${inspect(Object.keys(config))}`)
       assert.strictEqual(typeof config.validateStatus, 'function')
       assert.strictEqual(config.validateStatus(200), true)
       assert.strictEqual(config.validateStatus(500), false)
-      assert.ok(Object.hasOwn(config, 'hooks'))
-      assert.ok(typeof config.hooks === 'object' && config.hooks !== null)
-      assert.ok(Object.hasOwn(config.hooks, 'request'))
+      assert.ok(Object.hasOwn(config, 'hooks'), `Available keys: ${inspect(Object.keys(config))}`)
+      assert.ok(
+        typeof config.hooks === 'object' && config.hooks !== null,
+        `Expected non-null object, got ${inspect(config.hooks)}`
+      )
+      assert.ok(Object.hasOwn(config.hooks, 'request'), `Available keys: ${inspect(Object.keys(config.hooks))}`)
       assert.strictEqual(typeof config.hooks.request, 'function')
       assert.strictEqual(config.queryStringObfuscation, true)
     })
@@ -76,7 +80,7 @@ describe('plugins/util/web', () => {
 
       assert.deepStrictEqual(config.headers, [['test', undefined]])
       assert.strictEqual(config.validateStatus(200), false)
-      assert.ok(Object.hasOwn(config, 'hooks'))
+      assert.ok(Object.hasOwn(config, 'hooks'), `Available keys: ${inspect(Object.keys(config))}`)
       assert.strictEqual(config.hooks.request(), 'test')
     })
 
@@ -139,7 +143,7 @@ describe('plugins/util/web', () => {
   describe('addError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -172,7 +176,7 @@ describe('plugins/util/web', () => {
   describe('addStatusError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -268,7 +272,7 @@ describe('plugins/util/web', () => {
   describe('http.endpoint tagging', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
@@ -290,7 +294,10 @@ describe('plugins/util/web', () => {
 
       web.finishAll(context)
 
-      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      // `tags` was captured from span.context().getTags() before finishAll;
+      // the underlying tags object is still the original (clearTags() rebinds,
+      // but doesn't mutate the captured reference).
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `Available keys: ${inspect(Object.keys(tags))}`)
       assert.strictEqual(tags[HTTP_ENDPOINT], '/api/orders/{param:int}/items')
     })
 
@@ -304,8 +311,8 @@ describe('plugins/util/web', () => {
 
       web.finishAll(context)
 
-      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
-      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT), `Available keys: ${inspect(Object.keys(tags))}`)
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `Available keys: ${inspect(Object.keys(tags))}`)
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
     })
   })
@@ -316,7 +323,7 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 

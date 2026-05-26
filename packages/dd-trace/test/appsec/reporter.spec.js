@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
@@ -41,11 +42,17 @@ describe('reporter', () => {
       setPriority: sinon.stub(),
     }
 
+    const spanTags = {}
+    const spanContext = {
+      _tags: spanTags,
+      getTags () { return this._tags },
+      getTag (key) { return this._tags[key] },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags },
+    }
     span = {
       _prioritySampler: prioritySampler,
-      context: sinon.stub().returns({
-        _tags: {},
-      }),
+      context: sinon.stub().returns(spanContext),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
       keep: sinon.stub(),
@@ -665,7 +672,10 @@ describe('reporter', () => {
           const { truncated, value: truncatedRequestBody } = Reporter.truncateRequestBody(requestBody)
 
           assert.strictEqual(truncated, true)
-          assert.ok(Object.hasOwn(truncatedRequestBody, 'str'))
+          assert.ok(
+            Object.hasOwn(truncatedRequestBody, 'str'),
+            `Available keys: ${inspect(Object.keys(truncatedRequestBody))}`
+          )
           assert.strictEqual(truncatedRequestBody.str.length, 4096)
           assert.strictEqual(objectDepth(truncatedRequestBody.nestedObj), 19)
           assert.strictEqual(Object.keys(truncatedRequestBody.objectWithLotsOfNodes).length, 256)

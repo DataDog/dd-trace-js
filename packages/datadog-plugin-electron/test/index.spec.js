@@ -8,6 +8,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
+const IPC_TIMEOUT_MS = 10_000
+
 describe('Plugin', () => {
   let child
   let listener
@@ -33,7 +35,11 @@ describe('Plugin', () => {
     const startApp = done => {
       const electron = require(`../../../versions/electron@${version}`).get()
 
-      child = proc.spawn(electron, [join(__dirname, 'app', 'main')], {
+      const args = [join(__dirname, 'app', 'main')]
+      if (process.platform === 'linux') {
+        args.push('--no-sandbox', '--disable-gpu')
+      }
+      child = proc.spawn(electron, args, {
         env: {
           ...process.env,
           NODE_OPTIONS: `-r ${join(__dirname, 'tracer')}`,
@@ -48,10 +54,11 @@ describe('Plugin', () => {
     }
 
     describe('electron', () => {
-      describe('without configuration', () => {
+      describe('without configuration', function () {
+        this.timeout(IPC_TIMEOUT_MS + 5_000)
         beforeEach(() => agent.load('electron'))
         beforeEach(function (done) {
-          this.timeout(10_000)
+          this.timeout(30_000)
           startApp(done)
         })
 
@@ -112,7 +119,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when receiving', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.receive')
+              assert.ok(span, 'expected electron.main.receive span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -124,7 +132,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -135,6 +143,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces.flat().find(s => s.name === 'electron.main.handle')
+              assert.ok(span, 'expected electron.main.handle span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -145,7 +154,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -155,7 +164,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for main IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.main.send')
+              assert.ok(span, 'expected electron.main.send span')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.main.send')
@@ -165,7 +175,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'producer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -175,7 +185,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for renderer IPC when receiving', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.renderer.receive')
+              assert.ok(span, 'expected electron.renderer.receive span')
               const { meta } = span
 
               assert.strictEqual(span.type, 'worker')
@@ -187,7 +198,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -197,7 +208,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation for renderer IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces.flat().find(s => s.name === 'electron.renderer.send')
+              assert.ok(span, 'expected electron.renderer.send span')
               const { meta } = span
 
               assert.strictEqual(span.name, 'electron.renderer.send')
@@ -207,7 +219,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'producer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 

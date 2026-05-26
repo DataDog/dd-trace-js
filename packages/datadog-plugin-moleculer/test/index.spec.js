@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -76,7 +77,10 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].meta['span.kind'], 'server')
               assert.strictEqual(spans[0].meta['moleculer.context.action'], 'math.add')
               assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
-              assert.ok(Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'))
+              assert.ok(
+                Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'),
+                `Available keys: ${inspect(Object.keys(spans[0].meta))}`
+              )
               assert.strictEqual(spans[0].meta['moleculer.context.service'], 'math')
               assert.strictEqual(spans[0].meta['moleculer.namespace'], 'multi')
               assert.strictEqual(spans[0].meta['moleculer.node_id'], `server-${process.pid}`)
@@ -90,7 +94,10 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].meta['span.kind'], 'server')
               assert.strictEqual(spans[1].meta['moleculer.context.action'], 'math.numerify')
               assert.strictEqual(spans[1].meta['moleculer.context.node_id'], `server-${process.pid}`)
-              assert.ok(Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'))
+              assert.ok(
+                Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'),
+                `Available keys: ${inspect(Object.keys(spans[1].meta))}`
+              )
               assert.strictEqual(spans[1].meta['moleculer.context.service'], 'math')
               assert.strictEqual(spans[1].meta['moleculer.namespace'], 'multi')
               assert.strictEqual(spans[1].meta['moleculer.node_id'], `server-${process.pid}`)

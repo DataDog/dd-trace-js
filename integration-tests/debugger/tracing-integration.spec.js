@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const { setup, testBasicInput } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -77,8 +78,8 @@ describe('Dynamic Instrumentation', function () {
           const { process_tags: processTags } = payload[0]
 
           assert.strictEqual(typeof processTags, 'string')
-          assert.ok(processTags.includes('entrypoint.name:'))
-          assert.ok(processTags.includes('entrypoint.type:script'))
+          assert.ok(processTags.includes('entrypoint.name:'), `Got: ${inspect(processTags)}`)
+          assert.ok(processTags.includes('entrypoint.type:script'), `Got: ${inspect(processTags)}`)
 
           done()
         })
