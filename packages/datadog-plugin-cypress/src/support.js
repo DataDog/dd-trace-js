@@ -355,7 +355,7 @@ afterEach(function () {
   } catch {}
 
   // Snapshot before any DD-owned Cypress commands so they are not reported as test steps.
-  const commandsToReport = currentTestCommands.slice()
+  const commandsToReport = [...currentTestCommands]
 
   const rum = safeGetRum(originalWindow)
   if (rum) {
