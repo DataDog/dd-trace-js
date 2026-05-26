@@ -21,6 +21,9 @@ const IGNORED_CONFIGURATION_NAME_PREFIXES = [
   'experimental.appsec.',
   'experimental.iast.',
   'ingestion.',
+  'appsec.extendedHeadersCollection.',
+  'appsec.rasp.bodyCollection',
+  'iast.securityControlsConfiguration',
 ]
 const IGNORED_CONFIGURATION_LEAVES = new Set([
   'experimental.appsec',
