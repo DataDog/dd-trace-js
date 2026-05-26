@@ -22,6 +22,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_PARAMETERS,
   TEST_BROWSER_NAME,
+  TEST_FRAMEWORK_VERSION,
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -42,12 +43,11 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -319,6 +319,7 @@ versions.forEach((version) => {
                 true
               )
               assert.strictEqual(testEvent.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              assert.ok(testEvent.content.meta[TEST_FRAMEWORK_VERSION])
               // Can read DD_TAGS
               assertObjectContains(testEvent.content.meta, {
                 'test.customtag': 'customvalue',
