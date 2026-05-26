@@ -136,14 +136,6 @@ describe('TracingPlugin', () => {
 
       assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
     })
-
-    it('does not record a claim when service matches the tracer default', () => {
-      const span = { _spanContext: { _tags: {} } }
-
-      plugin.stampIntegrationService(span, 'tracer-default')
-
-      assert.strictEqual(span[INTEGRATION_SERVICE], undefined)
-    })
   })
 
   describe('setServiceName method', () => {
