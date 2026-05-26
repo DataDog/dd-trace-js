@@ -248,13 +248,21 @@ describe('API Security Sampler', () => {
       apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, sampleDelay: 30 } } })
     })
 
-    it('should use http.endpoint when http.route is not available', () => {
-      const spanWithEndpoint = {
+    function makeSpan (tags) {
+      return {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' },
+          _tags: tags,
+          getTag: (key) => tags[key],
+          getTags: () => tags,
+          setTag: (key, value) => { tags[key] = value },
+          hasTag: (key) => key in tags,
         }),
       }
+    }
+
+    it('should use http.endpoint when http.route is not available', () => {
+      const spanWithEndpoint = makeSpan({ 'http.endpoint': '/api/users' })
       webStub.root.returns(spanWithEndpoint)
       webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
 
@@ -264,12 +272,7 @@ describe('API Security Sampler', () => {
 
     it('should not use http.endpoint for 404 status codes', () => {
       const res404 = { statusCode: 404 }
-      const spanWithEndpoint = {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' },
-        }),
-      }
+      const spanWithEndpoint = makeSpan({ 'http.endpoint': '/api/users' })
       webStub.root.returns(spanWithEndpoint)
       webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
 
@@ -278,12 +281,7 @@ describe('API Security Sampler', () => {
     })
 
     it('should prefer http.route over http.endpoint when both are available', () => {
-      const spanWithBoth = {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' },
-        }),
-      }
+      const spanWithBoth = makeSpan({ 'http.endpoint': '/api/users' })
       webStub.root.returns(spanWithBoth)
       webStub.getContext.returns({ paths: ['/users/:id'], span: spanWithBoth })
 
@@ -292,12 +290,7 @@ describe('API Security Sampler', () => {
     })
 
     it('should handle missing http.endpoint gracefully', () => {
-      const spanWithoutEndpoint = {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: {},
-        }),
-      }
+      const spanWithoutEndpoint = makeSpan({})
       webStub.root.returns(spanWithoutEndpoint)
       webStub.getContext.returns({ paths: [], span: spanWithoutEndpoint })
 
@@ -313,18 +306,8 @@ describe('API Security Sampler', () => {
     })
 
     it('should sample different endpoints separately', () => {
-      const span1 = {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' },
-        }),
-      }
-      const span2 = {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/products' },
-        }),
-      }
+      const span1 = makeSpan({ 'http.endpoint': '/api/users' })
+      const span2 = makeSpan({ 'http.endpoint': '/api/products' })
 
       webStub.root.returns(span1)
       webStub.getContext.returns({ paths: [], span: span1 })
