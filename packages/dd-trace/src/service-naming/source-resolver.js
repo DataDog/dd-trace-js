@@ -20,13 +20,13 @@ const MANUAL = 'm'
  * @param {string|undefined} tracerService The tracer's configured default service.
  */
 function resolveServiceSource (span, tracerService) {
-  const tags = span._spanContext._tags
-  const currentService = tags['service.name']
-  const existingSource = tags[SVC_SRC_KEY]
+  const spanContext = span._spanContext
+  const currentService = spanContext.getTag('service.name')
+  const existingSource = spanContext.getTag(SVC_SRC_KEY)
 
   if (currentService === tracerService) {
     if (existingSource === undefined) return
-    delete tags[SVC_SRC_KEY]
+    spanContext.deleteTag(SVC_SRC_KEY)
     return
   }
 
@@ -36,7 +36,7 @@ function resolveServiceSource (span, tracerService) {
     return
   }
 
-  tags[SVC_SRC_KEY] = MANUAL
+  spanContext.setTag(SVC_SRC_KEY, MANUAL)
 }
 
 module.exports = {

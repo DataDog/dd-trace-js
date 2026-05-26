@@ -263,34 +263,34 @@ describe('plugins/util/web', () => {
       const customConfig = web.normalizeConfig({ service: 'integration-svc' })
 
       const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
-      const tags = span.context()._tags
+      const spanContext = span.context()
 
-      assert.strictEqual(tags['service.name'], 'integration-svc')
+      assert.strictEqual(spanContext.getTag('service.name'), 'integration-svc')
     })
 
     it('stamps the integration claim so a user override is flagged manual at finish', () => {
       const customConfig = web.normalizeConfig({ service: 'integration-svc' })
 
       const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
-      const tags = span.context()._tags
+      const spanContext = span.context()
 
       span.setTag('service.name', 'user-override')
       span.finish()
 
-      assert.strictEqual(tags['service.name'], 'user-override')
-      assert.strictEqual(tags[SVC_SRC_KEY], 'm')
+      assert.strictEqual(spanContext.getTag('service.name'), 'user-override')
+      assert.strictEqual(spanContext.getTag(SVC_SRC_KEY), 'm')
     })
 
     it('does not stamp manual when the user does not override the integration service', () => {
       const customConfig = web.normalizeConfig({ service: 'integration-svc' })
 
       const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
-      const tags = span.context()._tags
+      const spanContext = span.context()
 
       span.finish()
 
-      assert.strictEqual(tags['service.name'], 'integration-svc')
-      assert.strictEqual(tags[SVC_SRC_KEY], undefined)
+      assert.strictEqual(spanContext.getTag('service.name'), 'integration-svc')
+      assert.strictEqual(spanContext.getTag(SVC_SRC_KEY), undefined)
     })
   })
 

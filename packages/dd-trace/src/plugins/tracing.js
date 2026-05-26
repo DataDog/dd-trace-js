@@ -159,7 +159,8 @@ class TracingPlugin extends Plugin {
    * @param {string} name Service name the integration is claiming.
    */
   setServiceName (span, name) {
-    span._spanContext._tags['service.name'] = name
+    // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name -- this is the implementation
+    span._spanContext.setTag('service.name', name)
     this.stampIntegrationService(span, name)
   }
 

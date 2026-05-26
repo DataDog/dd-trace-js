@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 require('../setup/core')
+const DatadogSpanContext = require('../../src/opentracing/span_context')
 const {
   INTEGRATION_SERVICE,
   MANUAL,
@@ -15,7 +16,7 @@ const TRACER_SERVICE = 'app'
 const SVC_SRC_KEY = '_dd.svc_src'
 
 function makeSpan (tags = {}, marker) {
-  const span = { _spanContext: { _tags: { ...tags } } }
+  const span = { _spanContext: new DatadogSpanContext({ tags: { ...tags } }) }
   if (marker !== undefined) span[INTEGRATION_SERVICE] = marker
   return span
 }
@@ -27,7 +28,7 @@ describe('service-naming/source-resolver', () => {
 
       resolveServiceSource(span, TRACER_SERVICE)
 
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], undefined)
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), undefined)
     })
 
     it('keeps the integration source when the marker matches current service.name', () => {
@@ -35,7 +36,7 @@ describe('service-naming/source-resolver', () => {
 
       resolveServiceSource(span, TRACER_SERVICE)
 
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], 'kafka')
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), 'kafka')
     })
 
     it('marks manual when user overrides an integration value', () => {
@@ -43,7 +44,7 @@ describe('service-naming/source-resolver', () => {
 
       resolveServiceSource(span, TRACER_SERVICE)
 
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], MANUAL)
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), MANUAL)
     })
 
     it('marks manual for a user-only span with a non-default service', () => {
@@ -51,7 +52,7 @@ describe('service-naming/source-resolver', () => {
 
       resolveServiceSource(span, TRACER_SERVICE)
 
-      assert.strictEqual(span._spanContext._tags[SVC_SRC_KEY], MANUAL)
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), MANUAL)
     })
   })
 })
