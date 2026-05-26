@@ -82,33 +82,20 @@ describe('helpers/promise-instrumentor', () => {
       errorCh.unsubscribe(errorHandler)
     })
 
-    it('should publish start then finish without capturing the result by default', async () => {
+    it('should publish start then finish with ctx.result set to the resolved value', async () => {
       const instrument = createPromiseInstrumentor(prefix)
       const wrapped = instrument((_, args) => ({ args: [...args] }))(value => Promise.resolve(value))
 
-      const resolved = await wrapped('payload')
-
-      assert.strictEqual(resolved, 'payload')
-      assert.strictEqual(events.length, 2)
-      assert.strictEqual(events[0].type, 'start')
-      assert.strictEqual(events[1].type, 'finish')
-      assert.deepStrictEqual(events[0].ctx.args, ['payload'])
-      assert.strictEqual('result' in events[1].ctx, false)
-    })
-
-    it('should attach ctx.result before publishing finish when captureResult is true', async () => {
-      const instrument = createPromiseInstrumentor(prefix, { captureResult: true })
-      const wrapped = instrument(() => ({}))(() => Promise.resolve({ address: '127.0.0.1' }))
-
-      const resolved = await wrapped()
+      const resolved = await wrapped({ address: '127.0.0.1' })
 
       assert.deepStrictEqual(resolved, { address: '127.0.0.1' })
-      assert.strictEqual(events.length, 2)
+      assert.deepStrictEqual(events.map(event => event.type), ['start', 'finish'])
+      assert.deepStrictEqual(events[0].ctx.args, [{ address: '127.0.0.1' }])
       assert.deepStrictEqual(events[1].ctx.result, { address: '127.0.0.1' })
     })
 
     it('should publish error then finish and rethrow when the promise rejects', async () => {
-      const instrument = createPromiseInstrumentor(prefix, { captureResult: true })
+      const instrument = createPromiseInstrumentor(prefix)
       const failure = new Error('boom')
       const wrapped = instrument(() => ({}))(() => Promise.reject(failure))
 
@@ -116,8 +103,6 @@ describe('helpers/promise-instrumentor', () => {
 
       assert.deepStrictEqual(events.map(event => event.type), ['start', 'error', 'finish'])
       assert.strictEqual(events[1].ctx.error, failure)
-      // `ctx.result` must not leak the rejection reason.
-      assert.strictEqual('result' in events[2].ctx, false)
     })
 
     it('should publish error and rethrow when the underlying call throws synchronously', () => {

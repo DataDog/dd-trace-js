@@ -23,7 +23,7 @@ class DNSLookupPlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
-  bindFinish (ctx) {
+  finish (ctx) {
     const span = ctx.currentStore.span
     const result = ctx.result
 
@@ -40,7 +40,7 @@ class DNSLookupPlugin extends ClientPlugin {
       span.setTag('dns.address', result)
     }
 
-    return ctx.parentStore
+    super.finish(ctx)
   }
 }
 
