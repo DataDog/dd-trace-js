@@ -203,7 +203,7 @@ class DatadogSpan {
 
   setTag (key, value) {
     if (key === 'service.name') {
-      this._spanContext.setTag(SVC_SRC_KEY, SVC_SRC_MANUAL)
+      this._addTags({ [key]: value, [SVC_SRC_KEY]: SVC_SRC_MANUAL })
     } else {
       this._spanContext.setTag(key, value)
 
