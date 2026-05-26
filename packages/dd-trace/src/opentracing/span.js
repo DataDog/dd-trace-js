@@ -203,19 +203,19 @@ class DatadogSpan {
 
   setTag (key, value) {
     if (key === 'service.name') {
-      this._addTags({ [key]: value, [SVC_SRC_KEY]: SVC_SRC_MANUAL })
+      this._spanContext.setTag(SVC_SRC_KEY, SVC_SRC_MANUAL)
     } else {
       this._spanContext.setTag(key, value)
 
-    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+      if (isSamplingPriorityTag(key) && this._spanContext.getTag('sampling.priority') === undefined) {
+        this._prioritySampler.sample(this, false)
+      }
     }
 
     if (tagsUpdateCh.hasSubscribers) {
       tagsUpdateCh.publish(this)
     }
 
-    }
     return this
   }
 
@@ -295,7 +295,7 @@ class DatadogSpan {
     getIntegrationCounter('spans_finished', this._integrationName).inc()
     this._spanContext.setTag('_dd.integration', this._integrationName)
 
-    const finishTags = this._spanContext._tags
+    const finishTags = this._spanContext.getTags()
     if (finishTags['service.name'] === this.#parentTracer._service && finishTags[SVC_SRC_KEY] !== undefined) {
       delete finishTags[SVC_SRC_KEY]
     }
