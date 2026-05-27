@@ -2,12 +2,13 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -56,11 +57,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
