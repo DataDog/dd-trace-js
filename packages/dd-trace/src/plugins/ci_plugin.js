@@ -212,12 +212,7 @@ module.exports = class CiPlugin extends Plugin {
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = { '*': { [TEST_COMMAND]: command } }
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
+      const metadataTags = { '*': { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName } }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {
         this.tracer._exporter.addMetadataTags(metadataTags)

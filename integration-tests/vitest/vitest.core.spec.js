@@ -110,9 +110,7 @@ versions.forEach((version) => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)

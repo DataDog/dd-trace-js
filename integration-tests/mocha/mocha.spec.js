@@ -245,9 +245,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1602,9 +1600,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
         metadataDicts.forEach(metadata => {
           assert.ok(metadata['*'][TEST_COMMAND])
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
+          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
         })
 
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -5567,7 +5563,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
           // capabilities logic does not overwrite test session name
-          assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
         })
       })
 

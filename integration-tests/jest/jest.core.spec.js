@@ -430,9 +430,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -863,9 +861,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         // it propagates test session name to the test and test suite events in parallel mode
         metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
+          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
         })
 
         const events = eventsRequests.map(({ payload }) => payload)

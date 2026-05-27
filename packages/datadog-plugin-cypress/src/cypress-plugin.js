@@ -904,15 +904,9 @@ class CypressPlugin {
     )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
-      const metadataTags = { '*': { [TEST_COMMAND]: this.command } }
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
+      const metadataTags = { '*': { [TEST_COMMAND]: this.command, [TEST_SESSION_NAME]: testSessionName } }
       const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)
       metadataTags.test = {
-        ...metadataTags.test,
         ...libraryCapabilitiesTags,
       }
 
