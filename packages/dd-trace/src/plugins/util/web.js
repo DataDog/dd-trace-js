@@ -14,8 +14,6 @@ const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
-let extractIp
-
 const WEB = types.WEB
 const SERVER = kinds.SERVER
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -67,7 +65,9 @@ const web = {
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
-    extractIp = config.clientIpEnabled && require('./ip_extractor').extractIp
+    const extractIp = config.clientIpEnabled
+      ? require('./ip_extractor').extractIp
+      : undefined
 
     return {
       ...config,
@@ -77,6 +77,7 @@ const web = {
       filter,
       middleware,
       queryStringObfuscation,
+      extractIp,
     }
   },
 
@@ -393,8 +394,8 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (extractIp && !span.context().hasTag(HTTP_CLIENT_IP)) {
-    const clientIp = extractIp(config, req)
+  if (config.extractIp && !span.context().hasTag(HTTP_CLIENT_IP)) {
+    const clientIp = config.extractIp(config, req)
 
     if (clientIp) {
       span.setTag(HTTP_CLIENT_IP, clientIp)
