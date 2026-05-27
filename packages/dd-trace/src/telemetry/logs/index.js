@@ -1,6 +1,7 @@
 'use strict'
 
 const dc = require('dc-polyfill')
+const { formatUnfiltered } = require('../../stack-filter')
 const { sendData } = require('../send-data')
 const logCollector = require('./log-collector')
 
@@ -47,7 +48,7 @@ function onErrorLog (msg) {
   }
 
   if (cause) {
-    telLog.stack_trace = cause.stack
+    telLog.stack_trace = formatUnfiltered(cause)
     telLog.errorType = cause.constructor.name
   }
 

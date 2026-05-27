@@ -106,6 +106,8 @@ class Tracer extends NoopProxy {
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
+      require('./stack-filter').install()
+
       // Add config dependent process tags
       processTags.initialize(config)
 
