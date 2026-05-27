@@ -46,10 +46,6 @@ describe('client', () => {
     errorChannel.unsubscribe(errorChannelCb)
   })
 
-  /*
-   * Necessary because the tracer makes extra requests to the agent
-   * and the same stub could be called multiple times
-   */
   // originalUrl is the raw http.request first arg (string, URL, or options); uri is always a string.
   function getRequestUrlString (args) {
     if (!args) return undefined
@@ -59,6 +55,10 @@ describe('client', () => {
     return uri
   }
 
+  /*
+   * Necessary because the tracer makes extra requests to the agent
+   * and the same stub could be called multiple times
+   */
   function getContextFromStubByUrl (url, stub) {
     for (const args of stub.args) {
       const arg = args[0]
