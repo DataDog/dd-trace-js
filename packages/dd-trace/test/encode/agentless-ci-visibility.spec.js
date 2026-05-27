@@ -129,6 +129,31 @@ describe('agentless-ci-visibility-encode', () => {
     assert.strictEqual(encoder.count(), 0)
   })
 
+  it('clears the subclass _eventCount when the chunk cap fires mid-encode', () => {
+    // Encode a fine trace so `_eventCount` is non-zero before the cap
+    // fires. The regression this pins is the inherited `AgentEncoder.encode`
+    // catch path calling `this._reset()` (base helper) instead of
+    // `this.reset()` (virtual): the base helper clears `_traceBytes` and the
+    // string cache but leaves `_eventCount` stale, so the next `makePayload`
+    // patches the `events` array prefix with a count larger than the bytes
+    // that actually made it through.
+    encoder.encode(trace)
+    assert.ok(encoder._eventCount > 0, 'precondition: _eventCount must be primed before the cap fires')
+
+    sinon.stub(encoder._traceBytes, 'reserve').callsFake(() => {
+      const error = new RangeError('cap simulation')
+      error.code = 'ERR_MSGPACK_CHUNK_OVERFLOW'
+      throw error
+    })
+
+    encoder.encode(trace)
+
+    assert.strictEqual(
+      encoder._eventCount, 0,
+      'overflow must route through the subclass reset() and clear _eventCount'
+    )
+  })
+
   it('should truncate name, service, type and resource when they are too long', () => {
     const tooLongString = new Array(500).fill('a').join('')
     const resourceTooLongString = new Array(10000).fill('a').join('')
