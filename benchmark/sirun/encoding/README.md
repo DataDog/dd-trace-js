@@ -1,9 +1,19 @@
-This test sends a single trace many times to the encoder. Each trace is
-pre-formatted (as the encoder requires) and consists of 30 spans with the same
-content in each of them. The IDs are all randomized. A null writer is provided
-to the encoder, so writing operations are not included here.
+This bench sends a single pre-formatted trace through the encoder many times
+with a null writer, so all I/O is excluded and the cost being measured is the
+encoder itself.
 
-The span content contains three metas, three metrics, and reasonable values for
-everything else.
+The trace shape (`trace-fixture.js`) mirrors a typical Node.js HTTP-service
+request: one root Express server span plus a fan of internal middleware spans,
+Postgres / Redis client spans, a few outbound HTTP client spans, DNS lookups,
+and one error-bearing span with `error.message` / `error.stack`. The default
+trace has 30 spans; `TRACE_SPANS=<n>` scales the composition proportionally.
 
-The two variants correspond to the v0.4 and v0.5 encoders.
+Strings reuse the same keys (`span.kind`, `component`, `runtime-id`, …) and
+the same hot values (`GET`, `server`, `client`, `internal`, `javascript`, …)
+across spans, mirroring what the encoder's string cache sees in production.
+
+Variants:
+
+- `0.4` / `0.5` — wire-format variants of the agent encoder.
+- `0.4-events-native` / `0.4-events-legacy` / `0.5-events-legacy` —
+  exercise the span-event encoding paths (`WITH_SPAN_EVENTS`).
