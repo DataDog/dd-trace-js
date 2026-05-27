@@ -89,18 +89,41 @@ class AgentEncoder extends BaseEncoder {
     bytes.reserve(5)
     bytes.buffer[offset] = 0xDF
 
+    const stringMap = this._stringMap
     let count = 0
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
+      if (typeof entryValue !== 'string' && typeof entryValue !== 'number') continue
+
+      const keyIndex = stringMap[key] ?? this._cacheString(key)
+      const writeOffset = bytes.length
+
       if (typeof entryValue === 'string') {
-        this._encodeString(bytes, key)
-        this._encodeString(bytes, entryValue)
-        count++
-      } else if (typeof entryValue === 'number') {
-        this._encodeString(bytes, key)
-        bytes.writeIntOrFloat(entryValue)
-        count++
+        // Both halves are uint32 indices on the v0.5 wire — known
+        // size, so the key and value pair fuses into one reserve.
+        const valueIndex = stringMap[entryValue] ?? this._cacheString(entryValue)
+        bytes.reserve(10)
+        const target = bytes.buffer
+        this.#writeIndexAt(target, writeOffset, keyIndex)
+        this.#writeIndexAt(target, writeOffset + 5, valueIndex)
+      } else {
+        // Speculate that the value is a positive fixint (0..127). The
+        // metrics map is mostly small unsigned integers (sample priority,
+        // `_dd.measured`, attribute counts), so one reserve covers the
+        // key (5 bytes) and the value (1 byte). Misses rewind the
+        // speculative value byte and route the value through the full
+        // encoder so the wire still picks the shortest valid encoding.
+        bytes.reserve(6)
+        const target = bytes.buffer
+        this.#writeIndexAt(target, writeOffset, keyIndex)
+        if (entryValue === (entryValue & 0x7F)) {
+          target[writeOffset + 5] = entryValue
+        } else {
+          bytes.length = writeOffset + 5
+          bytes.writeIntOrFloat(entryValue)
+        }
       }
+      count++
     }
 
     const target = bytes.buffer
