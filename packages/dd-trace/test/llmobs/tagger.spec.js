@@ -302,7 +302,7 @@ describe('tagger', () => {
             realTagger = new RealTagger({ llmobs: { enabled: true, mlApp: 'test-app' } })
           })
 
-          it('detects a real gen_ai.* APM ancestor, suppresses llmobs_parent_id, and sets the ancestor as event parent', () => {
+          it('detects a real gen_ai.* ancestor, suppresses llmobs_parent_id, and uses ancestor as event parent', () => {
             const genAISpanId = '333333333333333'
             const leafSpanId = '444444444444444'
             const traceTags = {}
@@ -311,22 +311,23 @@ describe('tagger', () => {
             const genAISpanCtx = {
               _spanId: { toString: () => genAISpanId },
               _parentId: null,
-              _tags: { 'gen_ai.operation.name': 'invoke_agent' },
+              getTags () { return { 'gen_ai.operation.name': 'invoke_agent' } },
               _trace: { tags: traceTags, started: traceStarted },
             }
             const genAISpan = { context: () => genAISpanCtx }
 
+            const leafTags = {}
             const leafSpanCtx = {
               _spanId: { toString: () => leafSpanId },
               _parentId: { toString: () => genAISpanId },
-              _tags: {},
+              getTags () { return leafTags },
               _trace: { tags: traceTags, started: traceStarted },
               toTraceId () { return '00000000000000009999999999999999' },
               toSpanId () { return leafSpanId },
             }
             const leafSpan = {
               context: () => leafSpanCtx,
-              setTag (k, v) { leafSpanCtx._tags[k] = v },
+              setTag (k, v) { leafTags[k] = v },
             }
 
             traceStarted.push(genAISpan, leafSpan)

@@ -291,11 +291,12 @@ describe('util', () => {
       const started = []
       const trace = { started, tags: {} }
       for (const def of spanDefs) {
+        const tags = def.tags || {}
         started.push({
           context: () => ({
             _spanId: { toString: () => def.spanId },
             _parentId: def.parentId ? { toString: () => def.parentId } : null,
-            _tags: def.tags || {},
+            getTags () { return tags },
             _trace: trace,
           }),
         })

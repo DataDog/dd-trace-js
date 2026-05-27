@@ -297,7 +297,7 @@ function findGenAIAncestorSpanId (span) {
     }
     if (!parent) return null
 
-    const tags = parent.context()._tags
+    const tags = parent.context().getTags()
     if (tags) {
       for (const key of Object.keys(tags)) {
         if (key.startsWith('gen_ai.')) return parentId
