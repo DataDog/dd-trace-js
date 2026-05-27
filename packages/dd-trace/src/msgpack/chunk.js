@@ -27,7 +27,9 @@ class MsgpackChunk {
 
   constructor (minSize = DEFAULT_MIN_SIZE) {
     this.buffer = Buffer.allocUnsafe(minSize)
-    this.view = new DataView(this.buffer.buffer)
+    // `Buffer.allocUnsafe` pools small allocations, so `buffer.buffer` may be a
+    // shared slab; pass `byteOffset` / `byteLength` so the view spans only our slice.
+    this.view = new DataView(this.buffer.buffer, this.buffer.byteOffset, this.buffer.byteLength)
     this.length = 0
     this.#minSize = minSize
   }
@@ -70,7 +72,7 @@ class MsgpackChunk {
    * @param {number} sourceEnd
    */
   copy (target, sourceStart, sourceEnd) {
-    target.set(new Uint8Array(this.buffer.buffer, sourceStart, sourceEnd - sourceStart))
+    this.buffer.copy(target, 0, sourceStart, sourceEnd)
   }
 
   /**
@@ -125,7 +127,7 @@ class MsgpackChunk {
       if (++this.#lowUsageStreak >= SHRINK_AFTER_FLUSHES) {
         const newSize = Math.max(this.#minSize, this.buffer.length >>> 1)
         this.buffer = Buffer.allocUnsafe(newSize)
-        this.view = new DataView(this.buffer.buffer)
+        this.view = new DataView(this.buffer.buffer, this.buffer.byteOffset, this.buffer.byteLength)
         this.#lowUsageStreak = 0
       }
     } else {
@@ -445,7 +447,7 @@ class MsgpackChunk {
     const oldBuffer = this.buffer
 
     this.buffer = Buffer.allocUnsafe(size)
-    this.view = new DataView(this.buffer.buffer)
+    this.view = new DataView(this.buffer.buffer, this.buffer.byteOffset, this.buffer.byteLength)
 
     oldBuffer.copy(this.buffer, 0, 0, this.length)
   }

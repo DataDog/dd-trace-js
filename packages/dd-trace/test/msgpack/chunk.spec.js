@@ -180,6 +180,55 @@ describe('MsgpackChunk', () => {
     })
   })
 
+  describe('with a pool-allocated backing buffer', () => {
+    // `Buffer.allocUnsafe(2048)` cycles offsets 0, 2048, 4096, 6144 inside
+    // the shared 8 KiB pool. Retry until the chunk lands at a non-zero offset.
+    function poolOffsetChunk () {
+      for (let attempts = 0; attempts < 8; attempts++) {
+        const chunk = new MsgpackChunk(2048)
+        if (chunk.buffer.byteOffset !== 0) return chunk
+      }
+      throw new Error('Buffer.allocUnsafe pool layout unexpected; refresh the test helper')
+    }
+
+    it('writeFloat lands in the chunk slice', () => {
+      const chunk = poolOffsetChunk()
+
+      chunk.writeFloat(1.5)
+
+      const expected = Buffer.alloc(9)
+      expected[0] = 0xCB
+      expected.writeDoubleBE(1.5, 1)
+      assert.deepStrictEqual(used(chunk), expected)
+    })
+
+    it('writeBigInt lands in the chunk slice for positive and negative values', () => {
+      const positive = poolOffsetChunk()
+      positive.writeBigInt(9_223_372_036_854_775_807n)
+      const expectedPos = Buffer.alloc(9)
+      expectedPos[0] = 0xCF
+      expectedPos.writeBigUInt64BE(9_223_372_036_854_775_807n, 1)
+      assert.deepStrictEqual(used(positive), expectedPos)
+
+      const negative = poolOffsetChunk()
+      negative.writeBigInt(-9_223_372_036_854_775_807n)
+      const expectedNeg = Buffer.alloc(9)
+      expectedNeg[0] = 0xD3
+      expectedNeg.writeBigInt64BE(-9_223_372_036_854_775_807n, 1)
+      assert.deepStrictEqual(used(negative), expectedNeg)
+    })
+
+    it('copy returns the chunk slice bytes, not the underlying slab', () => {
+      const chunk = poolOffsetChunk()
+      chunk.write('hello')
+
+      const target = Buffer.alloc(6)
+      chunk.copy(target, 0, chunk.length)
+
+      assert.deepStrictEqual(target, Buffer.from([0xA5, 0x68, 0x65, 0x6C, 0x6C, 0x6F]))
+    })
+  })
+
   describe('set', () => {
     it('appends raw bytes and advances the cursor', () => {
       const chunk = new MsgpackChunk()
