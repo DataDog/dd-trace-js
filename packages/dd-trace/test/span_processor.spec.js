@@ -224,5 +224,107 @@ describe('SpanProcessor', () => {
         '-4'
       )
     })
+
+    it('should forward sampling-decision metrics when present', () => {
+      const ctx = {
+        _trace: {
+          tags: {},
+          '_dd.rule_psr': 1.5,
+          '_dd.limit_psr': 0.8,
+          '_dd.agent_psr': 0,
+        },
+        _sampling: { priority: 1, mechanism: 1 },
+      }
+
+      processor._syncSamplingToNative(ctx, 42)
+
+      // 5 calls: priority, mechanism, rule_psr, limit_psr, agent_psr
+      sinon.assert.callCount(nativeSpans.queueOp, 5)
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        42,
+        '_dd.rule_psr',
+        ['f64', 1.5]
+      )
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        42,
+        '_dd.limit_psr',
+        ['f64', 0.8]
+      )
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        42,
+        '_dd.agent_psr',
+        ['f64', 0]
+      )
+    })
+
+    it('should skip sampling-decision metrics when absent', () => {
+      const ctx = {
+        _trace: { tags: {} },
+        _sampling: { priority: 1, mechanism: 3 },
+      }
+
+      processor._syncSamplingToNative(ctx, 0)
+
+      // Only 2 calls: priority + mechanism, no decision metrics
+      sinon.assert.callCount(nativeSpans.queueOp, 2)
+    })
+
+    it('should forward only rule_psr when it is the sole decision metric', () => {
+      const ctx = {
+        _trace: {
+          tags: {},
+          '_dd.rule_psr': 2.0,
+        },
+        _sampling: { priority: 1, mechanism: 1 },
+      }
+
+      processor._syncSamplingToNative(ctx, 7)
+
+      // 3 calls: priority, mechanism, rule_psr
+      sinon.assert.callCount(nativeSpans.queueOp, 3)
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        7,
+        '_dd.rule_psr',
+        ['f64', 2.0]
+      )
+    })
+
+    it('should forward rule_psr and agent_psr when limit_psr is absent', () => {
+      const ctx = {
+        _trace: {
+          tags: {},
+          '_dd.rule_psr': 0.5,
+          '_dd.agent_psr': 1.0,
+        },
+        _sampling: { priority: 2, mechanism: 2 },
+      }
+
+      processor._syncSamplingToNative(ctx, 9)
+
+      // 4 calls: priority, mechanism, rule_psr, agent_psr
+      sinon.assert.callCount(nativeSpans.queueOp, 4)
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        9,
+        '_dd.rule_psr',
+        ['f64', 0.5]
+      )
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        fakeOpCode.SetTraceMetricsAttr,
+        9,
+        '_dd.agent_psr',
+        ['f64', 1.0]
+      )
+    })
   })
 })

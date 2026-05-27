@@ -6,6 +6,9 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const native = require('./native')
 const {
   SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION,
   DECISION_MAKER_KEY,
 } = require('./constants')
 
@@ -105,6 +108,34 @@ class SpanProcessor {
         slotIndex,
         '_dd.p.dm',
         `-${spanContext._sampling.mechanism}`
+      )
+    }
+
+    // Forward sampling-decision metrics written by priority_sampler.js
+    // Previously span_format.js copied these from _trace[KEY] onto root spans.
+    const traceObj = spanContext._trace
+    if (typeof traceObj[SAMPLING_RULE_DECISION] === 'number') {
+      this._nativeSpans.queueOp(
+        native.OpCode.SetTraceMetricsAttr,
+        slotIndex,
+        SAMPLING_RULE_DECISION,
+        ['f64', traceObj[SAMPLING_RULE_DECISION]]
+      )
+    }
+    if (typeof traceObj[SAMPLING_LIMIT_DECISION] === 'number') {
+      this._nativeSpans.queueOp(
+        native.OpCode.SetTraceMetricsAttr,
+        slotIndex,
+        SAMPLING_LIMIT_DECISION,
+        ['f64', traceObj[SAMPLING_LIMIT_DECISION]]
+      )
+    }
+    if (typeof traceObj[SAMPLING_AGENT_DECISION] === 'number') {
+      this._nativeSpans.queueOp(
+        native.OpCode.SetTraceMetricsAttr,
+        slotIndex,
+        SAMPLING_AGENT_DECISION,
+        ['f64', traceObj[SAMPLING_AGENT_DECISION]]
       )
     }
   }
