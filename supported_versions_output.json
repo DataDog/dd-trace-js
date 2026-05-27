@@ -1,5 +1,12 @@
 [
   {
+    "dependency": "@anthropic-ai/claude-agent-sdk",
+    "integration": "anthropic-ai-claude-agent-sdk",
+    "minimum_tracer_supported": "0.3.152",
+    "max_tracer_supported": "0.3.152",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@anthropic-ai/sdk",
     "integration": "anthropic",
     "minimum_tracer_supported": "0.14.0",
@@ -283,7 +290,7 @@
     "dependency": "child_process",
     "integration": "child_process",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -311,7 +318,7 @@
     "dependency": "dns",
     "integration": "dns",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -381,21 +388,21 @@
     "dependency": "http",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "http2",
     "integration": "http2",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "https",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -556,7 +563,7 @@
     "dependency": "net",
     "integration": "net",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -570,35 +577,35 @@
     "dependency": "node:dns",
     "integration": "dns",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http2",
     "integration": "http2",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:https",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:net",
     "integration": "net",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.2.0",
     "auto-instrumented": "True"
   },
   {
