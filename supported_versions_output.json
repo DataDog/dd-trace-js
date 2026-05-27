@@ -423,7 +423,7 @@
     "dependency": "ioredis",
     "integration": "ioredis",
     "minimum_tracer_supported": "2.0.0",
-    "max_tracer_supported": "5.10.1",
+    "max_tracer_supported": "5.11.0",
     "auto-instrumented": "True"
   },
   {
