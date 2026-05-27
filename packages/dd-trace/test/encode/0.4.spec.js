@@ -139,7 +139,8 @@ describe('encode', () => {
       const debugEncoder = new AgentEncoder(writer)
       debugEncoder.encode(data)
 
-      const message = logger.debug.firstCall.args[0]()
+      const [formatter, ...args] = logger.debug.firstCall.args
+      const message = formatter(...args)
 
       assert.match(message, /^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
     })
@@ -677,11 +678,11 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      // Assert that log.debug was called only once for 'unsupported_key'
       sinon.assert.calledOnce(logger.debug)
       sinon.assert.calledWith(
         logger.debug,
-        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: unsupported_key/)
+        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: %s/),
+        'unsupported_key'
       )
     })
 
@@ -708,11 +709,10 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      // Assert that log.debug was called once for each unique unsupported key
       assert.strictEqual(logger.debug.callCount, 3)
-      assert.match(logger.debug.getCall(0).args[0], /unsupported_key1/)
-      assert.match(logger.debug.getCall(1).args[0], /unsupported_key2/)
-      assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
+      assert.strictEqual(logger.debug.getCall(0).args[1], 'unsupported_key1')
+      assert.strictEqual(logger.debug.getCall(1).args[1], 'unsupported_key2')
+      assert.strictEqual(logger.debug.getCall(2).args[1], 'unsupported_key3')
     })
 
     it('should skip events whose name is not a string without throwing', () => {

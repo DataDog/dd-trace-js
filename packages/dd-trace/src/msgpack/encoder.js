@@ -12,18 +12,15 @@ class MsgpackEncoder {
 
   encodeValue (bytes, value) {
     switch (typeof value) {
-      case 'bigint':
-        this.encodeBigInt(bytes, value)
-        break
-      case 'boolean':
-        this.encodeBoolean(bytes, value)
+      case 'string':
+        this.encodeString(bytes, value)
         break
       case 'number':
         this.encodeNumber(bytes, value)
         break
       case 'object':
         if (value === null) {
-          this.encodeNull(bytes, value)
+          this.encodeNull(bytes)
         } else if (Array.isArray(value)) {
           this.encodeArray(bytes, value)
         } else if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) {
@@ -32,14 +29,17 @@ class MsgpackEncoder {
           this.encodeMap(bytes, value)
         }
         break
-      case 'string':
-        this.encodeString(bytes, value)
+      case 'boolean':
+        this.encodeBoolean(bytes, value)
+        break
+      case 'bigint':
+        this.encodeBigInt(bytes, value)
         break
       case 'symbol':
         this.encodeString(bytes, value.toString())
         break
       default: // function, symbol, undefined
-        this.encodeNull(bytes, value)
+        this.encodeNull(bytes)
         break
     }
   }
@@ -291,7 +291,7 @@ class MsgpackEncoder {
     this.encodeMapPrefix(bytes, keys.length)
 
     for (const key of keys) {
-      this.encodeValue(bytes, key)
+      this.encodeString(bytes, key)
       this.encodeValue(bytes, value[key])
     }
   }

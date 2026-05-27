@@ -201,8 +201,14 @@ function escapeJsonString (value) {
   return '"' + value + '"'
 }
 
+function lazyEncodedTraceBufferLogger (bytes, start, end) {
+  const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
+  return `Adding encoded trace to buffer: ${hex}`
+}
+
 class AgentEncoder {
-  #msgpack = new MsgpackEncoder()
+  msgpack = new MsgpackEncoder()
+
   #limit
   #writer
   #config
@@ -239,11 +245,7 @@ class AgentEncoder {
 
     if (this.#debugEncoding) {
       const end = bytes.length
-      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-      log.debug(() => {
-        const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
-        return `Adding encoded trace to buffer: ${hex}`
-      })
+      log.debug(lazyEncodedTraceBufferLogger, bytes, start, end)
     }
 
     // Soft limit overshoot is fine — the agent caps at 50 MB.
@@ -269,7 +271,7 @@ class AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    this._encodeArrayPrefix(bytes, trace)
+    this.msgpack.encodeArrayPrefix(bytes, trace)
 
     const formatSpan = this.#formatSpan
     const stringMap = this._stringMap
@@ -399,23 +401,23 @@ class AgentEncoder {
   }
 
   _encodeBuffer (bytes, buffer) {
-    this.#msgpack.encodeBin(bytes, buffer)
+    this.msgpack.encodeBin(bytes, buffer)
   }
 
   _encodeBool (bytes, value) {
-    this.#msgpack.encodeBoolean(bytes, value)
+    this.msgpack.encodeBoolean(bytes, value)
   }
 
   _encodeArrayPrefix (bytes, value) {
-    this.#msgpack.encodeArrayPrefix(bytes, value)
+    this.msgpack.encodeArrayPrefix(bytes, value)
   }
 
   _encodeMapPrefix (bytes, keysLength) {
-    this.#msgpack.encodeMapPrefix(bytes, keysLength)
+    this.msgpack.encodeMapPrefix(bytes, keysLength)
   }
 
   _encodeByte (bytes, value) {
-    this.#msgpack.encodeByte(bytes, value)
+    this.msgpack.encodeByte(bytes, value)
   }
 
   // TODO: Use BigInt instead.
@@ -439,15 +441,15 @@ class AgentEncoder {
   }
 
   _encodeNumber (bytes, value) {
-    this.#msgpack.encodeNumber(bytes, value)
+    this.msgpack.encodeNumber(bytes, value)
   }
 
   _encodeInteger (bytes, value) {
-    this.#msgpack.encodeInteger(bytes, value)
+    this.msgpack.encodeInteger(bytes, value)
   }
 
   _encodeLong (bytes, value) {
-    this.#msgpack.encodeLong(bytes, value)
+    this.msgpack.encodeLong(bytes, value)
   }
 
   // Single pass: reserve the count slot, encode entries while counting, patch the count.
@@ -467,7 +469,7 @@ class AgentEncoder {
         count++
       } else if (typeof entryValue === 'number') {
         this._encodeString(bytes, key)
-        this.#encodeFloat(bytes, entryValue)
+        this.msgpack.encodeFloat(bytes, entryValue)
         count++
       }
     }
@@ -615,12 +617,12 @@ class AgentEncoder {
     }
     if (Number.isInteger(value)) {
       if (value >= 0) {
-        this.#msgpack.encodeUnsigned(bytes, value)
+        this.msgpack.encodeUnsigned(bytes, value)
       } else {
-        this.#msgpack.encodeSigned(bytes, value)
+        this.msgpack.encodeSigned(bytes, value)
       }
     } else {
-      this.#encodeFloat(bytes, value)
+      this.msgpack.encodeFloat(bytes, value)
     }
   }
 
@@ -634,21 +636,17 @@ class AgentEncoder {
         this._encodeString(bytes, value)
         break
       case 'number':
-        this.#encodeFloat(bytes, value)
+        this.msgpack.encodeFloat(bytes, value)
         break
       case 'boolean':
-        this._encodeBool(bytes, value)
+        this.msgpack.encodeBoolean(bytes, value)
         break
     }
   }
 
-  #encodeFloat (bytes, value) {
-    this.#msgpack.encodeFloat(bytes, value)
-  }
-
   #encodeMetaStruct (bytes, value) {
     if (Array.isArray(value)) {
-      this._encodeMapPrefix(bytes, 0)
+      this.msgpack.encodeMapPrefix(bytes, 0)
       return
     }
 
@@ -774,7 +772,7 @@ class AgentEncoder {
       bytes.set(KEY_NAME)
       this._encodeString(bytes, event.name)
       bytes.set(KEY_EVENT_TIME)
-      this.#encodeFloat(bytes, event.time_unix_nano)
+      this.msgpack.encodeFloat(bytes, event.time_unix_nano)
 
       const attributes = event.attributes
       if (attributes !== null && typeof attributes === 'object') {
@@ -855,8 +853,11 @@ class AgentEncoder {
     if (Array.isArray(value)) {
       return this.#emitArrayAttribute(bytes, key, value)
     }
-    memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
-      `${key}: with value: ${typeof value}. Skipping encoding of pair.`
+    memoizedLogDebug(
+      key,
+      'Encountered unsupported data type for span event v0.4 encoding, key: ' +
+        '%s: with value: %s. Skipping encoding of pair.',
+      value
     )
     return false
   }
@@ -922,8 +923,11 @@ class AgentEncoder {
       return true
     }
     if (Array.isArray(value)) {
-      memoizedLogDebug(key, 'Encountered nested array data type for span event v0.4 encoding. ' +
-        `Skipping encoding key: ${key}: with value: ${typeof value}.`
+      memoizedLogDebug(
+        key,
+        'Encountered nested array data type for span event v0.4 encoding. ' +
+          'Skipping encoding key: %s: with value: %s.',
+        value
       )
     }
     return false
@@ -931,10 +935,10 @@ class AgentEncoder {
 }
 
 const seenKeys = new Set()
-function memoizedLogDebug (key, message) {
+function memoizedLogDebug (key, message, value) {
   if (!seenKeys.has(key)) {
     seenKeys.add(key)
-    log.debug(message)
+    log.debug(message, key, typeof value)
   }
 }
 
