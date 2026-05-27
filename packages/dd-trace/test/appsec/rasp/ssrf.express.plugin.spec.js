@@ -130,13 +130,16 @@ describe('RASP - ssrf', () => {
         withVersions('express', 'axios', axiosVersion => {
           let axiosToTest
 
-          beforeEach((done) => {
+          before(async () => {
             axiosToTest = require(`../../../../../versions/axios@${axiosVersion}`).get()
 
-            // we preload axios because it's lazyloading a debug dependency
-            // that in turns trigger LFI
-
-            axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop).then(done)
+            // Preload axios to trigger its lazily-loaded debug dependency outside of any
+            // request context, which would otherwise cause a false-positive RASP LFI event.
+            // We drain the resulting span synchronously within this `before` hook so it
+            // cannot bleed into any test's assertion window.
+            const preloadSpanDrained = agent.assertSomeTraces(() => {}).catch(noop)
+            await axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop)
+            await preloadSpanDrained
           })
 
           it('Should not detect threat', async () => {
