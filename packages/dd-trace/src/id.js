@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { isTrue } = require('./util')
 
 const UINT_MAX = 4_294_967_296
 
@@ -16,7 +17,7 @@ let batch = 0
 // id.js is a foundational module loaded before config initializes, so we read
 // the env var directly rather than going through the config system.
 // eslint-disable-next-line eslint-rules/eslint-process-env
-const _secureRandom = process.env.DD_TRACE_SECURE_RANDOM === 'true'
+const _secureRandom = isTrue(process.env.DD_TRACE_SECURE_RANDOM)
 const _secureBuf = _secureRandom ? new Uint8Array(8) : null
 
 // Internal representation of a trace or span ID.

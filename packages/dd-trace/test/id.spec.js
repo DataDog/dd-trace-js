@@ -157,6 +157,50 @@ describe('id', () => {
   })
 })
 
+describe('DD_TRACE_SECURE_RANDOM activation', () => {
+  const secureTruthy = ['true', '1', 'TRUE', 'True']
+  const secureFalsy = ['false', '0', '']
+
+  function loadWithMock (envValue) {
+    let secureCalls = 0
+    let batchCalls = 0
+    const mockCrypto = {
+      randomFillSync (buf) {
+        if (buf.length === 8) {
+          secureCalls++
+        } else {
+          batchCalls++
+        }
+        for (let i = 0; i < buf.length; i++) buf[i] = 0xAB
+      },
+    }
+    if (envValue !== '') {
+      process.env.DD_TRACE_SECURE_RANDOM = envValue
+    } else {
+      delete process.env.DD_TRACE_SECURE_RANDOM
+    }
+    const mod = proxyquire('../src/id', { crypto: mockCrypto })
+    delete process.env.DD_TRACE_SECURE_RANDOM
+    return { mod, secureCalls: () => secureCalls, batchCalls: () => batchCalls }
+  }
+
+  for (const value of secureTruthy) {
+    it(`should use per-call randomFillSync when DD_TRACE_SECURE_RANDOM="${value}"`, () => {
+      const { mod, secureCalls } = loadWithMock(value)
+      mod()
+      assert.ok(secureCalls() > 0, `expected 8-byte randomFillSync call for value "${value}"`)
+    })
+  }
+
+  for (const value of secureFalsy) {
+    it(`should use batch randomFillSync when DD_TRACE_SECURE_RANDOM="${value}"`, () => {
+      const { mod, batchCalls } = loadWithMock(value)
+      mod()
+      assert.ok(batchCalls() > 0, `expected batch randomFillSync call for value "${value}"`)
+    })
+  }
+})
+
 describe('id with DD_TRACE_SECURE_RANDOM=true', () => {
   let id
 
