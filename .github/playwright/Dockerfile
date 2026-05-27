@@ -10,10 +10,15 @@ COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN apt-get update && apt-get install -y curl git gpg libatomic1 && rm -rf /var/lib/apt/lists/*
 
 RUN npm install --prefix /tmp/pw @playwright/test@${PLAYWRIGHT_VERSION} \
-    && echo "playwright npm install finished" \
-    && /tmp/pw/node_modules/.bin/playwright install --with-deps chromium \
-    && echo "playwright chromium install finished" \
-    && rm -rf /tmp/pw \
+    && echo "playwright npm install finished"
+
+RUN /tmp/pw/node_modules/.bin/playwright install-deps chromium \
+    && echo "playwright chromium dependency install finished"
+
+RUN DEBUG=pw:install /tmp/pw/node_modules/.bin/playwright install chromium \
+    && echo "playwright chromium install finished"
+
+RUN rm -rf /tmp/pw \
     && echo "playwright temp cleanup finished" \
     # Remove node in the same RUN so it is invisible to the container at runtime.
     # Deletions in a later layer would still bloat the image with the unreachable binary.
