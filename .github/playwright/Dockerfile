@@ -7,10 +7,54 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 
-RUN apt-get update && apt-get install -y curl git gpg libatomic1 unzip && rm -rf /var/lib/apt/lists/*
+# Playwright 1.18 tries obsolete Ubuntu package names on Debian Bookworm
+# (`ttf-unifont`, `xfonts-cyrillic`, `ttf-ubuntu-font-family`) and exits 0
+# even though apt fails. Install Chromium's runtime dependencies directly.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    fonts-ipafont-gothic \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    fonts-tlwg-loma-otf \
+    fonts-unifont \
+    fonts-wqy-zenhei \
+    git \
+    gpg \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatomic1 \
+    libatspi2.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libegl1 \
+    libfontconfig1 \
+    libfreetype6 \
+    libgbm1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxrandr2 \
+    libxshmfence1 \
+    unzip \
+    xfonts-scalable \
+    xvfb \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN npm install --prefix /tmp/pw @playwright/test@${PLAYWRIGHT_VERSION} \
-    && /tmp/pw/node_modules/.bin/playwright install --with-deps chromium \
+    && /tmp/pw/node_modules/.bin/playwright install chromium \
     && rm -rf /tmp/pw \
     # Remove node in the same RUN so it is invisible to the container at runtime.
     # Deletions in a later layer would still bloat the image with the unreachable binary.
