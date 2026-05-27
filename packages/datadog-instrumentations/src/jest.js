@@ -2055,12 +2055,18 @@ addHook({
 function configureTestEnvironment (readConfigsResult) {
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+  const isCodeCoverageEnabledBecauseOfUs = shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled
 
-  if (shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled) {
+  if (isCodeCoverageEnabledBecauseOfUs) {
     readConfigsResult.globalConfig = {
       ...readConfigsResult.globalConfig,
       collectCoverage: true,
+      coverageReporters: ['none'],
     }
+    readConfigsResult.configs = readConfigsResult.configs.map(config => ({
+      ...config,
+      coverageReporters: ['none'],
+    }))
   }
 
   // We can't directly use the parent process flags when reporting suite coverage in `jestAdapterWrapper`

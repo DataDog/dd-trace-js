@@ -736,11 +736,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('keeps user coverage reporters when TIA forces coverage collection', async () => {
+    it('does not run coverage reporters when TIA forces coverage collection', async () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
-        coverage_report_upload_enabled: true,
+        coverage_report_upload_enabled: false,
         tests_skipping: true,
       })
 
@@ -767,7 +767,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       try {
         const [exitCode] = await once(childProcess, 'exit')
         assert.strictEqual(exitCode, 0)
-        assert.strictEqual(fs.existsSync(lcovPath), true)
+        assert.strictEqual(fs.existsSync(lcovPath), false)
       } finally {
         fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
       }
