@@ -115,16 +115,12 @@ jobs:
           IMAGE_TAG: ${{ steps.versions.outputs.image-tag }}
         run: |
           IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${IMAGE_TAG}"
-          echo "Checking for ${IMAGE}"
           if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
             echo "Image ${IMAGE} already exists, skipping build"
           else
-            echo "Building ${IMAGE} for Playwright ${PW_VERSION}"
-            docker build --progress=plain --build-arg PLAYWRIGHT_VERSION="${PW_VERSION}" \
+            docker build --build-arg PLAYWRIGHT_VERSION="${PW_VERSION}" \
               -t "${IMAGE}" .github/playwright
-            echo "Built ${IMAGE}, pushing"
             docker push "${IMAGE}"
-            echo "Pushed ${IMAGE}"
           fi
 
   integration-playwright:

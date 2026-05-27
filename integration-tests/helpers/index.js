@@ -1026,8 +1026,6 @@ function installPlaywrightChromium (cwd) {
     existsSync(PLAYWRIGHT_BROWSERS_PATH) &&
     readdirSync(PLAYWRIGHT_BROWSERS_PATH).length > 0
   ) {
-    // eslint-disable-next-line no-console
-    console.log(`Using preinstalled Playwright browsers from ${PLAYWRIGHT_BROWSERS_PATH}`)
     return
   }
 
