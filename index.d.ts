@@ -227,6 +227,7 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
+  "anthropic-ai-claude-agent-sdk": tracer.plugins.anthropic_ai_claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
@@ -2153,6 +2154,12 @@ declare namespace tracer {
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
     interface anthropic extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
+     */
+    interface anthropic_ai_claude_agent_sdk extends Instrumentation {}
 
     /**
      * Currently this plugin automatically instruments
