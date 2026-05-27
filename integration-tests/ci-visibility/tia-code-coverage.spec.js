@@ -138,6 +138,7 @@ function describeJestVersion (jestVersion, dependencies) {
       settings = {
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       },
       expectSuiteCoverage = true,
@@ -214,14 +215,15 @@ function describeJestVersion (jestVersion, dependencies) {
           coverageResult = coverages
         })
         : Promise.resolve()
+      const env = {
+        ...getCiVisAgentlessConfig(receiver.port),
+        ...framework.getEnv(),
+      }
       childProcess = exec(
         framework.command,
         {
           cwd: framework.cwd ? framework.cwd(cwd) : cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            ...framework.getEnv(),
-          },
+          env,
         }
       )
       childProcess.stdout?.on('data', chunk => {
@@ -339,6 +341,7 @@ function describeJestVersion (jestVersion, dependencies) {
         settings: {
           itr_enabled: true,
           code_coverage: true,
+          coverage_report_upload_enabled: true,
           tests_skipping: false,
         },
       })
@@ -350,17 +353,18 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
     })
 
-    // Session-level executable coverage is only needed for TIA flows. When TIA is off, ordinary Jest coverage may still
-    // send suite-level CITESTCOV payloads, but it should not send the extra session executable-lines coverage.
-    it('does not report jest session coverage when TIA is disabled', async () => {
+    // TIA is the gate for all Jest CITESTCOV payloads. When TIA is off, ordinary Jest coverage can still produce the
+    // local/stdout coverage result and Datadog lines_pct, but no suite or session coverage payload should be uploaded.
+    it('does not upload citestcov payloads when TIA is disabled', async () => {
       const result = await runFramework({
         framework: FRAMEWORKS[0],
         settings: {
           itr_enabled: false,
           code_coverage: true,
+          coverage_report_upload_enabled: true,
           tests_skipping: false,
         },
-        expectSessionCoverage: false,
+        expectCoveragePayloads: false,
       })
 
       assert.strictEqual(result.isTiaSkipped, 'false')
@@ -387,9 +391,10 @@ function describeJestVersion (jestVersion, dependencies) {
         settings: {
           itr_enabled: false,
           code_coverage: true,
+          coverage_report_upload_enabled: true,
           tests_skipping: true,
         },
-        expectSessionCoverage: false,
+        expectCoveragePayloads: false,
       })
 
       assert.strictEqual(result.receivedSkippableRequest, false)
@@ -399,9 +404,10 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
     })
 
-    // TIA-only users should keep the skip behavior without paying Jest coverage overhead. Even if the backend returns
-    // meta.coverage, we only backfill and publish coverage when Jest coverage was enabled by the user's config.
-    it('does not collect or backfill coverage when jest coverage is not configured', async () => {
+    // TIA forces Jest coverage collection so suite-level CITESTCOV and backend coverage backfill still work when the
+    // user did not configure coverage in Jest. coverage_report_upload_enabled=true adds the session executable-lines
+    // payload and the Datadog lines_pct tag.
+    it('backfills and reports Datadog coverage when TIA coverage is enabled without user jest coverage', async () => {
       const framework = {
         ...FRAMEWORKS[0],
         getEnv: () => getJestEnv({
@@ -420,21 +426,20 @@ function describeJestVersion (jestVersion, dependencies) {
         skippableCoverage: {
           [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
         },
-        expectCoveragePayloads: false,
         expectCoverageOutput: false,
       })
 
       assert.strictEqual(result.isTiaSkipped, 'true')
       assert.strictEqual(result.skippedSuites.length, 1)
       assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
-      assert.strictEqual(result.codeCoverageLinesPct, undefined)
+      assert.ok(result.codeCoverageLinesPct > 0)
       assert.strictEqual(result.stdoutCodeCoverageLinesPct, undefined)
     })
 
-    // When TIA is enabled, the Datadog coverage percentage should only be published from the coverage-backfill path.
-    // A user may still get Jest stdout coverage, but backend code_coverage=false means we do not upload Datadog
-    // coverage payloads and do not tag test.code_coverage.lines_pct.
-    it('does not report Datadog coverage percentage when TIA is enabled but backend coverage is disabled', async () => {
+    // TIA suite-level CITESTCOV collection is independent from Datadog Code Coverage. With report upload disabled we
+    // still upload suite coverage for future TIA decisions, but we do not backfill, upload session executable coverage,
+    // or tag Datadog lines_pct.
+    it('only uploads suite coverage when TIA is enabled but coverage report upload is disabled', async () => {
       const framework = FRAMEWORKS[0]
       const result = await runFramework({
         framework,
@@ -446,7 +451,71 @@ function describeJestVersion (jestVersion, dependencies) {
         }],
         settings: {
           itr_enabled: true,
+          code_coverage: true,
+          coverage_report_upload_enabled: false,
+          tests_skipping: true,
+        },
+        expectSessionCoverage: false,
+      })
+
+      assert.strictEqual(result.isTiaSkipped, 'true')
+      assert.strictEqual(result.skippedSuites.length, 1)
+      assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(result.codeCoverageLinesPct, undefined)
+      assert.ok(result.stdoutCodeCoverageLinesPct > 0)
+    })
+
+    // The same suite-only upload behavior applies when TIA has to force Jest coverage because the user did not
+    // configure it. coverage_report_upload_enabled=false still means no backfill, no session executable coverage,
+    // and no Datadog lines_pct.
+    it('only uploads suite coverage without report upload or user jest coverage', async () => {
+      const framework = {
+        ...FRAMEWORKS[0],
+        getEnv: () => getJestEnv({
+          collectCoverageFrom: null,
+          enableCoverage: false,
+        }),
+      }
+      const result = await runFramework({
+        framework,
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        settings: {
+          itr_enabled: true,
+          code_coverage: true,
+          coverage_report_upload_enabled: false,
+          tests_skipping: true,
+        },
+        expectSessionCoverage: false,
+        expectCoverageOutput: false,
+      })
+
+      assert.strictEqual(result.isTiaSkipped, 'true')
+      assert.strictEqual(result.skippedSuites.length, 1)
+      assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(result.codeCoverageLinesPct, undefined)
+      assert.strictEqual(result.stdoutCodeCoverageLinesPct, undefined)
+    })
+
+    // The backend code_coverage flag keeps its original meaning: it controls suite/test CITESTCOV collection for TIA.
+    // With both code_coverage and coverage report upload disabled, TIA can still skip, but no coverage payload is sent.
+    it('does not upload citestcov payloads when TIA code coverage is disabled', async () => {
+      const result = await runFramework({
+        framework: FRAMEWORKS[0],
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        settings: {
+          itr_enabled: true,
           code_coverage: false,
+          coverage_report_upload_enabled: false,
           tests_skipping: true,
         },
         expectCoveragePayloads: false,
@@ -457,6 +526,44 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
       assert.strictEqual(result.codeCoverageLinesPct, undefined)
       assert.ok(result.stdoutCodeCoverageLinesPct > 0)
+    })
+
+    // coverage_report_upload_enabled is the backfill gate. Even when TIA suite coverage upload is disabled through
+    // code_coverage=false, Datadog Code Coverage still gets the session executable-lines payload and backfilled total.
+    it('backfills and reports session coverage when coverage report upload is enabled', async () => {
+      const framework = FRAMEWORKS[0]
+      const settings = {
+        itr_enabled: true,
+        code_coverage: false,
+        coverage_report_upload_enabled: true,
+        tests_skipping: true,
+      }
+      const baseline = await runFramework({
+        framework,
+        settings,
+        expectSuiteCoverage: false,
+      })
+
+      const skippedWithCoverage = await runFramework({
+        framework,
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        skippableCoverage: {
+          [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
+        },
+        settings,
+        expectSuiteCoverage: false,
+      })
+
+      assert.strictEqual(skippedWithCoverage.isTiaSkipped, 'true')
+      assert.strictEqual(skippedWithCoverage.skippedSuites.length, 1)
+      assert.strictEqual(skippedWithCoverage.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(skippedWithCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
+      assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
     })
 
     // Zero-local-suite path: every suite that Jest would run is returned as skippable. No suite should run here;

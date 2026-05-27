@@ -92,6 +92,7 @@ let skippableSuitesCoverage = {}
 let skippedSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
+let isCoverageReportUploadEnabled = false
 let isItrEnabled = false
 let isSuitesSkippingEnabled = false
 let isUserCodeCoverageEnabled = false
@@ -117,6 +118,7 @@ let lastCoverageMapRootDir
 let coverageBackfillContexts
 let coverageBackfillFiles
 let coverageReporterClass
+let coverageReporterRequire
 let activeTestSuiteAbsolutePath
 let isConsoleErrorWrapped = false
 
@@ -147,6 +149,7 @@ const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
+const coverageReporterRequires = new WeakMap()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
@@ -1161,18 +1164,26 @@ function hasSkippableSuitesCoverage () {
     Object.keys(skippableSuitesCoverage).length > 0
 }
 
-function isJestCodeCoverageReportingEnabled () {
-  return isCodeCoverageEnabled && isUserCodeCoverageEnabled
+function shouldCollectJestCoverageForTia () {
+  return shouldReportJestSuiteCoverageForTia() || (isItrEnabled && isCoverageReportUploadEnabled)
 }
 
-// TIA coverage backfill needs both the backend coverage flag and a local Jest coverage map to patch.
+function shouldReportJestSuiteCoverageForTia () {
+  return isItrEnabled && isCodeCoverageEnabled
+}
+
+function hasJestCoverageMap () {
+  return isUserCodeCoverageEnabled || shouldCollectJestCoverageForTia()
+}
+
+// TIA coverage backfill is part of Datadog Code Coverage, not the per-suite TIA coverage upload.
 function isTiaCoverageBackfillEnabled () {
-  return isItrEnabled && isJestCodeCoverageReportingEnabled()
+  return isItrEnabled && isCoverageReportUploadEnabled && hasJestCoverageMap()
 }
 
 // Non-TIA Jest coverage keeps the legacy metric. TIA only reports it from the backfill-capable path.
 function shouldReportCodeCoverageLinesPct () {
-  return isUserCodeCoverageEnabled && (!isItrEnabled || isTiaCoverageBackfillEnabled())
+  return hasJestCoverageMap() && (!isItrEnabled || isTiaCoverageBackfillEnabled())
 }
 
 // Normalize backend meta.coverage paths so Jest can transform them from the repository root.
@@ -1197,7 +1208,17 @@ function getCoverageBackfillConfig (config) {
   }
 }
 
+function getHookRequire (hookMeta) {
+  if (!hookMeta?.moduleBaseDir) return
+
+  return createRequire(path.join(hookMeta.moduleBaseDir, 'package.json'))
+}
+
 function getCoverageBackfillRequire (CoverageReporter) {
+  const hookedCoverageReporterRequire = CoverageReporter && coverageReporterRequires.get(CoverageReporter)
+  if (hookedCoverageReporterRequire) return hookedCoverageReporterRequire
+  if (coverageReporterRequire) return coverageReporterRequire
+
   const coverageReporterFilename = CoverageReporter?.filename || coverageReporterClass?.filename
   if (coverageReporterFilename) {
     return createRequire(`${path.join(path.dirname(coverageReporterFilename), 'CoverageWorker')}.js`)
@@ -1391,11 +1412,15 @@ function reporterDispatcherWrapper (reporterDispatcherPackage) {
   return reporterDispatcherPackage
 }
 
-function wrapCoverageReporter (CoverageReporter) {
+function wrapCoverageReporter (CoverageReporter, hookMeta) {
   if (!CoverageReporter?.prototype?.onRunComplete || wrappedCoverageReporters.has(CoverageReporter)) {
     return
   }
 
+  coverageReporterRequire = getHookRequire(hookMeta) || coverageReporterRequire
+  if (coverageReporterRequire) {
+    coverageReporterRequires.set(CoverageReporter, coverageReporterRequire)
+  }
   coverageReporterClass = CoverageReporter
   wrappedCoverageReporters.add(CoverageReporter)
   if (CoverageReporter.prototype._addUntestedFiles) {
@@ -1431,13 +1456,13 @@ function wrapCoverageReporter (CoverageReporter) {
   })
 }
 
-function reportersWrapper (reportersPackage) {
-  wrapCoverageReporter(reportersPackage.CoverageReporter)
+function reportersWrapper (reportersPackage, _version, _isIitm, hookMeta) {
+  wrapCoverageReporter(reportersPackage.CoverageReporter, hookMeta)
   return reportersPackage
 }
 
-function coverageReporterWrapper (coverageReporterPackage) {
-  wrapCoverageReporter(coverageReporterPackage.default ?? coverageReporterPackage)
+function coverageReporterWrapper (coverageReporterPackage, _version, _isIitm, hookMeta) {
+  wrapCoverageReporter(coverageReporterPackage.default ?? coverageReporterPackage, hookMeta)
   return coverageReporterPackage
 }
 
@@ -1549,6 +1574,7 @@ function getCliWrapper (isNewJestVersion) {
         })
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+          isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
           isItrEnabled = libraryConfig.isItrEnabled
           isSuitesSkippingEnabled = isItrEnabled && libraryConfig.isSuitesSkippingEnabled
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
@@ -1869,6 +1895,7 @@ function getCliWrapper (isNewJestVersion) {
         isSuitesSkipped,
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
+        isCoverageReportUploadEnabled,
         testCodeCoverageLinesTotal,
         testSessionCoverageFiles,
         numSkippedSuites,
@@ -2138,12 +2165,20 @@ addHook({
 function configureTestEnvironment (readConfigsResult) {
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
-  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
-  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
+
+  if (shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled) {
+    readConfigsResult.globalConfig = {
+      ...readConfigsResult.globalConfig,
+      collectCoverage: true,
+    }
+  }
+
+  // We can't directly use the parent process flags when reporting suite coverage in `jestAdapterWrapper`
+  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`.
   const configs = readConfigsResult.configs.map(config => {
     const testEnvironmentOptions = config.testEnvironmentOptions || {}
     testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
-    testEnvironmentOptions._ddTestCodeCoverageEnabled = isJestCodeCoverageReportingEnabled()
+    testEnvironmentOptions._ddTestCodeCoverageEnabled = shouldReportJestSuiteCoverageForTia()
 
     return {
       ...config,

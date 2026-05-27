@@ -682,6 +682,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -728,7 +729,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('does not run user coverage reporters when jest coverage is not configured', async () => {
+    it('keeps user coverage reporters when TIA forces coverage collection', async () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -758,7 +759,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       try {
         const [exitCode] = await once(childProcess, 'exit')
         assert.strictEqual(exitCode, 0)
-        assert.strictEqual(fs.existsSync(lcovPath), false)
+        assert.strictEqual(fs.existsSync(lcovPath), true)
       } finally {
         fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
       }

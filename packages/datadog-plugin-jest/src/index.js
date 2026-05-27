@@ -115,6 +115,7 @@ class JestPlugin extends CiPlugin {
       isSuitesSkipped,
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
+      isCoverageReportUploadEnabled,
       testCodeCoverageLinesTotal,
       testSessionCoverageFiles,
       numSkippedSuites,
@@ -150,7 +151,7 @@ class JestPlugin extends CiPlugin {
           }
         )
 
-        if (testSessionCoverageFiles?.length && isCodeCoverageEnabled) {
+        if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
           this.tracer._exporter.exportCoverage({
             sessionId: this.testSessionSpan.context()._traceId,
             files: testSessionCoverageFiles,

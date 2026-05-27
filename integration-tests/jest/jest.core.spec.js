@@ -1280,16 +1280,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('does not report total code coverage % if user has not configured coverage manually', (done) => {
+  it('reports total code coverage % when TIA forces coverage collection', (done) => {
     receiver.setSettings({
       itr_enabled: true,
       code_coverage: true,
+      coverage_report_upload_enabled: true,
       tests_skipping: false,
     })
 
     receiver.assertPayloadReceived(({ payload }) => {
       const testSession = payload.events.find(event => event.type === 'test_session_end').content
-      assert.ok(!(TEST_CODE_COVERAGE_LINES_PCT in testSession.metrics))
+      assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
