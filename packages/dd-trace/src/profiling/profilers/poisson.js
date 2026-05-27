@@ -6,10 +6,11 @@ class PoissonProcessSamplingFilter {
   #samplingInterval
   #resetInterval
   #now
+  #random
   #lastNow = Number.NEGATIVE_INFINITY
   #samplingInstantCount = 0
 
-  constructor ({ samplingInterval, now, resetInterval }) {
+  constructor ({ samplingInterval, now, resetInterval, random = Math.random }) {
     if (samplingInterval <= 0) {
       throw new RangeError(`samplingInterval (${samplingInterval}) must be greater than 0`)
     }
@@ -24,6 +25,7 @@ class PoissonProcessSamplingFilter {
     this.#samplingInterval = samplingInterval
     this.#resetInterval = resetInterval
     this.#now = now
+    this.#random = random
     this.#nextSamplingInstant = this.#callNow()
     this.#setNextSamplingInstant()
   }
@@ -97,7 +99,7 @@ class PoissonProcessSamplingFilter {
 
   #setNextSamplingInstant () {
     this.#currentSamplingInstant = this.#nextSamplingInstant
-    this.#nextSamplingInstant -= Math.log(1 - Math.random()) * this.#samplingInterval
+    this.#nextSamplingInstant -= Math.log(1 - this.#random()) * this.#samplingInterval
     this.#samplingInstantCount++
   }
 }
