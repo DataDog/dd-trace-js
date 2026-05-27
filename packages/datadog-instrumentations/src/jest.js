@@ -92,7 +92,6 @@ let skippableSuitesCoverage = {}
 let skippedSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
-let isCodeCoverageEnabledBecauseOfUs = false
 let isItrEnabled = false
 let isSuitesSkippingEnabled = false
 let isUserCodeCoverageEnabled = false
@@ -1162,6 +1161,20 @@ function hasSkippableSuitesCoverage () {
     Object.keys(skippableSuitesCoverage).length > 0
 }
 
+function isJestCodeCoverageReportingEnabled () {
+  return isCodeCoverageEnabled && isUserCodeCoverageEnabled
+}
+
+// TIA coverage backfill needs both the backend coverage flag and a local Jest coverage map to patch.
+function isTiaCoverageBackfillEnabled () {
+  return isItrEnabled && isJestCodeCoverageReportingEnabled()
+}
+
+// Non-TIA Jest coverage keeps the legacy metric. TIA only reports it from the backfill-capable path.
+function shouldReportCodeCoverageLinesPct () {
+  return isUserCodeCoverageEnabled && (!isItrEnabled || isTiaCoverageBackfillEnabled())
+}
+
 // Normalize backend meta.coverage paths so Jest can transform them from the repository root.
 function getCoverageBackfillFiles (rootDir) {
   const files = []
@@ -1340,13 +1353,13 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
   isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
-  skippedSuitesCoverage = isSuitesSkipped && isCodeCoverageEnabled && hasSkippableSuitesCoverage()
+  skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
     ? skippableSuitesCoverage
     : {}
-  coverageBackfillContexts = isSuitesSkipped && isCodeCoverageEnabled
+  coverageBackfillContexts = isSuitesSkipped && isTiaCoverageBackfillEnabled()
     ? getTestContexts(originalTests)
     : undefined
-  coverageBackfillFiles = isSuitesSkipped && isCodeCoverageEnabled && hasSkippableSuitesCoverage()
+  coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
     ? getCoverageBackfillFiles(suitePathRoot)
     : undefined
 
@@ -1356,7 +1369,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 }
 
 function applySkippedCoverageToJestCoverageMap (coverageMap, rootDir) {
-  if (!coverageMap || !isSuitesSkipped || !isCodeCoverageEnabled) return
+  if (!coverageMap || !isSuitesSkipped || !isTiaCoverageBackfillEnabled()) return
   applySkippedCoverageToCoverage(
     coverageMap,
     skippedSuitesCoverage,
@@ -1368,7 +1381,7 @@ function reporterDispatcherWrapper (reporterDispatcherPackage) {
   const ReporterDispatcher = reporterDispatcherPackage.default ?? reporterDispatcherPackage
   if (ReporterDispatcher?.prototype?.onRunComplete) {
     shimmer.wrap(ReporterDispatcher.prototype, 'onRunComplete', onRunComplete => function (contexts, results) {
-      if (isSuitesSkipped && isCodeCoverageEnabled) {
+      if (isSuitesSkipped && isTiaCoverageBackfillEnabled()) {
         applySkippedCoverageToJestCoverageMap(results?.coverageMap, getRepositoryRootFromContexts(contexts))
       }
       return onRunComplete.apply(this, arguments)
@@ -1387,14 +1400,10 @@ function wrapCoverageReporter (CoverageReporter) {
   wrappedCoverageReporters.add(CoverageReporter)
   if (CoverageReporter.prototype._addUntestedFiles) {
     shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
-      if (isCodeCoverageEnabledBecauseOfUs) {
-        return Promise.resolve()
-      }
-
       const rootDir = repositoryRoot || this._globalConfig?.rootDir || process.cwd()
       args[0] = getCoverageBackfillContexts(args[0])
       const result = addUntestedFiles.apply(this, args)
-      if (!isSuitesSkipped || !isCodeCoverageEnabled) return result
+      if (!isSuitesSkipped || !isTiaCoverageBackfillEnabled()) return result
 
       const addBackfillAndApplyCoverage = () => {
         return addCoverageBackfillUntestedFiles(this._coverageMap, args[0], rootDir, CoverageReporter).then(() => {
@@ -1412,7 +1421,7 @@ function wrapCoverageReporter (CoverageReporter) {
     const coverageContexts = getCoverageBackfillContexts(contexts)
     const rootDir = getRepositoryRootFromContexts(coverageContexts, this._globalConfig?.rootDir)
     const coverageMap = results?.coverageMap || this._coverageMap
-    if (isSuitesSkipped && isCodeCoverageEnabled) {
+    if (isSuitesSkipped && isTiaCoverageBackfillEnabled()) {
       await addCoverageBackfillUntestedFiles(coverageMap, coverageContexts, rootDir, CoverageReporter)
       applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
     }
@@ -1657,9 +1666,9 @@ function getCliWrapper (isNewJestVersion) {
 
       let testCodeCoverageLinesTotal
       let testSessionCoverageFiles
-      const shouldReportTestSessionCoverage = isItrEnabled && isCodeCoverageEnabled
+      const shouldReportTestSessionCoverage = isTiaCoverageBackfillEnabled()
 
-      if (isUserCodeCoverageEnabled) {
+      if (shouldReportCodeCoverageLinesPct()) {
         try {
           const coverageMap = resultCoverageMap || lastCoverageMap
           const coverageRootDir = lastCoverageMapRootDir ||
@@ -2134,7 +2143,7 @@ function configureTestEnvironment (readConfigsResult) {
   const configs = readConfigsResult.configs.map(config => {
     const testEnvironmentOptions = config.testEnvironmentOptions || {}
     testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
-    testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+    testEnvironmentOptions._ddTestCodeCoverageEnabled = isJestCodeCoverageReportingEnabled()
 
     return {
       ...config,
@@ -2145,19 +2154,10 @@ function configureTestEnvironment (readConfigsResult) {
   testSessionConfigurationCh.publish(readConfigsResult.configs.map(config => config.testEnvironmentOptions))
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
 
-  isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
-
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabledBecauseOfUs) {
-    const globalConfig = {
-      ...readConfigsResult.globalConfig,
-      collectCoverage: true,
-    }
-    readConfigsResult.globalConfig = globalConfig
-  }
   if (isSuitesSkippingEnabled) {
     // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
     const globalConfig = {

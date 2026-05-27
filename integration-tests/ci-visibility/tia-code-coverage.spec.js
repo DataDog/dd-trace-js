@@ -52,6 +52,7 @@ function getLinePctFromOutput (output) {
 function getJestEnv ({
   testsToRun = `${FIXTURE_ROOT}/test-`,
   collectCoverageFrom = DEFAULT_COLLECT_COVERAGE_FROM,
+  enableCoverage = true,
   useJestRun = false,
   useConfigFile = false,
   configTestMatch,
@@ -60,10 +61,12 @@ function getJestEnv ({
 } = {}) {
   const env = {
     TESTS_TO_RUN: testsToRun,
-    ENABLE_CODE_COVERAGE: '1',
-    COVERAGE_REPORTERS: 'text-summary',
   }
 
+  if (enableCoverage) {
+    env.ENABLE_CODE_COVERAGE = '1'
+    env.COVERAGE_REPORTERS = 'text-summary'
+  }
   if (collectCoverageFrom !== null) {
     env.COLLECT_COVERAGE_FROM = collectCoverageFrom
   }
@@ -139,6 +142,8 @@ function describeJestVersion (jestVersion, dependencies) {
       },
       expectSuiteCoverage = true,
       expectSessionCoverage = true,
+      expectCoveragePayloads = true,
+      expectCoverageOutput = true,
     }) {
       const receiver = await new FakeCiVisIntake().start()
       receiver.setSettings(settings)
@@ -154,7 +159,14 @@ function describeJestVersion (jestVersion, dependencies) {
           receivedSkippableRequest = true
         }
       }
+      const coveragePayloads = []
+      const coverageRequestListener = (message) => {
+        if (message.url.endsWith('/api/v2/citestcov')) {
+          coveragePayloads.push(message)
+        }
+      }
       receiver.on('message', skippableRequestListener)
+      receiver.on('message', coverageRequestListener)
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -174,8 +186,8 @@ function describeJestVersion (jestVersion, dependencies) {
           }
         })
 
-      const coveragePromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+      const coveragePromise = expectCoveragePayloads
+        ? receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
           const coverages = getCoverageEvents(payloads)
           const suiteCoverage = coverages.find(coverage => coverage.test_suite_id)
           const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
@@ -201,6 +213,7 @@ function describeJestVersion (jestVersion, dependencies) {
 
           coverageResult = coverages
         })
+        : Promise.resolve()
       childProcess = exec(
         framework.command,
         {
@@ -229,16 +242,21 @@ function describeJestVersion (jestVersion, dependencies) {
           stderrEndPromise,
         ])
         assert.strictEqual(exitCode, 0)
+        if (!expectCoveragePayloads) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+          assert.strictEqual(coveragePayloads.length, 0, `code coverage payloads should not be reported:\n${output}`)
+        }
 
         return {
           ...eventsResult,
           coverages: coverageResult,
           output,
           receivedSkippableRequest,
-          stdoutCodeCoverageLinesPct: getLinePctFromOutput(output),
+          stdoutCodeCoverageLinesPct: expectCoverageOutput ? getLinePctFromOutput(output) : undefined,
         }
       } finally {
         receiver.off('message', skippableRequestListener)
+        receiver.off('message', coverageRequestListener)
         await receiver.stop()
       }
     }
@@ -332,8 +350,8 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
     })
 
-    // Session-level executable coverage is only needed for TIA flows. When TIA is off, ordinary Jest coverage should
-    // not pay the extra coverage-map walk or send the extra CITESTCOV request.
+    // Session-level executable coverage is only needed for TIA flows. When TIA is off, ordinary Jest coverage may still
+    // send suite-level CITESTCOV payloads, but it should not send the extra session executable-lines coverage.
     it('does not report jest session coverage when TIA is disabled', async () => {
       const result = await runFramework({
         framework: FRAMEWORKS[0],
@@ -379,6 +397,66 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.strictEqual(result.skippedSuites.length, 0)
       assert.strictEqual(result.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
       assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
+    })
+
+    // TIA-only users should keep the skip behavior without paying Jest coverage overhead. Even if the backend returns
+    // meta.coverage, we only backfill and publish coverage when Jest coverage was enabled by the user's config.
+    it('does not collect or backfill coverage when jest coverage is not configured', async () => {
+      const framework = {
+        ...FRAMEWORKS[0],
+        getEnv: () => getJestEnv({
+          collectCoverageFrom: null,
+          enableCoverage: false,
+        }),
+      }
+      const result = await runFramework({
+        framework,
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        skippableCoverage: {
+          [SKIPPED_SOURCE]: getLinesBitmapBase64(1, 20),
+        },
+        expectCoveragePayloads: false,
+        expectCoverageOutput: false,
+      })
+
+      assert.strictEqual(result.isTiaSkipped, 'true')
+      assert.strictEqual(result.skippedSuites.length, 1)
+      assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(result.codeCoverageLinesPct, undefined)
+      assert.strictEqual(result.stdoutCodeCoverageLinesPct, undefined)
+    })
+
+    // When TIA is enabled, the Datadog coverage percentage should only be published from the coverage-backfill path.
+    // A user may still get Jest stdout coverage, but backend code_coverage=false means we do not upload Datadog
+    // coverage payloads and do not tag test.code_coverage.lines_pct.
+    it('does not report Datadog coverage percentage when TIA is enabled but backend coverage is disabled', async () => {
+      const framework = FRAMEWORKS[0]
+      const result = await runFramework({
+        framework,
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        settings: {
+          itr_enabled: true,
+          code_coverage: false,
+          tests_skipping: true,
+        },
+        expectCoveragePayloads: false,
+      })
+
+      assert.strictEqual(result.isTiaSkipped, 'true')
+      assert.strictEqual(result.skippedSuites.length, 1)
+      assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(result.codeCoverageLinesPct, undefined)
+      assert.ok(result.stdoutCodeCoverageLinesPct > 0)
     })
 
     // Zero-local-suite path: every suite that Jest would run is returned as skippable. No suite should run here;

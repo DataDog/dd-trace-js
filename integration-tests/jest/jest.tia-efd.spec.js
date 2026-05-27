@@ -339,7 +339,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runTestsCommand,
         {
           cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
+          },
         }
       )
     })
@@ -725,7 +728,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('keeps user coverage reporters when code coverage is enabled because of us', async () => {
+    it('does not run user coverage reporters when jest coverage is not configured', async () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -753,8 +756,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
       try {
-        await once(childProcess, 'exit')
-        assert.strictEqual(fs.existsSync(lcovPath), true)
+        const [exitCode] = await once(childProcess, 'exit')
+        assert.strictEqual(exitCode, 0)
+        assert.strictEqual(fs.existsSync(lcovPath), false)
       } finally {
         fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
       }
@@ -872,6 +876,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
             PROJECTS: JSON.stringify([{
               testMatch: ['**/subproject-test*'],
               testEnvironment: 'node',
@@ -971,6 +976,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
             TESTS_TO_RUN: 'jest/mocked-test.js',
           },
         }
