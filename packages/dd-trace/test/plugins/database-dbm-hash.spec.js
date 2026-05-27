@@ -76,10 +76,10 @@ describe('DatabasePlugin DBM Hash', () => {
       assert.ok(comment.includes("ddsh='AQIDBAUG'"), 'Comment should include base64 hash')
     })
 
-    it('should set _dd.dbm.propagation_hash tag on span', () => {
+    it('should set _dd.propagated_hash tag on span', () => {
       plugin.createDbmComment(span, 'test-service')
 
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], 'AQIDBAUG',
+      assert.strictEqual(span._tags['_dd.propagated_hash'], 'AQIDBAUG',
         'Span should have propagation hash tag')
     })
 
@@ -96,7 +96,7 @@ describe('DatabasePlugin DBM Hash', () => {
       plugin.config.dbmPropagationMode = 'full'
       const fullComment = plugin.createDbmComment(span, 'test-service')
       assert.ok(fullComment.includes("ddsh='AQIDBAUG'"), 'Full mode should include hash')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], 'AQIDBAUG',
+      assert.strictEqual(span._tags['_dd.propagated_hash'], 'AQIDBAUG',
         'Full mode should set span tag')
     })
 
@@ -107,7 +107,7 @@ describe('DatabasePlugin DBM Hash', () => {
 
       assert.ok(comment, 'Comment should still be created')
       assert.ok(!comment.includes('ddsh='), 'Comment should not include hash')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+      assert.strictEqual(span._tags['_dd.propagated_hash'], undefined,
         'Span should not have hash tag')
     })
 
@@ -127,7 +127,7 @@ describe('DatabasePlugin DBM Hash', () => {
 
       assert.ok(comment, 'Comment should still be created')
       assert.ok(!comment.includes('ddsh='), 'Comment should not include hash when config is disabled')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+      assert.strictEqual(span._tags['_dd.propagated_hash'], undefined,
         'Span should not have hash tag when config is disabled')
     })
 
@@ -159,7 +159,7 @@ describe('DatabasePlugin DBM Hash', () => {
       const query = 'SELECT * FROM users'
       plugin.injectDbmQuery(span, query, 'test-service')
 
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], 'AQIDBAUG',
+      assert.strictEqual(span._tags['_dd.propagated_hash'], 'AQIDBAUG',
         'Span should have hash tag after query injection')
     })
   })
@@ -222,7 +222,7 @@ describe('DatabasePlugin DBM Hash', () => {
 
       assert.ok(comment.includes("ddsh='AQIDBAUG'"), 'Should inject hash')
       assert.ok(comment.includes('dddbs='), 'Should inject service tags')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], 'AQIDBAUG',
+      assert.strictEqual(span._tags['_dd.propagated_hash'], 'AQIDBAUG',
         'Should set hash tag on span')
     })
 
@@ -236,7 +236,7 @@ describe('DatabasePlugin DBM Hash', () => {
       assert.ok(comment, 'Should still create comment')
       assert.ok(comment.includes('dddbs='), 'Should inject service tags')
       assert.ok(!comment.includes('ddsh='), 'Should NOT inject hash')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+      assert.strictEqual(span._tags['_dd.propagated_hash'], undefined,
         'Should NOT set hash tag on span')
     })
 
@@ -249,7 +249,7 @@ describe('DatabasePlugin DBM Hash', () => {
 
       assert.ok(comment, 'Should still create comment with basic service info')
       assert.ok(!comment.includes('ddsh='), 'Should NOT inject hash')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+      assert.strictEqual(span._tags['_dd.propagated_hash'], undefined,
         'Should NOT set hash tag on span')
     })
 
@@ -262,7 +262,7 @@ describe('DatabasePlugin DBM Hash', () => {
 
       assert.ok(comment, 'Should still create comment')
       assert.ok(!comment.includes('ddsh='), 'Should NOT inject hash without process tags enabled')
-      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+      assert.strictEqual(span._tags['_dd.propagated_hash'], undefined,
         'Should NOT set hash tag on span')
     })
   })
