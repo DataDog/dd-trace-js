@@ -404,10 +404,10 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.strictEqual(result.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
     })
 
-    // TIA forces Jest coverage collection so suite-level CITESTCOV and backend coverage backfill still work when the
-    // user did not configure coverage in Jest. coverage_report_upload_enabled=true adds the session executable-lines
-    // payload and the Datadog lines_pct tag.
-    it('backfills and reports Datadog coverage when TIA coverage is enabled without user jest coverage', async () => {
+    // coverage_report_upload_enabled=true is the backfill gate. When Datadog Code Coverage is enabled, TIA can force
+    // Jest coverage collection, backfill skipped-suite coverage, and report Datadog lines_pct even if the user did not
+    // configure coverage in Jest.
+    it('backfills and reports Datadog coverage without user jest coverage when report upload is enabled', async () => {
       const framework = {
         ...FRAMEWORKS[0],
         getEnv: () => getJestEnv({
