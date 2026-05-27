@@ -333,6 +333,35 @@ describe('encode', () => {
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 
+    it('emits error: 1 via the fallback when start does not fit u64', () => {
+      // The fused per-span block only fires for the steady-state shape
+      // (`error: 0/1` AND a nanosecond `start` ≥ 2³²). Synthetic test
+      // inputs with small starts fall back to the per-field emit chain;
+      // pin both the `error === 1` arm and the `error: 0` arm in one
+      // place so a future refactor can't drop either silently.
+      data[0].error = 1
+
+      encoder.encode(data)
+
+      const trace = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0]
+      assert.strictEqual(trace[0].error, 1)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
+    })
+
+    it('emits unusual error flags via writeIntOrFloat in the fallback', () => {
+      // OTel-bridge spans and a handful of plugins push non-binary error
+      // values. The pre-fused `[KEY_ERROR, 0x00/0x01]` constants would
+      // miscode them; the fallback routes through `writeIntOrFloat` so
+      // each value picks the shortest msgpack encoding.
+      data[0].error = 42
+
+      encoder.encode(data)
+
+      const trace = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0]
+      assert.strictEqual(trace[0].error, 42)
+    })
+
     describe('meta_struct', () => {
       it('should encode meta_struct with simple key value object', () => {
         const metaStruct = {
