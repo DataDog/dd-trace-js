@@ -6,6 +6,13 @@ const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
 
+// Per-span fused head: `[0x9C, service-idx, name-idx, resource-idx,
+// trace-id, span-id, parent-id]` — three uint32 indexes (5 bytes each) +
+// three uint64 IDs (9 bytes each) + the array marker. Replaces seven
+// separate reserves (`writeByte` + 3 × `writeInteger` + 3 × `_encodeId`)
+// with one block-sized reserve per span.
+const HEAD_BLOCK_SIZE = 1 + 5 * 3 + 9 * 3
+
 function formatSpan (span) {
   span = normalizeSpan(span)
   // v0.5 has no native span_events slot; always serialize as a meta tag.
@@ -38,15 +45,31 @@ class AgentEncoder extends BaseEncoder {
   _encode (bytes, trace) {
     bytes.writeArrayPrefix(trace)
 
+    const stringMap = this._stringMap
+
     for (let span of trace) {
       span = formatSpan(span)
-      bytes.writeByte(ARRAY_OF_TWELVE)
-      this._encodeString(bytes, span.service)
-      this._encodeString(bytes, span.name)
-      this._encodeString(bytes, span.resource)
-      this._encodeId(bytes, span.trace_id)
-      this._encodeId(bytes, span.span_id)
-      this._encodeId(bytes, span.parent_id)
+
+      // Resolve the three head string indices up front. `_cacheString`
+      // writes into `_stringBytes`, an independent chunk, so the side
+      // effect is safe to interleave with the `_traceBytes` reserve
+      // below.
+      const serviceIndex = stringMap[span.service] ?? this._cacheString(span.service)
+      const nameIndex = stringMap[span.name] ?? this._cacheString(span.name)
+      const resourceIndex = stringMap[span.resource] ?? this._cacheString(span.resource)
+
+      const blockOffset = bytes.length
+      bytes.reserve(HEAD_BLOCK_SIZE)
+      const target = bytes.buffer
+
+      target[blockOffset] = ARRAY_OF_TWELVE
+      let cursor = this.#writeIndexAt(target, blockOffset + 1, serviceIndex)
+      cursor = this.#writeIndexAt(target, cursor, nameIndex)
+      cursor = this.#writeIndexAt(target, cursor, resourceIndex)
+      cursor = this.#writeIdAt(target, cursor, span.trace_id)
+      cursor = this.#writeIdAt(target, cursor, span.span_id)
+      this.#writeIdAt(target, cursor, span.parent_id)
+
       bytes.writeIntOrFloat(span.start || 0)
       bytes.writeIntOrFloat(span.duration || 0)
       bytes.writeIntOrFloat(span.error)
@@ -88,20 +111,18 @@ class AgentEncoder extends BaseEncoder {
   }
 
   _encodeString (bytes, value = '') {
+    const index = this._stringMap[value] ?? this._cacheString(value)
+    bytes.writeInteger(index)
+  }
+
+  _cacheString (value) {
     let index = this._stringMap[value]
     if (index === undefined) {
       index = this._stringCount++
       this._stringMap[value] = index
       this._stringBytes.write(value)
     }
-    bytes.writeInteger(index)
-  }
-
-  _cacheString (value) {
-    if (this._stringMap[value] === undefined) {
-      this._stringMap[value] = this._stringCount++
-      this._stringBytes.write(value)
-    }
+    return index
   }
 
   _writeStrings (buffer, offset) {
@@ -109,6 +130,49 @@ class AgentEncoder extends BaseEncoder {
     offset += this._stringBytes.buffer.copy(buffer, offset, 0, this._stringBytes.length)
 
     return offset
+  }
+
+  /**
+   * Write `[0xCE, uint32(index)]` into `target` at `offset` and return the
+   * new cursor. Caller is responsible for having reserved enough room.
+   *
+   * @param {Uint8Array} target
+   * @param {number} offset
+   * @param {number} index
+   * @returns {number}
+   */
+  #writeIndexAt (target, offset, index) {
+    target[offset] = 0xCE
+    target[offset + 1] = index >> 24
+    target[offset + 2] = index >> 16
+    target[offset + 3] = index >> 8
+    target[offset + 4] = index
+    return offset + 5
+  }
+
+  /**
+   * Write `[0xCF, uint64(id)]` into `target` at `offset` and return the
+   * new cursor. The id is truncated to the low 8 bytes, matching the
+   * inherited `_encodeId` behavior.
+   *
+   * @param {Uint8Array} target
+   * @param {number} offset
+   * @param {{ toBuffer: () => Uint8Array | number[] }} identifier
+   * @returns {number}
+   */
+  #writeIdAt (target, offset, identifier) {
+    target[offset] = 0xCF
+    const idBuffer = identifier.toBuffer()
+    const start = idBuffer.length - 8
+    target[offset + 1] = idBuffer[start]
+    target[offset + 2] = idBuffer[start + 1]
+    target[offset + 3] = idBuffer[start + 2]
+    target[offset + 4] = idBuffer[start + 3]
+    target[offset + 5] = idBuffer[start + 4]
+    target[offset + 6] = idBuffer[start + 5]
+    target[offset + 7] = idBuffer[start + 6]
+    target[offset + 8] = idBuffer[start + 7]
+    return offset + 9
   }
 }
 
