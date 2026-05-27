@@ -95,9 +95,9 @@ versions.forEach((version) => {
                 [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
                 [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
                 [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
-                // capabilities logic does not overwrite test session name
-                [TEST_SESSION_NAME]: 'my-test-session-name',
               })
+              // capabilities logic does not overwrite test session name
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
             })
           })
 

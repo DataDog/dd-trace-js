@@ -15,7 +15,7 @@ const {
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
-  TEST_LEVEL_EVENT_TYPES,
+  TEST_COMMAND,
   TEST_SESSION_NAME,
   TEST_SOURCE_START,
   TEST_IS_NEW,
@@ -323,18 +323,12 @@ class VitestPlugin extends CiPlugin {
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
       if (this.tracer._exporter.addMetadataTags) {
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
-        metadataTags.test = {
-          ...metadataTags.test,
-          ...libraryCapabilitiesTags,
+        const metadataTags = {
+          '*': { [TEST_COMMAND]: testCommand, [TEST_SESSION_NAME]: testSessionName },
         }
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
+        metadataTags.test = { ...libraryCapabilitiesTags }
         this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
