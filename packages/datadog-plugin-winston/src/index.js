@@ -1,6 +1,6 @@
 'use strict'
 
-const { buildHolder, messageProxy } = require('../../dd-trace/src/plugins/log_injection')
+const { buildLogHolder, messageProxy } = require('../../dd-trace/src/plugins/log_injection')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
 
 class WinstonPlugin extends LogPlugin {
@@ -24,13 +24,13 @@ class WinstonPlugin extends LogPlugin {
     const info = arg.message
     if (info === null || typeof info !== 'object' || Object.hasOwn(info, 'dd')) return
 
-    const holder = buildHolder(this.tracer)
-    if (!holder) return
+    const logHolder = buildLogHolder(this.tracer)
+    if (!logHolder) return
 
     if (Object.getPrototypeOf(info) === Object.prototype && Object.isExtensible(info)) {
-      info.dd = holder.dd
+      info.dd = logHolder.dd
     } else {
-      arg.message = messageProxy(info, holder)
+      arg.message = messageProxy(info, logHolder)
     }
   }
 }

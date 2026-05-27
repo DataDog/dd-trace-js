@@ -10,7 +10,7 @@ const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const LogPlugin = require('../../src/plugins/log_plugin')
-const { buildHolder, messageProxy } = require('../../src/plugins/log_injection')
+const { buildLogHolder, messageProxy } = require('../../src/plugins/log_injection')
 const Tracer = require('../../src/tracer')
 const getConfig = require('../../src/config')
 
@@ -22,9 +22,9 @@ class TestLog extends LogPlugin {
   constructor (...args) {
     super(...args)
     this.addSub('apm:test:log', (arg) => {
-      const holder = buildHolder(this.tracer)
-      if (!holder) return
-      arg.message = messageProxy(arg.message, holder)
+      const logHolder = buildLogHolder(this.tracer)
+      if (!logHolder) return
+      arg.message = messageProxy(arg.message, logHolder)
     })
   }
 }

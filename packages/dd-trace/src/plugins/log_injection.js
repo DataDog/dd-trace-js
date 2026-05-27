@@ -6,27 +6,27 @@ const { storage } = require('../../../datadog-core')
 const legacyStorage = storage('legacy')
 
 /**
- * Runs the tracer's log injector and returns the populated holder, or
+ * Runs the tracer's log injector and returns the populated log holder, or
  * `undefined` when the propagator emitted no `dd` field (no span, no
  * service / version / env). Hot-path callers gate on the return.
  *
  * @param {object} tracer
  * @returns {{ dd: object } | undefined}
  */
-function buildHolder (tracer) {
-  const holder = {}
-  tracer.inject(legacyStorage.getStore()?.span, LOG, holder)
-  return holder.dd ? holder : undefined
+function buildLogHolder (tracer) {
+  const logHolder = {}
+  tracer.inject(legacyStorage.getStore()?.span, LOG, logHolder)
+  return logHolder.dd ? logHolder : undefined
 }
 
 /**
  * @param {object} message Caller-owned log record; never mutated.
- * @param {{ dd: object }} holder Holds the dd fields injected by the tracer.
+ * @param {{ dd: object }} logHolder Holds the dd fields injected by the tracer.
  */
-function messageProxy (message, holder) {
+function messageProxy (message, logHolder) {
   return new Proxy(message, {
     get (target, key) {
-      if (shouldOverride(target, key)) return holder.dd
+      if (shouldOverride(target, key)) return logHolder.dd
       return target[key]
     },
     set (target, key, value) {
@@ -40,7 +40,7 @@ function messageProxy (message, holder) {
       return ownKeys
     },
     getOwnPropertyDescriptor (target, p) {
-      return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
+      return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? logHolder : target, p)
     },
   })
 }
@@ -53,4 +53,4 @@ function shouldOverride (target, p) {
   return p === 'dd' && !Object.hasOwn(target, p) && Reflect.isExtensible(target)
 }
 
-module.exports = { buildHolder, messageProxy }
+module.exports = { buildLogHolder, messageProxy }

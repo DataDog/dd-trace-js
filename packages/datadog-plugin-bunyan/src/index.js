@@ -1,6 +1,6 @@
 'use strict'
 
-const { buildHolder } = require('../../dd-trace/src/plugins/log_injection')
+const { buildLogHolder } = require('../../dd-trace/src/plugins/log_injection')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
 
 class BunyanPlugin extends LogPlugin {
@@ -26,10 +26,10 @@ class BunyanPlugin extends LogPlugin {
     const rec = arg.message
     if (rec === null || typeof rec !== 'object' || Object.hasOwn(rec, 'dd')) return
 
-    const holder = buildHolder(this.tracer)
-    if (!holder) return
+    const logHolder = buildLogHolder(this.tracer)
+    if (!logHolder) return
 
-    rec.dd = holder.dd
+    rec.dd = logHolder.dd
   }
 }
 

@@ -1,6 +1,6 @@
 'use strict'
 
-const { buildHolder, messageProxy } = require('../../dd-trace/src/plugins/log_injection')
+const { buildLogHolder, messageProxy } = require('../../dd-trace/src/plugins/log_injection')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
 
 class PinoPlugin extends LogPlugin {
@@ -20,14 +20,14 @@ class PinoPlugin extends LogPlugin {
    * @param {{ line: string }} payload
    */
   handleJsonLine (payload) {
-    const holder = buildHolder(this.tracer)
-    if (!holder) return
+    const logHolder = buildLogHolder(this.tracer)
+    if (!logHolder) return
 
     const line = payload.line
     const lastClose = line.lastIndexOf('}')
     if (lastClose < 1) return
 
-    const ddJson = JSON.stringify(holder.dd)
+    const ddJson = JSON.stringify(logHolder.dd)
     const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
     payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
   }
@@ -41,10 +41,10 @@ class PinoPlugin extends LogPlugin {
    * @param {{ message: object }} arg
    */
   handlePrettyMessage (arg) {
-    const holder = buildHolder(this.tracer)
-    if (!holder) return
+    const logHolder = buildLogHolder(this.tracer)
+    if (!logHolder) return
 
-    arg.message = messageProxy(arg.message, holder)
+    arg.message = messageProxy(arg.message, logHolder)
   }
 }
 
