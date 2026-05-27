@@ -174,7 +174,7 @@ describe('SpanProcessor', () => {
     const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(SpanSampler, config.sampler)
+    sinon.assert.calledWith(SpanSampler, sinon.match({ nativeSpans }))
   })
 
   it('should erase the trace and stop execution when tracing=false', () => {

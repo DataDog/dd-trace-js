@@ -23,7 +23,7 @@ class SpanProcessor {
     this._killAll = false
     this._nativeSpans = nativeSpans
 
-    this._spanSampler = new SpanSampler(config.sampler)
+    this._spanSampler = new SpanSampler({ spanSamplingRules: config.sampler?.spanSamplingRules, nativeSpans })
     this._gitMetadataTagger = new GitMetadataTagger(config)
   }
 
