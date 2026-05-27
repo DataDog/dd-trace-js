@@ -94,6 +94,111 @@ const ATTR_PREFIX_ARRAY = Buffer.concat([
 const ATTR_PAYLOAD_BOOL_TRUE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0xC3])])
 const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0xC2])])
 
+// Steady-state string cache shared across every `AgentEncoder` instance in
+// the process. The keys / values listed below are emitted on (close to)
+// every payload from a typical web service — caching them once at module
+// load lets every `_reset()` start with them already encoded instead of
+// running `_cacheString` for each one per payload boundary. Entries point
+// into `STEADY_STRING_BUFFER`; `#refreshStringCache` skips them via the
+// `ArrayBuffer` identity check so a `_stringBytes` resize does not corrupt
+// them.
+const STEADY_STRING_KEYS = Object.freeze([
+  // Wire string for the empty value — emitted as a missing-field placeholder
+  // and as the meta-struct empty-map sentinel. Reserved first so the index
+  // matches what `_cacheString('')` used to produce.
+  '',
+  // `extractTags` adds these on every span via `config.tags`.
+  'language',
+  'process_id',
+  'runtime-id',
+  'service',
+  'version',
+  'env',
+  // Trace-level sampling and routing tags written by the sampler /
+  // priority sampler on the local root span.
+  '_sampling_priority_v1',
+  '_dd.hostname',
+  '_dd.origin',
+  '_dd.measured',
+  '_dd.base_service',
+  '_dd.agent_psr',
+  '_dd.p.dm',
+  '_dd.p.tid',
+  // Universal span shape tags.
+  'component',
+  'span.kind',
+  'resource.name',
+  'operation.name',
+  // HTTP server / client spans. The web plugin emits these per request.
+  'http.url',
+  'http.method',
+  'http.status_code',
+  'http.useragent',
+  'http.route',
+  'http.client_ip',
+  'http.host',
+  // Common DB / messaging / RPC tags. Always emitted by the relevant plugin.
+  'db.type',
+  'db.name',
+  'db.instance',
+  'db.statement',
+  'db.system',
+  'peer.hostname',
+  'peer.service',
+  'out.host',
+  'out.port',
+  'network.destination.port',
+  'rpc.system',
+  'rpc.service',
+  'rpc.method',
+  // Error envelope.
+  'error.type',
+  'error.message',
+  'error.stack',
+])
+
+// Values that recur on essentially every payload — pre-encoding them lets the
+// string cache hit on a tag value too, not just the key.
+const STEADY_STRING_VALUES = Object.freeze([
+  // The only `language` value the tracer ever writes.
+  'javascript',
+  // OTel-style `span.kind` enum values.
+  'client',
+  'server',
+  'producer',
+  'consumer',
+  'internal',
+  // HTTP methods.
+  'GET',
+  'POST',
+  'PUT',
+  'DELETE',
+  'PATCH',
+  'HEAD',
+  'OPTIONS',
+])
+
+// One backing `MsgpackChunk` for the whole process. `_stringMap` clones the
+// derived entries on every `_reset()` so each `AgentEncoder` instance gets a
+// per-payload cache that already includes the steady set.
+const STEADY_STRING_BUFFER = new MsgpackChunk()
+const STEADY_STRING_ENTRIES = Object.create(null)
+for (const value of STEADY_STRING_KEYS) {
+  const start = STEADY_STRING_BUFFER.length
+  const written = STEADY_STRING_BUFFER.write(value)
+  STEADY_STRING_ENTRIES[value] = STEADY_STRING_BUFFER.buffer.subarray(start, start + written)
+}
+for (const value of STEADY_STRING_VALUES) {
+  if (STEADY_STRING_ENTRIES[value] !== undefined) continue
+  const start = STEADY_STRING_BUFFER.length
+  const written = STEADY_STRING_BUFFER.write(value)
+  STEADY_STRING_ENTRIES[value] = STEADY_STRING_BUFFER.buffer.subarray(start, start + written)
+}
+
+// `_stringBytes` resizes detected via `Buffer.buffer` identity — the steady
+// entries share this `ArrayBuffer` and must be skipped during refresh.
+const STEADY_STRING_ARRAY_BUFFER = STEADY_STRING_BUFFER.buffer.buffer
+
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
@@ -378,12 +483,18 @@ class AgentEncoder {
    * MB)` bypasses the small-allocation pool and starts at offset 0 in its
    * `ArrayBuffer`, so the old subarray's `byteOffset` is the entry's start
    * position in the new buffer.
+   *
+   * Steady-cache entries point into `STEADY_STRING_BUFFER`, not into
+   * `_stringBytes`. Re-subarraying them against `_stringBytes` would corrupt
+   * the wire bytes, so the loop skips them via the `ArrayBuffer` identity
+   * check.
    */
   #refreshStringCache () {
     const newBuffer = this._stringBytes.buffer
     const stringMap = this._stringMap
     for (const key of Object.keys(stringMap)) {
       const old = stringMap[key]
+      if (old.buffer === STEADY_STRING_ARRAY_BUFFER) continue
       stringMap[key] = newBuffer.subarray(old.byteOffset, old.byteOffset + old.length)
     }
   }
@@ -393,9 +504,17 @@ class AgentEncoder {
     this._traceBytes.length = 0
     this._stringCount = 0
     this._stringBytes.length = 0
-    this._stringMap = Object.create(null)
 
-    this._cacheString('')
+    // The 0.5 subclass replaces `_cacheString` to intern strings into a
+    // wire-shipped table (where index 0 must be the empty string), so the
+    // module-level steady cache (Buffer subarrays, not indices) does not
+    // apply.
+    if (this._cacheString === AgentEncoder.prototype._cacheString) {
+      this._stringMap = Object.assign(Object.create(null), STEADY_STRING_ENTRIES)
+    } else {
+      this._stringMap = Object.create(null)
+      this._cacheString('')
+    }
   }
 
   _encodeBuffer (bytes, buffer) {

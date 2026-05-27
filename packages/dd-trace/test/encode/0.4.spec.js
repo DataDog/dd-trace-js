@@ -198,6 +198,49 @@ describe('encode', () => {
       })
     })
 
+    it('produces byte-identical output via the steady-cache and lazy paths', () => {
+      // The steady cache stores the same msgpack fixstr bytes the lazy
+      // `_cacheString` fallback would write; clearing `_stringMap` after a
+      // first encode forces the second one through the lazy path. Both
+      // payloads must match byte-for-byte for any HTTP span.
+      data[0].meta = {
+        'http.url': 'http://localhost/foo',
+        'http.method': 'GET',
+        'http.status_code': '200',
+        'http.useragent': 'curl/8.0',
+        'http.route': '/foo/:id',
+        component: 'express',
+        'span.kind': 'server',
+        'runtime-id': '00000000-0000-0000-0000-000000000000',
+        service: 'svc',
+        version: '1.2.3',
+        env: 'prod',
+        language: 'javascript',
+        '_dd.origin': 'rum',
+      }
+      data[0].metrics = {
+        process_id: 1234,
+        _sampling_priority_v1: 1,
+        '_dd.hostname': 1,
+        '_dd.measured': 1,
+      }
+
+      encoder.encode(data)
+      const steadyPayload = encoder.makePayload()
+
+      encoder._stringMap = Object.create(null)
+      encoder._cacheString('')
+
+      encoder.encode(data)
+      const lazyPayload = encoder.makePayload()
+
+      assert.deepStrictEqual(Buffer.from(steadyPayload), Buffer.from(lazyPayload))
+
+      const [[decoded]] = msgpack.decode(steadyPayload, { useBigInt64: true })
+      assert.deepStrictEqual(decoded.meta, data[0].meta)
+      assert.deepStrictEqual(decoded.metrics, data[0].metrics)
+    })
+
     it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
       // Force enough unique strings to overflow the 2 MB initial chunk so
       // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
@@ -227,11 +270,14 @@ describe('encode', () => {
 
       const finalBuffer = encoder._stringBytes.buffer
       assert.notStrictEqual(initialBuffer, finalBuffer, '_stringBytes must have resized for this test to be meaningful')
-      let staleEntries = 0
+      // The check is one-sided: any entry that still points at the OLD
+      // `_stringBytes` ArrayBuffer keeps it pinned. Entries that point at
+      // the steady-cache ArrayBuffer are expected and harmless.
+      let stalePins = 0
       for (const key of Object.keys(encoder._stringMap)) {
-        if (encoder._stringMap[key].buffer !== finalBuffer.buffer) staleEntries++
+        if (encoder._stringMap[key].buffer === initialBuffer.buffer) stalePins++
       }
-      assert.strictEqual(staleEntries, 0)
+      assert.strictEqual(stalePins, 0)
     })
 
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
