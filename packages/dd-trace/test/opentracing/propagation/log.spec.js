@@ -141,6 +141,15 @@ describe('LogPropagator', () => {
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
+
+    it('should not assign dd when no span, service, env, or version is set', () => {
+      propagator = new LogPropagator({})
+      const carrier = {}
+
+      propagator.inject(null, carrier)
+
+      assert.strictEqual(carrier.dd, undefined)
+    })
   })
 
   describe('extract', () => {
