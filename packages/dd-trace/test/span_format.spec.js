@@ -255,6 +255,42 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.service, truncatedServiceValue)
     })
 
+    it('truncates overlong Datadog-tag string values to the agent value limit', () => {
+      const { MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+      // `span.type`, `resource.name`, and `http.status_code` each have
+      // their own inlined truncation branch in the `extractTags` switch
+      // (the inlining bypasses `addMixedTag`'s polymorphic slow path).
+      // Pin all three so a refactor that drops one of them surfaces here.
+      const overlongType = `${'t'.repeat(MAX_META_VALUE_LENGTH)}!`
+      const overlongResource = `${'r'.repeat(MAX_META_VALUE_LENGTH)}!`
+      const overlongStatusCode = `${'9'.repeat(MAX_META_VALUE_LENGTH)}!`
+      spanContext._tags['span.type'] = overlongType
+      spanContext._tags['resource.name'] = overlongResource
+      spanContext._tags['http.status_code'] = overlongStatusCode
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.type, `${overlongType.slice(0, MAX_META_VALUE_LENGTH)}...`)
+      assert.strictEqual(trace.resource, `${overlongResource.slice(0, MAX_META_VALUE_LENGTH)}...`)
+      assert.strictEqual(
+        trace.meta['http.status_code'],
+        `${overlongStatusCode.slice(0, MAX_META_VALUE_LENGTH)}...`
+      )
+    })
+
+    it('truncates overlong origin and hostname meta values to the agent value limit', () => {
+      const { MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+      const overlongOrigin = `${'o'.repeat(MAX_META_VALUE_LENGTH)}!`
+      const overlongHostname = `${'h'.repeat(MAX_META_VALUE_LENGTH)}!`
+      spanContext._trace.origin = overlongOrigin
+      spanContext._hostname = overlongHostname
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ORIGIN_KEY], `${overlongOrigin.slice(0, MAX_META_VALUE_LENGTH)}...`)
+      assert.strictEqual(trace.meta[HOSTNAME_KEY], `${overlongHostname.slice(0, MAX_META_VALUE_LENGTH)}...`)
+    })
+
     it('should truncate the serialized span_links meta value past MAX_META_VALUE_LENGTH', () => {
       const { MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
 
@@ -388,14 +424,16 @@ describe('spanFormat', () => {
       )
     })
 
-    it('should skip numeric root tags whose source value is not a finite number', () => {
-      // `addNumberTag` drops non-numbers (e.g. `undefined`) and `NaN`, so
-      // those decisions never reach the metrics object even though the span
-      // is otherwise eligible for root-tag extraction.
+    it('should skip root tag decisions whose source value is undefined', () => {
+      // The `typeof === 'number'` gate skips any decision the priority
+      // sampler never set, so partial-decision spans emit only the metric
+      // they actually own. `Sampler.rate()` / `RateLimiter.effectiveRate()`
+      // cannot return `NaN` (the `Sampler` constructor throws via
+      // `BigInt(Math.floor(NaN * MAX_TRACE_ID))` long before the field can
+      // be assigned), so the `undefined` case is the only one to pin.
       spanContext._parentId = null
-      spanContext._trace[SAMPLING_AGENT_DECISION] = Number.NaN
       spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
-      // SAMPLING_RULE_DECISION is intentionally left undefined.
+      // SAMPLING_AGENT_DECISION / SAMPLING_RULE_DECISION intentionally unset.
 
       trace = spanFormat(span)
 
@@ -504,16 +542,25 @@ describe('spanFormat', () => {
       const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
       const overlongChunkKey = `${'k'.repeat(MAX_META_KEY_LENGTH)}!`
       const overlongChunkValue = `${'v'.repeat(MAX_META_VALUE_LENGTH)}!`
+      // A second tag with a short key and overlong value pins the value
+      // truncation branch of the inlined `extractChunkTags` for-loop. The
+      // first tag pairs an overlong key with a short value (key branch);
+      // `tagForFirstSpanInChunk` pairs an overlong process-tag value with
+      // its own dedicated truncation branch.
+      const overlongTraceTagValue = `${'b'.repeat(MAX_META_VALUE_LENGTH)}!`
       spanContext._trace.tags = {
         [overlongChunkKey]: 'short',
+        '_dd.p.tid': overlongTraceTagValue,
       }
 
       trace = spanFormat(span, true, overlongChunkValue)
 
       const truncatedKey = `${overlongChunkKey.slice(0, MAX_META_KEY_LENGTH)}...`
       const truncatedValue = `${overlongChunkValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+      const truncatedTraceTagValue = `${overlongTraceTagValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       assert.strictEqual(trace.meta[truncatedKey], 'short')
       assert.strictEqual(trace.meta['_dd.tags.process'], truncatedValue)
+      assert.strictEqual(trace.meta['_dd.p.tid'], truncatedTraceTagValue)
     })
 
     it('should not extract trace chunk tags when not chunk root', () => {
@@ -593,6 +640,19 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.metrics.payload, 'hello')
     })
 
+    it('should extract URL tags as stringified metrics', () => {
+      // `addMixedTag`'s default branch routes both `Buffer` and `URL` to
+      // metrics as `value.toString()`. The Buffer half is covered above;
+      // pin the URL half so a future tightening that drops `isUrl` from
+      // the helper surfaces here.
+      const url = new URL('https://example.com/foo?bar=1')
+      spanContext._tags.endpoint = url
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics.endpoint, url.toString())
+    })
+
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }
 
@@ -652,6 +712,76 @@ describe('spanFormat', () => {
       trace = spanFormat(span)
 
       assert.strictEqual(trace.meta[ERROR_MESSAGE], 'E_BOOM')
+    })
+
+    it('coerces non-string error tag values to meta strings', () => {
+      spanContext._tags[ERROR_TYPE] = 42
+      spanContext._tags[ERROR_MESSAGE] = { code: 'E_BOOM' }
+      spanContext._tags[ERROR_STACK] = true
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_TYPE], '42')
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta[ERROR_STACK], 'true')
+      assert.ok(!(ERROR_TYPE in trace.metrics))
+      assert.ok(!(ERROR_MESSAGE in trace.metrics))
+      assert.ok(!(ERROR_STACK in trace.metrics))
+      assert.strictEqual(trace.error, 1)
+    })
+
+    it('skips null and undefined error tag values without writing meta', () => {
+      spanContext._tags[ERROR_TYPE] = null
+      spanContext._tags[ERROR_MESSAGE] = undefined
+      spanContext._tags[ERROR_STACK] = 'real stack'
+
+      trace = spanFormat(span)
+
+      assert.ok(!(ERROR_TYPE in trace.meta))
+      assert.ok(!(ERROR_MESSAGE in trace.meta))
+      assert.strictEqual(trace.meta[ERROR_STACK], 'real stack')
+      // Any of the three present (even null) still flips `error=1` unless
+      // OTel's `IGNORE_OTEL_ERROR` flag suppresses it.
+      assert.strictEqual(trace.error, 1)
+    })
+
+    it('truncates overlong error tag values to the agent value limit', () => {
+      const { MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+      const overlongStack = `${'s'.repeat(MAX_META_VALUE_LENGTH)}!`
+      spanContext._tags[ERROR_STACK] = overlongStack
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_STACK], `${overlongStack.slice(0, MAX_META_VALUE_LENGTH)}...`)
+    })
+
+    it('coerces non-string Error subclass fields to meta strings via extractError', () => {
+      class WeirdError extends Error {}
+      const error = new WeirdError()
+      error.name = Symbol('CustomName')
+      error.message = 1234
+      error.stack = ['frame-0', 'frame-1']
+      spanContext._tags.error = error
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_TYPE], 'Symbol(CustomName)')
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '1234')
+      assert.strictEqual(trace.meta[ERROR_STACK], 'frame-0,frame-1')
+      assert.ok(!(ERROR_TYPE in trace.metrics))
+      assert.ok(!(ERROR_MESSAGE in trace.metrics))
+      assert.ok(!(ERROR_STACK in trace.metrics))
+    })
+
+    it('truncates overlong Error.message via extractError', () => {
+      const { MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+      const overlongMessage = `${'m'.repeat(MAX_META_VALUE_LENGTH)}!`
+      const error = new Error(overlongMessage)
+      spanContext._tags.error = error
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], `${overlongMessage.slice(0, MAX_META_VALUE_LENGTH)}...`)
     })
 
     it('should extract the origin', () => {
