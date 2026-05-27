@@ -24,7 +24,7 @@
     "dependency": "@azure/cosmos",
     "integration": "azure-cosmos",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "4.9.2",
+    "max_tracer_supported": "4.9.3",
     "auto-instrumented": "True"
   },
   {
@@ -38,7 +38,7 @@
     "dependency": "@azure/functions",
     "integration": "azure-functions",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.14.0",
+    "max_tracer_supported": "4.16.0",
     "auto-instrumented": "True"
   },
   {
@@ -199,14 +199,14 @@
     "dependency": "@smithy/core",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "3.24.0",
-    "max_tracer_supported": "3.24.2",
+    "max_tracer_supported": "3.24.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@smithy/smithy-client",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "1.0.3",
-    "max_tracer_supported": "4.13.3",
+    "max_tracer_supported": "4.13.4",
     "auto-instrumented": "True"
   },
   {

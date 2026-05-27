@@ -640,7 +640,9 @@
         "configurationNames": [
           "dbmPropagationMode"
         ],
-        "default": "disabled"
+        "default": "disabled",
+        "allowed": "disabled|service|full|dynamic_service",
+        "transform": "toLowerCase"
       }
     ],
     "DD_DOGSTATSD_HOST": [
