@@ -153,7 +153,7 @@ class MsgpackChunk {
   /**
    * @param {number} size 0..15.
    */
-  writeFixArray (size = 0) {
+  writeFixArray (size) {
     const offset = this.length
 
     this.reserve(1)
@@ -176,16 +176,6 @@ class MsgpackChunk {
     this.buffer[offset + 2] = length >> 16
     this.buffer[offset + 3] = length >> 8
     this.buffer[offset + 4] = length
-  }
-
-  /**
-   * @param {number} size 0..15.
-   */
-  writeFixMap (size = 0) {
-    const offset = this.length
-
-    this.reserve(1)
-    this.buffer[offset] = 0x80 + size
   }
 
   /**
