@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const semver = require('semver')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -12,9 +13,18 @@ const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers'
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
+// @redis/client >= 5.12.0 uses built-in TracingChannel on Node.js >= 19.9 / 20.2, which
+// sanitizes command args and does not expose the connection name.
+const hasDcTracingChannel = typeof require('node:diagnostics_channel').tracingChannel === 'function'
+
 describe('Plugin', () => {
   describe('redis', () => {
-    withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName) => {
+    withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName, resolvedVersion) => {
+      // @redis/client >= 5.12.0 on Node.js >= 20.2 uses built-in TracingChannel which sanitizes
+      // SET/MSET values and does not expose connectionName, so splitByInstance has no effect.
+      const isBuiltinDcVersion = moduleName === '@redis/client' &&
+        hasDcTracingChannel && semver.satisfies(resolvedVersion, '>=5.12.0')
+
       let redis
       let client
       let tracer
@@ -91,8 +101,10 @@ describe('Plugin', () => {
         })
 
         it('keeps every arg when formatting a multi-arg command', async () => {
+          // Built-in TracingChannel sanitizes SET values; only the key is kept.
+          const expectedRawCommand = isBuiltinDcVersion ? 'SET multi-arg-key ?' : 'SET multi-arg-key multi-arg-value'
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'SET multi-arg-key multi-arg-value')
+            assert.strictEqual(traces[0][0].meta['redis.raw_command'], expectedRawCommand)
           }, { spanResourceMatch: /^SET$/ })
 
           await Promise.all([client.set('multi-arg-key', 'multi-arg-value'), promise])
@@ -102,8 +114,13 @@ describe('Plugin', () => {
           const longValue = 'x'.repeat(150)
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
-            assert.strictEqual(rawCommand, `SET long-key ${'x'.repeat(97)}...`)
-            assert.strictEqual(rawCommand.length, 'SET long-key '.length + 100)
+            if (isBuiltinDcVersion) {
+              // Built-in TracingChannel sanitizes SET values to '?'.
+              assert.strictEqual(rawCommand, 'SET long-key ?')
+            } else {
+              assert.strictEqual(rawCommand, `SET long-key ${'x'.repeat(97)}...`)
+              assert.strictEqual(rawCommand.length, 'SET long-key '.length + 100)
+            }
           }, { spanResourceMatch: /^SET$/ })
 
           await Promise.all([client.set('long-key', longValue), promise])
@@ -127,9 +144,16 @@ describe('Plugin', () => {
           }
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
-            assert.strictEqual(rawCommand.length, 1000)
             assert.match(rawCommand, /^MSET /)
-            assert.match(rawCommand, /\.\.\.$/)
+            if (isBuiltinDcVersion) {
+              // Built-in TracingChannel sanitizes all MSET values to '?'; the result is shorter
+              // than 1000 chars and does not end with '...'.
+              assert.ok(rawCommand.length < 1000)
+              assert.match(rawCommand, / \?$/)
+            } else {
+              assert.strictEqual(rawCommand.length, 1000)
+              assert.match(rawCommand, /\.\.\.$/)
+            }
           }, { spanResourceMatch: /^MSET$/ })
 
           await Promise.all([client.sendCommand(['MSET', ...args]), promise])
@@ -286,16 +310,21 @@ describe('Plugin', () => {
         })
 
         it('should set service name based on connection name', async () => {
+          // Built-in TracingChannel does not expose connectionName, so splitByInstance has no effect.
+          const expectedService = isBuiltinDcVersion ? 'custom' : 'custom-test'
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-test')
+            assert.strictEqual(traces[0][0].service, expectedService)
           })
 
           await Promise.all([client.get('foo'), promise])
         })
 
         it('should set service source tag to split-by-instance', async () => {
+          // Built-in TracingChannel does not expose connectionName, so splitByInstance has no effect
+          // and the source tag is 'opt.plugin' (from the configured service) instead.
+          const expectedSvcSrc = isBuiltinDcVersion ? 'opt.plugin' : 'opt.split_by_instance'
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.split_by_instance')
+            assert.strictEqual(traces[0][0].meta['_dd.svc_src'], expectedSvcSrc)
           })
 
           await Promise.all([client.get('foo'), promise])
@@ -306,7 +335,8 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom-test',
+              // Built-in TracingChannel does not expose connectionName, so splitByInstance has no effect.
+              serviceName: isBuiltinDcVersion ? 'custom' : 'custom-test',
             },
             v1: {
               opName: 'redis.command',
