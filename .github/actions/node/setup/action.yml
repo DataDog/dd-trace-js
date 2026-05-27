@@ -29,8 +29,8 @@ runs:
           eol)         version=16 ;;
           oldest)      version=$(node_version 18) ;;
           maintenance) version=$(node_version 20) ;;
-          active)      version=$(node_version 22) ;;
-          latest)      version=${LATEST_VERSION:-$(node_version 24)} ;;
+          active)      version=$(node_version 24) ;;
+          latest)      version=${LATEST_VERSION:-$(node_version 26)} ;;
           *)           version=$VERSION ;;
         esac
         echo "version=$version" >> "$GITHUB_OUTPUT"
