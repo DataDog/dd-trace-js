@@ -6,6 +6,12 @@ const log = require('../log')
 const { normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
+// Values longer than this byte threshold skip the `_stringMap` lookup and
+// emit through `bytes.write` directly. Hashing a multi-KiB string for
+// `Map.get` costs more than the cache hit saves on the inputs that produce
+// strings this long (events JSON, stack traces, large query bodies) — they
+// are unique per span, so the cache hit rate stays near zero anyway.
+const STRING_CACHE_BYPASS_LIMIT = 1024
 
 // Pre-encoded static keys + value-prefix bytes; the hot encode loop emits
 // each via one Uint8Array.set instead of routing through the string cache.
@@ -464,6 +470,10 @@ class AgentEncoder {
   }
 
   _encodeString (bytes, value = '') {
+    if (value.length > STRING_CACHE_BYPASS_LIMIT) {
+      bytes.write(value)
+      return
+    }
     const entry = this._stringMap[value] ?? this._cacheString(value)
     const length = entry.length
     const offset = bytes.length
@@ -524,6 +534,17 @@ class AgentEncoder {
       const writeOffset = bytes.length
 
       if (typeof entryValue === 'string') {
+        if (entryValue.length > STRING_CACHE_BYPASS_LIMIT) {
+          // Long values (events JSON, stack traces, large query bodies) are
+          // unique per span; hashing them for the cache lookup costs more
+          // than the lookup ever recovers. Emit the key from the cache and
+          // stream the value directly.
+          bytes.reserve(keyEntryLen)
+          bytes.buffer.set(keyEntry, writeOffset)
+          bytes.write(entryValue)
+          count++
+          continue
+        }
         const valueEntry = stringMap[entryValue] ?? this._cacheString(entryValue)
         const valueEntryLen = valueEntry.length
         bytes.reserve(keyEntryLen + valueEntryLen)
