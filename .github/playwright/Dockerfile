@@ -1,5 +1,5 @@
 FROM oven/bun:1.3.1 AS bun
-FROM node:24-bookworm-slim
+FROM node:24.14.1-bookworm-slim
 ARG PLAYWRIGHT_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,7 +7,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 
-RUN apt-get update && apt-get install -y curl git gpg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl git gpg unzip && rm -rf /var/lib/apt/lists/*
 
 RUN npm install --prefix /tmp/pw @playwright/test@${PLAYWRIGHT_VERSION} \
     && /tmp/pw/node_modules/.bin/playwright install --with-deps chromium \
