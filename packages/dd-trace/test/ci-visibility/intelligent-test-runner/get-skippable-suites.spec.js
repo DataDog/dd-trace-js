@@ -97,7 +97,8 @@ function cacheKeyForParams (params) {
   return buildCacheKey('skippable', [
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
-    params.runtimeName, params.runtimeVersion, params.testLevel, params.custom, params.isCodeCoverageEnabled || false,
+    params.runtimeName, params.runtimeVersion, params.testLevel, params.custom,
+    params.isCoverageReportUploadEnabled || false,
   ])
 }
 
@@ -114,7 +115,7 @@ describe('get-skippable-suites', () => {
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
     cleanup(DEFAULT_PARAMS)
-    cleanup({ ...DEFAULT_PARAMS, isCodeCoverageEnabled: true })
+    cleanup({ ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true })
   })
 
   afterEach(() => {
@@ -123,7 +124,7 @@ describe('get-skippable-suites', () => {
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = false
     cleanup(DEFAULT_PARAMS)
-    cleanup({ ...DEFAULT_PARAMS, isCodeCoverageEnabled: true })
+    cleanup({ ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true })
     nock.cleanAll()
   })
 
@@ -157,8 +158,8 @@ describe('get-skippable-suites', () => {
     })
   })
 
-  it('should skip suites with response metadata coverage when code coverage is enabled', (done) => {
-    const params = { ...DEFAULT_PARAMS, isCodeCoverageEnabled: true }
+  it('should skip suites with response metadata coverage when coverage report upload is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
     nock(BASE_URL)
       .post('/api/v2/ci/tests/skippable')
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_COVERAGE))
@@ -175,8 +176,8 @@ describe('get-skippable-suites', () => {
     })
   })
 
-  it('should not skip suites with missing line coverage when code coverage is enabled', (done) => {
-    const params = { ...DEFAULT_PARAMS, isCodeCoverageEnabled: true }
+  it('should not skip suites with missing line coverage when coverage report upload is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
     nock(BASE_URL)
       .post('/api/v2/ci/tests/skippable')
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE))
@@ -189,8 +190,21 @@ describe('get-skippable-suites', () => {
     })
   })
 
-  it('should return suites without coverage when code coverage is enabled', (done) => {
-    const params = { ...DEFAULT_PARAMS, isCodeCoverageEnabled: true }
+  it('should keep suites with missing line coverage when coverage report upload is disabled', (done) => {
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE))
+
+    getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should return suites without coverage when coverage report upload is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
     nock(BASE_URL)
       .post('/api/v2/ci/tests/skippable')
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))

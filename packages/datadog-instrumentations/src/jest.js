@@ -42,6 +42,10 @@ const {
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
 } = require('../../datadog-plugin-jest/src/util')
+const {
+  addCoverageBackfillUntestedFiles,
+  getCoverageBackfillFiles,
+} = require('./jest/coverage-backfill')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -1150,7 +1154,7 @@ function getRepositoryRootFromConfig (config, fallbackRootDir) {
 }
 
 function getRepositoryRootFromContexts (contexts, fallbackRootDir) {
-  const firstContext = contexts?.[Symbol.iterator]?.().next().value
+  const [firstContext] = contexts || []
   return getRepositoryRootFromConfig(firstContext?.config, fallbackRootDir)
 }
 
@@ -1186,28 +1190,6 @@ function shouldReportCodeCoverageLinesPct () {
   return hasJestCoverageMap() && (!isItrEnabled || isTiaCoverageBackfillEnabled())
 }
 
-// Normalize backend meta.coverage paths so Jest can transform them from the repository root.
-function getCoverageBackfillFiles (rootDir) {
-  const files = []
-  for (const filename of Object.keys(skippableSuitesCoverage || {})) {
-    const relativeFilename = path.isAbsolute(filename)
-      ? getTestSuitePath(filename, rootDir)
-      : filename
-    files.push(relativeFilename)
-  }
-  return files
-}
-
-// Keep synthetic transforms out of Jest's regular cache namespace.
-function getCoverageBackfillConfig (config) {
-  if (!config?.cacheDirectory) return config
-
-  return {
-    ...config,
-    cacheDirectory: path.join(config.cacheDirectory, 'dd-trace-coverage-backfill'),
-  }
-}
-
 function getHookRequire (hookMeta) {
   if (!hookMeta?.moduleBaseDir) return
 
@@ -1225,112 +1207,6 @@ function getCoverageBackfillRequire (CoverageReporter) {
   }
 
   return require
-}
-
-function getCoverageBackfillDependencies (CoverageReporter) {
-  const coverageWorkerRequire = getCoverageBackfillRequire(CoverageReporter)
-
-  return {
-    createFileCoverage: coverageWorkerRequire('istanbul-lib-coverage').createFileCoverage,
-    createScriptTransformer: coverageWorkerRequire('@jest/transform').createScriptTransformer,
-    readInitialCoverage: coverageWorkerRequire('istanbul-lib-instrument').readInitialCoverage,
-  }
-}
-
-// Some transformers expose Istanbul coverage as a literal that readInitialCoverage does not parse.
-function extractCoverageDataObject (code) {
-  const marker = 'var coverageData = '
-  const start = code.indexOf(marker)
-  if (start === -1) return
-
-  let depth = 0
-  let quote
-  let escaped = false
-  let index = start + marker.length
-  for (; index < code.length; index++) {
-    const char = code[index]
-    if (quote) {
-      if (escaped) {
-        escaped = false
-      } else if (char === '\\') {
-        escaped = true
-      } else if (char === quote) {
-        quote = undefined
-      }
-      continue
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-    } else if (char === '{') {
-      depth++
-    } else if (char === '}') {
-      depth--
-      if (depth === 0) {
-        index++
-        break
-      }
-    }
-  }
-  if (depth !== 0) return
-
-  try {
-    // Some transformers emit a plain coverageData object literal that readInitialCoverage does not recognize.
-    // eslint-disable-next-line no-new-func
-    return new Function(`return (${code.slice(start + marker.length, index)})`)()
-  } catch {
-    // Ignore transformer output that does not contain parseable Istanbul metadata.
-  }
-}
-
-// Read the Istanbul file metadata emitted by Jest's transformer.
-function getCoverageDataFromCode (code, readInitialCoverage) {
-  return readInitialCoverage(code)?.coverageData || extractCoverageDataObject(code)
-}
-
-// Seed Jest's coverage map with files that did not run locally but are covered by backend meta.coverage.
-async function addCoverageBackfillUntestedFiles (coverageMap, testContexts, rootDir, CoverageReporter) {
-  if (!coverageBackfillFiles?.length || !coverageMap || !rootDir) return
-
-  let createFileCoverage, createScriptTransformer, readInitialCoverage
-  try {
-    ({
-      createFileCoverage,
-      createScriptTransformer,
-      readInitialCoverage,
-    } = getCoverageBackfillDependencies(CoverageReporter))
-  } catch {
-    return
-  }
-  const processedFiles = new Set()
-
-  for (const context of testContexts || []) {
-    const config = getCoverageBackfillConfig(context.config)
-    // eslint-disable-next-line no-await-in-loop
-    const transformer = await createScriptTransformer(config)
-
-    for (const file of coverageBackfillFiles) {
-      const absoluteFile = path.isAbsolute(file) ? file : path.join(rootDir, file)
-      if (processedFiles.has(absoluteFile) || coverageMap.data[absoluteFile]) continue
-
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const { code } = await transformer.transformSourceAsync(absoluteFile, readFileSync(absoluteFile, 'utf8'), {
-          instrument: true,
-          supportsDynamicImport: true,
-          supportsExportNamespaceFrom: true,
-          supportsStaticESM: true,
-          supportsTopLevelAwait: true,
-        })
-        const coverageData = getCoverageDataFromCode(code, readInitialCoverage)
-        if (coverageData) {
-          coverageMap.addFileCoverage(createFileCoverage(coverageData))
-          processedFiles.add(absoluteFile)
-        }
-      } catch {
-        // Missing files or files unsupported by this Jest project cannot contribute executable-line metadata.
-      }
-    }
-  }
 }
 
 function getTestContexts (tests) {
@@ -1381,7 +1257,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
     ? getTestContexts(originalTests)
     : undefined
   coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
-    ? getCoverageBackfillFiles(suitePathRoot)
+    ? getCoverageBackfillFiles(skippableSuitesCoverage, suitePathRoot, getTestSuitePath)
     : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
@@ -1431,7 +1307,14 @@ function wrapCoverageReporter (CoverageReporter, hookMeta) {
       if (!isSuitesSkipped || !isTiaCoverageBackfillEnabled()) return result
 
       const addBackfillAndApplyCoverage = () => {
-        return addCoverageBackfillUntestedFiles(this._coverageMap, args[0], rootDir, CoverageReporter).then(() => {
+        return addCoverageBackfillUntestedFiles({
+          coverageMap: this._coverageMap,
+          testContexts: args[0],
+          rootDir,
+          CoverageReporter,
+          coverageBackfillFiles,
+          getCoverageBackfillRequire,
+        }).then(() => {
           applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
         })
       }
@@ -1447,7 +1330,14 @@ function wrapCoverageReporter (CoverageReporter, hookMeta) {
     const rootDir = getRepositoryRootFromContexts(coverageContexts, this._globalConfig?.rootDir)
     const coverageMap = results?.coverageMap || this._coverageMap
     if (isSuitesSkipped && isTiaCoverageBackfillEnabled()) {
-      await addCoverageBackfillUntestedFiles(coverageMap, coverageContexts, rootDir, CoverageReporter)
+      await addCoverageBackfillUntestedFiles({
+        coverageMap,
+        testContexts: coverageContexts,
+        rootDir,
+        CoverageReporter,
+        coverageBackfillFiles,
+        getCoverageBackfillRequire,
+      })
       applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
     }
     lastCoverageMap = coverageMap

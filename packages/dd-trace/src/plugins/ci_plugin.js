@@ -189,7 +189,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getSkippableSuites(
         {
           ...this.testConfiguration,
-          isCodeCoverageEnabled: this.libraryConfig?.isCodeCoverageEnabled,
+          isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
         },
         (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
           if (err) {

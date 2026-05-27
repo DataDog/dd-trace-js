@@ -31,11 +31,11 @@ function getSkippableSuites ({
   runtimeVersion,
   custom,
   testLevel = 'suite',
-  isCodeCoverageEnabled = false,
+  isCoverageReportUploadEnabled = false,
 }, done) {
   const cacheKey = buildCacheKey('skippable', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, testLevel, custom, isCodeCoverageEnabled,
+    runtimeName, runtimeVersion, testLevel, custom, isCoverageReportUploadEnabled,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {
@@ -55,7 +55,7 @@ function getSkippableSuites ({
       runtimeVersion,
       custom,
       testLevel,
-      isCodeCoverageEnabled,
+      isCoverageReportUploadEnabled,
       cacheKey: activeCacheKey,
     }, cb)
   }, (err, data) => {
@@ -83,7 +83,7 @@ function getSkippableSuites ({
  * @param {string} params.runtimeVersion
  * @param {object} [params.custom]
  * @param {string} [params.testLevel]
- * @param {boolean} [params.isCodeCoverageEnabled]
+ * @param {boolean} [params.isCoverageReportUploadEnabled]
  * @param {string | null} params.cacheKey
  * @param {Function} done
  */
@@ -103,7 +103,7 @@ function fetchFromApi ({
   runtimeVersion,
   custom,
   testLevel,
-  isCodeCoverageEnabled,
+  isCoverageReportUploadEnabled,
   cacheKey,
 }, done) {
   const options = {
@@ -177,7 +177,8 @@ function fetchFromApi ({
             _is_missing_line_code_coverage: isMissingLineCodeCoverage,
           },
         } of skippableItems) {
-          if (isCodeCoverageEnabled && isMissingLineCodeCoverage) continue
+          // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
+          if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
 
           skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
         }
