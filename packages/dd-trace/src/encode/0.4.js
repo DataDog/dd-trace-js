@@ -581,9 +581,22 @@ class AgentEncoder {
         target.set(keyEntry, writeOffset)
         target.set(valueEntry, writeOffset + keyEntryLen)
       } else {
-        bytes.reserve(keyEntryLen)
-        bytes.buffer.set(keyEntry, writeOffset)
-        bytes.writeIntOrFloat(entryValue)
+        // Speculate that `entryValue` is a positive fixint (0..127): one
+        // reserve covers both the key and the value. The metrics map (sample
+        // rate, priority, `_dd.measured`, attribute counts) is mostly small
+        // unsigned integers, so the speculation wins on every entry that
+        // doesn't go through the slow `writeIntOrFloat` dispatch chain.
+        bytes.reserve(keyEntryLen + 1)
+        const target = bytes.buffer
+        target.set(keyEntry, writeOffset)
+        if (entryValue === (entryValue & 0x7F)) {
+          target[writeOffset + keyEntryLen] = entryValue
+        } else {
+          // Speculation missed; rewind the speculative byte and route the
+          // value through the full encoder so it picks the right type.
+          bytes.length = writeOffset + keyEntryLen
+          bytes.writeIntOrFloat(entryValue)
+        }
       }
       count++
     }
