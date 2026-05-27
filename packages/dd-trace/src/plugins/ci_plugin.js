@@ -614,7 +614,7 @@ module.exports = class CiPlugin extends Plugin {
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-        [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+        [TEST_COMMAND]: testSuiteSpan.context().getTag(TEST_COMMAND),
         [TEST_MODULE]: this.constructor.id,
         ...getSessionRequestErrorTags(this.testSessionSpan),
       }
@@ -807,7 +807,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   getTestTelemetryTags (testSpan) {
-    const activeSpanTags = testSpan.context()._tags
+    const activeSpanTags = testSpan.context().getTags()
     return {
       hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
       isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,

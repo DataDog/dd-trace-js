@@ -24,7 +24,7 @@
     "dependency": "@azure/cosmos",
     "integration": "azure-cosmos",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "4.9.2",
+    "max_tracer_supported": "4.9.3",
     "auto-instrumented": "True"
   },
   {
@@ -38,7 +38,7 @@
     "dependency": "@azure/functions",
     "integration": "azure-functions",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.14.0",
+    "max_tracer_supported": "4.16.0",
     "auto-instrumented": "True"
   },
   {
@@ -196,17 +196,24 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@smithy/core",
+    "integration": "aws-sdk",
+    "minimum_tracer_supported": "3.24.0",
+    "max_tracer_supported": "3.24.4",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@smithy/smithy-client",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "1.0.3",
-    "max_tracer_supported": "4.13.3",
+    "max_tracer_supported": "4.13.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@vitest/runner",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.6",
+    "max_tracer_supported": "4.1.7",
     "auto-instrumented": "True"
   },
   {
@@ -493,7 +500,7 @@
     "dependency": "mocha",
     "integration": "mocha",
     "minimum_tracer_supported": "8.0.0",
-    "max_tracer_supported": "11.7.5",
+    "max_tracer_supported": "11.7.6",
     "auto-instrumented": "True"
   },
   {
@@ -514,7 +521,7 @@
     "dependency": "mongodb",
     "integration": "mongodb-core",
     "minimum_tracer_supported": "3.3.0",
-    "max_tracer_supported": "7.0.0",
+    "max_tracer_supported": "7.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -528,7 +535,7 @@
     "dependency": "mongoose",
     "integration": "mongoose",
     "minimum_tracer_supported": "4.6.4",
-    "max_tracer_supported": "9.1.4",
+    "max_tracer_supported": "9.6.2",
     "auto-instrumented": "True"
   },
   {
@@ -717,7 +724,7 @@
     "dependency": "vitest",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.6",
+    "max_tracer_supported": "4.1.7",
     "auto-instrumented": "True"
   },
   {

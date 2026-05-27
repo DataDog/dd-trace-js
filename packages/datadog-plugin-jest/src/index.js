@@ -596,7 +596,7 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
-    const skippingEnabled = testSuiteSpan?.context()._tags?.[TEST_ITR_SKIPPING_ENABLED]
+    const skippingEnabled = testSuiteSpan?.context()?.getTag?.(TEST_ITR_SKIPPING_ENABLED)
     if (skippingEnabled !== undefined) {
       extraTags[TEST_ITR_SKIPPING_ENABLED] = skippingEnabled
     }
