@@ -1,5 +1,7 @@
 FROM oven/bun:1.3.1 AS bun
-FROM node:24-bookworm-slim
+# This Node version only runs Playwright's browser installer during image build.
+# setup-node provides the test runtime version after this binary is removed below.
+FROM node:20-bookworm-slim
 ARG PLAYWRIGHT_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
