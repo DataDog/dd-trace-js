@@ -194,7 +194,7 @@ class JestPlugin extends CiPlugin {
       for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
-        config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestCommand = this.command
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled

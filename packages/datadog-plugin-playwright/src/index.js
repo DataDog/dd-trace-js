@@ -235,7 +235,6 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             Object.assign(formattedSpan.meta, this.getSessionRequestErrorTags())
-            formattedSpan.meta[TEST_COMMAND] = this.command
             formattedSpan.meta[TEST_FRAMEWORK_VERSION] = this.frameworkVersion
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized

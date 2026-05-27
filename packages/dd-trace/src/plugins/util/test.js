@@ -952,7 +952,6 @@ function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
-    [TEST_COMMAND]: command,
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
   }
 }

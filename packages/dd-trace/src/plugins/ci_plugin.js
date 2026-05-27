@@ -128,7 +128,6 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const suiteTags = {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
     [TEST_MODULE]: testFramework,
   }
 
@@ -213,7 +212,7 @@ module.exports = class CiPlugin extends Plugin {
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = {}
+      const metadataTags = { '*': { [TEST_COMMAND]: command } }
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName,
@@ -255,7 +254,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      const testCommand = this.command
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),

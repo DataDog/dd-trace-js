@@ -48,11 +48,18 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._eventCount = 0
 
     this.metadataTags = {}
+    this.wildcardMetadataTags = {}
 
     this.reset()
   }
 
   addMetadataTags (tags) {
+    if (tags['*']) {
+      this.wildcardMetadataTags = {
+        ...this.wildcardMetadataTags,
+        ...tags['*'],
+      }
+    }
     for (const type of ALLOWED_CONTENT_TYPES) {
       if (tags[type]) {
         this.metadataTags[type] = {
@@ -318,6 +325,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         '*': {
           language: 'javascript',
           library_version: ddTraceVersion,
+          ...this.wildcardMetadataTags,
         },
         ...this.metadataTags,
       },
