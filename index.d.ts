@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "./vendor/dist/opentracing";
+import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -230,6 +230,7 @@ interface Plugins {
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
@@ -841,11 +842,20 @@ declare namespace tracer {
 
     /**
      * Enables DBM to APM link using tag injection.
+     *
+     * - `disabled`: No SQL comment is injected (default).
+     * - `service`: Injects a SQL comment with service-level tags (database name, service, environment,
+     *   host, tracer service, tracer version). Enables DBM–APM correlation without full trace linking.
+     * - `full`: Same as `service`, plus a W3C `traceparent` for full distributed trace correlation.
+     * - `dynamic_service`: Same as `service`, but also automatically injects the propagation hash
+     *   (`ddsh`) when process tags are enabled (`DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true`).
+     *   This is a convenience shorthand for `service` + `DD_DBM_INJECT_SQL_BASEHASH=true`.
+     *
      * @default 'disabled'
      * @env DD_DBM_PROPAGATION_MODE
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    dbmPropagationMode?: 'disabled' | 'service' | 'full'
+    dbmPropagationMode?: 'disabled' | 'service' | 'full' | 'dynamic_service'
 
     /**
      * Whether to enable Data Streams Monitoring.
@@ -1991,7 +2001,8 @@ declare namespace tracer {
       middleware?: boolean;
 
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2070,7 +2081,8 @@ declare namespace tracer {
        */
       validateStatus?: (code: number) => boolean;
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2224,6 +2236,12 @@ declare namespace tracer {
        */
       [key: string]: boolean | Object | undefined;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * @azure/cosmos module
+     */
+    interface azure_cosmos extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2763,6 +2781,24 @@ declare namespace tracer {
        * @default true
        */
       heartbeatEnabled?: boolean;
+
+      /**
+       * How to mask primitive query values in the `mongodb.query` tag and the
+       * resource name (when `queryInResourceName` is also enabled). Keys,
+       * operator names, and array / pipeline shape are preserved so the masked
+       * query is still a usable query signature.
+       *
+       * - `'types'`: replace each primitive leaf with its `typeof` name
+       *   (`'string'`, `'number'`, `'boolean'`, `'bigint'`, `'object'`,
+       *   `'null'`). Keeps the same redaction guarantee as `'redact'` but
+       *   preserves the value types so the rendered query can still be used
+       *   to design indexes.
+       * - `'redact'`: replace each primitive leaf with `'?'`. Strictest masking.
+       * - `'none'`: do not mask. Values land verbatim on the span.
+       *
+       * @default 'none'
+       */
+      obfuscateQuery?: 'none' | 'types' | 'redact';
 
       /**
        * Whether to include the query contents in the resource name.
@@ -3425,11 +3461,15 @@ declare namespace tracer {
 
       /**
        * Enable LLM Observability tracing.
+       *
+       * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
       enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
+       *
+       * @deprecated Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. Set DD_LLMOBS_ENABLED=false to disable LLM Observability.
        */
       disable (): void,
 

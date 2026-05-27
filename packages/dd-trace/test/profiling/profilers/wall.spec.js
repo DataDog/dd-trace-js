@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const dc = require('dc-polyfill')
@@ -23,6 +24,7 @@ describe('profilers/native/wall', () => {
         start: sinon.stub(),
         stop: sinon.stub().returns(profile0),
         setContext: sinon.stub(),
+        getContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
           kSampleCount: 0,
@@ -446,7 +448,7 @@ describe('profilers/native/wall', () => {
       assert.ok(called)
       sinon.assert.calledOnce(localPprof.time.runWithContext)
       const [ctx] = localPprof.time.runWithContext.firstCall.args
-      assert.ok(Array.isArray(ctx))
+      assert.ok(Array.isArray(ctx), `Expected array, got ${inspect(ctx)}`)
       assert.deepStrictEqual(ctx[0], { spanId: '123' })
       assert.deepStrictEqual(ctx[1], { customer: 'acme' })
 
@@ -471,7 +473,7 @@ describe('profilers/native/wall', () => {
       })
 
       const innerCtx = localPprof.time.runWithContext.secondCall.args[0]
-      assert.ok(Array.isArray(innerCtx))
+      assert.ok(Array.isArray(innerCtx), `Expected array, got ${inspect(innerCtx)}`)
       assert.deepStrictEqual(innerCtx[0], { spanId: '123' })
       assert.deepStrictEqual(innerCtx[1], { customer: 'acme', region: 'us-east' })
 
@@ -718,6 +720,7 @@ describe('profilers/native/wall', () => {
         time: {
           ...pprof.time,
           setContext: sinon.stub(),
+          getContext: sinon.stub(),
         },
       }
 
@@ -736,7 +739,13 @@ describe('profilers/native/wall', () => {
     function makeWebSpan () {
       const tags = {}
       const spanId = {}
-      const ctx = { _tags: tags, _spanId: spanId, _parentId: null, _trace: { started: [] } }
+      const ctx = {
+        _tags: tags,
+        _spanId: spanId,
+        _parentId: null,
+        _trace: { started: [] },
+        getTags () { return this._tags },
+      }
       const span = { context: () => ctx }
       ctx._trace.started.push(span)
       return { span, tags, spanId }
@@ -745,7 +754,13 @@ describe('profilers/native/wall', () => {
     function makeChildSpan (webSpanId, webSpan) {
       const tags = { 'span.type': 'router' }
       const spanId = {}
-      const ctx = { _tags: tags, _spanId: spanId, _parentId: webSpanId, _trace: { started: [webSpan] } }
+      const ctx = {
+        _tags: tags,
+        _spanId: spanId,
+        _parentId: webSpanId,
+        _trace: { started: [webSpan] },
+        getTags () { return this._tags },
+      }
       const span = { context: () => ctx }
       ctx._trace.started.push(span)
       return { span, tags }
@@ -895,6 +910,35 @@ describe('profilers/native/wall', () => {
       // Tags update should be a no-op since webTags is already set
       tagsUpdateCh.publish(webSpan)
       assert.strictEqual(ctx0.webTags, webSpanTags)
+
+      profiler.stop()
+    })
+
+    it('should skip setContext in ACF mode when current CPED context equals sampleContext', () => {
+      // Every native setContext in ACF mode allocates a fresh contextHolder
+      // (Object+Global), so repeated activations of the same span must short-
+      // circuit when the CPED already holds the cached profilingContext.
+      const { span: webSpan } = makeWebSpan()
+      const profiler = new WallProfiler({
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      currentStore = { span: webSpan }
+      enterCh.publish()
+      sinon.assert.calledOnce(localPprof.time.setContext)
+      const ctx0 = localPprof.time.setContext.firstCall.args[0]
+
+      // Simulate the CPED now holding ctx0 (which the native side would have
+      // done in response to the previous setContext call).
+      localPprof.time.getContext.returns(ctx0)
+
+      // Re-activation with the same span returns the cached ctx0 from
+      // #getProfilingContext → #enter must skip the native setContext call.
+      enterCh.publish()
+      sinon.assert.calledOnce(localPprof.time.setContext)
 
       profiler.stop()
     })

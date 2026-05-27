@@ -2,11 +2,15 @@
 
 const assert = require('node:assert')
 
-const { after, before, describe, it } = require('mocha')
+const dc = require('dc-polyfill')
+const { after, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
+const ddpv = require('mocha/package.json').version
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const hostname = 'localhost'
 // TODO: Use another port or db instance to differentiate it better from defaults
@@ -37,7 +41,7 @@ describe('Plugin', () => {
         })
 
         after(async () => {
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         describe('with connection', () => {
@@ -98,7 +102,9 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 component: 'oracledb',
                 'db.instance': dbInstance,
+                'db.name': dbInstance,
                 'db.hostname': hostname,
+                'out.host': hostname,
                 'network.destination.port': port,
               },
             })
@@ -122,7 +128,9 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 component: 'oracledb',
                 'db.instance': dbInstance,
+                'db.name': dbInstance,
                 'db.hostname': hostname,
+                'out.host': hostname,
                 'network.destination.port': port,
               },
             }).then(done, done)
@@ -166,7 +174,9 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 component: 'oracledb',
                 'db.instance': dbInstance,
+                'db.name': dbInstance,
                 'db.hostname': hostname,
+                'out.host': hostname,
                 'network.destination.port': port,
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_TYPE]: error.name,
@@ -288,7 +298,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
           withNamingSchema(
             () => connection.execute(dbQuery),
@@ -331,7 +341,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
           withNamingSchema(
             () => connection.execute(dbQuery),
@@ -379,7 +389,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
           withNamingSchema(
             () => connection.execute(dbQuery),
@@ -416,7 +426,7 @@ describe('Plugin', () => {
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           it('should fallback to connectionString when connectString is not available', async () => {
@@ -435,6 +445,336 @@ describe('Plugin', () => {
             await connection.close()
           })
         })
+      })
+
+      // oracledb has no stable JS-side queue across v5 thick / v6 thin, so the DBM tests below capture
+      // the plugin-produced SQL via `apm:oracledb:query:start` instead of reading a driver-internal queue
+      // (the pattern pg / mysql / mysql2 tests use).
+      describe('with DBM propagation disabled (default)', () => {
+        let injected
+        const onStart = (ctx) => { injected = ctx.injected }
+
+        before(async () => {
+          tracer = await agent.load('oracledb')
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          dc.subscribe('apm:oracledb:query:start', onStart)
+          connection = await oracledb.getConnection(config)
+        })
+
+        after(async () => {
+          dc.unsubscribe('apm:oracledb:query:start', onStart)
+          await connection.close()
+          await agent.close()
+        })
+
+        beforeEach(() => {
+          injected = undefined
+        })
+
+        it('should not inject a comment when propagation is disabled', async () => {
+          await connection.execute(dbQuery)
+          assert.strictEqual(injected, dbQuery)
+        })
+      })
+
+      describe('with DBM propagation enabled with service using plugin configurations', () => {
+        let injected
+        const onStart = (ctx) => { injected = ctx.injected }
+
+        before(async () => {
+          tracer = await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          dc.subscribe('apm:oracledb:query:start', onStart)
+          connection = await oracledb.getConnection(config)
+        })
+
+        after(async () => {
+          dc.unsubscribe('apm:oracledb:query:start', onStart)
+          await connection.close()
+          await agent.close()
+        })
+
+        beforeEach(() => {
+          injected = undefined
+        })
+
+        it('should contain comment in query text', async () => {
+          await connection.execute(dbQuery)
+          assert.strictEqual(
+            injected,
+            `/*dddb='${dbInstance}',dddbs='serviced',dde='tester',ddh='${hostname}',ddps='test',` +
+            `ddpv='${ddpv}'*/ ${dbQuery}`
+          )
+        })
+
+        it('should contain comment in query text for callback-form execute', done => {
+          connection.execute(dbQuery, err => {
+            if (err) return done(err)
+            try {
+              assert.strictEqual(
+                injected,
+                `/*dddb='${dbInstance}',dddbs='serviced',dde='tester',ddh='${hostname}',ddps='test',` +
+                `ddpv='${ddpv}'*/ ${dbQuery}`
+              )
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+        })
+
+        it('trace query resource should not be changed when propagation is enabled', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, dbQuery)
+            }),
+            connection.execute(dbQuery),
+          ])
+        })
+      })
+
+      // oracledb 6.4 added object-form execute (`{ statement, values }`) to support
+      // sql-template-tag style usage. Earlier drivers reject the object outright at
+      // argument validation, so the test only runs on >= 6.4.
+      if (semver.intersects(version, '>=6.4.0')) {
+        describe('with DBM propagation enabled and object-form execute', () => {
+          let injected
+          const onStart = (ctx) => { injected = ctx.injected }
+
+          before(async () => {
+            tracer = await agent.load('oracledb', { dbmPropagationMode: 'service', service: () => 'serviced' })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            dc.subscribe('apm:oracledb:query:start', onStart)
+            connection = await oracledb.getConnection(config)
+          })
+
+          after(async () => {
+            dc.unsubscribe('apm:oracledb:query:start', onStart)
+            await connection.close()
+            await agent.close()
+          })
+
+          beforeEach(() => {
+            injected = undefined
+          })
+
+          it('should inject comment into statement and preserve binds', async () => {
+            await connection.execute({ statement: dbQuery, values: [] })
+            assert.deepStrictEqual(injected, {
+              statement:
+                `/*dddb='${dbInstance}',dddbs='serviced',dde='tester',ddh='${hostname}',ddps='test',` +
+                `ddpv='${ddpv}'*/ ${dbQuery}`,
+              values: [],
+            })
+          })
+
+          it('trace query resource should reflect the statement string', async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].resource, dbQuery)
+              }),
+              connection.execute({ statement: dbQuery, values: [] }),
+            ])
+          })
+        })
+
+        describe('with DBM propagation disabled and object-form execute', () => {
+          let injected
+          const onStart = (ctx) => { injected = ctx.injected }
+
+          before(async () => {
+            tracer = await agent.load('oracledb')
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            dc.subscribe('apm:oracledb:query:start', onStart)
+            connection = await oracledb.getConnection(config)
+          })
+
+          after(async () => {
+            dc.unsubscribe('apm:oracledb:query:start', onStart)
+            await connection.close()
+            await agent.close()
+          })
+
+          beforeEach(() => {
+            injected = undefined
+          })
+
+          it('should pass through the original statement and binds unchanged', async () => {
+            const query = { statement: dbQuery, values: [] }
+            await connection.execute(query)
+            assert.deepStrictEqual(injected, { statement: dbQuery, values: [] })
+          })
+        })
+      }
+
+      describe('DBM propagation should handle special characters', () => {
+        let injected
+        const onStart = (ctx) => { injected = ctx.injected }
+
+        before(async () => {
+          tracer = await agent.load('oracledb', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          dc.subscribe('apm:oracledb:query:start', onStart)
+          connection = await oracledb.getConnection(config)
+        })
+
+        after(async () => {
+          dc.unsubscribe('apm:oracledb:query:start', onStart)
+          await connection.close()
+          await agent.close()
+        })
+
+        beforeEach(() => {
+          injected = undefined
+        })
+
+        it('DBM propagation should handle special characters', async () => {
+          await connection.execute(dbQuery)
+          assert.strictEqual(
+            injected,
+            `/*dddb='${dbInstance}',dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
+            `ddh='${hostname}',ddps='test',ddpv='${ddpv}'*/ ${dbQuery}`
+          )
+        })
+      })
+
+      describe('with DBM propagation enabled with full using tracer configurations', () => {
+        let seenTraceParent
+        let seenTraceId
+        let seenSpanId
+        const onStart = (ctx) => {
+          const m = ctx.injected?.match(/traceparent='([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})'/)
+          if (m) {
+            seenTraceParent = true
+            seenTraceId = m[2]
+            seenSpanId = m[3]
+          }
+        }
+
+        before(async () => {
+          tracer = await agent.load('oracledb')
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          dc.subscribe('apm:oracledb:query:start', onStart)
+          connection = await oracledb.getConnection(config)
+        })
+
+        after(async () => {
+          dc.unsubscribe('apm:oracledb:query:start', onStart)
+          await connection.close()
+          await agent.close()
+        })
+
+        beforeEach(() => {
+          tracer.use('oracledb', { dbmPropagationMode: 'full' })
+          seenTraceParent = undefined
+          seenTraceId = undefined
+          seenSpanId = undefined
+        })
+
+        it('query text should contain traceparent', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
+              const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
+              const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+              assert.strictEqual(seenTraceParent, true)
+              assert.strictEqual(seenTraceId, traceId)
+              assert.strictEqual(seenSpanId, spanId)
+            }),
+            connection.execute(dbQuery),
+          ])
+        })
+
+        it('query should inject _dd.dbm_trace_injected into span', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assertObjectContains(traces[0][0].meta, {
+                '_dd.dbm_trace_injected': 'true',
+              })
+            }),
+            connection.execute(dbQuery),
+          ])
+        })
+
+        it('service should default to tracer service name', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            }),
+            connection.execute(dbQuery),
+          ])
+        })
+      })
+
+      describe('with DBM propagation enabled with append comment configurations', () => {
+        let injected
+        const onStart = (ctx) => { injected = ctx.injected }
+
+        before(async () => {
+          tracer = await agent.load('oracledb', {
+            appendComment: true,
+            dbmPropagationMode: 'service',
+            service: () => 'serviced',
+          })
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          dc.subscribe('apm:oracledb:query:start', onStart)
+          connection = await oracledb.getConnection(config)
+        })
+
+        after(async () => {
+          dc.unsubscribe('apm:oracledb:query:start', onStart)
+          await connection.close()
+          await agent.close()
+        })
+
+        beforeEach(() => {
+          injected = undefined
+        })
+
+        it('should append comment in query text', async () => {
+          await connection.execute(dbQuery)
+          assert.strictEqual(
+            injected,
+            `${dbQuery} /*dddb='${dbInstance}',dddbs='serviced',dde='tester',ddh='${hostname}',` +
+            `ddps='test',ddpv='${ddpv}'*/`
+          )
+        })
+      })
+    })
+
+    describe('with DBM propagation enabled with append comment using tracer configuration', () => {
+      let injected
+      const onStart = (ctx) => { injected = ctx.injected }
+
+      before(async () => {
+        tracer = await agent.load('oracledb', {
+          appendComment: true,
+          service: () => 'serviced',
+        }, {
+          dbmPropagationMode: 'service',
+        })
+        oracledb = require('../../../versions/oracledb').get()
+        dc.subscribe('apm:oracledb:query:start', onStart)
+        connection = await oracledb.getConnection(config)
+      })
+
+      after(async () => {
+        dc.unsubscribe('apm:oracledb:query:start', onStart)
+        await connection.close()
+        await agent.close()
+      })
+
+      beforeEach(() => {
+        injected = undefined
+      })
+
+      it('should append service mode comment in query text', async () => {
+        await connection.execute(dbQuery)
+        assert.strictEqual(
+          injected,
+          `${dbQuery} /*dddb='${dbInstance}',dddbs='serviced',dde='tester',ddh='${hostname}',` +
+          `ddps='test',ddpv='${ddpv}'*/`
+        )
       })
     })
   })

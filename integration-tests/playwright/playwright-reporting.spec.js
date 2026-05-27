@@ -2,12 +2,14 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
@@ -21,6 +23,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_PARAMETERS,
   TEST_BROWSER_NAME,
+  TEST_FRAMEWORK_VERSION,
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -41,12 +44,11 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -72,11 +74,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
@@ -254,9 +252,15 @@ versions.forEach((version) => {
 
             const stepEvents = events.filter(event => event.type === 'span')
 
-            assert.ok(testSessionEvent.content.resource.includes('test_session.playwright test'))
+            assert.ok(
+              testSessionEvent.content.resource.includes('test_session.playwright test'),
+              `Got: ${inspect(testSessionEvent.content.resource)}`
+            )
             assert.strictEqual(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-            assert.ok(testModuleEvent.content.resource.includes('test_module.playwright test'))
+            assert.ok(
+              testModuleEvent.content.resource.includes('test_module.playwright test'),
+              `Got: ${inspect(testModuleEvent.content.resource)}`
+            )
             assert.strictEqual(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'browser')
             assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'browser')
@@ -280,7 +284,7 @@ versions.forEach((version) => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.ok(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
-              assert.ok(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
+              assert.match(testSuiteEvent.content.meta[TEST_SOURCE_FILE], /-test\.js$/)
               assert.strictEqual(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
               assert.ok(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
@@ -312,6 +316,7 @@ versions.forEach((version) => {
                 true
               )
               assert.strictEqual(testEvent.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              assert.ok(testEvent.content.meta[TEST_FRAMEWORK_VERSION])
               // Can read DD_TAGS
               assertObjectContains(testEvent.content.meta, {
                 'test.customtag': 'customvalue',
@@ -339,7 +344,10 @@ versions.forEach((version) => {
 
             stepEvents.forEach(stepEvent => {
               assert.strictEqual(stepEvent.content.name, 'playwright.step')
-              assert.ok(Object.hasOwn(stepEvent.content.meta, 'playwright.step'))
+              assert.ok(
+                Object.hasOwn(stepEvent.content.meta, 'playwright.step'),
+                `Available keys: ${inspect(Object.keys(stepEvent.content.meta))}`
+              )
             })
             const annotatedTest = testEvents.find(test =>
               test.content.resource.endsWith('should work with annotated tests')
@@ -569,7 +577,7 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-            assert.ok(metadataDicts.length > 0)
+            assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
               assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
               assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')

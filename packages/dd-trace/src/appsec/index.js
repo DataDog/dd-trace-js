@@ -289,7 +289,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
   if (isSdkCalled) return
 
   const results = waf.run({
@@ -350,8 +350,15 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (!isEmpty(responseHeaders)) {
-    storedResponseHeaders.set(req, responseHeaders)
+  // Normalize header names to lowercase so downstream consumers see the same shape
+  // regardless of how the caller wrote them.
+  const normalizedResponseHeaders = {}
+  for (const [key, value] of Object.entries(responseHeaders)) {
+    normalizedResponseHeaders[key.toLowerCase()] = value
+  }
+
+  if (!isEmpty(normalizedResponseHeaders)) {
+    storedResponseHeaders.set(req, normalizedResponseHeaders)
   }
 
   // TODO: do not call waf if inside block()
@@ -376,7 +383,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(responseHeaders, 'set-cookie'),
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
     },
   }, req)
 

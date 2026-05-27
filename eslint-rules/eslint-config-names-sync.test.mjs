@@ -15,13 +15,14 @@ const fixturesDirectory = path.join(process.cwd(), 'eslint-rules/fixtures/config
 
 /**
  * @param {string} fixtureName
- * @returns {{ indexDtsPath: string, supportedConfigurationsPath: string }}
+ * @param {string[]} [typeFiles]
+ * @returns {{ indexDtsPaths: string[], supportedConfigurationsPath: string }}
  */
-function getFixtureOptions (fixtureName) {
+function getFixtureOptions (fixtureName, typeFiles = ['index.d.ts']) {
   const fixtureDirectory = path.join(fixturesDirectory, fixtureName)
 
   return {
-    indexDtsPath: path.relative(process.cwd(), path.join(fixtureDirectory, 'index.d.ts')),
+    indexDtsPaths: typeFiles.map(f => path.relative(process.cwd(), path.join(fixtureDirectory, f))),
     supportedConfigurationsPath: path.relative(
       process.cwd(),
       path.join(fixtureDirectory, 'supported-configurations.json')
@@ -55,6 +56,11 @@ ruleTester.run('eslint-config-names-sync', rule, {
       filename: path.join(fixturesDirectory, 'iast-experimental-alias-exception', 'lint-anchor.js'),
       code: '',
       options: [getFixtureOptions('iast-experimental-alias-exception')],
+    },
+    {
+      filename: path.join(fixturesDirectory, 'iast-canonical-still-checked', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('iast-canonical-still-checked', ['index.d.ts', 'index.d.v5.ts'])],
     },
   ],
   invalid: [
@@ -96,17 +102,6 @@ ruleTester.run('eslint-config-names-sync', rule, {
         messageId: 'configurationMissingInSupportedConfigurations',
         data: {
           configurationName: 'llmobs.agentlessEnabledasd',
-        },
-      }],
-    },
-    {
-      filename: path.join(fixturesDirectory, 'iast-canonical-still-checked', 'lint-anchor.js'),
-      code: '',
-      options: [getFixtureOptions('iast-canonical-still-checked')],
-      errors: [{
-        messageId: 'configurationMissingInIndexDts',
-        data: {
-          configurationName: 'iast.securityControlsConfiguration',
         },
       }],
     },

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -57,6 +58,10 @@ describe('spanFormat', () => {
       _name: 'operation',
       toTraceId: sinon.stub().returns(spanId),
       toSpanId: sinon.stub().returns(spanId),
+      getTag (key) { return this._tags[key] },
+      getTags () { return this._tags },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags },
     }
 
     span = {
@@ -194,7 +199,7 @@ describe('spanFormat', () => {
 
       const serialized = trace.meta['_dd.span_links']
       assert.strictEqual(serialized.length, MAX_META_VALUE_LENGTH + 3)
-      assert.ok(serialized.endsWith('...'))
+      assert.match(serialized, /\.\.\.$/)
     })
 
     it('should always set a parent ID', () => {
@@ -276,9 +281,11 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
+      const sampledKeys = [SAMPLING_AGENT_DECISION, SAMPLING_LIMIT_DECISION, SAMPLING_RULE_DECISION]
       assert.ok(
-        !([SAMPLING_AGENT_DECISION, SAMPLING_LIMIT_DECISION, SAMPLING_RULE_DECISION]
-          .some(k => Object.hasOwn(trace.metrics, k))))
+        !sampledKeys.some(k => Object.hasOwn(trace.metrics, k)),
+        `Expected none of ${inspect(sampledKeys)} in metrics, got keys: ${inspect(Object.keys(trace.metrics))}`
+      )
     })
 
     it('should always add single span ingestion tags from options if present', () => {
@@ -298,9 +305,11 @@ describe('spanFormat', () => {
     it('should not add single span ingestion tags if options not present', () => {
       trace = spanFormat(span)
 
+      const spanSamplingKeys = [SPAN_SAMPLING_MECHANISM, SPAN_SAMPLING_MAX_PER_SECOND, SPAN_SAMPLING_RULE_RATE]
       assert.ok(
-        !([SPAN_SAMPLING_MECHANISM, SPAN_SAMPLING_MAX_PER_SECOND, SPAN_SAMPLING_RULE_RATE]
-          .some(k => Object.hasOwn(trace.metrics, k))))
+        !spanSamplingKeys.some(k => Object.hasOwn(trace.metrics, k)),
+        `Expected none of ${inspect(spanSamplingKeys)} in metrics, got keys: ${inspect(Object.keys(trace.metrics))}`
+      )
     })
 
     it('should format span links', () => {
@@ -430,9 +439,9 @@ describe('spanFormat', () => {
           'foo.bar': 'foobar',
         },
       })
-      assert.ok(!Object.hasOwn(trace.meta, 'service.name'))
-      assert.ok(!Object.hasOwn(trace.meta, 'span.type'))
-      assert.ok(!Object.hasOwn(trace.meta, 'resource.name'))
+      assert.ok(!Object.hasOwn(trace.meta, 'service.name'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+      assert.ok(!Object.hasOwn(trace.meta, 'span.type'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+      assert.ok(!Object.hasOwn(trace.meta, 'resource.name'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
     })
 
     it('should extract numeric tags as metrics', () => {
@@ -621,9 +630,9 @@ describe('spanFormat', () => {
           'nested.num': '1',
         },
       })
-      assert.ok(!Object.hasOwn(trace.meta, 'nested.A'))
-      assert.ok(!Object.hasOwn(trace.meta, 'nested.A.B'))
-      assert.ok(!Object.hasOwn(trace.meta, 'nested.A.num'))
+      assert.ok(!Object.hasOwn(trace.meta, 'nested.A'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+      assert.ok(!Object.hasOwn(trace.meta, 'nested.A.B'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+      assert.ok(!Object.hasOwn(trace.meta, 'nested.A.num'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
     })
 
     it('should accept a boolean for measured', () => {

@@ -10,17 +10,25 @@ const tracingChannelPredicate = (node) => (
 )
 
 const transforms = module.exports = {
-  tracingChannelImport ({ dcModule, sourceType }, node) {
+  /**
+   * @param {{ dcModule: string, moduleType: 'esm' | 'cjs' }} state
+   * @param {import('estree').Program} node
+   */
+  tracingChannelImport ({ dcModule, moduleType }, node) {
     if (node.body.some(tracingChannelPredicate)) return
 
+    // The vendored matcher state exposes `moduleType` (`esm` / `cjs`), so we
+    // read that field directly. Naming it `sourceType` here used to silently
+    // pick the CJS branch for every ESM file, leaving `require()` baked into
+    // pure ESM modules like `@langchain/langgraph/dist/pregel/index.js`.
+    const isModule = moduleType === 'esm'
+
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = isModuleSourceType(sourceType)
-      ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
+    const code = isModule
+      ? `import tr_ch_apm_dc from "${dcModule}"; const {tracingChannel: tr_ch_apm_tracingChannel} = tr_ch_apm_dc`
       : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
-    node.body.splice(index + 1, 0, parse(code, {
-      isModule: isModuleSourceType(sourceType),
-    }).body[0])
+    node.body.splice(index + 1, 0, ...parse(code, { isModule }).body)
   },
 
   tracingChannelDeclaration (state, node) {
@@ -41,6 +49,7 @@ const transforms = module.exports = {
 
   traceAsyncIterator: traceAny,
   traceIterator: traceAny,
+  waitForAsyncEnd,
 }
 
 function traceAny (state, node, _parent, ancestry) {
@@ -51,13 +60,6 @@ function traceAny (state, node, _parent, ancestry) {
   } else {
     traceFunction(state, node, program)
   }
-}
-
-/**
- * @param {string} sourceType
- */
-function isModuleSourceType (sourceType) {
-  return sourceType === 'module' || sourceType === 'esm'
 }
 
 function traceFunction (state, node, program) {
@@ -242,4 +244,38 @@ function wrapIterator (state, node, program) {
   query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
 
   return wrapper
+}
+
+/**
+ * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`
+ * wrapper's native-Promise fulfillment handler.
+ *
+ * @param {object} _state
+ * @param {import('estree').CallExpression} node
+ * @returns {void}
+ */
+function waitForAsyncEnd (_state, node) {
+  const onFulfilled = node.arguments[0]
+  const statements = onFulfilled?.body?.body
+
+  if (!statements || query(onFulfilled.body, '[id.name=__apm$asyncEndPromise]').length > 0) {
+    return
+  }
+
+  const returnIndex = statements.findIndex(statement => (
+    statement.type === 'ReturnStatement' && statement.argument?.name === 'result'
+  ))
+
+  if (returnIndex === -1) return
+
+  const waitStatements = parse(`
+    function wrapper () {
+      const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
+      if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
+        return __apm$asyncEndPromise.then(() => result, () => result);
+      }
+    }
+  `).body[0].body.body
+
+  statements.splice(returnIndex, 0, ...waitStatements)
 }

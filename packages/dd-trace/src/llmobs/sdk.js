@@ -11,8 +11,6 @@ const {
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
-  LLMOBS_TRACE_ID_BRIDGE_KEY,
-  LLMOBS_PARENT_ID_BRIDGE_KEY,
 } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -55,6 +53,11 @@ class LLMObs extends NoopLLMObs {
   }
 
   enable (options = {}) {
+    logger.warn(
+      'Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
+      'Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.'
+    )
+
     if (this.enabled) {
       logger.debug('LLMObs is already enabled.')
       return
@@ -79,6 +82,11 @@ class LLMObs extends NoopLLMObs {
   }
 
   disable () {
+    logger.warn(
+      'Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
+      'Set DD_LLMOBS_ENABLED=false to disable LLM Observability.'
+    )
+
     if (!this.enabled) {
       logger.debug('LLMObs is already disabled.')
       return
@@ -543,20 +551,6 @@ class LLMObs extends NoopLLMObs {
         ...options,
         parent: parentStore?.span,
       })
-
-      // Bridge tags read by the dd-go LLMObs trace-indexer to correlate OTel
-      // gen_ai.* spans with SDK LLMObs spans. Written once per local trace,
-      // on the first successful SDK LLMObs span registration. The shared
-      // _trace.tags bag is serialized to the first span in every flushed
-      // chunk's meta, so partial flush is covered automatically without a
-      // separate flush-time processor. Writing only after registerLLMObsSpan
-      // succeeds avoids poisoning _trace.tags with bridge tags pointing at a
-      // span that will never produce an LLMObs event.
-      const traceTags = span?.context?.()._trace?.tags
-      if (this.enabled && traceTags && !traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) {
-        traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
-        traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
-      }
     }
 
     try {

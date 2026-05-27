@@ -20,6 +20,9 @@ class MongodbCorePlugin extends DatabasePlugin {
 
     this.config.heartbeatEnabled = config.heartbeatEnabled ??
       this._tracerConfig.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+    this.config.obfuscateQuery = normaliseObfuscateQuery(
+      config.obfuscateQuery ?? this._tracerConfig.DD_TRACE_MONGODB_OBFUSCATE_QUERY
+    )
   }
 
   bindStart (ctx) {
@@ -28,7 +31,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
     }
-    const query = getQuery(ops)
+    const query = getQuery(ops, this.config.obfuscateQuery)
     const resource = truncate(getResource(this, ns, query, name))
     const serviceResult = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -106,15 +109,19 @@ function extractQuery (statements) {
   return extractedQueries
 }
 
-function getQuery (cmd) {
+/**
+ * @param {Record<string, unknown> | unknown[] | undefined} cmd
+ * @param {'none' | 'types' | 'redact'} mode
+ */
+function getQuery (cmd, mode) {
   if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
 
-  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd))
-  if (cmd.query) return sanitiseAndStringify(cmd.query)
-  if (cmd.filter) return sanitiseAndStringify(cmd.filter)
-  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline)
-  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes))
-  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates))
+  if (Array.isArray(cmd)) return sanitiseAndStringify(extractQuery(cmd), mode)
+  if (cmd.query) return sanitiseAndStringify(cmd.query, mode)
+  if (cmd.filter) return sanitiseAndStringify(cmd.filter, mode)
+  if (cmd.pipeline) return sanitiseAndStringify(cmd.pipeline, mode)
+  if (cmd.deletes) return sanitiseAndStringify(extractQuery(cmd.deletes), mode)
+  if (cmd.updates) return sanitiseAndStringify(extractQuery(cmd.updates), mode)
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -131,37 +138,217 @@ function truncate (input) {
   return input.length > MAX_QUERY_LENGTH ? input.slice(0, MAX_QUERY_LENGTH) : input
 }
 
-// Single-pass sanitisation. The replacer:
-// - skips functions and coerces bigint to its decimal string,
-// - returns '?' for Buffer / BSON Binary on the *original* value (JSON.stringify already invoked
-//   toJSON before calling us; Buffer / Binary do have toJSON outputs we want to suppress),
-// - lets JSON.stringify call toJSON on other BSON types (ObjectId, Long, Decimal128, Date, Timestamp, ...)
-//   so the result lands here as a primitive or plain object,
-// - returns '?' for BSON types without toJSON (MinKey, MaxKey) where `value === original`,
-// - tracks depth via an ancestor stack so cycles and depth >= MAX_DEPTH collapse to '?'.
-function sanitiseAndStringify (input) {
-  const ancestors = []
-  return JSON.stringify(input, function (key, value) {
-    if (typeof value === 'function') return
-    if (typeof value === 'bigint') return value.toString()
+// Depth doubles as the cycle bound: a cycle pushes past MAX_DEPTH and bails,
+// after which the slow path catches it via its ancestor stack.
+/** @param {unknown} input */
+function canStringifyDirect (input) {
+  if (input === null || typeof input !== 'object') return false
+  if (Buffer.isBuffer(input) || input._bsontype !== undefined) return false
+  return canStringifyDirectWalk(input, 1)
+}
 
-    const original = key === '' ? value : this[key]
-    if (typeof original === 'object' && original !== null) {
-      if (Buffer.isBuffer(original)) return '?'
-      const bsontype = original._bsontype
-      if (bsontype !== undefined && (bsontype === 'Binary' || value === original)) {
-        return '?'
-      }
+/**
+ * @param {Record<string, unknown> | unknown[]} value
+ * @param {number} depth
+ */
+function canStringifyDirectWalk (value, depth) {
+  if (depth > MAX_DEPTH) return false
+  const children = Array.isArray(value) ? value : Object.values(value)
+  for (const child of children) {
+    if (child === null ||
+        typeof child === 'string' ||
+        typeof child === 'number' ||
+        typeof child === 'boolean') {
+      continue
+    }
+    if (typeof child !== 'object' ||
+        Buffer.isBuffer(child) ||
+        child._bsontype !== undefined) {
+      return false
+    }
+    if (!canStringifyDirectWalk(child, depth + 1)) return false
+  }
+  return true
+}
+
+/**
+ * @param {Record<string, unknown> | unknown[]} input
+ * @param {'none' | 'types' | 'redact'} mode
+ */
+function sanitiseAndStringify (input, mode) {
+  if (mode === 'none') {
+    if (canStringifyDirect(input)) return JSON.stringify(input)
+    return sanitiseNone(input)
+  }
+  if (mode === 'redact') return buildRedact(input, [])
+  return buildTypes(input, [])
+}
+
+/** @param {Record<string, unknown> | unknown[]} input */
+function sanitiseNone (input) {
+  let ancestors
+  return JSON.stringify(input, function (key, value) {
+    if (typeof value !== 'object') {
+      if (typeof value === 'function') return
+      if (typeof value === 'bigint') return value.toString()
+      // Binary's toJSON returns a base64 string before the replacer sees it,
+      // so inspect this[key] for the original Binary to still redact it.
+      if (this[key]?._bsontype === 'Binary') return '?'
+      return value
+    }
+    if (value === null) return value
+
+    if (key === '') {
+      ancestors = [value]
+      return value
     }
 
-    if (value === null || typeof value !== 'object') return value
+    // `this[key]` is a second read; a non-pure getter / Proxy can return
+    // nullish here even when JSON.stringify snapshotted an object into `value`.
+    const original = this[key]
+    const bsontype = original?._bsontype
+    if (Buffer.isBuffer(original) || bsontype === 'Binary' ||
+        (bsontype !== undefined && value === original)) {
+      return '?'
+    }
 
-    while (ancestors.length > 0 && ancestors.at(-1) !== this) ancestors.pop()
+    while (ancestors[ancestors.length - 1] !== this) {
+      ancestors.pop()
+    }
     if (ancestors.length >= MAX_DEPTH || ancestors.includes(value)) return '?'
     ancestors.push(value)
-
     return value
   })
+}
+
+const REDACT_LEAF = '"?"'
+
+/**
+ * @param {Record<string, unknown> | unknown[]} value
+ * @param {object[]} ancestors
+ */
+function buildRedact (value, ancestors) {
+  const bsontype = value._bsontype
+  if (Buffer.isBuffer(value) || bsontype === 'Binary' ||
+      ancestors.length >= MAX_DEPTH || ancestors.includes(value)) {
+    return REDACT_LEAF
+  }
+
+  // Mirror JSON.stringify: when `toJSON` is present, walk its result (which
+  // wrappers like Timestamp / Decimal128 expand to `{$timestamp: "..."}` etc).
+  // A primitive, null, or self-reference collapses to the sentinel — master's
+  // `value === original` short-circuit.
+  if (typeof value.toJSON === 'function') {
+    const json = value.toJSON()
+    if (typeof json !== 'object' || json === null || json === value) return REDACT_LEAF
+    value = json
+  } else if (bsontype !== undefined) {
+    return REDACT_LEAF
+  }
+
+  ancestors.push(value)
+
+  let result
+  if (Array.isArray(value)) {
+    result = '['
+    let sep = ''
+    for (let i = 0; i < value.length; i++) {
+      result += sep + classifyForRedact(value[i], ancestors)
+      sep = ','
+    }
+    result += ']'
+  } else {
+    result = '{'
+    let sep = ''
+    for (const key of Object.keys(value)) {
+      result += sep + JSON.stringify(key) + ':' + classifyForRedact(value[key], ancestors)
+      sep = ','
+    }
+    result += '}'
+  }
+  ancestors.pop()
+  return result
+}
+
+/**
+ * @param {unknown} child
+ * @param {object[]} ancestors
+ */
+function classifyForRedact (child, ancestors) {
+  if (typeof child !== 'object' || child === null) return REDACT_LEAF
+  return buildRedact(child, ancestors)
+}
+
+const TYPE_OBJECT = '"object"'
+const TYPE_NULL = '"null"'
+const TYPE_BY_TYPEOF = {
+  string: '"string"',
+  number: '"number"',
+  boolean: '"boolean"',
+  bigint: '"bigint"',
+  undefined: '"undefined"',
+}
+
+/**
+ * @param {Record<string, unknown> | unknown[]} value
+ * @param {object[]} ancestors
+ */
+function buildTypes (value, ancestors) {
+  const bsontype = value._bsontype
+  if (Buffer.isBuffer(value) || bsontype === 'Binary' ||
+      ancestors.length >= MAX_DEPTH || ancestors.includes(value)) {
+    return TYPE_OBJECT
+  }
+
+  if (typeof value.toJSON === 'function') {
+    const json = value.toJSON()
+    if (typeof json !== 'object' || json === null || json === value) return TYPE_OBJECT
+    value = json
+  } else if (bsontype !== undefined) {
+    return TYPE_OBJECT
+  }
+
+  ancestors.push(value)
+
+  let result
+  if (Array.isArray(value)) {
+    result = '['
+    let sep = ''
+    for (let i = 0; i < value.length; i++) {
+      // JSON.stringify renders unsupported leaves (function, symbol) as null in arrays.
+      result += sep + (classifyForTypes(value[i], ancestors) ?? 'null')
+      sep = ','
+    }
+    result += ']'
+  } else {
+    result = '{'
+    let sep = ''
+    for (const key of Object.keys(value)) {
+      const childResult = classifyForTypes(value[key], ancestors)
+      if (childResult === undefined) continue
+      result += sep + JSON.stringify(key) + ':' + childResult
+      sep = ','
+    }
+    result += '}'
+  }
+  ancestors.pop()
+  return result
+}
+
+/**
+ * @param {unknown} child
+ * @param {object[]} ancestors
+ */
+function classifyForTypes (child, ancestors) {
+  if (typeof child !== 'object') return TYPE_BY_TYPEOF[typeof child]
+  if (child === null) return TYPE_NULL
+  return buildTypes(child, ancestors)
+}
+
+/** @param {unknown} value */
+function normaliseObfuscateQuery (value) {
+  if (value === 'types' || value === 'redact') return value
+  return 'none'
 }
 
 function isHeartbeat (ops, config) {

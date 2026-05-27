@@ -439,7 +439,7 @@ describe('request', function () {
     const charLength = body.length
     const byteLength = Buffer.byteLength(body, 'utf-8')
 
-    assert.ok(charLength < byteLength)
+    assert.ok(charLength < byteLength, `Expected ${charLength} < ${byteLength}`)
 
     nock('http://test:123').post('/').reply(200, 'OK')
 

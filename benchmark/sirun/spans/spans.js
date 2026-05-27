@@ -31,7 +31,7 @@ const FIELDS_WITH_TAGS_AND_LINKS = {
 // breakage where the construction shape stopped propagating.
 const sanitySpan = tracer.startSpan('sanity.span', FIELDS_WITH_TAGS_AND_LINKS)
 sanitySpan.addEvent('sanity-event', EVENT_ATTRIBUTES)
-assert.equal(sanitySpan.context()._tags.service, 'svc')
+assert.equal(sanitySpan.context().getTag('service'), 'svc')
 assert.equal(sanitySpan._links.length, 1)
 assert.equal(sanitySpan._events.length, 1)
 sanitySpan.finish()

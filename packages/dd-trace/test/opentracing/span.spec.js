@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -9,11 +10,13 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
+const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const startCh = channel('dd-trace:span:start')
+const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 describe('Span', () => {
   let Span
@@ -161,8 +164,9 @@ describe('Span', () => {
     })
 
     assert.deepStrictEqual(span.context()._traceId, '123')
-    assert.ok(Object.hasOwn(span.context()._trace.tags, '_dd.p.tid'))
-    assert.match(span.context()._trace.tags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
+    const traceTags = span.context()._trace.tags
+    assert.ok(Object.hasOwn(traceTags, '_dd.p.tid'), `Available keys: ${inspect(Object.keys(traceTags))}`)
+    assert.match(traceTags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
   })
 
   it('should be published via dd-trace:span:start channel', () => {
@@ -217,7 +221,10 @@ describe('Span', () => {
 
       assert.ok('foo' in span.context()._baggageItems)
       assert.strictEqual(span.context()._baggageItems.foo, 'bar')
-      assert.ok(!('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar')
+      assert.ok(
+        !('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar',
+        `Got parent._baggageItems: ${inspect(parent._baggageItems)}`
+      )
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -247,7 +254,7 @@ describe('Span', () => {
       const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       span.addLink({ context: span2.context() })
-      assert.ok(Object.hasOwn(span, '_links'))
+      assert.ok(Object.hasOwn(span, '_links'), `Available keys: ${inspect(Object.keys(span))}`)
       assert.strictEqual(span._links.length, 1)
     })
 
@@ -446,7 +453,31 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
+      assert.strictEqual(span.context().getTag('foo'), 'bar')
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    it('should sample based on manual sampling tags', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setTag(MANUAL_KEEP, true)
+
+      assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
+      sinon.assert.calledWith(prioritySampler.sample, span, false)
+    })
+
+    it('should be published via dd-trace:span:tags:update channel', () => {
+      const onTagsUpdate = sinon.stub()
+      tagsUpdateCh.subscribe(onTagsUpdate)
+
+      try {
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+        span.setTag('foo', 'bar')
+
+        sinon.assert.calledOnceWithExactly(onTagsUpdate, span, 'dd-trace:span:tags:update')
+      } finally {
+        tagsUpdateCh.unsubscribe(onTagsUpdate)
+      }
     })
   })
 
@@ -455,20 +486,64 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
     })
 
-    it('should add tags', () => {
-      const tags = { foo: 'bar' }
+    it('should add tags from an object without going through tagger.add', () => {
+      span.addTags({ foo: 'bar', baz: 'qux' })
 
-      span.addTags(tags)
-
-      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
+      assert.strictEqual(span.context().getTag('foo'), 'bar')
+      assert.strictEqual(span.context().getTag('baz'), 'qux')
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    it('should sample based on the tags', () => {
-      const tags = { foo: 'bar' }
+    it('should ignore unsupported argument types', () => {
+      const tagsBefore = { ...span.context().getTags() }
+      span.addTags(42)
+      span.addTags(null)
+      span.addTags(undefined)
 
-      span.addTags(tags)
+      assert.deepStrictEqual(span.context().getTags(), tagsBefore)
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
 
+    const legacyAddTagsShape = DD_MAJOR < 6 ? it : it.skip
+    legacyAddTagsShape('still accepts string and array inputs via tagger on v5', () => {
+      span.addTags('foo:bar')
+      span.addTags([{ baz: 'qux' }])
+
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar')
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), [{ baz: 'qux' }])
+    })
+
+    const v6AddTagsShape = DD_MAJOR >= 6 ? it : it.skip
+    v6AddTagsShape('drops string and array inputs on v6', () => {
+      const tagsBefore = { ...span.context().getTags() }
+      span.addTags('foo:bar')
+      span.addTags([{ baz: 'qux' }])
+
+      assert.deepStrictEqual(span.context().getTags(), tagsBefore)
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    it('should sample based on manual sampling tags', () => {
+      span.addTags({ [MANUAL_KEEP]: true })
+
+      assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
       sinon.assert.calledWith(prioritySampler.sample, span, false)
+    })
+
+    it('should be published via dd-trace:span:tags:update channel', () => {
+      const onTagsUpdate = sinon.stub()
+      tagsUpdateCh.subscribe(onTagsUpdate)
+
+      try {
+        span.addTags({ foo: 'bar' })
+
+        sinon.assert.calledOnceWithExactly(onTagsUpdate, span, 'dd-trace:span:tags:update')
+      } finally {
+        tagsUpdateCh.unsubscribe(onTagsUpdate)
+      }
     })
   })
 
@@ -507,7 +582,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
+      assertObjectContains(span._spanContext.getTags(), { '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {

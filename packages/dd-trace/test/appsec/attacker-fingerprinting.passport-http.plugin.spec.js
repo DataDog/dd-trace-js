@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 const agent = require('../plugins/agent')
@@ -10,11 +11,17 @@ const { withVersions } = require('../setup/mocha')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
-  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'))
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'), `Available keys: ${inspect(Object.keys(span.meta))}`)
   assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-e58aa9dd')
-  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'))
+  assert.ok(
+    Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'),
+    `Available keys: ${inspect(Object.keys(span.meta))}`
+  )
   assert.strictEqual(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
-  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'))
+  assert.ok(
+    Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'),
+    `Available keys: ${inspect(Object.keys(span.meta))}`
+  )
   assert.strictEqual(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-7e93fba0--')
 }
 
@@ -73,7 +80,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     after(() => {

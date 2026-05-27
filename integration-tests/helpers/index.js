@@ -3,7 +3,7 @@
 const assert = require('assert')
 const childProcess = require('child_process')
 const { exec, execSync, fork, spawn } = childProcess
-const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
+const { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
 const { builtinModules } = require('module')
@@ -46,7 +46,7 @@ const defaultStopProcTimeoutMs = 2_000
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
-  assert(proc.pid !== undefined, 'Process PID is not available')
+  assert.notStrictEqual(proc.pid, undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
@@ -162,9 +162,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     }
 
     // Validate result metadata is present and has valid values
-    assert(typeof actualMetadata.result === 'string', 'result should be a string')
-    assert(typeof actualMetadata.result_class === 'string', 'result_class should be a string')
-    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
+    assert.strictEqual(typeof actualMetadata.result, 'string')
+    assert.strictEqual(typeof actualMetadata.result_class, 'string')
+    assert.strictEqual(typeof actualMetadata.result_reason, 'string')
     assert(actualMetadata.result, 'result field should be present')
     assert(actualMetadata.result_class, 'result_class field should be present')
     assert(actualMetadata.result_reason, 'result_reason field should be present')
@@ -555,7 +555,7 @@ async function createSandbox (
 
     const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
 
-    assert(match !== null, `Invalid dependency format: ${dep}`)
+    assert.notStrictEqual(match, null, `Invalid dependency format: ${dep}`)
 
     const name = match[1]
     const range = match[3] || ''
@@ -1015,6 +1015,24 @@ function useEnv (env) {
 }
 
 /**
+ * @param {string} cwd
+ */
+function installPlaywrightChromium (cwd) {
+  const { NODE_OPTIONS, ...env } = process.env
+  const { PLAYWRIGHT_BROWSERS_PATH } = env
+
+  if (
+    PLAYWRIGHT_BROWSERS_PATH &&
+    existsSync(PLAYWRIGHT_BROWSERS_PATH) &&
+    readdirSync(PLAYWRIGHT_BROWSERS_PATH).length > 0
+  ) {
+    return
+  }
+
+  execSync('npx playwright install chromium', { cwd, env, stdio: 'inherit' })
+}
+
+/**
  * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
@@ -1090,7 +1108,7 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     } else if (useMatchers && val === ANY_NUMBER) {
       assert.strictEqual(typeof actual[key], 'number', `Expected ${key} to be a number but got ${typeof actual[key]}`)
     } else if (useMatchers && val === ANY_VALUE) {
-      assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
+      assert.notStrictEqual(actual[key], undefined, `Expected ${key} to be present but it was undefined`)
     } else if (val !== null && typeof val === 'object') {
       assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
@@ -1180,6 +1198,7 @@ module.exports = {
   spawnPluginIntegrationTestProcAndExpectExit,
   useEnv,
   setShouldKill,
+  installPlaywrightChromium,
   sandboxCwd,
   useSandbox,
   varySandbox,

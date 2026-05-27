@@ -9,9 +9,12 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { calculateHttpEndpoint, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const HTTP_URL = tags.HTTP_URL
+const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -29,27 +32,34 @@ class HttpClientPlugin extends ClientPlugin {
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
     const pathname = options.path || options.pathname
-    const path = pathname ? pathname.split(/[?#]/)[0] : '/'
+    const [path, pathWithQuery] = splitPathAndQuery(pathname)
     const uri = `${protocol}//${host}${path}`
+    const httpUrl = path === pathWithQuery
+      ? uri
+      : obfuscateQs(this.config, `${protocol}//${host}${pathWithQuery}`)
 
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
+    const meta = {
+      [COMPONENT]: this.component,
+      'span.kind': 'client',
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      [HTTP_URL]: httpUrl,
+      'out.host': hostname,
+    }
+    if (this.config.resourceRenamingEnabled) {
+      meta[HTTP_ENDPOINT] = calculateHttpEndpoint(path)
+    }
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.component,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
-      meta: {
-        [COMPONENT]: this.component,
-        'span.kind': 'client',
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': uri,
-        'out.host': hostname,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(options.port),
       },
@@ -169,6 +179,7 @@ function normalizeClientConfig (config) {
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
+  const queryStringObfuscation = getQsObfuscator(config)
 
   return {
     ...config,
@@ -177,7 +188,28 @@ function normalizeClientConfig (config) {
     propagationFilter,
     headers,
     hooks,
+    queryStringObfuscation,
   }
+}
+
+/**
+ * Split a raw HTTP request path into the path-only segment (for `http.endpoint`
+ * and filters) and the path-plus-query segment (for the `http.url` tag).
+ *
+ * Fragments are dropped from both because they never travel over the wire.
+ *
+ * @param {string | undefined} pathname
+ * @returns {[string, string]} `[path, pathWithQuery]`
+ */
+function splitPathAndQuery (pathname) {
+  if (!pathname) return ['/', '/']
+
+  const fragmentIndex = pathname.indexOf('#')
+  const pathWithQuery = fragmentIndex === -1 ? pathname : pathname.slice(0, fragmentIndex)
+  const queryIndex = pathWithQuery.indexOf('?')
+  const path = queryIndex === -1 ? pathWithQuery : pathWithQuery.slice(0, queryIndex)
+
+  return [path, pathWithQuery]
 }
 
 function is400ErrorCode (code) {

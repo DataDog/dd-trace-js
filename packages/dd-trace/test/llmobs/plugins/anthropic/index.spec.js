@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, before, it } = require('mocha')
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
@@ -67,6 +68,14 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
+
+        // MLOS-591 regression: the default `LLMObsPlugin.start` registration
+        // path must emit OTel bridge tags onto the local trace so dd-go can
+        // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
+        const apmMeta = apmSpans[0].meta
+        assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+        assert.ok(apmMeta.llmobs_parent_id)
+        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
       })
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {
@@ -205,7 +214,10 @@ describe('Plugin', () => {
         assert.ok(response)
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        assert.ok(!llmobsSpans[0].meta.output.messages[0].content.includes('signature'))
+        assert.ok(
+          !llmobsSpans[0].meta.output.messages[0].content.includes('signature'),
+          `Got: ${inspect(llmobsSpans[0].meta.output.messages[0].content)}`
+        )
 
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],

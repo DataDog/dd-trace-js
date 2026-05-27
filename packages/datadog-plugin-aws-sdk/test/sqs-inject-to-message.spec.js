@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
+const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
 
@@ -109,7 +110,11 @@ describe('Sqs plugin injectToMessage', () => {
 
     assert.strictEqual(plugin.dsmCalls[0].datadog.StringValue, '{}')
     const decoded = JSON.parse(params.MessageAttributes._datadog.StringValue)
-    assert.ok(typeof decoded['dd-pathway-ctx-base64'] === 'string' && decoded['dd-pathway-ctx-base64'].length > 0)
+    const pathwayCtx = decoded['dd-pathway-ctx-base64']
+    assert.ok(
+      typeof pathwayCtx === 'string' && pathwayCtx.length > 0,
+      `Expected non-empty pathway ctx string, got ${inspect(pathwayCtx)}`
+    )
   })
 
   it('skips `_datadog` entirely when DSM is disabled and trace inject yields nothing', () => {

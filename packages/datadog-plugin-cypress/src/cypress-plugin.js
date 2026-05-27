@@ -70,9 +70,11 @@ const {
   getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
@@ -787,19 +789,29 @@ class CypressPlugin {
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+      skippableSuitesResponse: skippableTestsRequestResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: this.isKnownTestsEnabled,
+      isTestManagementTestsEnabled: this.isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
+      getKnownTests: () => getKnownTests(this.tracer, this.testConfiguration),
+      getTestManagementTests: () => getTestManagementTests(this.tracer, this.testConfiguration),
+      getSkippableSuites: () => getSkippableTests(this.tracer, this.testConfiguration),
+    })
+
     if (this.isKnownTestsEnabled) {
-      const knownTestsResponse = await getKnownTests(
-        this.tracer,
-        this.testConfiguration
-      )
-      if (knownTestsResponse.err) {
-        log.error('Cypress known tests response error', knownTestsResponse.err)
+      const currentKnownTestsResponse = knownTestsResponse || await getKnownTests(this.tracer, this.testConfiguration)
+      if (currentKnownTestsResponse.err) {
+        log.error('Cypress known tests response error', currentKnownTestsResponse.err)
         this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, value: 'true' })
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        if (knownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
-          this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        if (currentKnownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
+          this.knownTestsByTestSuite = currentKnownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
         } else {
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
@@ -823,10 +835,8 @@ class CypressPlugin {
     }
 
     if (this.isSuitesSkippingEnabled) {
-      const skippableTestsResponse = await getSkippableTests(
-        this.tracer,
-        this.testConfiguration
-      )
+      const skippableTestsResponse =
+        skippableTestsRequestResponse || await getSkippableTests(this.tracer, this.testConfiguration)
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
         this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, value: 'true' })
@@ -839,19 +849,17 @@ class CypressPlugin {
     }
 
     if (this.isTestManagementTestsEnabled) {
-      const testManagementTestsResponse = await getTestManagementTests(
-        this.tracer,
-        this.testConfiguration
-      )
-      if (testManagementTestsResponse.err) {
-        log.error('Cypress test management tests response error', testManagementTestsResponse.err)
+      const currentTestManagementTestsResponse =
+        testManagementTestsResponse || await getTestManagementTests(this.tracer, this.testConfiguration)
+      if (currentTestManagementTestsResponse.err) {
+        log.error('Cypress test management tests response error', currentTestManagementTestsResponse.err)
         this._pendingRequestErrorTags.push({
           tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
           value: 'true',
         })
         this.isTestManagementTestsEnabled = false
       } else {
-        this.testManagementTests = testManagementTestsResponse.testManagementTests
+        this.testManagementTests = currentTestManagementTestsResponse.testManagementTests
       }
     }
 
@@ -1138,7 +1146,7 @@ class CypressPlugin {
         }
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1165,7 +1173,7 @@ class CypressPlugin {
         }
 
         if (isLastAttempt) {
-          const testSpanTags = finishedTest.testSpan.context()._tags
+          const testSpanTags = finishedTest.testSpan.context().getTags()
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
@@ -1273,7 +1281,7 @@ class CypressPlugin {
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
-      'dd:afterEach': ({ test, coverage }) => {
+      'dd:afterEach': ({ test, coverage, commands }) => {
         if (!this.activeTestSpan) {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
@@ -1336,7 +1344,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
-        const activeSpanTags = this.activeTestSpan.context()._tags
+        const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
@@ -1435,6 +1443,31 @@ class CypressPlugin {
         }
         if (isDisabledFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+        }
+
+        if (Array.isArray(commands) && commands.length > 0) {
+          for (const command of commands) {
+            const { startTime, endTime } = command
+            if (typeof startTime !== 'number' || typeof endTime !== 'number' || endTime < startTime) {
+              continue
+            }
+            const stepSpan = this.tracer.startSpan('cypress.step', {
+              childOf: this.activeTestSpan,
+              startTime,
+              tags: {
+                [COMPONENT]: 'cypress',
+                'cypress.command': command.name,
+                [RESOURCE_NAME]: command.name,
+              },
+            })
+            if (command.error) {
+              const errorObj = new Error(command.error.message || String(command.error))
+              if (command.error.name) errorObj.name = command.error.name
+              if (command.error.stack) errorObj.stack = command.error.stack
+              stepSpan.setTag('error', errorObj)
+            }
+            stepSpan.finish(endTime)
+          }
         }
 
         const finishedTest = {

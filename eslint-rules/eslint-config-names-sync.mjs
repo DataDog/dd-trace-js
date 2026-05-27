@@ -554,8 +554,10 @@ export default {
     schema: [{
       type: 'object',
       properties: {
-        indexDtsPath: {
-          type: 'string',
+        indexDtsPaths: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
         },
         supportedConfigurationsPath: {
           type: 'string',
@@ -574,7 +576,8 @@ export default {
   },
   create (context) {
     const options = context.options[0] || {}
-    const indexDtsPath = path.resolve(context.cwd, options.indexDtsPath || 'index.d.ts')
+    const indexDtsPaths = (options.indexDtsPaths ?? ['index.d.ts'])
+      .map(p => path.resolve(context.cwd, p))
     const supportedConfigurationsPath = path.resolve(
       context.cwd,
       options.supportedConfigurationsPath || 'packages/dd-trace/src/config/supported-configurations.json'
@@ -585,9 +588,22 @@ export default {
         let indexDtsNames
         let supportedConfigurationInfo
 
+        let primaryIndexDtsNames
         try {
           supportedConfigurationInfo = getSupportedConfigurationInfo(supportedConfigurationsPath)
-          indexDtsNames = getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)
+
+          // Union names from all type files: a config is covered if it appears in any version.
+          indexDtsNames = new Set()
+          for (const indexDtsPath of indexDtsPaths) {
+            const names = getIndexDtsConfigurationNames(indexDtsPath, supportedConfigurationInfo)
+            for (const name of names) {
+              indexDtsNames.add(name)
+            }
+          }
+
+          // Use only the primary (v6) file for the reverse check: v5-only configs are not
+          // required to exist in supported-configurations.json.
+          primaryIndexDtsNames = getIndexDtsConfigurationNames(indexDtsPaths[0], supportedConfigurationInfo)
         } catch (error) {
           context.report({
             node,
@@ -609,7 +625,7 @@ export default {
         reportMissingConfigurations(
           context,
           node,
-          indexDtsNames,
+          primaryIndexDtsNames,
           supportedConfigurationInfo.names,
           'configurationMissingInSupportedConfigurations'
         )

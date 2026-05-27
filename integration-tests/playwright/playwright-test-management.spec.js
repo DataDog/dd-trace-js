@@ -2,12 +2,14 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { inspect } = require('node:util')
+const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   assertObjectContains,
 } = require('../helpers')
@@ -29,14 +31,13 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -62,11 +63,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
@@ -213,9 +210,10 @@ versions.forEach((version) => {
 
               if (isDisabled && !isAttemptingToFix) {
                 assert.strictEqual(attemptedToFixTests.length, 2)
-                assert.ok(attemptedToFixTests.every(test =>
-                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
-                ))
+                assert.ok(
+                  attemptedToFixTests.every(test => test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'),
+                  `Got: ${inspect(attemptedToFixTests.map(t => t.meta[TEST_MANAGEMENT_IS_DISABLED]))}`
+                )
                 // if the test is disabled and not attempting to fix, there will be no retries
                 return
               }
@@ -497,7 +495,7 @@ versions.forEach((version) => {
               const atfTests = tests.filter(
                 t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
               )
-              assert.ok(atfTests.length > 0)
+              assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
               for (const test of atfTests) {
                 assert.ok(
                   !(TEST_IS_NEW in test.meta),

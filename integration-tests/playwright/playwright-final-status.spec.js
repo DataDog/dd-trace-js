@@ -2,12 +2,13 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -20,14 +21,14 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
+const RETRY_FINAL_STATUS_TIMEOUT = 60000
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -56,11 +57,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
@@ -159,7 +156,7 @@ versions.forEach((version) => {
             const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
             assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
               'All other ATR runs should not have TEST_FINAL_STATUS')
-          }, 30000)
+          }, RETRY_FINAL_STATUS_TIMEOUT)
 
         // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
         // dd-trace won't override it since its guard is `if (project.retries === 0)`.
@@ -243,7 +240,7 @@ versions.forEach((version) => {
               'highest-level-describe  leading and trailing spaces    should work with annotated tests',
               'pass'
             )
-          }, 30000)
+          }, RETRY_FINAL_STATUS_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -289,7 +286,7 @@ versions.forEach((version) => {
               const eventuallyPassingTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
               )
-              assert.ok(eventuallyPassingTests.length > 1)
+              assert.ok(eventuallyPassingTests.length > 1, `Expected ${eventuallyPassingTests.length} > 1`)
 
               const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
               assert.strictEqual(finalRuns.length, 1,
@@ -300,7 +297,7 @@ versions.forEach((version) => {
               const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
               assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
                 'All other ATR runs should not have TEST_FINAL_STATUS')
-            }, 30000)
+            }, RETRY_FINAL_STATUS_TIMEOUT)
 
           // --retries=2 is passed via CLI so test.retries is correctly set at startup.
           // dd-trace won't override it since its guard is `if (project.retries === 0)`.

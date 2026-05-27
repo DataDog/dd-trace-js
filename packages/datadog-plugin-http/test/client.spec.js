@@ -50,24 +50,21 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        tracer = require('../../dd-trace')
         appListener = null
       })
 
-      afterEach(() => {
+      afterEach(async () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close({ ritmReset: false })
+        await agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('http', { server: false })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
+        beforeEach(async () => {
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
         })
 
         const spanProducerFn = (done) => {
@@ -272,7 +269,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should remove the query string from the URL', done => {
+        it('should keep non-secret query string parameters on the URL by default', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -283,7 +280,7 @@ describe('Plugin', () => {
             agent.assertFirstTraceSpan({
               meta: {
                 'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`,
+                'http.url': `${protocol}://localhost:${port}/user?foo=bar`,
               },
             })
               .then(done)
@@ -882,7 +879,7 @@ describe('Plugin', () => {
             agent.assertFirstTraceSpan({
               meta: {
                 'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`,
+                'http.url': `${protocol}://localhost:${port}/user?foo=bar`,
               },
             })
               .then(done)
@@ -1502,6 +1499,116 @@ describe('Plugin', () => {
               const req = http.request(`${protocol}://localhost:${port}/health`, res => {
                 res.on('data', () => {})
               })
+              req.end()
+            })
+          })
+        })
+      })
+
+      describe('with queryStringObfuscation', () => {
+        describe('set to a regex pattern', () => {
+          beforeEach(() => {
+            return agent.load('http', { server: false, queryStringObfuscation: 'secret=.*?(&|$)' })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          it('should obfuscate matching query string parameters on the client span', done => {
+            const app = express()
+            app.get('/user', (req, res) => res.status(200).send())
+
+            appListener = server(app, port => {
+              agent
+                .assertSomeTraces(traces => {
+                  const clientSpan = traces[0].find(span => span.meta['span.kind'] === 'client')
+                  assert.strictEqual(
+                    clientSpan.meta['http.url'],
+                    `${protocol}://localhost:${port}/user?<redacted>foo=bar`
+                  )
+                })
+                .then(done)
+                .catch(done)
+
+              const req = http.request(
+                `${protocol}://localhost:${port}/user?secret=password&foo=bar`,
+                res => {
+                  res.on('data', () => {})
+                }
+              )
+              req.end()
+            })
+          })
+        })
+
+        describe('set to true', () => {
+          beforeEach(() => {
+            return agent.load('http', { server: false, queryStringObfuscation: true })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          it('should remove the entire query string from the client span', done => {
+            const app = express()
+            app.get('/user', (req, res) => res.status(200).send())
+
+            appListener = server(app, port => {
+              agent
+                .assertSomeTraces(traces => {
+                  const clientSpan = traces[0].find(span => span.meta['span.kind'] === 'client')
+                  assert.strictEqual(
+                    clientSpan.meta['http.url'],
+                    `${protocol}://localhost:${port}/user`
+                  )
+                })
+                .then(done)
+                .catch(done)
+
+              const req = http.request(
+                `${protocol}://localhost:${port}/user?secret=password&foo=bar`,
+                res => {
+                  res.on('data', () => {})
+                }
+              )
+              req.end()
+            })
+          })
+        })
+
+        describe('set to false', () => {
+          beforeEach(() => {
+            return agent.load('http', { server: false, queryStringObfuscation: false })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          it('should not obfuscate the query string on the client span', done => {
+            const app = express()
+            app.get('/user', (req, res) => res.status(200).send())
+
+            appListener = server(app, port => {
+              agent
+                .assertSomeTraces(traces => {
+                  const clientSpan = traces[0].find(span => span.meta['span.kind'] === 'client')
+                  assert.strictEqual(
+                    clientSpan.meta['http.url'],
+                    `${protocol}://localhost:${port}/user?secret=password&foo=bar`
+                  )
+                })
+                .then(done)
+                .catch(done)
+
+              const req = http.request(
+                `${protocol}://localhost:${port}/user?secret=password&foo=bar`,
+                res => {
+                  res.on('data', () => {})
+                }
+              )
               req.end()
             })
           })
