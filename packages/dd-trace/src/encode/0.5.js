@@ -10,12 +10,7 @@ function formatSpan (span) {
   span = normalizeSpan(span)
   // v0.5 has no native span_events slot; always serialize as a meta tag.
   if (span.span_events) {
-    // TODO: Memoize the stringified output via a `WeakMap<span_events,
-    // string>` — see the matching comment in `0.4.js`. Memoization is more
-    // valuable here than for 0.4 because the v0.5 wire ships every meta
-    // value through the indexed string table; a stable string instance lets
-    // the cache hit on its second emission instead of re-interning a fresh
-    // copy.
+    // TODO: this is a costly operation. Consolidate this with the formatter
     span.meta.events = stringifySpanEvents(span.span_events)
     // `= undefined` over `delete` to keep the span's hidden class.
     span.span_events = undefined

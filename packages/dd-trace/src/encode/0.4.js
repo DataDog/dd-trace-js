@@ -114,12 +114,8 @@ const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0x
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
-    // TODO: Memoize the stringified output via a `WeakMap<span_events,
-    // string>`. The same event array often survives multiple encode cycles
-    // (e.g. a payload that retries) and re-stringifying a multi-KiB JSON
-    // blob is the dominant cost on the events=legacy hot path. Out of
-    // scope for the current perf branch; the bench is currently bound by
-    // raw memory bandwidth here, not the cache lookup.
+    // TODO: this is currently a main cost driver. By unifying it with the formatter
+    // it should be possible to improve performance significantly overall.
     span.meta.events = stringifySpanEvents(span.span_events)
     // `= undefined` over `delete` to keep the span's hidden class — `delete`
     // would push every event-bearing span into V8 dictionary mode.
