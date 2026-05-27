@@ -56,6 +56,10 @@ const KEY_DURATION = buildKey('duration')
 // value through `writeIntOrFloat`'s reserve + branch table.
 const KEY_ERROR_0 = Buffer.concat([KEY_ERROR, Buffer.from([0x00])])
 const KEY_ERROR_1 = Buffer.concat([KEY_ERROR, Buffer.from([0x01])])
+// `[KEY_START, 0xCF]` — `start` is always a nanosecond timestamp ≥ 2³², so
+// the msgpack u64 type byte is statically known and fuses with the key. The
+// 8-byte value is written inline right after.
+const KEY_START_PREFIX = buildKeyWithPrefix('start', 0xCF)
 const KEY_SPAN_EVENTS = buildKey('span_events')
 const KEY_META_STRUCT = buildKey('meta_struct')
 const KEY_TRACE_ID_PREFIX = buildKeyWithPrefix('trace_id', 0xCF)
@@ -299,10 +303,10 @@ class AgentEncoder {
       if (span.span_events) mapSize++
 
       // Pre-fetch the cached string entries up front and fuse the map prefix,
-      // optional `type`, three IDs, and `name` / `resource` / `service`
+      // optional `type`, three IDs, `name` / `resource` / `service`, and —
+      // in the common fixint-error case — the error/start/duration_key
       // emissions into a single `bytes.reserve` + sequential native writes.
-      // Replaces seven `bytes.reserve` calls per span (one each for the
-      // header, type, three IDs, three strings) with one.
+      // Replaces up to ten separate `bytes.reserve` calls per span with one.
       let typeEntry
       if (span.type) {
         typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
@@ -314,8 +318,17 @@ class AgentEncoder {
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
 
-      // 1 byte map prefix + 3 ID fields (10/9/11 bytes prefix + 8 bytes value
-      // each) + the three string fields.
+      // Almost every span carries `error: 0` or `error: 1` AND a nanosecond
+      // `start` timestamp ≥ 2³² (so `start` always encodes as a u64). When
+      // both hold, the block fuses error key+value, the start key + 0xCF
+      // type byte + 8-byte timestamp, and the duration key into the per-span
+      // reserve. The fallback path covers synthetic/test inputs with small
+      // starts and rare non-binary error flags by keeping per-field emits so
+      // each integer picks the shortest msgpack encoding.
+      const errorIsFixint = span.error === 0 || span.error === 1
+      const startFitsU64 = span.start >= 0x1_00_00_00_00
+      const fuseTail = errorIsFixint && startFitsU64
+
       let blockSize = 1 +
         KEY_TRACE_ID_PREFIX.length + 8 +
         KEY_SPAN_ID_PREFIX.length + 8 +
@@ -324,6 +337,9 @@ class AgentEncoder {
         KEY_RESOURCE.length + resourceLen +
         KEY_SERVICE.length + serviceLen
       if (typeEntry) blockSize += KEY_TYPE.length + typeEntry.length
+      if (fuseTail) {
+        blockSize += KEY_ERROR_0.length + KEY_START_PREFIX.length + 8 + KEY_DURATION.length
+      }
 
       const blockOffset = bytes.length
       bytes.reserve(blockSize)
@@ -356,21 +372,34 @@ class AgentEncoder {
       target.set(KEY_SERVICE, cursor)
       cursor += KEY_SERVICE.length
       target.set(serviceEntry, cursor)
+      cursor += serviceLen
 
-      // `error` is `0` or `1` for nearly every span; the fused constants emit
-      // the key and the fixint value in one `bytes.set` call. Anything else
-      // (rare numeric flags, `undefined`) falls through to the variable path.
-      if (span.error === 0) {
-        bytes.set(KEY_ERROR_0)
-      } else if (span.error === 1) {
-        bytes.set(KEY_ERROR_1)
+      if (fuseTail) {
+        target.set(span.error === 0 ? KEY_ERROR_0 : KEY_ERROR_1, cursor)
+        cursor += KEY_ERROR_0.length
+
+        target.set(KEY_START_PREFIX, cursor)
+        cursor += KEY_START_PREFIX.length
+        // Inline u64 write so the 0xCF type byte and the 8 timestamp bytes
+        // share the same reserve as the keys.
+        target.writeUInt32BE((span.start / 0x1_00_00_00_00) >>> 0, cursor)
+        target.writeUInt32BE(span.start >>> 0, cursor + 4)
+        cursor += 8
+
+        target.set(KEY_DURATION, cursor)
       } else {
-        bytes.set(KEY_ERROR)
-        bytes.writeIntOrFloat(span.error)
+        if (span.error === 0) {
+          bytes.set(KEY_ERROR_0)
+        } else if (span.error === 1) {
+          bytes.set(KEY_ERROR_1)
+        } else {
+          bytes.set(KEY_ERROR)
+          bytes.writeIntOrFloat(span.error)
+        }
+        bytes.set(KEY_START)
+        bytes.writeIntOrFloat(span.start)
+        bytes.set(KEY_DURATION)
       }
-      bytes.set(KEY_START)
-      bytes.writeIntOrFloat(span.start)
-      bytes.set(KEY_DURATION)
       bytes.writeIntOrFloat(span.duration)
 
       this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
