@@ -312,9 +312,12 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
       if (!guard) return body
 
       return aiGuard.evaluateOutput(guard, body).then(() => body)
-    }, error => {
-      finish(ctx, undefined, error)
-
+    })
+    .catch(error => {
+      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in
+      // success branch, before-model block, or openai error) — record the error now.
+      // If finish already ran successfully (after-model block), don't double-publish.
+      if (!ctx.result) finish(ctx, undefined, error)
       throw error
     })
 }
