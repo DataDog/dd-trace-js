@@ -62,6 +62,10 @@ assert.ok(
   'query() should return an async iterable'
 )
 
+// Replace the SDK's subprocess-driven stream with an in-memory queue so
+// `for await` runs deterministically without spawning `claude-code`. The
+// `[Symbol.asyncIterator]` fix is applied at prototype level by the
+// instrumentation hook, so iteration goes through Query.next → sdkMessages.next.
 const queue = messages.slice()
 q.sdkMessages = {
   next: () => Promise.resolve(

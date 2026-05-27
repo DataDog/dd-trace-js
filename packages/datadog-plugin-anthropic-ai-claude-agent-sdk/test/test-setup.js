@@ -46,12 +46,11 @@ class AnthropicAiClaudeAgentSdkTestSetup {
       'query() should return an async iterable'
     )
 
-    // The SDK's `[Symbol.asyncIterator]()` returns `q.sdkMessages` instead of
-    // `this`, so `for await` would bypass the orchestrion-patched
-    // `Query.next`. The production hook applies the same override via
-    // shimmer.wrap when IITM is active, but unit tests load the SDK via
-    // sealed CJS-of-ESM exports, so we apply it directly on the instance.
-    q[Symbol.asyncIterator] = function () { return this }
+    // Replace the SDK's subprocess-driven stream with an in-memory message
+    // sequence so iteration runs deterministically without spawning the
+    // `claude-code` CLI. The prototype-level `[Symbol.asyncIterator]` fix
+    // applied by the instrumentation hook routes iteration through the
+    // SDK's traced `Query.next`, which delegates here.
     q.sdkMessages = messageStream(QUERY_SUCCESS)
 
     const messages = []
