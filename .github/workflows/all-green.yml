@@ -39,4 +39,4 @@ jobs:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
-          RETRIES: 30
+          RETRIES: 20

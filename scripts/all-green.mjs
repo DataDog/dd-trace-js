@@ -160,6 +160,18 @@ async function rerunOnStartup () {
   }
 }
 
+async function cancelRunningWorkflows (runs) {
+  const running = runs.filter(r => r.status !== 'completed')
+  if (running.length === 0) return
+  console.log(`Cancelling ${running.length} still-running workflow(s).`)
+  await Promise.all(
+    running.map(run => {
+      console.log(`Cancelling workflow run ${run.id} (${run.name}).`)
+      return octokit.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id })
+    })
+  )
+}
+
 async function checkAllGreen () {
   await rerunOnStartup()
 
@@ -169,6 +181,7 @@ async function checkAllGreen () {
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
+    await cancelRunningWorkflows(runs)
     process.exitCode = 1
     return
   }
