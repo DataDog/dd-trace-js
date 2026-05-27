@@ -575,6 +575,20 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(otlpSpans[1].traceId, expectedTraceId)
       })
 
+      it('lowercases an uppercase _dd.p.tid so the OTLP traceId is canonical lowercase hex', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const span = createMockSpan({
+          trace_id: id(lowHex),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890ABCDEF' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '1234567890abcdef' + lowHex)
+      })
+
       it('uses a full 16-byte trace_id buffer directly without consulting _dd.p.tid', () => {
         const transformer = new OtlpTraceTransformer({})
         const unusedTidHigh = '1000000000000000'
