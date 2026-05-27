@@ -43,6 +43,13 @@ const KEY_SERVICE = buildKey('service')
 const KEY_ERROR = buildKey('error')
 const KEY_START = buildKey('start')
 const KEY_DURATION = buildKey('duration')
+
+// Fused `[KEY_ERROR, fixint]` payloads. `error` is `0` or `1` on nearly every
+// span (the boolean-shaped tracer field collapsed onto a single byte). One
+// `bytes.set` writes the key and the value together instead of routing the
+// value through `writeIntOrFloat`'s reserve + branch table.
+const KEY_ERROR_0 = Buffer.concat([KEY_ERROR, Buffer.from([0x00])])
+const KEY_ERROR_1 = Buffer.concat([KEY_ERROR, Buffer.from([0x01])])
 const KEY_SPAN_EVENTS = buildKey('span_events')
 const KEY_META_STRUCT = buildKey('meta_struct')
 const KEY_TRACE_ID_PREFIX = buildKeyWithPrefix('trace_id', 0xCF)
@@ -344,8 +351,17 @@ class AgentEncoder {
       cursor += KEY_SERVICE.length
       target.set(serviceEntry, cursor)
 
-      bytes.set(KEY_ERROR)
-      bytes.writeIntOrFloat(span.error)
+      // `error` is `0` or `1` for nearly every span; the fused constants emit
+      // the key and the fixint value in one `bytes.set` call. Anything else
+      // (rare numeric flags, `undefined`) falls through to the variable path.
+      if (span.error === 0) {
+        bytes.set(KEY_ERROR_0)
+      } else if (span.error === 1) {
+        bytes.set(KEY_ERROR_1)
+      } else {
+        bytes.set(KEY_ERROR)
+        bytes.writeIntOrFloat(span.error)
+      }
       bytes.set(KEY_START)
       bytes.writeIntOrFloat(span.start)
       bytes.set(KEY_DURATION)
