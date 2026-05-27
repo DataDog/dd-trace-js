@@ -25,7 +25,6 @@ const patchedMods = new WeakSet()
 // holds at most one entry per process (agents-core is a singleton dep) and
 // the mod is kept alive by `require.cache` anyway — no extra lifetime.
 const agentsCoreLoadedCh = channel('apm:openai-agents:agents-core:loaded')
-const loadedAgentsCoreMods = new Set()
 
 // Plugin subscribes here to keep track of the OpenAI-compatible client's
 // baseURL — used to resolve `model_provider` (openai / azure_openai /
@@ -39,16 +38,16 @@ const loadedAgentsCoreMods = new Set()
 // suggestion so the wrap stays decoupled from the plugin module.
 const responseClientCh = channel('apm:openai-agents:response:client')
 
-addHook({ name: '@openai/agents-core', versions: ['>=0.7.0'] }, (mod) => {
+// Hook @openai/agents (not @openai/agents-core) because @openai/agents/dist/index.mjs
+// calls setDefaultOpenAITracingExporter() at module load time, which calls
+// setTraceProcessors([defaultProcessor()]) and wipes any processor registered earlier.
+// @openai/agents re-exports addTraceProcessor from @openai/agents-core, so mod here
+// has everything we need and fires after the reset.
+addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
-  if (typeof mod?.addTraceProcessor !== 'function') return mod
-  patchedMods.add(mod)
-  loadedAgentsCoreMods.add(mod)
   agentsCoreLoadedCh.publish({ mod })
   return mod
 })
-
-module.exports = { loadedAgentsCoreMods }
 
 function wrapResponseMethod (original) {
   return function (...args) {

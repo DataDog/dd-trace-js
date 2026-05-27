@@ -1,14 +1,8 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
-const { loadedAgentsCoreMods } = require('../../datadog-instrumentations/src/openai-agents')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { OpenAIAgentsIntegration } = require('./integration')
 const { DDOpenAIAgentsProcessor } = require('./processor')
-
-const agentsCoreLoadedCh = channel('apm:openai-agents:agents-core:loaded')
-const responseClientCh = channel('apm:openai-agents:response:client')
 
 /**
  * Drives the openai-agents integration through agents-core's
@@ -37,18 +31,11 @@ class OpenaiAgentsPlugin extends Plugin {
       config: tracerConfig,
     })
 
-    const registerProcessor = (mod) => {
+    this.addSub('apm:openai-agents:agents-core:loaded', ({ mod }) => {
       if (typeof mod?.addTraceProcessor !== 'function') return
       mod.addTraceProcessor(new DDOpenAIAgentsProcessor(() => this.#integration))
-    }
-    // Drain any agents-core mods that loaded before this plugin was
-    // constructed (e.g. another plugin's tests triggered the require first),
-    // then keep listening for future loads. Set is bounded to one entry per
-    // process — agents-core is a singleton dep.
-    for (const mod of loadedAgentsCoreMods) registerProcessor(mod)
-    agentsCoreLoadedCh.subscribe(({ mod }) => registerProcessor(mod))
-
-    responseClientCh.subscribe(({ baseURL }) => {
+    })
+    this.addSub('apm:openai-agents:response:client', ({ baseURL }) => {
       if (!this.#integration.enabled) return
       this.#integration.setClientBaseURL(baseURL)
     })

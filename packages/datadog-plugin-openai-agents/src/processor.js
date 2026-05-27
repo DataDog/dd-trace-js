@@ -30,7 +30,7 @@ const RESOLVED = Promise.resolve()
  */
 class DDOpenAIAgentsProcessor {
   /**
-   * @param {() => (object | undefined)} getIntegration - Lazy accessor for the
+   * @param {() => (import('./integration').OpenAIAgentsIntegration | undefined)} getIntegration - Lazy accessor for the
    *   current OpenAIAgentsIntegration singleton. Read on each lifecycle event
    *   so re-instantiating the plugin doesn't strand the processor against an
    *   old integration reference inside agents-core.
