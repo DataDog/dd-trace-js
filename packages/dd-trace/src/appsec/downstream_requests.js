@@ -32,6 +32,7 @@ let samplingRate
 let globalRequestCounter
 let bodyAnalysisCount
 let downstreamAnalysisCount
+let responseBodyIgnoredCount
 let redirectBodyCollectionDecisions
 
 function enable (_config) {
@@ -39,6 +40,7 @@ function enable (_config) {
   globalRequestCounter = 0n
   bodyAnalysisCount = new WeakMap()
   downstreamAnalysisCount = new WeakMap()
+  responseBodyIgnoredCount = new WeakMap()
   redirectBodyCollectionDecisions = new WeakMap()
 
   const bodyAnalysisSampleRate = config.appsec.apiSecurity?.downstreamBodyAnalysisSampleRate
@@ -56,6 +58,7 @@ function disable () {
   globalRequestCounter = null
   bodyAnalysisCount = null
   downstreamAnalysisCount = null
+  responseBodyIgnoredCount = null
   redirectBodyCollectionDecisions = null
 }
 
@@ -247,8 +250,16 @@ function recordResponseBodyIgnored (req, reason) {
   if (!span) return
 
   const tag = `_dd.appsec.downstream_request.response_body_ignored.${suffix}`
-  const current = Number(span.context()._tags[tag]) || 0
-  span.setTag(tag, current + 1)
+  let counts = responseBodyIgnoredCount.get(req)
+  if (!counts) {
+    counts = {}
+    responseBodyIgnoredCount.set(req, counts)
+  }
+
+  const current = counts[tag] || 0
+  const next = current + 1
+  counts[tag] = next
+  span.setTag(tag, next)
 }
 
 /**

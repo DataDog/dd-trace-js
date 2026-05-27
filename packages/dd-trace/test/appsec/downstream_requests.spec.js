@@ -378,14 +378,8 @@ describe('appsec downstream_requests', () => {
 
     beforeEach(() => {
       web = require('../../src/plugins/util/web')
-      const tags = {}
       span = {
-        setTag (key, value) {
-          tags[key] = value
-        },
-        context () {
-          return { _tags: tags }
-        },
+        setTag: sinon.stub(),
       }
     })
 
@@ -400,7 +394,9 @@ describe('appsec downstream_requests', () => {
       downstream.recordResponseBodyIgnored(req, 'content_type_invalid')
       downstream.recordResponseBodyIgnored(req, 'content_type_invalid')
 
-      assert.strictEqual(span.context()._tags[tag], 2)
+      sinon.assert.calledTwice(span.setTag)
+      sinon.assert.calledWith(span.setTag, tag, 1)
+      sinon.assert.calledWith(span.setTag, tag, 2)
       webRootStub.restore()
     })
 
@@ -409,7 +405,7 @@ describe('appsec downstream_requests', () => {
 
       downstream.recordResponseBodyIgnored(req, 'unknown_reason')
 
-      assert.strictEqual(Object.keys(span.context()._tags).length, 0)
+      sinon.assert.notCalled(span.setTag)
       webRootStub.restore()
     })
   })
