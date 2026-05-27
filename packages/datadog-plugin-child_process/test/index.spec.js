@@ -37,7 +37,7 @@ describe('Child process plugin', () => {
       }
 
       tracerStub = {
-        startSpan: sinon.stub(),
+        startSpan: sinon.stub().returns(spanStub),
       }
 
       configStub = {
