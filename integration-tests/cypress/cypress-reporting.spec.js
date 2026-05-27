@@ -1969,6 +1969,7 @@ moduleTypes.forEach(({
 
             ciVisMetadataDicts.forEach(metadata => {
               assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.ok(metadata['*'][TEST_COMMAND])
             })
             const events = ciVisPayloads.flatMap(({ payload }) => payload.events)
 
@@ -1981,14 +1982,12 @@ moduleTypes.forEach(({
             const { content: testModuleEventContent } = testModuleEvent
 
             assert.ok(testSessionEventContent.test_session_id)
-            assert.ok(testSessionEventContent.meta[TEST_COMMAND])
             assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
             assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
             assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
             assert.ok(testModuleEventContent.test_session_id)
             assert.ok(testModuleEventContent.test_module_id)
-            assert.ok(testModuleEventContent.meta[TEST_COMMAND])
             assert.ok(testModuleEventContent.meta[TEST_MODULE])
             assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
             assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
@@ -2022,7 +2021,6 @@ moduleTypes.forEach(({
                 test_session_id: testSessionId,
               },
             }) => {
-              assert.ok(meta[TEST_COMMAND])
               assert.ok(meta[TEST_MODULE])
               assert.ok(testSuiteId)
               assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
@@ -2047,7 +2045,6 @@ moduleTypes.forEach(({
                 test_session_id: testSessionId,
               },
             }) => {
-              assert.ok(meta[TEST_COMMAND])
               assert.ok(meta[TEST_MODULE])
               assert.ok(testSuiteId)
               assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
