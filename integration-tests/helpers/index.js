@@ -3,7 +3,7 @@
 const assert = require('assert')
 const childProcess = require('child_process')
 const { exec, execSync, fork, spawn } = childProcess
-const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
+const { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
 const { builtinModules } = require('module')
@@ -1015,6 +1015,24 @@ function useEnv (env) {
 }
 
 /**
+ * @param {string} cwd
+ */
+function installPlaywrightChromium (cwd) {
+  const { NODE_OPTIONS, ...env } = process.env
+  const { PLAYWRIGHT_BROWSERS_PATH } = env
+
+  if (
+    PLAYWRIGHT_BROWSERS_PATH &&
+    existsSync(PLAYWRIGHT_BROWSERS_PATH) &&
+    readdirSync(PLAYWRIGHT_BROWSERS_PATH).length > 0
+  ) {
+    return
+  }
+
+  execSync('npx playwright install chromium', { cwd, env, stdio: 'inherit' })
+}
+
+/**
  * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
@@ -1180,6 +1198,7 @@ module.exports = {
   spawnPluginIntegrationTestProcAndExpectExit,
   useEnv,
   setShouldKill,
+  installPlaywrightChromium,
   sandboxCwd,
   useSandbox,
   varySandbox,

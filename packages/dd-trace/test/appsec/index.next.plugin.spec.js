@@ -17,6 +17,10 @@ describe('test suite', () => {
       return // next 12.x fails on node 24.0.0, but 24.0.1 works
     }
 
+    if (satisfies(realVersion, '>=12 <13') && NODE_MAJOR >= 26) {
+      return // next 12.x fails to build on Node.js 26
+    }
+
     if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
       return
     }

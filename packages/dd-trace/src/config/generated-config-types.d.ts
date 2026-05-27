@@ -65,7 +65,7 @@ export interface GeneratedConfig {
   dbm: {
     injectSqlBaseHash: boolean;
   };
-  dbmPropagationMode: string;
+  dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
@@ -211,6 +211,7 @@ export interface GeneratedConfig {
   DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED: boolean;
   DD_TRACE_AXIOS_ENABLED: boolean;
+  DD_TRACE_AZURE_COSMOS_ENABLED: boolean;
   DD_TRACE_AZURE_DURABLE_FUNCTIONS_ENABLED: boolean;
   DD_TRACE_AZURE_EVENT_HUBS_ENABLED: boolean;
   DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: boolean;

@@ -10,11 +10,13 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
+const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const startCh = channel('dd-trace:span:start')
+const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 describe('Span', () => {
   let Span
@@ -451,7 +453,31 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
+      assert.strictEqual(span.context().getTag('foo'), 'bar')
+      sinon.assert.notCalled(tagger.add)
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    it('should sample based on manual sampling tags', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setTag(MANUAL_KEEP, true)
+
+      assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
+      sinon.assert.calledWith(prioritySampler.sample, span, false)
+    })
+
+    it('should be published via dd-trace:span:tags:update channel', () => {
+      const onTagsUpdate = sinon.stub()
+      tagsUpdateCh.subscribe(onTagsUpdate)
+
+      try {
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+        span.setTag('foo', 'bar')
+
+        sinon.assert.calledOnceWithExactly(onTagsUpdate, span, 'dd-trace:span:tags:update')
+      } finally {
+        tagsUpdateCh.unsubscribe(onTagsUpdate)
+      }
     })
   })
 
@@ -465,7 +491,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), tags)
     })
 
     it('should sample based on the tags', () => {
@@ -512,7 +538,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
+      assertObjectContains(span._spanContext.getTags(), { '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {
