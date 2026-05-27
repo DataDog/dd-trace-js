@@ -755,6 +755,80 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source }).catch(done)
         })
 
+        it('publishes resolver finish for every sibling of a collapsed list', async () => {
+          // Regression for first-wins finishTime: when a list collapses to one span,
+          // every sibling resolver must still publish on apm:graphql:resolve:updateField
+          // so the span's finishTime reflects the last sibling, not the first.
+          const updateCh = dc.channel('apm:graphql:resolve:updateField')
+          const counts = new Map()
+          const handler = (ctx) => {
+            counts.set(ctx.pathString, (counts.get(ctx.pathString) ?? 0) + 1)
+          }
+          updateCh.subscribe(handler)
+
+          try {
+            const source = '{ friends { name } }'
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const friendsName = spans.find(span => span.meta['graphql.field.path'] === 'friends.*.name')
+                assert.ok(friendsName, 'expected one collapsed friends.*.name span')
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.strictEqual(
+              counts.get('friends.*.name'),
+              2,
+              'expected one updateField publish per sibling of the 2-element friends list',
+            )
+          } finally {
+            updateCh.unsubscribe(handler)
+          }
+        })
+
+        it('publishes apm:graphql:resolve:start for every sibling of a collapsed list', async () => {
+          // The collapse knob dedupes span creation, not channel publishes. IAST
+          // taint-tracking mutates each call's own args object; if siblings 2..N
+          // skip the publish, those args objects never get tainted and a sink
+          // reached through sibling N misses the vulnerability.
+          const startCh = dc.channel('apm:graphql:resolve:start')
+          const argsByPath = new Map()
+          const handler = (ctx) => {
+            const list = argsByPath.get(ctx.pathString) ?? []
+            list.push(ctx.args)
+            argsByPath.set(ctx.pathString, list)
+          }
+          startCh.subscribe(handler)
+
+          try {
+            const source = '{ friends { name } }'
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const friendsName = spans.find(span => span.meta['graphql.field.path'] === 'friends.*.name')
+                assert.ok(friendsName, 'expected one collapsed friends.*.name span')
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            const nameArgs = argsByPath.get('friends.*.name') ?? []
+            assert.strictEqual(
+              nameArgs.length,
+              2,
+              'expected one startResolveCh publish per sibling of the 2-element friends list',
+            )
+            // graphql-js builds a fresh args object per resolver call; siblings
+            // share content but not identity. IAST mutates the passed object, so
+            // each call needs its own publish.
+            assert.notStrictEqual(nameArgs[0], nameArgs[1])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
+
         it('should instrument list field resolvers', done => {
           const source = `{
             friends {
@@ -823,6 +897,31 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('caches path strings across nested list-of-lists items', async () => {
+          // `[[Cell]]` puts two synthetic array-index nodes back-to-back; the
+          // `friends { pets { name } }` sibling has a `pets` field between.
+          const matrixSchema = graphql.buildSchema(`
+            type Cell { value: Int }
+            type Query { matrix: [[Cell]] }
+          `)
+          const rootValue = { matrix: () => [[{ value: 42 }]] }
+          const source = '{ matrix { value } }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const paths = sort(traces[0])
+                .filter(span => span.name === 'graphql.resolve')
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
+              assert.deepStrictEqual(paths, ['matrix', 'matrix.*.*.value'])
+            }),
+            graphql.graphql({ schema: matrixSchema, source, rootValue }),
+          ])
+
+          assert.ok(!result.errors || result.errors.length === 0)
+          assert.strictEqual(result.data?.matrix?.[0]?.[0]?.value, 42)
         })
 
         it('should instrument mutations', done => {
@@ -1338,6 +1437,75 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
 
+        it('throws AbortError when the execute abortController is aborted before execute runs', async () => {
+          // AppSec's WAF blocks a malicious request by aborting the execute ctx
+          // on apm:graphql:execute:start. callInAsyncScope sees the signal and
+          // throws AbortError before exe runs; the field-resolver path never
+          // fires for this query.
+          const startCh = dc.channel('apm:graphql:execute:start')
+          const handler = (ctx) => {
+            ctx.abortController.abort()
+          }
+          startCh.subscribe(handler)
+
+          const source = '{ hello(name: "world") }'
+          const document = graphql.parse(source)
+
+          try {
+            const [, error] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+                assert.strictEqual(resolveSpans.length, 0, 'no resolver should run after abort')
+                const opSpan = spans.find(span => span.name === expectedSchema.server.opName)
+                assert.ok(opSpan, 'execute span still finishes')
+                assert.strictEqual(opSpan.error, 0)
+              }),
+              assert.throws(
+                () => graphql.execute({ schema, document }),
+                { name: 'AbortError', message: 'Aborted' },
+              ),
+            ])
+            assert.strictEqual(error, undefined)
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
+
+        it('throws AbortError from the next resolver when the controller aborts mid-execution', async () => {
+          // Same WAF hook as above, but the abort lands after the first
+          // resolver finished its work (apm:graphql:resolve:updateField) so
+          // callInAsyncScope's signal check is already past. resolveAsync's
+          // own signal check is the only guard that stops the second
+          // resolver from running, and assertField has already published its
+          // startResolveCh / built its TrackedField for it.
+          const updateCh = dc.channel('apm:graphql:resolve:updateField')
+          const finished = []
+          const handler = (ctx) => {
+            finished.push(ctx.pathString)
+            if (finished.length === 1) {
+              ctx.rootCtx.abortController.abort()
+            }
+          }
+          updateCh.subscribe(handler)
+
+          try {
+            const source = '{ first: hello(name: "first") second: hello(name: "second") }'
+            const result = await graphql.graphql({ schema, source })
+
+            // graphql captures the resolver throw into result.errors; the
+            // first resolver runs to completion, the second hits the abort
+            // branch.
+            assert.ok(result.errors, 'expected an AbortError surfaced through result.errors')
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+            assert.strictEqual(result.errors[0].originalError?.message, 'Aborted')
+            assert.deepStrictEqual(finished.sort(), ['first', 'second'])
+          } finally {
+            updateCh.unsubscribe(handler)
+          }
+        })
+
         it('should support multiple executions with the same contextValue', done => {
           const schema = graphql.buildSchema(`
             type Query {
@@ -1772,6 +1940,51 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source }).catch(done)
         })
+
+        it('publishes apm:graphql:resolve:start for every resolver, including depth-gated ones', async () => {
+          // The depth knob caps span creation, not channel publishes.
+          // IAST taint-tracking and AppSec WAF subscribers run on every resolver
+          // call so user-controlled args at any depth still flow through.
+          const startCh = dc.channel('apm:graphql:resolve:start')
+          const paths = []
+          const handler = (ctx) => {
+            paths.push(ctx.pathString)
+          }
+          startCh.subscribe(handler)
+
+          try {
+            const source = `
+              {
+                human {
+                  name
+                  address {
+                    civicNumber
+                    street
+                  }
+                }
+              }
+            `
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const tracedPaths = spans.map(span => span.meta['graphql.field.path']).sort()
+                assert.deepStrictEqual(tracedPaths, ['human', 'human.address', 'human.name'])
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.deepStrictEqual(paths.sort(), [
+              'human',
+              'human.address',
+              'human.address.civicNumber',
+              'human.address.street',
+              'human.name',
+            ])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
       })
 
       describe('with collapsing disabled', () => {
@@ -1865,6 +2078,53 @@ describe('Plugin', () => {
           )
           // eslint-disable-next-line no-proto
           assert.strictEqual(result.data.__proto__, 'alias')
+        })
+      })
+
+      describe('with collapsing disabled and a depth >=1', () => {
+        before(async () => {
+          tracer = await agent.load('graphql', { collapse: false, depth: 2 })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should count only string segments when collapsing is disabled', done => {
+          const source = `
+            {
+              friends {
+                name
+                pets {
+                  name
+                }
+              }
+            }
+          `
+
+          agent
+            .assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
+
+              assert.deepStrictEqual(paths, [
+                'friends',
+                'friends.0.name',
+                'friends.0.pets',
+                'friends.1.name',
+                'friends.1.pets',
+              ])
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql({ schema, source }).catch(done)
         })
       })
 
