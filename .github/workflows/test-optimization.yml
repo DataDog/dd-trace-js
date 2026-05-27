@@ -384,14 +384,28 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      # We cache Cypress binaries for fixed versions (6.7.0, 12.0.0, 14.5.4) but not for "latest"
-      # as that changes frequently and would have a low cache hit rate
+      - name: Resolve Cypress version
+        id: cypress-version
+        run: |
+          if [ "${{ matrix.cypress-version }}" = "latest" ]; then
+            RESOLVED=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies.cypress")
+          else
+            RESOLVED="${{ matrix.cypress-version }}"
+          fi
+          echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
       - name: Cache Cypress binary
-        if: matrix.cypress-version != 'latest'
+        id: cypress-cache
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/Cypress
-          key: cypress-binary-${{ matrix.cypress-version }}
+          key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
+      - name: Install Cypress binary
+        if: steps.cypress-cache.outputs.cache-hit != 'true'
+        run: |
+          npm install --prefix /tmp/cypress-install \
+            cypress@${{ steps.cypress-version.outputs.resolved }}
+          /tmp/cypress-install/node_modules/.bin/cypress run \
+            --spec __ddwarmup_no_match__.cy.js || true
       - run: yarn config set ignore-engines true
       - run: yarn test:integration:cypress:coverage --ignore-engines
         env:
