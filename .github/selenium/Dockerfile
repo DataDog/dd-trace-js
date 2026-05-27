@@ -1,8 +1,8 @@
-FROM node:24.14.1-bookworm-slim
+FROM node:24.14.1-bookworm-slim@sha256:e484ae3f1e3c378021c967fd42254f343c302a9263e412280eac32bf5bca7008
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y curl wget gnupg unzip \
+RUN apt-get update && apt-get install -y curl wget gnupg libatomic1 unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome stable
