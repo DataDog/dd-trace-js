@@ -357,11 +357,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
-      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
-
     if (this.telemetry.heartbeatInterval) {
       setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
     }
