@@ -34,13 +34,14 @@ class RedisPlugin extends CachePlugin {
   }
 
   /**
-   * Normalizes the @redis/client built-in TracingChannel context to the format
+   * Normalizes the `@redis/client` built-in TracingChannel context to the format
    * expected by RedisPlugin.bindStart.
    *
    * Built-in context: { command (uppercase), args (sanitized, includes command name at [0]),
    *   database, clientId, serverAddress, serverPort }
    *
-   * @param {{ command: string, args: string[], database: number, serverAddress: string, serverPort: number | undefined }} builtinCtx
+   * @param {{ command: string, args: string[], database: number,
+   *   serverAddress: string, serverPort: number | undefined }} builtinCtx
    * @returns {object}
    */
   #bindBuiltinRedisStart (builtinCtx) {

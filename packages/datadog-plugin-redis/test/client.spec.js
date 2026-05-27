@@ -15,6 +15,7 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // @redis/client >= 5.12.0 uses built-in TracingChannel on Node.js >= 19.9 / 20.2, which
 // sanitizes command args and does not expose the connection name.
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const hasDcTracingChannel = typeof require('node:diagnostics_channel').tracingChannel === 'function'
 
 describe('Plugin', () => {
