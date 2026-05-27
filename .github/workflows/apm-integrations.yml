@@ -157,6 +157,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+      # `plugins/upstream` only runs `test:plugins:upstream`, which is a non-glob suite runner;
+      # the in-tree `test/integration-test/*.spec.js` files would otherwise have no CI invocation
+      # whose glob expands to reach them.
+      - uses: ./.github/actions/plugins/integration-test
 
   body-parser:
     runs-on: ubuntu-latest
@@ -167,6 +171,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+      - uses: ./.github/actions/plugins/integration-test
 
   bullmq:
     runs-on: ubuntu-latest
@@ -450,7 +455,9 @@ jobs:
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node
+        with:
+          version: '24.15'
       - uses: ./.github/actions/install
       # Ubuntu 24.04 tightened AppArmor defaults and now blocks unprivileged user
       # namespaces, which Electron's Chromium sandbox requires to run. Setting
@@ -845,6 +852,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -862,6 +871,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   mongoose:
     runs-on: ubuntu-latest
@@ -878,6 +889,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   multer:
     runs-on: ubuntu-latest
@@ -1275,10 +1288,8 @@ jobs:
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:

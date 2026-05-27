@@ -2,13 +2,14 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
@@ -24,14 +25,13 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -57,11 +57,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instances to avoid issues with retries
       webAppServer = createWebAppServer()

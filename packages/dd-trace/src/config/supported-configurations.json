@@ -640,7 +640,9 @@
         "configurationNames": [
           "dbmPropagationMode"
         ],
-        "default": "disabled"
+        "default": "disabled",
+        "allowed": "disabled|service|full|dynamic_service",
+        "transform": "toLowerCase"
       }
     ],
     "DD_DOGSTATSD_HOST": [
@@ -2170,6 +2172,13 @@
       }
     ],
     "DD_TRACE_AXIOS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_AZURE_COSMOS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

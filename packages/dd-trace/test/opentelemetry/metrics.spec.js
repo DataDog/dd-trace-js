@@ -14,6 +14,21 @@ const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_l
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 
+/**
+ * @param {object} type protobufjs Type instance for the OTLP service message
+ * @param {Buffer} originalPayload Raw wire bytes captured from the exporter
+ */
+function assertWireRoundTrip (type, originalPayload) {
+  assert(Buffer.isBuffer(originalPayload) && originalPayload.length > 0)
+  const message = type.decode(originalPayload)
+  const reEncoded = Buffer.from(type.encode(message).finish())
+  const projectOptions = { longs: Number }
+  assert.deepStrictEqual(
+    type.toObject(type.decode(reEncoded), projectOptions),
+    type.toObject(message, projectOptions),
+  )
+}
+
 describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
   let httpStub
@@ -76,12 +91,15 @@ describe('OpenTelemetry Meter Provider', () => {
             const contentType = capturedHeaders['Content-Type']
             const isJson = contentType && contentType.includes('application/json')
 
-            const decoded = isJson
-              ? JSON.parse(capturedPayload.toString())
-              : protoMetricsService.toObject(protoMetricsService.decode(capturedPayload), {
+            let decoded
+            if (isJson) {
+              decoded = JSON.parse(capturedPayload.toString())
+            } else {
+              assertWireRoundTrip(protoMetricsService, capturedPayload)
+              decoded = protoMetricsService.toObject(protoMetricsService.decode(capturedPayload), {
                 longs: Number,
-                defaults: false,
               })
+            }
 
             validator(decoded, capturedHeaders)
             validatorCalled = true
@@ -217,7 +235,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const validator = mockOtlpExport((decoded) => {
         const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(updown.name, 'queue')
-        assert.strictEqual(updown.sum.isMonotonic, false)
+        assert.strictEqual(updown.sum.isMonotonic ?? false, false)
         assert.strictEqual(updown.sum.dataPoints[0].asInt, 7)
       })
 
@@ -268,7 +286,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const validator = mockOtlpExport((decoded) => {
         const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(updown.name, 'tasks')
-        assert.strictEqual(updown.sum.isMonotonic, false)
+        assert.strictEqual(updown.sum.isMonotonic ?? false, false)
         assert.strictEqual(updown.sum.dataPoints[0].asInt, 15)
       })
 
