@@ -163,6 +163,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('can report code coverage', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: true,
+        tests_skipping: true,
+      })
+
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
@@ -733,6 +740,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -769,6 +777,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -806,6 +815,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -899,6 +909,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
       receiver.setSuitesToSkip([
