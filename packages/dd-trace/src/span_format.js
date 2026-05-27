@@ -46,7 +46,12 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {number} start
  * @property {number} duration
  * @property {Array} links
- * @property {Array<{ name: string, time_unix_nano: number, attributes?: Record<string, string> }> | undefined} span_events
+ * @property {Array<SpanEvent> | undefined} span_events
+ *
+ * @typedef {object} SpanEvent
+ * @property {string} name
+ * @property {number} time_unix_nano
+ * @property {Record<string, string>} [attributes]
  */
 
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
@@ -93,11 +98,11 @@ function setSingleSpanIngestionTags (formattedSpan, options) {
   const metrics = formattedSpan.metrics
   metrics[SPAN_SAMPLING_MECHANISM] = SAMPLING_MECHANISM_SPAN
   const sampleRate = options.sampleRate
-  if (typeof sampleRate === 'number' && !Number.isNaN(sampleRate)) {
+  if (typeof sampleRate === 'number') {
     metrics[SPAN_SAMPLING_RULE_RATE] = sampleRate
   }
   const maxPerSecond = options.maxPerSecond
-  if (typeof maxPerSecond === 'number' && !Number.isNaN(maxPerSecond)) {
+  if (typeof maxPerSecond === 'number') {
     metrics[SPAN_SAMPLING_MAX_PER_SECOND] = maxPerSecond
   }
 }
@@ -225,16 +230,17 @@ function extractTags (formattedSpan, span) {
         break
       case ERROR_TYPE:
       case ERROR_MESSAGE:
-      case ERROR_STACK:
+      case ERROR_STACK: {
         // HACK: remove when implemented in the backend
-        if (context._name === 'fs.operation') {
-          break
-        }
+        if (context._name === 'fs.operation') break
         // otel.recordException should not influence trace.error
         if (!tags[IGNORE_OTEL_ERROR]) {
           formattedSpan.error = 1
         }
-      default: { // eslint-disable-line no-fallthrough
+        if (value != null) writeErrorMeta(meta, tag, value)
+        break
+      }
+      default: {
         const valueType = typeof value
         if (valueType === 'string') {
           let writeKey = tag
@@ -268,7 +274,7 @@ function extractTags (formattedSpan, span) {
 
   meta.language = 'javascript'
   metrics[PROCESS_ID] = process.pid
-  if (typeof priority === 'number' && !Number.isNaN(priority)) {
+  if (typeof priority === 'number') {
     metrics[SAMPLING_PRIORITY_KEY] = priority
   }
   if (typeof origin === 'string') {
@@ -292,15 +298,15 @@ function extractRootTags (formattedSpan, span) {
   const trace = context._trace
   const metrics = formattedSpan.metrics
   const ruleDecision = trace[SAMPLING_RULE_DECISION]
-  if (typeof ruleDecision === 'number' && !Number.isNaN(ruleDecision)) {
+  if (typeof ruleDecision === 'number') {
     metrics[SAMPLING_RULE_DECISION] = ruleDecision
   }
   const limitDecision = trace[SAMPLING_LIMIT_DECISION]
-  if (typeof limitDecision === 'number' && !Number.isNaN(limitDecision)) {
+  if (typeof limitDecision === 'number') {
     metrics[SAMPLING_LIMIT_DECISION] = limitDecision
   }
   const agentDecision = trace[SAMPLING_AGENT_DECISION]
-  if (typeof agentDecision === 'number' && !Number.isNaN(agentDecision)) {
+  if (typeof agentDecision === 'number') {
     metrics[SAMPLING_AGENT_DECISION] = agentDecision
   }
   metrics[TOP_LEVEL_KEY] = 1
@@ -345,10 +351,27 @@ function extractError (formattedSpan, error) {
     // AggregateError only has a code and no message.
     // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
     // the code just generally be added, if available?
-    addMixedTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
-    addMixedTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
-    addMixedTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
+    const meta = formattedSpan.meta
+    const message = error.message || error.code
+    if (message != null) writeErrorMeta(meta, ERROR_MESSAGE, message)
+    if (error.name != null) writeErrorMeta(meta, ERROR_TYPE, error.name)
+    if (error.stack != null) writeErrorMeta(meta, ERROR_STACK, error.stack)
   }
+}
+
+/**
+ * Coerces `value` to string and truncates at `MAX_META_VALUE_LENGTH` before
+ * writing it to one of the three error meta fields.
+ *
+ * @param {Record<string, string>} meta
+ * @param {string} key
+ * @param {unknown} value
+ */
+function writeErrorMeta (meta, key, value) {
+  const stringValue = typeof value === 'string' ? value : String(value)
+  meta[key] = stringValue.length > MAX_META_VALUE_LENGTH
+    ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+    : stringValue
 }
 
 /**
