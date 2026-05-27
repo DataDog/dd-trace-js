@@ -75,7 +75,7 @@ class Instrument {
 class Counter extends Instrument {
   add (value, attributes) {
     if (value < 0) return
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
   }
 }
 
@@ -86,7 +86,7 @@ class Counter extends Instrument {
  */
 class UpDownCounter extends Instrument {
   add (value, attributes) {
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
   }
 }
 
@@ -98,7 +98,7 @@ class UpDownCounter extends Instrument {
 class Histogram extends Instrument {
   record (value, attributes) {
     if (value < 0) return
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
   }
 }
 
@@ -109,7 +109,7 @@ class Histogram extends Instrument {
  */
 class Gauge extends Instrument {
   record (value, attributes) {
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
   }
 }
 
@@ -135,7 +135,7 @@ class ObservableInstrument extends Instrument {
   addCallback (callback) {
     if (typeof callback !== 'function') return
     this.#callbacks.push(callback)
-    this.reader?.observableInstruments.add(this)
+    this.reader.observableInstruments.add(this)
   }
 
   /**
@@ -149,7 +149,7 @@ class ObservableInstrument extends Instrument {
       this.#callbacks.splice(index, 1)
       if (this.#callbacks.length === 0) {
         // Remove instrument from collection when no callbacks remain
-        this.reader?.observableInstruments.delete(this)
+        this.reader.observableInstruments.delete(this)
       }
     }
   }

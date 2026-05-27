@@ -153,7 +153,7 @@ class Meter {
    * @param {Array} observables
    */
   addBatchObservableCallback (callback, observables) {
-    this.meterProvider.reader?.addBatchObservableCallback(callback, observables)
+    this.meterProvider.reader.addBatchObservableCallback(callback, observables)
   }
 
   /**
@@ -161,7 +161,7 @@ class Meter {
    * @param {Array} observables
    */
   removeBatchObservableCallback (callback, observables) {
-    this.meterProvider.reader?.removeBatchObservableCallback(callback, observables)
+    this.meterProvider.reader.removeBatchObservableCallback(callback, observables)
   }
 }
 

@@ -932,12 +932,14 @@ describe('otlp_runtime_metrics', () => {
   let callbacks
   let records
   let batchCallbacks
+  let statsdCalls
 
   beforeEach(() => {
     createdInstruments = {}
     callbacks = {}
     records = {}
     batchCallbacks = []
+    statsdCalls = []
     FakePerformanceObserver.instances = []
 
     function makeFactory (type) {
@@ -982,6 +984,18 @@ describe('otlp_runtime_metrics', () => {
 
     const realPerfHooks = require('node:perf_hooks')
 
+    class FakeDogStatsDClient {}
+    FakeDogStatsDClient.generateClientConfig = () => ({ tags: [] })
+
+    class FakeMetricsAggregationClient {
+      constructor () { this.flushed = 0 }
+      boolean (name, value, tag) { statsdCalls.push(['boolean', name, value, tag]) }
+      histogram (name, value, tag) { statsdCalls.push(['histogram', name, value, tag]) }
+      count (name, count, tag, monotonic) { statsdCalls.push(['count', name, count, tag, monotonic]) }
+      gauge (name, value, tag) { statsdCalls.push(['gauge', name, value, tag]) }
+      flush () { this.flushed++ }
+    }
+
     otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
@@ -993,6 +1007,11 @@ describe('otlp_runtime_metrics', () => {
         PerformanceObserver: FakePerformanceObserver,
         constants: realPerfHooks.constants,
       },
+      '../dogstatsd': {
+        DogStatsDClient: FakeDogStatsDClient,
+        MetricsAggregationClient: FakeMetricsAggregationClient,
+      },
+      '../process-tags': { tagsArray: [] },
     })
   })
 
@@ -1141,12 +1160,21 @@ describe('otlp_runtime_metrics', () => {
       addBatchObservableCallback () {},
       removeBatchObservableCallback () {},
     }
+    class NoopStatsdClient {
+      flush () {}
+    }
+    NoopStatsdClient.generateClientConfig = () => ({ tags: [] })
     const errorLog = sinon.spy()
     const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
       },
       '../log': { debug () {}, error: errorLog },
+      '../dogstatsd': {
+        DogStatsDClient: NoopStatsdClient,
+        MetricsAggregationClient: class { flush () {} },
+      },
+      '../process-tags': { tagsArray: [] },
     })
     const dispatcher = proxyquire.noCallThru()('../src/runtime_metrics', {
       './otlp_runtime_metrics': otlpMetricsFailing,
@@ -1161,14 +1189,27 @@ describe('otlp_runtime_metrics', () => {
     dispatcher.stop()
   })
 
-  it('exposes the runtime-metrics surface as no-ops so callers can stay backend-agnostic', () => {
+  it('forwards DD-proprietary metrics through DogStatsD so internal callers keep emitting', () => {
     otlpMetrics.start({ runtimeMetrics: {} })
-    assert.strictEqual(typeof otlpMetrics.boolean, 'function', 'boolean should exist')
-    assert.strictEqual(typeof otlpMetrics.histogram, 'function', 'histogram should exist')
-    assert.strictEqual(typeof otlpMetrics.count, 'function', 'count should exist')
-    assert.strictEqual(typeof otlpMetrics.gauge, 'function', 'gauge should exist')
-    assert.strictEqual(typeof otlpMetrics.increment, 'function', 'increment should exist')
-    assert.strictEqual(typeof otlpMetrics.decrement, 'function', 'decrement should exist')
+
+    otlpMetrics.increment('runtime.node.spans.unfinished')
+    otlpMetrics.increment('datadog.tracer.node.api.requests', true)
+    otlpMetrics.decrement('runtime.node.spans.open')
+    otlpMetrics.gauge('runtime.node.something', 7)
+    otlpMetrics.histogram('runtime.node.gc.pause', 42)
+    otlpMetrics.boolean('runtime.node.flag', true)
+    otlpMetrics.count('runtime.node.events', 3, undefined, true)
+
+    assert.deepStrictEqual(statsdCalls, [
+      ['count', 'runtime.node.spans.unfinished', 1, undefined, false],
+      ['count', 'datadog.tracer.node.api.requests', 1, true, false],
+      ['count', 'runtime.node.spans.open', -1, undefined, false],
+      ['gauge', 'runtime.node.something', 7, undefined],
+      ['histogram', 'runtime.node.gc.pause', 42, undefined],
+      ['boolean', 'runtime.node.flag', true, undefined],
+      ['count', 'runtime.node.events', 3, undefined, true],
+    ])
+
     // track(span).finish() shape preserved so callers don't switch on the active backend.
     const handle = otlpMetrics.track({})
     assert.strictEqual(typeof handle?.finish, 'function', 'track().finish should be callable')
@@ -1260,7 +1301,10 @@ describe('OTLP runtime metrics — pipeline flow', () => {
   // gc.duration histogram wire shape is covered by opentelemetry/metrics.spec.js;
   // the GC observer wiring + kind→type mapping is covered in the mock describe above.
   it('flushes every observable metric with correct wire shape (sum vs gauge) and scope name', () => {
-    otlpRuntimeMetrics.start({ runtimeMetrics: { enabled: true, eventLoop: true, gc: false } })
+    otlpRuntimeMetrics.start({
+      runtimeMetrics: { enabled: true, eventLoop: true, gc: false },
+      dogstatsd: { hostname: '127.0.0.1', port: 8125 },
+    })
     reader.forceFlush()
 
     const { wire, scopeName } = collectWire()

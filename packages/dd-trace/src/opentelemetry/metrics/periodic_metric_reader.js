@@ -142,7 +142,7 @@ class PeriodicMetricReader {
    */
   addBatchObservableCallback (callback, observables) {
     if (typeof callback !== 'function') return
-    const instruments = new Set((observables || []).filter(isObservableInstrument))
+    const instruments = new Set(observables?.filter(isObservableInstrument))
     if (instruments.size === 0) return
     if (this.#findBatchCallback(callback, instruments) !== -1) return
     this.#batchCallbacks.push({ callback, instruments })
@@ -153,7 +153,7 @@ class PeriodicMetricReader {
    * @param {Array} observables
    */
   removeBatchObservableCallback (callback, observables) {
-    const instruments = new Set((observables || []).filter(isObservableInstrument))
+    const instruments = new Set(observables?.filter(isObservableInstrument))
     const idx = this.#findBatchCallback(callback, instruments)
     if (idx !== -1) this.#batchCallbacks.splice(idx, 1)
   }

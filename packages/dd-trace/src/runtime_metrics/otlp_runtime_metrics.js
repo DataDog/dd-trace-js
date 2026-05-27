@@ -4,20 +4,29 @@ const v8 = require('node:v8')
 const process = require('node:process')
 const { performance, monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks')
 const { metrics } = require('@opentelemetry/api')
+const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
+const processTags = require('../process-tags')
 
 const METER_NAME = 'datadog.runtime_metrics'
 
 const ATTR_ELU_STATE_IDLE = { 'nodejs.eventloop.state': 'idle' }
 const ATTR_ELU_STATE_ACTIVE = { 'nodejs.eventloop.state': 'active' }
 
+// Pre-allocated `{ 'v8js.gc.type': <type> }` attribute objects so the observer
+// doesn't allocate a new one per entry under GC pressure.
+const ATTR_GC_TYPE_MINOR = { 'v8js.gc.type': 'minor' }
+const ATTR_GC_TYPE_MAJOR = { 'v8js.gc.type': 'major' }
+const ATTR_GC_TYPE_INCREMENTAL = { 'v8js.gc.type': 'incremental' }
+const ATTR_GC_TYPE_WEAKCB = { 'v8js.gc.type': 'weakcb' }
+
 // Kind 2 is V8's MinorMarkSweep (Node 20+) and not exposed via perf_hooks.constants.
-const GC_TYPE_BY_KIND = new Map([
-  [constants.NODE_PERFORMANCE_GC_MINOR, 'minor'],
-  [2, 'minor'],
-  [constants.NODE_PERFORMANCE_GC_MAJOR, 'major'],
-  [constants.NODE_PERFORMANCE_GC_INCREMENTAL, 'incremental'],
-  [constants.NODE_PERFORMANCE_GC_WEAKCB, 'weakcb'],
+const GC_ATTR_BY_KIND = new Map([
+  [constants.NODE_PERFORMANCE_GC_MINOR, ATTR_GC_TYPE_MINOR],
+  [2, ATTR_GC_TYPE_MINOR],
+  [constants.NODE_PERFORMANCE_GC_MAJOR, ATTR_GC_TYPE_MAJOR],
+  [constants.NODE_PERFORMANCE_GC_INCREMENTAL, ATTR_GC_TYPE_INCREMENTAL],
+  [constants.NODE_PERFORMANCE_GC_WEAKCB, ATTR_GC_TYPE_WEAKCB],
 ])
 
 let meter = null
@@ -41,12 +50,29 @@ function getHeapSpaceAttr (name) {
 const registeredCallbacks = []
 const registeredBatchCallbacks = []
 
+// DD-proprietary tracer metrics (runtime.node.spans.*, datadog.tracer.*) have no OTel
+// equivalent; keep a DogStatsD client so OTLP-path customers don't lose them.
+let client = null
+let flushInterval = null
+
 module.exports = {
   /**
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   start (config) {
     this.stop()
+
+    const clientConfig = DogStatsDClient.generateClientConfig(config)
+    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
+      for (const tag of processTags.tagsArray) {
+        clientConfig.tags.push(tag)
+      }
+    }
+    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    flushInterval = setInterval(() => {
+      client.flush()
+    }, config.DD_RUNTIME_METRICS_FLUSH_INTERVAL ?? 10_000)
+    flushInterval.unref?.()
 
     meter = metrics.getMeterProvider().getMeter(METER_NAME)
 
@@ -148,9 +174,9 @@ module.exports = {
         const entries = list.getEntries()
         for (let i = 0; i < entries.length; i++) {
           const entry = entries[i]
-          const type = GC_TYPE_BY_KIND.get(entry.detail?.kind ?? entry.kind)
-          if (type === undefined) continue
-          gcHistogram.record(entry.duration / 1000, { 'v8js.gc.type': type })
+          const attr = GC_ATTR_BY_KIND.get(entry.detail?.kind ?? entry.kind)
+          if (attr === undefined) continue
+          gcHistogram.record(entry.duration / 1000, attr)
         }
       })
       gcObserver.observe({ type: 'gc' })
@@ -183,16 +209,34 @@ module.exports = {
     registeredBatchCallbacks.length = 0
     meter = null
     lastElu = null
+    if (flushInterval) {
+      clearInterval(flushInterval)
+      flushInterval = null
+    }
+    client = null
   },
 
-  // API parity with the DogStatsD path; production only calls increment/decrement here.
+  // Tied to @datadog/native-metrics which the OTLP path doesn't enable; noop with expected shape.
   track () { return { finish () {} } },
-  boolean () {},
-  histogram () {},
-  count () {},
-  gauge () {},
-  increment () {},
-  decrement () {},
+
+  boolean (name, value, tag) {
+    client?.boolean(name, value, tag)
+  },
+  histogram (name, value, tag) {
+    client?.histogram(name, value, tag)
+  },
+  count (name, count, tag, monotonic = false) {
+    client?.count(name, count, tag, monotonic)
+  },
+  gauge (name, value, tag) {
+    client?.gauge(name, value, tag)
+  },
+  increment (name, tag, monotonic) {
+    this.count(name, 1, tag, monotonic)
+  },
+  decrement (name, tag) {
+    this.count(name, -1, tag)
+  },
 }
 
 /**
