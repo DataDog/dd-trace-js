@@ -233,8 +233,8 @@ function getFunctionArguments (fn, args = []) {
 }
 
 function spanHasError (span) {
-  const tags = span.context()._tags
-  return !!(tags.error || tags['error.type'])
+  const spanContext = span.context()
+  return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
 }
 
 // LLM SDKs stream tool-call argument JSON across SSE chunks; a malformed

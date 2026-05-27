@@ -31,6 +31,7 @@ const plugins = {
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
   get './runtime/library.js' () { return require('../../../datadog-plugin-prisma/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
+  get '@smithy/core' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
   get '@langchain/langgraph' () { return require('../../../datadog-plugin-langgraph/src') },

@@ -212,6 +212,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-fastify:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: fastify
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-fetch:
     runs-on: ubuntu-latest
     permissions:
@@ -300,6 +310,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-kafkajs:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: kafkajs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-knex:
     runs-on: ubuntu-latest
     permissions:
@@ -335,6 +355,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
+        with:
+          node-floor: newest-maintenance-lts
 
   instrumentation-multer:
     runs-on: ubuntu-latest
@@ -460,6 +482,16 @@ jobs:
       id-token: write
     env:
       PLUGINS: stripe
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-router:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: router
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test

@@ -571,6 +571,7 @@ module.exports = {
       name: 'mongodb',
       dep: true,
       forced: true,
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',

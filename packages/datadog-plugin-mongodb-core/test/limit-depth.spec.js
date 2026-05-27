@@ -7,8 +7,8 @@ const sinon = require('sinon')
 
 const MongodbCorePlugin = require('../src/index')
 
-// `limitDepth` is module-private; exercise it through `bindStart`, the only
-// caller that observably surfaces its output (as `meta['mongodb.query']`).
+// The sanitisation helpers are module-private; exercise them through `bindStart`,
+// which surfaces their output as `meta['mongodb.query']`.
 function callBindStart (ctx, configOverride) {
   const startSpan = sinon.stub().returns({ finish () {} })
   const self = {
@@ -105,8 +105,13 @@ describe('mongodb-core query depth limiter', () => {
     ])
   })
 
-  it('renders Binary BSON values as "?"', () => {
-    const binary = { _bsontype: 'Binary', buffer: Buffer.from('payload') }
+  it('renders Binary BSON values as "?" even when toJSON flattens to a base64 string', () => {
+    // Mirrors bson@>=4 Binary.prototype.toJSON.
+    const binary = {
+      _bsontype: 'Binary',
+      buffer: Buffer.from('payload'),
+      toJSON () { return this.buffer.toString('base64') },
+    }
     const query = callBindStart({
       ns: 'db.coll',
       ops: { query: { blob: binary } },
@@ -137,6 +142,60 @@ describe('mongodb-core query depth limiter', () => {
     })
 
     assert.deepStrictEqual(JSON.parse(query), { a: 1, self: '?' })
+  })
+
+  it('preserves sibling objects under the slow none path', () => {
+    // The bigint disqualifies canStringifyDirect so the JSON.stringify replacer runs.
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { a: { b: 1 }, c: { d: 2 }, big: 9n } },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { a: { b: 1 }, c: { d: 2 }, big: '9' })
+  })
+
+  it('does not throw when a property getter returns a different value on the second read', () => {
+    // JSON.stringify snapshots the first read into `value` and passes the parent
+    // as `this` to the replacer; reading `this[key]` again can yield a different
+    // result for non-pure getters / Proxies. The replacer must not assume the
+    // second read is non-nullish.
+    let reads = 0
+    const flaky = {}
+    Object.defineProperty(flaky, 'volatile', {
+      enumerable: true,
+      get () {
+        reads += 1
+        return reads === 1 ? { nested: 'value' } : undefined
+      },
+    })
+
+    const query = callBindStart({
+      ns: 'db.coll',
+      // The leading bigint disqualifies canStringifyDirect on its first
+      // iteration so the slow path's JSON.stringify replacer sees the getter,
+      // not the precheck (which would consume the first read and mask the bug).
+      ops: { query: { big: 9n, outer: flaky } },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      big: '9',
+      outer: { volatile: { nested: 'value' } },
+    })
+  })
+
+  it('drops functions and renders non-Binary BSON values in the slow none path', () => {
+    // The bigint forces the slow none path; MinKey has no toJSON so the replacer
+    // sees `value === original` and falls into the BSON sentinel branch.
+    const minKey = { _bsontype: 'MinKey' }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { boundary: minKey, drop: () => {}, big: 9n } },
+      name: 'find',
+    })
+
+    assert.deepStrictEqual(JSON.parse(query), { boundary: '?', big: '9' })
   })
 
   it('collapses depth past MAX_DEPTH to "?"', () => {
@@ -228,6 +287,20 @@ describe('mongodb-core query obfuscation (redact mode)', () => {
     assert.deepStrictEqual(JSON.parse(query), { blob: '?' })
   })
 
+  it('redacts BSON internal types without toJSON as "?"', () => {
+    // MinKey, MaxKey, and Long don't implement Symbol.toPrimitive / toJSON, so
+    // JSON.stringify would call their default Object#toString or leave them as
+    // empty objects. Mirror master and collapse to the sentinel.
+    const minKey = { _bsontype: 'MinKey' }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { boundary: minKey } },
+      name: 'find',
+    }, { obfuscateQuery: 'redact' })
+
+    assert.deepStrictEqual(JSON.parse(query), { boundary: '?' })
+  })
+
   it('preserves pipeline operator shapes while redacting leaves', () => {
     const query = callBindStart({
       ns: 'db.coll',
@@ -244,6 +317,54 @@ describe('mongodb-core query obfuscation (redact mode)', () => {
       { $match: { user: '?', age: { $gte: '?' } } },
       { $count: '?' },
     ])
+  })
+
+  it('redacts Date values via their toJSON marker', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { createdAt: new Date('2020-01-01') } },
+      name: 'find',
+    }, { obfuscateQuery: 'redact' })
+
+    assert.deepStrictEqual(JSON.parse(query), { createdAt: '?' })
+  })
+
+  it('preserves Timestamp / Decimal128 wrapper shapes while redacting leaves', () => {
+    // Mirrors bson@>=4 Timestamp.prototype.toJSON / Decimal128.prototype.toJSON,
+    // both of which return a single-key wrapper object. Master walked into that
+    // wrapper and redacted only the leaf; collapsing the whole value to "?"
+    // merges distinct query signatures.
+    const timestamp = { _bsontype: 'Timestamp', toJSON: () => ({ $timestamp: '0' }) }
+    const decimal = { _bsontype: 'Decimal128', toJSON: () => ({ $numberDecimal: '12.34' }) }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { _time: timestamp, price: decimal } },
+      name: 'find',
+    }, { obfuscateQuery: 'redact' })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      _time: { $timestamp: '?' },
+      price: { $numberDecimal: '?' },
+    })
+  })
+
+  it('collapses depth past MAX_DEPTH in redact mode', () => {
+    let nested = { leaf: 'value' }
+    for (let i = 0; i < 20; i++) {
+      nested = { inner: nested }
+    }
+
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: nested },
+      name: 'find',
+    }, { obfuscateQuery: 'redact' })
+
+    let walk = JSON.parse(query)
+    while (typeof walk === 'object' && walk !== null && walk.inner !== '?') {
+      walk = walk.inner
+    }
+    assert.strictEqual(walk.inner, '?')
   })
 
   it('redacts each q across multi-statement updates', () => {
@@ -341,6 +462,17 @@ describe('mongodb-core query obfuscation (types mode)', () => {
     assert.deepStrictEqual(JSON.parse(query), { blob: 'object' })
   })
 
+  it('reports BSON internal types without toJSON as "object"', () => {
+    const minKey = { _bsontype: 'MinKey' }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { boundary: minKey } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { boundary: 'object' })
+  })
+
   it('collapses cycles to "object"', () => {
     const circular = { a: 1 }
     circular.self = circular
@@ -352,5 +484,111 @@ describe('mongodb-core query obfuscation (types mode)', () => {
     }, { obfuscateQuery: 'types' })
 
     assert.deepStrictEqual(JSON.parse(query), { a: 'number', self: 'object' })
+  })
+
+  it('reports array elements of every primitive type', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { mixed: ['s', 1, true, null, 9n] } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      mixed: ['string', 'number', 'boolean', 'null', 'bigint'],
+    })
+  })
+
+  it('emits null for array elements JSON drops (undefined kept, function / symbol nulled)', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { items: ['ok', undefined, () => {}, Symbol('x'), 'tail'] } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      items: ['string', 'undefined', null, null, 'string'],
+    })
+  })
+
+  it('drops function- and symbol-valued object fields', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { keep: 1, drop: () => {}, sym: Symbol('x') } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { keep: 'number' })
+  })
+
+  it('reports undefined object fields by their typeof name', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { u: undefined } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { u: 'undefined' })
+  })
+
+  it('reports Date values as "object" via their toJSON marker', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { createdAt: new Date('2020-01-01') } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), { createdAt: 'object' })
+  })
+
+  it('preserves Timestamp / Decimal128 wrapper shapes while typing leaves', () => {
+    const timestamp = { _bsontype: 'Timestamp', toJSON: () => ({ $timestamp: '0' }) }
+    const decimal = { _bsontype: 'Decimal128', toJSON: () => ({ $numberDecimal: '12.34' }) }
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { query: { _time: timestamp, price: decimal } },
+      name: 'find',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      _time: { $timestamp: 'string' },
+      price: { $numberDecimal: 'string' },
+    })
+  })
+
+  it('recurses into nested objects inside arrays', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: { pipeline: [{ $match: { user: 'alice' } }, { $count: 'total' }] },
+      name: 'aggregate',
+    }, { obfuscateQuery: 'types' })
+
+    assert.deepStrictEqual(JSON.parse(query), [
+      { $match: { user: 'string' } },
+      { $count: 'string' },
+    ])
+  })
+})
+
+describe('mongodb-core query obfuscation (array edge cases under redact)', () => {
+  it('redacts every leaf uniformly, including functions and symbols', () => {
+    const query = callBindStart({
+      ns: 'db.coll',
+      ops: {
+        query: {
+          keep: 1,
+          drop: () => {},
+          sym: Symbol('x'),
+          items: ['ok', () => {}, Symbol('x'), 'tail', null],
+        },
+      },
+      name: 'find',
+    }, { obfuscateQuery: 'redact' })
+
+    assert.deepStrictEqual(JSON.parse(query), {
+      keep: '?',
+      drop: '?',
+      sym: '?',
+      items: ['?', '?', '?', '?', '?'],
+    })
   })
 })

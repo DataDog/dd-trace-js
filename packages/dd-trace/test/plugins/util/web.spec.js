@@ -7,12 +7,13 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
-const tags = require('../../../../../ext/tags')
+const tagsExt = require('../../../../../ext/tags')
 
-const ERROR = tags.ERROR
-const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
-const HTTP_ROUTE = tags.HTTP_ROUTE
-const RESOURCE_NAME = tags.RESOURCE_NAME
+const ERROR = tagsExt.ERROR
+const HTTP_CLIENT_IP = tagsExt.HTTP_CLIENT_IP
+const HTTP_ENDPOINT = tagsExt.HTTP_ENDPOINT
+const HTTP_ROUTE = tagsExt.HTTP_ROUTE
+const RESOURCE_NAME = tagsExt.RESOURCE_NAME
 
 describe('plugins/util/web', () => {
   let web
@@ -126,6 +127,55 @@ describe('plugins/util/web', () => {
         assert.strictEqual(config.queryStringObfuscation, true)
       })
     })
+
+    describe('clientIpEnabled', () => {
+      it('leaves extractIp undefined when clientIpEnabled is not set', () => {
+        const config = web.normalizeConfig({})
+
+        assert.strictEqual(config.extractIp, undefined)
+      })
+
+      it('resolves extractIp to the ip_extractor implementation when clientIpEnabled is true', () => {
+        const config = web.normalizeConfig({ clientIpEnabled: true })
+        const { extractIp } = require('../../../src/plugins/util/ip_extractor')
+
+        assert.strictEqual(config.extractIp, extractIp)
+      })
+    })
+  })
+
+  describe('startSpan client IP extraction', () => {
+    it('tags the span with the extracted client IP when clientIpEnabled is set', () => {
+      const config = web.normalizeConfig({ clientIpEnabled: true })
+      req.headers['x-forwarded-for'] = '8.8.8.8'
+
+      const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+      assert.strictEqual(span.context().getTag(HTTP_CLIENT_IP), '8.8.8.8')
+    })
+
+    it('leaves the client IP tag unset when clientIpEnabled is not set', () => {
+      const config = web.normalizeConfig({})
+      req.headers['x-forwarded-for'] = '8.8.8.8'
+
+      const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+      assert.strictEqual(span.context().hasTag(HTTP_CLIENT_IP), false)
+    })
+
+    // Regression for the per-plugin scoping fix: a later normalizeConfig call
+    // for a different plugin must not disable IP extraction on the earlier
+    // plugin's config. Used to fail because extractIp lived on the module.
+    it('keeps extraction enabled on the first config after a second plugin normalizes without clientIpEnabled',
+      () => {
+        const enabledConfig = web.normalizeConfig({ clientIpEnabled: true })
+        web.normalizeConfig({})
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        const span = web.startSpan(tracer, enabledConfig, req, res, 'test.request')
+
+        assert.strictEqual(span.context().getTag(HTTP_CLIENT_IP), '8.8.8.8')
+      })
   })
 
   describe('root', () => {
@@ -143,7 +193,7 @@ describe('plugins/util/web', () => {
   describe('addError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -176,7 +226,7 @@ describe('plugins/util/web', () => {
   describe('addStatusError', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       web.patch(req)
       const context = web.getContext(req)
@@ -198,6 +248,49 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 500)
 
       assert.ok(!(ERROR in tags))
+    })
+  })
+
+  describe('setConfig service', () => {
+    const SVC_SRC_KEY = '_dd.svc_src'
+
+    beforeEach(() => {
+      req.url = '/'
+      web.plugin = null
+    })
+
+    it('writes service.name from config.service onto the span', () => {
+      const customConfig = web.normalizeConfig({ service: 'integration-svc' })
+
+      const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
+      const spanContext = span.context()
+
+      assert.strictEqual(spanContext.getTag('service.name'), 'integration-svc')
+    })
+
+    it('stamps the integration claim so a user override is flagged manual at finish', () => {
+      const customConfig = web.normalizeConfig({ service: 'integration-svc' })
+
+      const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
+      const spanContext = span.context()
+
+      span.setTag('service.name', 'user-override')
+      span.finish()
+
+      assert.strictEqual(spanContext.getTag('service.name'), 'user-override')
+      assert.strictEqual(spanContext.getTag(SVC_SRC_KEY), 'm')
+    })
+
+    it('does not stamp manual when the user does not override the integration service', () => {
+      const customConfig = web.normalizeConfig({ service: 'integration-svc' })
+
+      const span = web.startSpan(tracer, customConfig, req, res, 'test.request')
+      const spanContext = span.context()
+
+      span.finish()
+
+      assert.strictEqual(spanContext.getTag('service.name'), 'integration-svc')
+      assert.strictEqual(spanContext.getTag(SVC_SRC_KEY), undefined)
     })
   })
 
@@ -272,7 +365,7 @@ describe('plugins/util/web', () => {
   describe('http.endpoint tagging', () => {
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
@@ -294,6 +387,9 @@ describe('plugins/util/web', () => {
 
       web.finishAll(context)
 
+      // `tags` was captured from span.context().getTags() before finishAll;
+      // the underlying tags object is still the original (clearTags() rebinds,
+      // but doesn't mutate the captured reference).
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE), `Available keys: ${inspect(Object.keys(tags))}`)
       assert.strictEqual(tags[HTTP_ENDPOINT], '/api/orders/{param:int}/items')
     })
@@ -320,7 +416,7 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       span = tracer.startSpan('test.request')
-      tags = span.context()._tags
+      tags = span.context().getTags()
 
       req.url = '/'
 
