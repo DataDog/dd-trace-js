@@ -275,8 +275,8 @@ describe('OTel Context Manager', () => {
         active.addEvent('with-attrs-and-hr-time', { code: 42 }, hrTime)
 
         // Single equality guards: no array-indexed attribute leak on the time-only forms,
-        // numeric startTime (not hrTime array) so span_format's Math.round(startTime * 1e6)
-        // cannot produce NaN.
+        // and the recorded startTime is numeric (not an hrTime array) so the downstream
+        // ms-conversion cannot produce NaN.
         assert.deepStrictEqual(ddSpan._events, [
           { name: 'with-hr-time', startTime: hrTimeMs },
           { name: 'with-date', startTime: date.getTime() },
