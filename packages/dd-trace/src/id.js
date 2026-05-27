@@ -23,6 +23,7 @@ const _rawEnv = process.env.DD_TRACE_SECURE_RANDOM
 const _secureRandom = _rawEnv !== undefined && (
   _rawEnv.toLowerCase() === 'true' || _rawEnv === '1'
 )
+const _secureBuf = _secureRandom ? new Uint8Array(8) : null
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -220,11 +221,13 @@ function toNumberString (buffer, radix) {
  * @returns {number[] | Uint8Array}
  */
 function pseudoRandom () {
-  if (_secureRandom) {
-    const buf = new Uint8Array(8)
-    randomFillSync(buf)
-    buf[0] &= 0x7F
-    return buf
+  if (_secureBuf) {
+    randomFillSync(_secureBuf)
+    return [
+      _secureBuf[0] & 0x7F,
+      _secureBuf[1], _secureBuf[2], _secureBuf[3],
+      _secureBuf[4], _secureBuf[5], _secureBuf[6], _secureBuf[7],
+    ]
   }
   if (batch === 0) {
     randomFillSync(data)
