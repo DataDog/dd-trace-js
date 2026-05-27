@@ -4,6 +4,7 @@ const log = require('./log')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const native = require('./native')
+const { registerExtraService } = require('./service-naming/extra-services')
 const {
   SAMPLING_MECHANISM_MANUAL,
   SAMPLING_RULE_DECISION,
@@ -191,6 +192,10 @@ class SpanProcessor {
           active.push(span)
         } else {
           finishedSpansToExport.push(span)
+          const serviceName = span.context().getTag('service.name')
+          if (typeof serviceName === 'string' && serviceName.length > 0) {
+            registerExtraService(serviceName)
+          }
         }
       }
 

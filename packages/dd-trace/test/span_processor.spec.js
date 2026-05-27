@@ -22,6 +22,8 @@ describe('SpanProcessor', () => {
   let sample
   let nativeSpans
   let fakeOpCode
+  let extraServicesStub
+  let registerExtraService
 
   before(() => {
     require('../src/process-tags').initialize()
@@ -81,9 +83,17 @@ describe('SpanProcessor', () => {
       queueOp: sinon.stub(),
     }
 
+    extraServicesStub = {
+      registerExtraService: sinon.stub(),
+      getExtraServices: sinon.stub().returns([]),
+      clear: sinon.stub(),
+    }
+    registerExtraService = extraServicesStub.registerExtraService
+
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_sampler': SpanSampler,
       './native': { OpCode: fakeOpCode },
+      './service-naming/extra-services': extraServicesStub,
     })
     processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
   })
@@ -197,6 +207,86 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.finished, [])
     assert.deepStrictEqual(finishedSpan.context().getTags(), {})
     sinon.assert.notCalled(exporter.export)
+  })
+
+  describe('extra services registration', () => {
+    beforeEach(() => {
+      registerExtraService.resetHistory()
+    })
+
+    it('should register extra service when span has service.name tag', () => {
+      const spanWithService = {
+        ...finishedSpan,
+        _duration: 100,
+      }
+      spanWithService.context().setTag('service.name', 'my-service')
+
+      trace.started = [spanWithService]
+      trace.finished = [spanWithService]
+      processor.process(spanWithService)
+
+      sinon.assert.calledOnceWithExactly(registerExtraService, 'my-service')
+    })
+
+    it('should not register extra service when span has no service.name tag', () => {
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      processor.process(finishedSpan)
+
+      sinon.assert.notCalled(registerExtraService)
+    })
+
+    it('should not register extra services below the flushMinSpans threshold', () => {
+      const spanA = { ...finishedSpan, _duration: 100 }
+      const spanB = { ...finishedSpan, _duration: 100 }
+      const spanC = { ...finishedSpan, _duration: 100 }
+
+      trace.started = [spanA, spanB, spanC]
+      trace.finished = [spanA]
+      processor.process(spanA)
+
+      sinon.assert.notCalled(registerExtraService)
+    })
+
+    it('should register extra services for all finished spans in the trace during flush', () => {
+      let tagsA = {}
+      let tagsB = {}
+      const spanA = {
+        tracer: sinon.stub().returns(tracer),
+        context: sinon.stub().returns({
+          _trace: trace,
+          _sampling: {},
+          getTags: () => tagsA,
+          getTag: (key) => tagsA[key],
+          setTag: (key, value) => { tagsA[key] = value },
+          hasTag: (key) => key in tagsA,
+          clearTags: () => { tagsA = Object.create(null) },
+        }),
+        _duration: 100,
+      }
+      const spanB = {
+        tracer: sinon.stub().returns(tracer),
+        context: sinon.stub().returns({
+          _trace: trace,
+          _sampling: {},
+          getTags: () => tagsB,
+          getTag: (key) => tagsB[key],
+          setTag: (key, value) => { tagsB[key] = value },
+          hasTag: (key) => key in tagsB,
+          clearTags: () => { tagsB = Object.create(null) },
+        }),
+        _duration: 200,
+      }
+      spanA.context().setTag('service.name', 'service-a')
+      spanB.context().setTag('service.name', 'service-b')
+
+      trace.started = [spanA, spanB]
+      trace.finished = [spanA, spanB]
+      processor.process(spanA)
+
+      sinon.assert.calledWith(registerExtraService, 'service-a')
+      sinon.assert.calledWith(registerExtraService, 'service-b')
+    })
   })
 
   describe('native sampling sync', () => {
