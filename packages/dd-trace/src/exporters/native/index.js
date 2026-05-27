@@ -1,8 +1,13 @@
 'use strict'
 
 const { URL, format } = require('url')
-const log = require('../../log')
+
+const { channel } = require('dc-polyfill')
+
 const defaults = require('../../config/defaults')
+const log = require('../../log')
+
+const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 /**
  * NativeExporter sends spans to the Datadog agent via the native
@@ -13,6 +18,7 @@ const defaults = require('../../config/defaults')
 class NativeExporter {
   #timer
   #flushInFlight = false
+  #firstFlushSent = false
 
   /**
    * @param {object} config - Tracer configuration
@@ -141,6 +147,10 @@ class NativeExporter {
       .then(() => {
         this.#flushInFlight = false
         this._nativeSpans.freeSlots(slots)
+        if (!this.#firstFlushSent) {
+          this.#firstFlushSent = true
+          firstFlushChannel.publish()
+        }
         // Drain any spans that arrived while the send was in flight.
         if (this._pendingSpans.length > 0) {
           this.flush()

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -283,6 +284,43 @@ describe('NativeExporter', () => {
       await clock.tickAsync(0)
 
       sinon.assert.called(nativeSpans.freeSlots)
+    })
+  })
+
+  describe('first-flush channel', () => {
+    const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+    let onFirstFlush
+
+    beforeEach(() => {
+      onFirstFlush = sinon.spy()
+      firstFlushChannel.subscribe(onFirstFlush)
+      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+    })
+
+    afterEach(() => {
+      firstFlushChannel.unsubscribe(onFirstFlush)
+    })
+
+    it('publishes once on first successful flush and does not republish on subsequent flushes', async () => {
+      exporter.export([createMockSpan(1n, 11)])
+      exporter.flush()
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(onFirstFlush)
+
+      exporter.export([createMockSpan(2n, 22)])
+      exporter.flush()
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(onFirstFlush)
+    })
+
+    it('does not publish when the flush rejects', async () => {
+      nativeSpans.flushSpans.rejects(new Error('Network error'))
+
+      exporter.export([createMockSpan(1n, 11)])
+      exporter.flush()
+      await clock.tickAsync(0)
+
+      sinon.assert.notCalled(onFirstFlush)
     })
   })
 
