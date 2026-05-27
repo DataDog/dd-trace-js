@@ -2121,13 +2121,6 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
   return require(moduleName)
 }
 
-function formatDefaultStackTrace (error, structuredStackTrace) {
-  const errorString = Error.prototype.toString.call(error)
-  if (structuredStackTrace.length === 0) return errorString
-
-  return `${errorString}\n    at ${structuredStackTrace.join('\n    at ')}`
-}
-
 addHook({
   name: 'jest-runtime',
   versions: [MINIMUM_JEST_VERSION],
@@ -2158,45 +2151,27 @@ addHook({
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
-    // `requireModuleOrMock` may log errors to the console. If we don't remove ourselves
-    // from the stack trace, the user might see a useless stack trace rather than the error
-    // that `jest` tries to show.
-    const originalPrepareStackTrace = Error.prepareStackTrace
-    Error.prepareStackTrace = function (error, structuredStackTrace) {
-      const filteredStackTrace = structuredStackTrace
-        .filter(callSite => !callSite.getFileName()?.includes('datadog-instrumentations/src/jest.js'))
-
-      if (typeof originalPrepareStackTrace === 'function') {
-        return originalPrepareStackTrace(error, filteredStackTrace)
-      }
-      return formatDefaultStackTrace(error, filteredStackTrace)
+    // TODO: do this for every library that we instrument
+    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+      // To bypass jest's own require engine
+      return requireOutsideJestRequireEngine(this, moduleName)
     }
+    let returnedValue
     try {
-      // TODO: do this for every library that we instrument
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        // To bypass jest's own require engine
-        return requireOutsideJestRequireEngine(this, moduleName)
+      returnedValue = requireModuleOrMock.apply(this, arguments)
+    } catch (error) {
+      if (isBetweenTestsReferenceError(error)) {
+        reportBetweenTestsReferenceError(this, moduleName, error.message)
       }
-      let returnedValue
-      try {
-        returnedValue = requireModuleOrMock.apply(this, arguments)
-      } catch (error) {
-        if (isBetweenTestsReferenceError(error)) {
-          reportBetweenTestsReferenceError(this, moduleName, error.message)
-        }
-        throw error
-      }
-      if (process.exitCode === 1) {
-        publishRuntimeReferenceError(
-          this,
-          getLastLoggedReferenceError(this) || 'An error occurred while importing a module'
-        )
-      }
-      return returnedValue
-    } finally {
-      // Restore original prepareStackTrace
-      Error.prepareStackTrace = originalPrepareStackTrace
+      throw error
     }
+    if (process.exitCode === 1) {
+      publishRuntimeReferenceError(
+        this,
+        getLastLoggedReferenceError(this) || 'An error occurred while importing a module'
+      )
+    }
+    return returnedValue
   })
 
   if (Runtime.prototype._logFormattedReferenceError) {
