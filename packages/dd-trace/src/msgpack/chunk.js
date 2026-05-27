@@ -1,14 +1,29 @@
 'use strict'
 
-const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
+const DEFAULT_MIN_SIZE = 1024 * 1024 // 1 MiB
+// Number of consecutive `reset()` calls whose peak usage stayed under
+// `SHRINK_USAGE_RATIO * buffer.length` before the buffer halves. Picked high
+// enough that a one-off burst keeps the grown buffer warm.
+const SHRINK_AFTER_FLUSHES = 32
+// Peak fraction of the current buffer the next flush must beat to keep the
+// shrink streak from advancing. 1/4 — a quarter — matches the doubling growth
+// shape: after a halving step the post-shrink fill is the prior peak doubled,
+// still under 50 %.
+const SHRINK_USAGE_RATIO = 4
 
 /**
  * Resizable msgpack write buffer. Owns the byte-layout primitives the encoder
  * layer dispatches into; callers reach the underlying `Buffer` only when they
  * need to assemble a fused write (pre-computed prefixes, span-id payloads).
+ *
+ * Growth doubles the capacity per `reserve`; shrink halves it after
+ * `SHRINK_AFTER_FLUSHES` consecutive `reset()` calls left the buffer barely
+ * filled. Both stop at `minSize` so callers can pin a floor (CI Visibility's
+ * payload prefix chunk uses ~2 KiB).
  */
 class MsgpackChunk {
   #minSize
+  #lowUsageStreak = 0
 
   constructor (minSize = DEFAULT_MIN_SIZE) {
     this.buffer = Buffer.allocUnsafe(minSize)
@@ -80,12 +95,42 @@ class MsgpackChunk {
    * @param {number} size
    */
   reserve (size) {
-    if (this.length + size > this.buffer.length) {
-      const minSize = this.#minSize
-      this.#resize(minSize * Math.ceil((this.length + size) / minSize))
+    const needed = this.length + size
+
+    if (needed > this.buffer.length) {
+      let newSize = this.buffer.length
+      // `*= 2` instead of `<<= 1`: `1073741824 << 1` is negative as int32,
+      // and msgpack values can legitimately reach the multi-GiB range.
+      while (newSize < needed) newSize *= 2
+      this.#resize(newSize)
     }
 
     this.length += size
+  }
+
+  /**
+   * Mark the buffer as flushed: zero the cursor and, when the previous flush
+   * barely filled the buffer for `SHRINK_AFTER_FLUSHES` consecutive resets,
+   * halve the backing buffer. A single high-watermark flush resets the
+   * streak. Long-lived encoders can therefore grow under bursts and give the
+   * memory back during quiet periods without the user having to recreate the
+   * chunk.
+   */
+  reset () {
+    const peak = this.length
+
+    this.length = 0
+
+    if (this.buffer.length > this.#minSize && peak * SHRINK_USAGE_RATIO < this.buffer.length) {
+      if (++this.#lowUsageStreak >= SHRINK_AFTER_FLUSHES) {
+        const newSize = Math.max(this.#minSize, this.buffer.length >>> 1)
+        this.buffer = Buffer.allocUnsafe(newSize)
+        this.view = new DataView(this.buffer.buffer)
+        this.#lowUsageStreak = 0
+      }
+    } else {
+      this.#lowUsageStreak = 0
+    }
   }
 
   writeNull () {

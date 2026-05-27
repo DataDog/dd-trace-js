@@ -200,7 +200,7 @@ describe('encode', () => {
     })
 
     it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
-      // Force enough unique strings to overflow the 2 MB initial chunk so
+      // Force enough unique strings to overflow the 1 MiB initial chunk so
       // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
       // entry is left pointing at a now-orphaned ArrayBuffer; the public
       // surface does not expose this retention directly.

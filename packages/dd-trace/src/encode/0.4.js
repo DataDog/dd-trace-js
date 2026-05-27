@@ -390,9 +390,9 @@ class AgentEncoder {
 
   _reset () {
     this._traceCount = 0
-    this._traceBytes.length = 0
+    this._traceBytes.reset()
     this._stringCount = 0
-    this._stringBytes.length = 0
+    this._stringBytes.reset()
     this._stringMap = Object.create(null)
 
     this._cacheString('')

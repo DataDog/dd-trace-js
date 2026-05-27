@@ -83,7 +83,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   reset () {
     this._reset()
     if (this._coverageBytes) {
-      this._coverageBytes.length = 0
+      this._coverageBytes.reset()
     }
     this._coveragesCount = 0
     this._encodePayloadStart(this._coverageBytes)
