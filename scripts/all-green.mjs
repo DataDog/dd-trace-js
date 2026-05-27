@@ -135,9 +135,6 @@ async function rerunFailedWorkflows (workflowRuns) {
   await Promise.all(
     workflowRuns.map(workflowRun => {
       console.log(`Rerunning ${workflowRun.conclusion} workflow run ${workflowRun.id} (${workflowRun.name}).`)
-      if (workflowRun.conclusion === 'cancelled') {
-        return octokit.rest.actions.reRunWorkflow({ owner, repo, run_id: workflowRun.id })
-      }
       return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
     })
   )
