@@ -77,10 +77,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       this.#tagResponse(span, inputs, response, error)
     }
 
-    // Metrics and response model are tagged whenever the SDK returned a parsed body,
-    // even if the span ended up errored (e.g. AI Guard after-model block on a 200 OK).
-    // Mirrors Python's _extract_llmobs_metrics_tags, which doesn't gate on span.error.
-    if (response) {
+    if (!error) {
       const metrics = this._extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
 
