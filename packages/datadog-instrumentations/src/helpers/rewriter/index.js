@@ -45,7 +45,10 @@ function rewrite (content, filename, format) {
 
   filename = filename.replace('file://', '')
 
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
+  // When `_compile` is invoked indirectly (e.g. via nyc's `append-transform`),
+  // the `format` argument may be lost. Fall back to detecting ESM by the
+  // `.mjs` extension so we don't inject CJS-style `require()` calls into ESM.
+  const moduleType = format === 'module' || filename.endsWith('.mjs') ? 'esm' : 'cjs'
   const [modulePath] = filename.split('/node_modules/').reverse()
   const moduleParts = modulePath.split('/')
   const splitIndex = moduleParts[0].startsWith('@') ? 2 : 1
