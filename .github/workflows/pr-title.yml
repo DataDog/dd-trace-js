@@ -63,12 +63,15 @@ jobs:
 
             // For reverts, the semver bump tracks the magnitude of the change
             // being undone, parsed from the nested type in the title.
+            // feat -> minor; fix/build/docs/refactor/perf -> patch;
+            // style/test/ci/chore don't affect users and get no label.
             const semverFor = ({ type, revertedType, breaking }) => {
               if (!type) return undefined
               if (breaking) return 'semver-major'
               const effective = type === 'revert' ? revertedType : type
               if (effective === 'feat') return 'semver-minor'
-              return 'semver-patch'
+              if (['fix', 'build', 'docs', 'refactor', 'perf'].includes(effective)) return 'semver-patch'
+              return undefined
             }
 
             const pr = context.payload.pull_request
