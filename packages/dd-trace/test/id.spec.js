@@ -235,7 +235,7 @@ describe('id with DD_TRACE_SECURE_RANDOM=true', () => {
       const spanId = id()
       const hex = spanId.toString()
       const firstByte = Number.parseInt(hex.slice(0, 2), 16)
-      assert.ok((firstByte & 0x80) === 0, `expected high bit clear, got 0x${firstByte.toString(16)}`)
+      assert.strictEqual(firstByte & 0x80, 0, `expected high bit clear, got 0x${firstByte.toString(16)}`)
     }
   })
 
