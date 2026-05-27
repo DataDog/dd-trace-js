@@ -9,7 +9,7 @@ const {
 } = require('../ci-visibility/telemetry')
 const { MsgpackChunk } = require('../msgpack')
 const { AgentEncoder } = require('./0.4')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { truncateSpanTestOpt, normalizeSpan } = require('./tags-processors')
 
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
@@ -32,7 +32,7 @@ function formatSpan (span) {
   return {
     type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
-    content: normalizeSpan(truncateSpan(span)),
+    content: normalizeSpan(truncateSpanTestOpt(span)),
   }
 }
 

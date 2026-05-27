@@ -9,6 +9,8 @@ const MAX_RESOURCE_NAME_LENGTH = 5000
 const MAX_META_KEY_LENGTH = 200
 // MAX_META_VALUE_LENGTH the maximum length of metadata value
 const MAX_META_VALUE_LENGTH = 25_000
+// MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION the maximum length of metadata value for test optimization libraries products
+const MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION = 5000
 // MAX_METRIC_KEY_LENGTH the maximum length of a metric name key
 const MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH
 
@@ -28,6 +30,18 @@ const MAX_TYPE_LENGTH = 100
 function truncateSpan (span) {
   if (span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
     span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
+  }
+  return span
+}
+
+function truncateSpanTestOpt (span) {
+  truncateSpan(span)
+  if (span.meta) {
+    for (const key of Object.keys(span.meta)) {
+      if (span.meta[key].length > MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION) {
+        span.meta[key] = `${span.meta[key].slice(0, MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION)}...`
+      }
+    }
   }
   return span
 }
@@ -53,6 +67,7 @@ function normalizeSpan (span) {
 
 module.exports = {
   truncateSpan,
+  truncateSpanTestOpt,
   normalizeSpan,
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
