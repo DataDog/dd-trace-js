@@ -66,7 +66,7 @@ export interface GeneratedConfig {
   dbm: {
     injectSqlBaseHash: boolean;
   };
-  dbmPropagationMode: string;
+  dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;

@@ -56,6 +56,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' }, // should not use this
             toSpanId () { return '456' },
           }
@@ -130,6 +133,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -160,6 +166,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -195,6 +204,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -229,6 +241,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -254,6 +269,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -286,6 +304,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -313,6 +334,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -340,6 +364,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -366,6 +393,9 @@ describe('span processor', () => {
               'error.type': 'error type',
               'error.stack': 'error stack',
             },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -397,6 +427,9 @@ describe('span processor', () => {
             _tags: {
               error: new Error('error message'),
             },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -424,6 +457,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -446,6 +482,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -469,6 +508,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -492,6 +534,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -514,6 +559,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -533,6 +581,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -558,6 +609,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -581,6 +635,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -604,6 +661,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }

@@ -49,6 +49,7 @@ const transforms = module.exports = {
 
   traceAsyncIterator: traceAny,
   traceIterator: traceAny,
+  waitForAsyncEnd,
 }
 
 function traceAny (state, node, _parent, ancestry) {
@@ -243,4 +244,38 @@ function wrapIterator (state, node, program) {
   query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
 
   return wrapper
+}
+
+/**
+ * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`
+ * wrapper's native-Promise fulfillment handler.
+ *
+ * @param {object} _state
+ * @param {import('estree').CallExpression} node
+ * @returns {void}
+ */
+function waitForAsyncEnd (_state, node) {
+  const onFulfilled = node.arguments[0]
+  const statements = onFulfilled?.body?.body
+
+  if (!statements || query(onFulfilled.body, '[id.name=__apm$asyncEndPromise]').length > 0) {
+    return
+  }
+
+  const returnIndex = statements.findIndex(statement => (
+    statement.type === 'ReturnStatement' && statement.argument?.name === 'result'
+  ))
+
+  if (returnIndex === -1) return
+
+  const waitStatements = parse(`
+    function wrapper () {
+      const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
+      if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
+        return __apm$asyncEndPromise.then(() => result, () => result);
+      }
+    }
+  `).body[0].body.body
+
+  statements.splice(returnIndex, 0, ...waitStatements)
 }

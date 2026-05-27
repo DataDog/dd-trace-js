@@ -22,6 +22,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_PARAMETERS,
   TEST_BROWSER_NAME,
+  TEST_FRAMEWORK_VERSION,
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -318,6 +319,7 @@ versions.forEach((version) => {
                 true
               )
               assert.strictEqual(testEvent.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              assert.ok(testEvent.content.meta[TEST_FRAMEWORK_VERSION])
               // Can read DD_TAGS
               assertObjectContains(testEvent.content.meta, {
                 'test.customtag': 'customvalue',

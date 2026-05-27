@@ -138,9 +138,13 @@ describe('Plugin', () => {
           app = sinon.stub()
 
           const tracesPromise = agent.assertSomeTraces(traces => {
+            // The batch may also contain the client-side http.request span; find the server span.
+            const serverTrace = traces.find(t => t[0]?.name === 'web.request')
+            if (!serverTrace) throw new Error('No web.request span found in batch yet')
+
             sinon.assert.notCalled(app) // request should be cancelled before call to app
 
-            assertObjectContains(traces[0][0], {
+            assertObjectContains(serverTrace[0], {
               name: 'web.request',
               service: 'test',
               type: 'web',
@@ -218,7 +222,10 @@ describe('Plugin', () => {
         beforeEach(done => {
           const server = http2.createServer(listener)
           appListener = server
-            .listen(port, 'localhost', () => done())
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         const spanProducerFn = (done) => {
@@ -313,7 +320,10 @@ describe('Plugin', () => {
         beforeEach(done => {
           const server = http2.createServer(listener)
           appListener = server
-            .listen(port, 'localhost', () => done())
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         it('should drop traces for blocklist route', done => {
