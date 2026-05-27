@@ -56,6 +56,7 @@ addHook({ name: 'ioredis', versions: ['>=5 <5.11.0'] }, wrapRedis)
 // subscribes directly to those channels and no shimmer is needed. Fall back to the
 // shimmer approach on older Node.js runtimes.
 addHook({ name: 'ioredis', versions: ['>=5.11.0'] }, (Redis) => {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
   if (typeof require('node:diagnostics_channel').tracingChannel === 'function') {
     return Redis
   }

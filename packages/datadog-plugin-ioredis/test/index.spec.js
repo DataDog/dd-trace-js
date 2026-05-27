@@ -13,6 +13,7 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // ioredis >= 5.11.0 uses built-in TracingChannel on Node.js >= 19.9 / 20.2, which
 // does not expose the connection name, so splitByInstance has no effect.
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const hasDcTracingChannel = typeof require('node:diagnostics_channel').tracingChannel === 'function'
 
 describe('Plugin', () => {
@@ -186,7 +187,9 @@ describe('Plugin', () => {
               // ioredis >= 5.11.0 on Node.js >= 20.2 uses built-in TracingChannel which does not
               // expose connectionName, so splitByInstance has no effect and the service is 'custom'.
               // `version` may be a range string like '>=5.11.0', so coerce before comparing.
-              serviceName: hasDcTracingChannel && semver.satisfies(semver.coerce(version), '>=5.11.0') ? 'custom' : 'custom-test',
+              serviceName: hasDcTracingChannel && semver.satisfies(semver.coerce(version), '>=5.11.0')
+                ? 'custom'
+                : 'custom-test',
             },
             v1: {
               opName: 'redis.command',

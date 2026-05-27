@@ -77,6 +77,7 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/index.js', versions
 // On Node.js versions that support dc.tracingChannel (>= 19.9 / 20.2), skip the shimmer to
 // avoid double-tracing. Fall back to the shimmer approach on older Node.js runtimes.
 addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1'] }, (redis, version) => {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
   if (satisfies(version, '>=5.12.0') && typeof require('node:diagnostics_channel').tracingChannel === 'function') {
     return redis
   }
@@ -85,6 +86,7 @@ addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>
 })
 
 addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, (redis, version) => {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
   if (satisfies(version, '>=5.12.0') && typeof require('node:diagnostics_channel').tracingChannel === 'function') {
     return redis
   }

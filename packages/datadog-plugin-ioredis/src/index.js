@@ -21,7 +21,8 @@ class IORedisPlugin extends RedisPlugin {
    *
    * Built-in context: { command, args (sanitized, no command name), database, serverAddress, serverPort }
    *
-   * @param {{ command: string, args: string[], database: number, serverAddress: string, serverPort: number | undefined }} builtinCtx
+   * @param {{ command: string, args: string[], database: number,
+   *   serverAddress: string, serverPort: number | undefined }} builtinCtx
    * @returns {object}
    */
   #bindBuiltinStart (builtinCtx) {
