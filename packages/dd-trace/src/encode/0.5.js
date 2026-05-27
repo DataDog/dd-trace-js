@@ -35,20 +35,20 @@ class AgentEncoder extends BaseEncoder {
   }
 
   _encode (bytes, trace) {
-    this._encodeArrayPrefix(bytes, trace)
+    bytes.writeArrayPrefix(trace)
 
     for (let span of trace) {
       span = formatSpan(span)
-      this._encodeByte(bytes, ARRAY_OF_TWELVE)
+      bytes.writeByte(ARRAY_OF_TWELVE)
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, span.name)
       this._encodeString(bytes, span.resource)
       this._encodeId(bytes, span.trace_id)
       this._encodeId(bytes, span.span_id)
       this._encodeId(bytes, span.parent_id)
-      this._encodeIntOrFloat(bytes, span.start || 0)
-      this._encodeIntOrFloat(bytes, span.duration || 0)
-      this._encodeIntOrFloat(bytes, span.error)
+      bytes.writeIntOrFloat(span.start || 0)
+      bytes.writeIntOrFloat(span.duration || 0)
+      bytes.writeIntOrFloat(span.error)
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
@@ -74,7 +74,7 @@ class AgentEncoder extends BaseEncoder {
         count++
       } else if (typeof entryValue === 'number') {
         this._encodeString(bytes, key)
-        this._encodeIntOrFloat(bytes, entryValue)
+        bytes.writeIntOrFloat(entryValue)
         count++
       }
     }
@@ -93,7 +93,7 @@ class AgentEncoder extends BaseEncoder {
       this._stringMap[value] = index
       this._stringBytes.write(value)
     }
-    this._encodeInteger(bytes, index)
+    bytes.writeInteger(index)
   }
 
   _cacheString (value) {

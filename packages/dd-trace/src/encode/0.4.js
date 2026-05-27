@@ -1,7 +1,7 @@
 'use strict'
 
 const getConfig = require('../config')
-const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
+const { MsgpackChunk } = require('../msgpack')
 const log = require('../log')
 const { normalizeSpan } = require('./tags-processors')
 
@@ -207,8 +207,6 @@ function lazyEncodedTraceBufferLogger (bytes, start, end) {
 }
 
 class AgentEncoder {
-  msgpack = new MsgpackEncoder()
-
   #limit
   #writer
   #config
@@ -271,7 +269,7 @@ class AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    this.msgpack.encodeArrayPrefix(bytes, trace)
+    bytes.writeArrayPrefix(trace)
 
     const formatSpan = this.#formatSpan
     const stringMap = this._stringMap
@@ -347,11 +345,11 @@ class AgentEncoder {
       target.set(serviceEntry, cursor)
 
       bytes.set(KEY_ERROR)
-      this._encodeIntOrFloat(bytes, span.error)
+      bytes.writeIntOrFloat(span.error)
       bytes.set(KEY_START)
-      this._encodeIntOrFloat(bytes, span.start)
+      bytes.writeIntOrFloat(span.start)
       bytes.set(KEY_DURATION)
-      this._encodeIntOrFloat(bytes, span.duration)
+      bytes.writeIntOrFloat(span.duration)
 
       this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
       this.#encodeMetaEntries(bytes, KEY_METRICS_PREFIX, span.metrics)
@@ -400,26 +398,6 @@ class AgentEncoder {
     this._cacheString('')
   }
 
-  _encodeBuffer (bytes, buffer) {
-    this.msgpack.encodeBin(bytes, buffer)
-  }
-
-  _encodeBool (bytes, value) {
-    this.msgpack.encodeBoolean(bytes, value)
-  }
-
-  _encodeArrayPrefix (bytes, value) {
-    this.msgpack.encodeArrayPrefix(bytes, value)
-  }
-
-  _encodeMapPrefix (bytes, keysLength) {
-    this.msgpack.encodeMapPrefix(bytes, keysLength)
-  }
-
-  _encodeByte (bytes, value) {
-    this.msgpack.encodeByte(bytes, value)
-  }
-
   // TODO: Use BigInt instead.
   _encodeId (bytes, identifier) {
     const idBuffer = identifier.toBuffer()
@@ -440,18 +418,6 @@ class AgentEncoder {
     target[offset + 8] = idBuffer[start + 7]
   }
 
-  _encodeNumber (bytes, value) {
-    this.msgpack.encodeNumber(bytes, value)
-  }
-
-  _encodeInteger (bytes, value) {
-    this.msgpack.encodeInteger(bytes, value)
-  }
-
-  _encodeLong (bytes, value) {
-    this.msgpack.encodeLong(bytes, value)
-  }
-
   // Single pass: reserve the count slot, encode entries while counting, patch the count.
   // Subclasses (0.5, CI visibility encoders) inherit this; the wire stays on float64
   // for numeric values to keep their established trace / events intake unchanged.
@@ -469,7 +435,7 @@ class AgentEncoder {
         count++
       } else if (typeof entryValue === 'number') {
         this._encodeString(bytes, key)
-        this.msgpack.encodeFloat(bytes, entryValue)
+        bytes.writeFloat(entryValue)
         count++
       }
     }
@@ -551,7 +517,7 @@ class AgentEncoder {
       } else {
         bytes.reserve(keyEntryLen)
         bytes.buffer.set(keyEntry, writeOffset)
-        this._encodeIntOrFloat(bytes, entryValue)
+        bytes.writeIntOrFloat(entryValue)
       }
       count++
     }
@@ -592,41 +558,6 @@ class AgentEncoder {
   }
 
   /**
-   * Emit `value` as the smallest valid msgpack number encoding: compact
-   * unsigned/signed int when integer, float64 otherwise. Unlike
-   * `MsgpackEncoder#encodeNumber`, NaN keeps its float64 bits instead of
-   * coercing to fixint 0.
-   *
-   * Underscore-protected so the 0.5 subclass can call it from its own
-   * `_encode` / `_encodeMap` overrides.
-   *
-   * @param {MsgpackChunk} bytes
-   * @param {number} value
-   */
-  _encodeIntOrFloat (bytes, value) {
-    // Fast path: positive fixint (0..127). `value === (value & 0x7F)` is true
-    // iff `value` is an exact integer in that range — covers `error: 0/1`,
-    // priority flags, attribute counts, HTTP status codes mapped to numbers,
-    // and most small metrics. NaN, ±Infinity, negatives, and any non-integer
-    // float fall through.
-    if (value === (value & 0x7F)) {
-      const offset = bytes.length
-      bytes.reserve(1)
-      bytes.buffer[offset] = value
-      return
-    }
-    if (Number.isInteger(value)) {
-      if (value >= 0) {
-        this.msgpack.encodeUnsigned(bytes, value)
-      } else {
-        this.msgpack.encodeSigned(bytes, value)
-      }
-    } else {
-      this.msgpack.encodeFloat(bytes, value)
-    }
-  }
-
-  /**
    * @param {MsgpackChunk} bytes
    * @param {string | number | boolean} value
    */
@@ -636,17 +567,17 @@ class AgentEncoder {
         this._encodeString(bytes, value)
         break
       case 'number':
-        this.msgpack.encodeFloat(bytes, value)
+        bytes.writeFloat(value)
         break
       case 'boolean':
-        this.msgpack.encodeBoolean(bytes, value)
+        bytes.writeBoolean(value)
         break
     }
   }
 
   #encodeMetaStruct (bytes, value) {
     if (Array.isArray(value)) {
-      this.msgpack.encodeMapPrefix(bytes, 0)
+      bytes.writeMapPrefix(0)
       return
     }
 
@@ -772,7 +703,7 @@ class AgentEncoder {
       bytes.set(KEY_NAME)
       this._encodeString(bytes, event.name)
       bytes.set(KEY_EVENT_TIME)
-      this.msgpack.encodeFloat(bytes, event.time_unix_nano)
+      bytes.writeFloat(event.time_unix_nano)
 
       const attributes = event.attributes
       if (attributes !== null && typeof attributes === 'object') {
@@ -842,7 +773,7 @@ class AgentEncoder {
     if (typeof value === 'number') {
       this._encodeString(bytes, key)
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this._encodeIntOrFloat(bytes, value)
+      bytes.writeIntOrFloat(value)
       return true
     }
     if (typeof value === 'boolean') {
@@ -915,7 +846,7 @@ class AgentEncoder {
     }
     if (typeof value === 'number') {
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this._encodeIntOrFloat(bytes, value)
+      bytes.writeIntOrFloat(value)
       return true
     }
     if (typeof value === 'boolean') {

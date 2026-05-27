@@ -3,11 +3,11 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 
 require('../setup/core')
-const { MsgpackEncoder } = require('../../src/msgpack/encoder')
+const { encode } = require('../../src/msgpack')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -15,13 +15,7 @@ function randString (length) {
   }).join('')
 }
 
-describe('msgpack/encoder', () => {
-  let encoder
-
-  beforeEach(() => {
-    encoder = new MsgpackEncoder()
-  })
-
+describe('msgpack/encode', () => {
   it('should encode to msgpack', () => {
     const data = [
       { first: 'test' },
@@ -46,7 +40,7 @@ describe('msgpack/encoder', () => {
       },
     ]
 
-    const buffer = encoder.encode(data)
+    const buffer = encode(data)
     const decoded = msgpack.decode(buffer, { useBigInt64: true })
 
     assert.ok(Array.isArray(decoded), `Expected array, got ${inspect(decoded)}`)
