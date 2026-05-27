@@ -682,6 +682,7 @@ describe('Config', () => {
           endpointCollectionMessageLimit: 300,
           downstreamBodyAnalysisSampleRate: 0.5,
           maxDownstreamRequestBodyAnalysis: 1,
+          maxDownstreamBodyBytes: 10485760,
         },
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
@@ -822,6 +823,7 @@ describe('Config', () => {
       { name: 'DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT', value: 300, origin: 'default' },
       { name: 'DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE', value: 0.5, origin: 'default' },
       { name: 'DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS', value: 1, origin: 'default' },
+      { name: 'DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES', value: 10485760, origin: 'default' },
       { name: 'DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML', value: null, origin: 'default' },
       { name: 'DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON', value: null, origin: 'default' },
       { name: 'DD_APPSEC_ENABLED', value: null, origin: 'default' },
@@ -1032,6 +1034,7 @@ describe('Config', () => {
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '500'
     process.env.DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE = '0.75'
     process.env.DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS = '2'
+    process.env.DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES = '2048'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APP_KEY = 'myAppKey'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
@@ -1156,6 +1159,7 @@ describe('Config', () => {
           endpointCollectionMessageLimit: 500,
           downstreamBodyAnalysisSampleRate: 0.75,
           maxDownstreamRequestBodyAnalysis: 2,
+          maxDownstreamBodyBytes: 2048,
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
@@ -1317,6 +1321,7 @@ describe('Config', () => {
       { name: 'DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT', value: 500, origin: 'env_var' },
       { name: 'DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE', value: 0.75, origin: 'env_var' },
       { name: 'DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS', value: 2, origin: 'env_var' },
+      { name: 'DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES', value: 2048, origin: 'env_var' },
       { name: 'DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'DD_APPSEC_ENABLED', value: true, origin: 'env_var' },
@@ -2500,6 +2505,7 @@ describe('Config', () => {
         endpointCollectionMessageLimit: 500,
         downstreamBodyAnalysisSampleRate: 0.5,
         maxDownstreamRequestBodyAnalysis: 1,
+        maxDownstreamBodyBytes: 10485760,
       },
       blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
       blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,

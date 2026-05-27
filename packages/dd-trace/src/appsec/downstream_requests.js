@@ -13,6 +13,20 @@ const {
 const KNUTH_FACTOR = 11400714819323199488n // eslint-disable-line unicorn/numeric-separators-style
 const UINT64_MAX = (1n << 64n) - 1n
 
+const SUPPORTED_RESPONSE_BODY_MIME_TYPES = new Set([
+  'application/json',
+  'text/json',
+  'application/x-www-form-urlencoded',
+])
+
+const DEFAULT_MAX_DOWNSTREAM_BODY_BYTES = 10 * 1024 * 1024
+
+const RESPONSE_BODY_IGNORED_METRIC_SUFFIX = {
+  content_type_invalid: 'content_type_invalid',
+  content_length_missing: 'content_length_missing',
+  content_length_too_big: 'content_length_too_big',
+}
+
 let config
 let samplingRate
 let globalRequestCounter
@@ -210,6 +224,34 @@ function incrementDownstreamAnalysisCount (req) {
 }
 
 /**
+ * Returns response body collection limits for downstream instrumentation.
+ * @returns {{ maxBytes: number, supportedMimeTypes: Set<string> }}
+ */
+function getResponseBodyCollectionConfig () {
+  return {
+    maxBytes: config?.appsec?.apiSecurity?.maxDownstreamBodyBytes ?? DEFAULT_MAX_DOWNSTREAM_BODY_BYTES,
+    supportedMimeTypes: SUPPORTED_RESPONSE_BODY_MIME_TYPES,
+  }
+}
+
+/**
+ * Increments a response-body-ignored counter on the service-entry span.
+ * @param {import('http').IncomingMessage} req originating request.
+ * @param {string} reason ignore reason key.
+ */
+function recordResponseBodyIgnored (req, reason) {
+  const suffix = RESPONSE_BODY_IGNORED_METRIC_SUFFIX[reason]
+  if (!suffix) return
+
+  const span = web.root(req)
+  if (!span) return
+
+  const tag = `_dd.appsec.downstream_request.response_body_ignored.${suffix}`
+  const current = Number(span.context()._tags[tag]) || 0
+  span.setTag(tag, current + 1)
+}
+
+/**
  * Returns the HTTP method to use for a downstream request, defaulting to GET.
  * @param {string} method method supplied in the outgoing request options.
  * @returns {string} validated HTTP method.
@@ -293,10 +335,14 @@ module.exports = {
   shouldSampleBody,
   handleRedirectResponse,
   incrementDownstreamAnalysisCount,
+  getResponseBodyCollectionConfig,
+  recordResponseBodyIgnored,
   extractRequestData,
   extractResponseData,
   // exports for tests
   parseBody,
   getMethod,
   storeRedirectBodyCollectionDecision,
+  SUPPORTED_RESPONSE_BODY_MIME_TYPES,
+  RESPONSE_BODY_IGNORED_METRIC_SUFFIX,
 }

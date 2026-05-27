@@ -20,6 +20,7 @@ describe('appsec downstream_requests', () => {
           enabled: true,
           downstreamBodyAnalysisSampleRate: 1,
           maxDownstreamRequestBodyAnalysis: 1,
+          maxDownstreamBodyBytes: 1024,
         },
       },
     }
@@ -358,6 +359,58 @@ describe('appsec downstream_requests', () => {
 
     it('returns GET when method is not a string', () => {
       assert.strictEqual(downstream.getMethod(123), 'GET')
+    })
+  })
+
+  describe('getResponseBodyCollectionConfig', () => {
+    it('returns configured max bytes and supported mime types', () => {
+      const collectionConfig = downstream.getResponseBodyCollectionConfig()
+
+      assert.strictEqual(collectionConfig.maxBytes, 1024)
+      assert.ok(collectionConfig.supportedMimeTypes.has('application/json'))
+      assert.ok(collectionConfig.supportedMimeTypes.has('application/x-www-form-urlencoded'))
+    })
+  })
+
+  describe('recordResponseBodyIgnored', () => {
+    let web
+    let span
+
+    beforeEach(() => {
+      web = require('../../src/plugins/util/web')
+      const tags = {}
+      span = {
+        setTag (key, value) {
+          tags[key] = value
+        },
+        context () {
+          return { _tags: tags }
+        },
+      }
+    })
+
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    it('increments ignored-body metric on span', () => {
+      const webRootStub = sinon.stub(web, 'root').returns(span)
+      const tag = '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
+
+      downstream.recordResponseBodyIgnored(req, 'content_type_invalid')
+      downstream.recordResponseBodyIgnored(req, 'content_type_invalid')
+
+      assert.strictEqual(span.context()._tags[tag], 2)
+      webRootStub.restore()
+    })
+
+    it('does not write tag for unknown reason', () => {
+      const webRootStub = sinon.stub(web, 'root').returns(span)
+
+      downstream.recordResponseBodyIgnored(req, 'unknown_reason')
+
+      assert.strictEqual(Object.keys(span.context()._tags).length, 0)
+      webRootStub.restore()
     })
   })
 

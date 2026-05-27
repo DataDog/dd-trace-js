@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { EventEmitter } = require('events')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -15,7 +16,7 @@ const { withRequest } = require('../../../src/appsec/store')
 
 const DEFAULT_URL = 'http://example.com'
 
-describe('RASP - ssrf.js', () => {
+describe.only('RASP - ssrf.js', () => {
   let waf
   let downstream
   let ssrf
@@ -61,6 +62,11 @@ describe('RASP - ssrf.js', () => {
       enable: sinon.stub(),
       disable: sinon.stub(),
       shouldSampleBody: sinon.stub().returns(true),
+      getResponseBodyCollectionConfig: sinon.stub().returns({
+        maxBytes: 10485760,
+        supportedMimeTypes: new Set(['application/json']),
+      }),
+      recordResponseBodyIgnored: sinon.stub(),
       handleRedirectResponse: sinon.stub().returns(false),
       extractRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
@@ -166,6 +172,20 @@ describe('RASP - ssrf.js', () => {
       publishRequestStart({ ctx, includeBodies: false })
 
       sinon.assert.match(ctx.shouldCollectBody, false)
+      assert.strictEqual(ctx.responseBodyCollection, undefined)
+    })
+
+    it('sets responseBodyCollection when body sampling is enabled', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      publishRequestStart({ ctx, includeBodies: true })
+
+      sinon.assert.calledOnce(downstream.getResponseBodyCollectionConfig)
+      sinon.assert.match(ctx.responseBodyCollection, {
+        maxBytes: 10485760,
+        supportedMimeTypes: sinon.match.instanceOf(Set),
+      })
     })
 
     it('evaluates response and passes body through to extractResponseData', () => {
@@ -303,6 +323,32 @@ describe('RASP - ssrf.js', () => {
       const body = Buffer.from('{"data":"test"}')
       httpClientResponseFinish.publish({ ctx, res: response, body })
 
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
+
+    it('records ignored body metric and skips WAF body when guards reject collection', () => {
+      const ctx = makeCtx()
+      const { req } = stubStore({}, {})
+
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: true })
+
+      const response = createResponse()
+      const body = Buffer.from('{"ok":true}')
+
+      httpClientResponseFinish.publish({
+        ctx,
+        res: response,
+        body,
+        responseBodyIgnoredReason: 'content_type_invalid',
+      })
+
+      sinon.assert.calledOnceWithExactly(
+        downstream.recordResponseBodyIgnored, req, 'content_type_invalid')
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
     })
   })

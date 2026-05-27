@@ -39,6 +39,10 @@ function analyzeSsrf (ctx) {
   // Determine if we should collect the response body based on sampling rate and redirect URL
   ctx.shouldCollectBody = downstream.shouldSampleBody(req, outgoingUrl)
 
+  if (ctx.shouldCollectBody) {
+    ctx.responseBodyCollection = downstream.getResponseBodyCollectionConfig()
+  }
+
   const requestAddresses = downstream.extractRequestData(ctx)
 
   const ephemeral = {
@@ -63,15 +67,21 @@ function analyzeSsrf (ctx) {
  *   body: string|Buffer|null
  * }} payload event payload from the channel.
  */
-function handleResponseFinish ({ ctx, res, body }) {
+function handleResponseFinish ({ ctx, res, body, responseBodyIgnoredReason }) {
   // downstream response object
   if (!res) return
 
   const originatingRequest = getActiveRequest()
   if (!originatingRequest) return
 
-  // Skip body analysis for redirect responses
-  const evaluateBody = ctx.shouldCollectBody && !downstream.handleRedirectResponse(originatingRequest, res)
+  if (responseBodyIgnoredReason) {
+    downstream.recordResponseBodyIgnored(originatingRequest, responseBodyIgnoredReason)
+  }
+
+  // Skip body analysis for redirect responses or when guards rejected collection
+  const evaluateBody = ctx.shouldCollectBody &&
+    !responseBodyIgnoredReason &&
+    !downstream.handleRedirectResponse(originatingRequest, res)
   const responseBody = evaluateBody ? body : null
   runResponseEvaluation(res, originatingRequest, responseBody)
 }
