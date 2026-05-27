@@ -15,18 +15,6 @@ describe('PoissonProcessSamplingFilter', () => {
     nowValue = 0
   })
 
-  it('should use provided random function instead of Math.random', () => {
-    const random = () => 0.5
-    const filter = new PoissonProcessSamplingFilter({
-      samplingInterval: 100,
-      resetInterval: 200,
-      now,
-      random,
-    })
-    const expected = -Math.log(1 - 0.5) * 100
-    assert.strictEqual(filter.nextSamplingInstant, expected)
-  })
-
   it('should throw if resetInterval < samplingInterval', () => {
     assert.throws(() => new PoissonProcessSamplingFilter({
       samplingInterval: 100,
@@ -141,7 +129,6 @@ describe('PoissonProcessSamplingFilter', () => {
       samplingInterval: 100,
       resetInterval: 200,
       now,
-      random: () => 0.5,
     })
     const prevNextSamplingInstant = filter.nextSamplingInstant
     nowValue = 1000
