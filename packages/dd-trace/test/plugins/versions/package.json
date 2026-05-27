@@ -172,7 +172,6 @@
     "node-20": "npm:node@20.20.2",
     "node-22": "npm:node@22.22.3",
     "node-24": "npm:node@24.16.0",
-    "node-26": "npm:node@26.2.0",
     "node-serialize": "0.0.4",
     "npm": "11.14.1",
     "nyc": "18.0.0",
