@@ -1,6 +1,5 @@
 'use strict'
 
-const { once } = require('node:events')
 const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
@@ -15,11 +14,16 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', async function () {
       t.triggerBreakpoint()
 
-      const promise = once(t.agent, 'debugger-input')
+      const rcConfig = t.generateRemoteConfig({ captureSnapshot: true })
+      const promise = new Promise((resolve) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+          if (snapshot.probe.id === rcConfig.config.id) resolve(snapshot)
+        })
+      })
 
-      t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true }))
+      t.agent.addRemoteConfig(rcConfig)
 
-      const [{ payload: [{ debugger: { snapshot: { captures } } }] }] = await promise
+      const { captures } = await promise
       const { locals } = captures.lines[t.breakpoint.line]
 
       assertObjectContains(locals, {
@@ -42,11 +46,16 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', async function () {
       t.triggerBreakpoint()
 
-      const promise = once(t.agent, 'debugger-input')
+      const rcConfig = t.generateRemoteConfig({ captureSnapshot: true })
+      const promise = new Promise((resolve) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+          if (snapshot.probe.id === rcConfig.config.id) resolve(snapshot)
+        })
+      })
 
-      t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true }))
+      t.agent.addRemoteConfig(rcConfig)
 
-      const [{ payload: [{ debugger: { snapshot: { captures } } }] }] = await promise
+      const { captures } = await promise
       const { locals } = captures.lines[t.breakpoint.line]
 
       assertObjectContains(locals, {
