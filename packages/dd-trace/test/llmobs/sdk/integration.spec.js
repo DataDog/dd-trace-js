@@ -161,6 +161,7 @@ describe('end to end sdk integration tests', () => {
         tags: {
           foo: 'bar',
         },
+        evalScope: 'span',
       })
     })
   })

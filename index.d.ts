@@ -3572,7 +3572,7 @@ declare namespace tracer {
       deregisterProcessor (): void
 
       /**
-       * Submits a custom evaluation metric for a given span ID and trace ID.
+       * Submits a custom evaluation metric for a given span or trace.
        * @param spanContext The span context of the span to submit the evaluation metric for.
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
        */
@@ -3670,7 +3670,13 @@ declare namespace tracer {
       /**
        * Arbitrary JSON data associated with the evaluation.
        */
-      metadata?: { [key: string]: any }
+      metadata?: { [key: string]: any },
+
+      /**
+       * The scope of the evaluation. Use "trace" to associate the evaluation with an entire trace (the span provided via `span` should be the root span).
+       * @default 'span'
+       */
+      evalScope?: 'span' | 'trace',
     }
 
     interface Document {
