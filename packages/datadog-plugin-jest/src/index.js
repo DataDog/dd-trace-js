@@ -16,7 +16,6 @@ const {
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
-  TEST_COMMAND,
   TEST_FRAMEWORK_VERSION,
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
