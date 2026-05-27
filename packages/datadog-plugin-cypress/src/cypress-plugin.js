@@ -674,15 +674,16 @@ class CypressPlugin {
       }
     }
 
-    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+    const testSuiteSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
-      tags: {
-        [COMPONENT]: TEST_FRAMEWORK_NAME,
-        ...this.testEnvironmentMetadata,
-        ...testSuiteSpanMetadata,
-      },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    testSuiteSpan._addTags({
+      [COMPONENT]: TEST_FRAMEWORK_NAME,
+      ...this.testEnvironmentMetadata,
+      ...testSuiteSpanMetadata,
+    })
+    return testSuiteSpan
   }
 
   getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
@@ -741,17 +742,18 @@ class CypressPlugin {
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
-    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
+    const testSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
-      tags: {
-        [COMPONENT]: TEST_FRAMEWORK_NAME,
-        [ORIGIN_KEY]: CI_APP_ORIGIN,
-        ...testSpanMetadata,
-        ...this.testEnvironmentMetadata,
-        ...testSuiteTags,
-      },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    testSpan._addTags({
+      [COMPONENT]: TEST_FRAMEWORK_NAME,
+      [ORIGIN_KEY]: CI_APP_ORIGIN,
+      ...testSpanMetadata,
+      ...this.testEnvironmentMetadata,
+      ...testSuiteTags,
+    })
+    return testSpan
   }
 
   /**
@@ -929,12 +931,12 @@ class CypressPlugin {
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
-      tags: {
-        [COMPONENT]: TEST_FRAMEWORK_NAME,
-        ...this.testEnvironmentMetadata,
-        ...testSessionSpanMetadata,
-      },
       integrationName: TEST_FRAMEWORK_NAME,
+    })
+    this.testSessionSpan._addTags({
+      [COMPONENT]: TEST_FRAMEWORK_NAME,
+      ...this.testEnvironmentMetadata,
+      ...testSessionSpanMetadata,
     })
     for (const { tag, value } of this._pendingRequestErrorTags) {
       this.testSessionSpan.setTag(tag, value)
@@ -945,13 +947,13 @@ class CypressPlugin {
     const sessionRequestErrorTags = getSessionRequestErrorTags(this.testSessionSpan)
     this.testModuleSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
       childOf: this.testSessionSpan,
-      tags: {
-        [COMPONENT]: TEST_FRAMEWORK_NAME,
-        ...this.testEnvironmentMetadata,
-        ...testModuleSpanMetadata,
-        ...sessionRequestErrorTags,
-      },
       integrationName: TEST_FRAMEWORK_NAME,
+    })
+    this.testModuleSpan._addTags({
+      [COMPONENT]: TEST_FRAMEWORK_NAME,
+      ...this.testEnvironmentMetadata,
+      ...testModuleSpanMetadata,
+      ...sessionRequestErrorTags,
     })
     if (this.hasLibraryConfiguration) {
       const skippingEnabled = this.isSuitesSkippingEnabled ? 'true' : 'false'
@@ -1454,11 +1456,11 @@ class CypressPlugin {
             const stepSpan = this.tracer.startSpan('cypress.step', {
               childOf: this.activeTestSpan,
               startTime,
-              tags: {
-                [COMPONENT]: 'cypress',
-                'cypress.command': command.name,
-                [RESOURCE_NAME]: command.name,
-              },
+            })
+            stepSpan._addTags({
+              [COMPONENT]: 'cypress',
+              'cypress.command': command.name,
+              [RESOURCE_NAME]: command.name,
             })
             if (command.error) {
               const errorObj = new Error(command.error.message || String(command.error))

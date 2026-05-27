@@ -7,6 +7,7 @@ const formats = require('../../../../ext/formats')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../constants')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -86,8 +87,12 @@ class DatadogTracer {
       links: options.links,
     }, this._debug)
 
-    span.addTags(this._config.tags)
-    span.addTags(options.tags)
+    span._addTags(this._config.tags)
+    span._addTags(options.tags)
+
+    if (options.tags && ('service' in options.tags || 'service.name' in options.tags)) {
+      span.setTag(SVC_SRC_KEY, SVC_SRC_MANUAL)
+    }
 
     return span
   }

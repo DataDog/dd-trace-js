@@ -358,11 +358,11 @@ class VitestPlugin extends CiPlugin {
 
       const testSuiteSpan = this.tracer.startSpan('vitest.test_suite', {
         childOf: testSessionSpanContext,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata,
-        },
+      })
+      testSuiteSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteMetadata,
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       const store = storage('legacy').getStore()

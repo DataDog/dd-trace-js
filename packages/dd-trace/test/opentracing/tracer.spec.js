@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const opentracing = require('opentracing')
 require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../../src/constants')
 const formats = require('../../../../ext/formats')
 
 const Reference = opentracing.Reference
@@ -41,7 +42,8 @@ describe('Tracer', () => {
     fields = {}
 
     span = {
-      addTags: sinon.stub().returns(span),
+      _addTags: sinon.stub(),
+      setTag: sinon.stub(),
     }
     Span = sinon.stub().returns(span)
 
@@ -142,7 +144,7 @@ describe('Tracer', () => {
         links: undefined,
       }, true)
 
-      sinon.assert.calledWith(span.addTags, {
+      sinon.assert.calledWith(span._addTags, {
         foo: 'bar',
       })
 
@@ -251,8 +253,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(span.addTags, config.tags)
-      sinon.assert.calledWith(span.addTags, fields.tags)
+      sinon.assert.calledWith(span._addTags, config.tags)
+      sinon.assert.calledWith(span._addTags, fields.tags)
     })
 
     it('If span is granted a service name that differs from the global service name' +
@@ -272,8 +274,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(span.addTags, config.tags)
-      sinon.assert.calledWith(span.addTags, { ...fields.tags, version: undefined })
+      sinon.assert.calledWith(span._addTags, config.tags)
+      sinon.assert.calledWith(span._addTags, { ...fields.tags, version: undefined })
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
@@ -287,6 +289,34 @@ describe('Tracer', () => {
         links: undefined,
       })
       assert.strictEqual(testSpan, span)
+    })
+
+    it('stamps svc_src=m when tags.service is provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { service: 'override' } })
+
+      sinon.assert.calledWith(span.setTag, SVC_SRC_KEY, SVC_SRC_MANUAL)
+    })
+
+    it('stamps svc_src=m when tags["service.name"] is provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { 'service.name': 'override' } })
+
+      sinon.assert.calledWith(span.setTag, SVC_SRC_KEY, SVC_SRC_MANUAL)
+    })
+
+    it('does not stamp svc_src when no service tag is provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { component: 'foo' } })
+
+      sinon.assert.notCalled(span.setTag)
+    })
+
+    it('does not stamp svc_src when no tags are provided', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', {})
+
+      sinon.assert.notCalled(span.setTag)
     })
 
     it('should start a span with the trace ID generation configuration', () => {

@@ -13,15 +13,30 @@ const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
 describe('TracingPlugin', () => {
+  function createTestSpan (initialTags = {}) {
+    const tags = { ...initialTags }
+    const context = {
+      getTag: key => tags[key],
+      getTags: () => tags,
+    }
+
+    return {
+      _spanContext: context,
+      context: () => context,
+      _addTags: newTags => Object.assign(tags, newTags),
+    }
+  }
+
   describe('startSpan method', () => {
     let startSpanSpy
     let plugin
 
     beforeEach(() => {
-      startSpanSpy = sinon.spy()
+      startSpanSpy = sinon.stub().callsFake(() => createTestSpan())
       plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
+          _service: 'tracer-default',
         },
       })
       plugin.configure({})
@@ -39,37 +54,57 @@ describe('TracingPlugin', () => {
     })
 
     it('sets SVC_SRC_KEY tag when service is provided as an object with source', () => {
-      plugin.startSpan('Test span', { service: { name: 'my-service', source: 'kafka' } })
+      const span = plugin.startSpan('Test span', { service: { name: 'my-service', source: 'kafka' } })
 
-      sinon.assert.calledWith(startSpanSpy,
-        'Test span',
-        sinon.match({
-          tags: sinon.match({
-            [SVC_SRC_KEY]: 'kafka',
-          }),
-        })
-      )
+      assert.strictEqual(span.context().getTag(SVC_SRC_KEY), 'kafka')
     })
 
     it('defaults SVC_SRC_KEY to opt.plugin when service is a plain string', () => {
       // This means the service name was provided from the config, so it should default to opt.plugin
-      plugin.startSpan('Test span', { service: 'my-service' })
+      const span = plugin.startSpan('Test span', { service: 'my-service' })
 
-      sinon.assert.calledWith(startSpanSpy,
-        'Test span',
-        sinon.match({
-          tags: sinon.match({
-            [SVC_SRC_KEY]: 'opt.plugin',
-          }),
-        })
-      )
+      assert.strictEqual(span.context().getTag(SVC_SRC_KEY), 'opt.plugin')
     })
 
     it('does not set SVC_SRC_KEY tag when service is not provided', () => {
-      plugin.startSpan('Test span', {})
+      const span = plugin.startSpan('Test span', {})
 
-      const callArgs = startSpanSpy.firstCall.args[1]
-      assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
+      assert.ok(
+        !Object.hasOwn(span.context().getTags(), SVC_SRC_KEY),
+        'SVC_SRC_KEY should not be present when service is not provided'
+      )
+    })
+
+    it('keeps the integration source when the user does not override service.name', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+
+      assert.strictEqual(span.context().getTag(SVC_SRC_KEY), 'kafka')
+    })
+  })
+
+  describe('setServiceName method', () => {
+    let plugin
+
+    beforeEach(() => {
+      plugin = new TracingPlugin({ _tracer: { _service: 'tracer-default' } })
+      plugin.configure({})
+    })
+
+    it('sets service.name tag directly without triggering the manual stamp', () => {
+      const span = createTestSpan()
+
+      plugin.setServiceName(span, 'express-app')
+
+      assert.strictEqual(span.context().getTag('service.name'), 'express-app')
+      assert.strictEqual(span.context().getTag(SVC_SRC_KEY), undefined)
+    })
+
+    it('leaves svc_src unchanged when called after startSpan', () => {
+      const span = createTestSpan({ [SVC_SRC_KEY]: 'opt.plugin' })
+
+      plugin.setServiceName(span, 'express-app')
+
+      assert.strictEqual(span.context().getTag(SVC_SRC_KEY), 'opt.plugin')
     })
   })
 })

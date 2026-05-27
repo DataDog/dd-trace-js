@@ -58,15 +58,18 @@ describe('RedisPlugin bindStart service caching', () => {
   let plugin
   let nomenclature
   let startSpan
+  let span
 
   beforeEach(() => {
     nomenclature = makeNomenclatureStub()
-    startSpan = sinon.stub().returns({
+    span = {
       _spanContext: { _tags: {} },
       setTag () {},
       finish () {},
       addLink () {},
-    })
+      _addTags: sinon.stub(),
+    }
+    startSpan = sinon.stub().returns(span)
     plugin = new RedisPlugin(makeTracerStub(nomenclature, startSpan), {
       codeOriginForSpans: { enabled: false, experimental: { exit_spans: { enabled: false } } },
     })
@@ -81,13 +84,13 @@ describe('RedisPlugin bindStart service caching', () => {
     plugin.bindStart(makeCtx('test'))
     plugin.bindStart(makeCtx('test'))
 
-    assert.strictEqual(startSpan.firstCall.args[1].tags['service.name'], 'custom-test')
-    assert.strictEqual(startSpan.secondCall.args[1].tags['service.name'], 'custom-test')
+    assert.strictEqual(span._addTags.getCall(0).args[0]['service.name'], 'custom-test')
+    assert.strictEqual(span._addTags.getCall(1).args[0]['service.name'], 'custom-test')
   })
 
   it('re-derives the service name when the nomenclature config flips (schema v0 -> v1)', () => {
     plugin.bindStart(makeCtx('test'))
-    assert.strictEqual(startSpan.firstCall.args[1].tags['service.name'], 'custom-test')
+    assert.strictEqual(span._addTags.getCall(0).args[0]['service.name'], 'custom-test')
 
     // Replace the object the way `SchemaManager.configure` does -- not mutate.
     nomenclature.config = {
@@ -96,12 +99,12 @@ describe('RedisPlugin bindStart service caching', () => {
     }
 
     plugin.bindStart(makeCtx('test'))
-    assert.strictEqual(startSpan.secondCall.args[1].tags['service.name'], 'custom')
+    assert.strictEqual(span._addTags.getCall(1).args[0]['service.name'], 'custom')
   })
 
   it('clears the cache on configure() so a new plugin config takes effect', () => {
     plugin.bindStart(makeCtx('test'))
-    assert.strictEqual(startSpan.firstCall.args[1].tags['service.name'], 'custom-test')
+    assert.strictEqual(span._addTags.getCall(0).args[0]['service.name'], 'custom-test')
 
     plugin.configure({
       service: 'renamed',
@@ -110,7 +113,7 @@ describe('RedisPlugin bindStart service caching', () => {
     })
 
     plugin.bindStart(makeCtx('test'))
-    assert.strictEqual(startSpan.secondCall.args[1].tags['service.name'], 'renamed-test')
+    assert.strictEqual(span._addTags.getCall(1).args[0]['service.name'], 'renamed-test')
   })
 
   it('still caches across multiple connections separately', () => {
@@ -119,10 +122,9 @@ describe('RedisPlugin bindStart service caching', () => {
     plugin.bindStart(makeCtx('a'))
     plugin.bindStart(makeCtx('b'))
 
-    const calls = startSpan.getCalls()
-    assert.strictEqual(calls[0].args[1].tags['service.name'], 'custom-a')
-    assert.strictEqual(calls[1].args[1].tags['service.name'], 'custom-b')
-    assert.strictEqual(calls[2].args[1].tags['service.name'], 'custom-a')
-    assert.strictEqual(calls[3].args[1].tags['service.name'], 'custom-b')
+    assert.strictEqual(span._addTags.getCall(0).args[0]['service.name'], 'custom-a')
+    assert.strictEqual(span._addTags.getCall(1).args[0]['service.name'], 'custom-b')
+    assert.strictEqual(span._addTags.getCall(2).args[0]['service.name'], 'custom-a')
+    assert.strictEqual(span._addTags.getCall(3).args[0]['service.name'], 'custom-b')
   })
 })

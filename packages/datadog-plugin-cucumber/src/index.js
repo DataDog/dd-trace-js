@@ -166,12 +166,12 @@ class CucumberPlugin extends CiPlugin {
 
       const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata,
-        },
         integrationName: this.constructor.id,
+      })
+      testSuiteSpan._addTags({
+        [COMPONENT]: this.constructor.id,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteMetadata,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
 
@@ -278,12 +278,12 @@ class CucumberPlugin extends CiPlugin {
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          'cucumber.step': resource,
-          [RESOURCE_NAME]: resource,
-        },
         integrationName: this.constructor.id,
+      })
+      span._addTags({
+        [COMPONENT]: this.constructor.id,
+        'cucumber.step': resource,
+        [RESOURCE_NAME]: resource,
       })
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }

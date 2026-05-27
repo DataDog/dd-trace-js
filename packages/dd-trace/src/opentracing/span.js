@@ -10,6 +10,7 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const { SVC_SRC_KEY, SVC_SRC_MANUAL } = require('../constants')
 const telemetryMetrics = require('../telemetry/metrics')
 const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
@@ -201,10 +202,14 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._spanContext.setTag(key, value)
+    if (key === 'service.name') {
+      this._addTags({ [key]: value, [SVC_SRC_KEY]: SVC_SRC_MANUAL })
+    } else {
+      this._spanContext.setTag(key, value)
 
-    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+      if (isSamplingPriorityTag(key) && this._spanContext.getTag('sampling.priority') === undefined) {
+        this._prioritySampler.sample(this, false)
+      }
     }
 
     if (tagsUpdateCh.hasSubscribers) {
@@ -215,7 +220,11 @@ class DatadogSpan {
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    if (keyValueMap != null && 'service.name' in keyValueMap) {
+      this._addTags({ ...keyValueMap, [SVC_SRC_KEY]: SVC_SRC_MANUAL })
+    } else {
+      this._addTags(keyValueMap)
+    }
     return this
   }
 
@@ -285,6 +294,11 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
     this._spanContext.setTag('_dd.integration', this._integrationName)
+
+    const finishTags = this._spanContext.getTags()
+    if (finishTags['service.name'] === this.#parentTracer._service && finishTags[SVC_SRC_KEY] !== undefined) {
+      delete finishTags[SVC_SRC_KEY]
+    }
 
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
