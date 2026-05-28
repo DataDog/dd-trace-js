@@ -4,6 +4,7 @@
 const { performance } = require('perf_hooks')
 const dateNow = Date.now
 
+const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../vendor/dist/semifies')
 const {
   TEST_STATUS,
@@ -25,7 +26,12 @@ const {
   TEST_MODULE,
   TEST_SOURCE_START,
   finishAllTraceSpans,
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  mergeCoverage,
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
@@ -201,13 +207,17 @@ function getSkippableTests (tracer, testConfiguration) {
     if (!tracer._tracer._exporter?.getSkippableSuites) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
-      resolve({
-        err,
-        skippableTests,
-        correlationId,
-      })
-    })
+    tracer._tracer._exporter.getSkippableSuites(
+      testConfiguration,
+      (err, skippableTests, correlationId, skippableTestsCoverage) => {
+        resolve({
+          err,
+          skippableTests,
+          correlationId,
+          skippableTestsCoverage,
+        })
+      }
+    )
   })
 }
 
@@ -361,9 +371,11 @@ class CypressPlugin {
   finishedTestsByFile = {}
   testStatuses = {}
   hasLibraryConfiguration = false
+  isItrEnabled = false
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
+  isCoverageReportUploadEnabled = false
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
@@ -376,6 +388,8 @@ class CypressPlugin {
   earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
+  skippableTestsCoverage = {}
+  testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
   unskippableSuites = []
@@ -440,9 +454,11 @@ class CypressPlugin {
     this.finishedTestsByFile = {}
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
+    this.isItrEnabled = false
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
+    this.isCoverageReportUploadEnabled = false
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
     this.isEarlyFlakeDetectionEnabled = false
@@ -455,6 +471,8 @@ class CypressPlugin {
     this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
+    this.skippableTestsCoverage = {}
+    this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
     this.unskippableSuites = []
@@ -494,6 +512,117 @@ class CypressPlugin {
     return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
+  /**
+   * Returns the directory used to normalize coverage file names.
+   *
+   * @returns {string}
+   */
+  getCoverageRootDir () {
+    return this.repositoryRoot || this.rootDir || process.cwd()
+  }
+
+  /**
+   * Returns whether the backend supplied skipped-test coverage data.
+   *
+   * @returns {boolean}
+   */
+  hasSkippableTestsCoverage () {
+    return !!(this.skippableTestsCoverage &&
+      typeof this.skippableTestsCoverage === 'object' &&
+      Object.keys(this.skippableTestsCoverage).length > 0)
+  }
+
+  /**
+   * Returns whether skipped test coverage should be backfilled into the session coverage map.
+   *
+   * @returns {boolean}
+   */
+  shouldBackfillSkippedCoverage () {
+    return this.isItrEnabled &&
+      this.isCoverageReportUploadEnabled &&
+      this.isTestsSkipped &&
+      this.hasSkippableTestsCoverage()
+  }
+
+  /**
+   * Adds a test's Istanbul coverage to the aggregated session coverage map.
+   *
+   * @param {object} coverage
+   * @returns {void}
+   */
+  addTestSessionCoverage (coverage) {
+    mergeCoverage(coverage, this.testSessionCoverageMap)
+  }
+
+  /**
+   * Applies backend skipped-test coverage to the aggregated session coverage map.
+   *
+   * @returns {boolean}
+   */
+  applySkippedCoverageToTestSessionCoverage () {
+    if (!this.shouldBackfillSkippedCoverage()) {
+      return false
+    }
+
+    return applySkippedCoverageToCoverage(
+      this.testSessionCoverageMap,
+      this.skippableTestsCoverage,
+      this.getCoverageRootDir()
+    )
+  }
+
+  /**
+   * Calculates the total session code coverage percentage when product rules allow reporting it.
+   *
+   * @param {boolean} hasBackfilledCoverage
+   * @returns {number | undefined}
+   */
+  getTestCodeCoverageLinesTotal (hasBackfilledCoverage) {
+    if (!this.testSessionCoverageMap.files().length || (this.isTestsSkipped && !hasBackfilledCoverage)) {
+      return
+    }
+
+    return getTestCoverageLinesPercentage(this.testSessionCoverageMap, undefined, this.getCoverageRootDir())
+  }
+
+  /**
+   * Returns repository-relative executable-line coverage files for the test session.
+   *
+   * @returns {Array<{ filename: string, bitmap: Buffer }>}
+   */
+  getTestSessionCoverageFiles () {
+    return getRelativeCoverageFiles(
+      getExecutableFilesFromCoverage(this.testSessionCoverageMap),
+      this.getCoverageRootDir()
+    )
+  }
+
+  /**
+   * Uploads executable-line coverage for the test session when backend configuration enables it.
+   *
+   * @returns {void}
+   */
+  reportTestSessionCoverage () {
+    const exporter = this.tracer._tracer._exporter
+    if (
+      !this.testSessionSpan ||
+      !this.isCoverageReportUploadEnabled ||
+      !exporter?.exportCoverage
+    ) {
+      return
+    }
+
+    const files = this.getTestSessionCoverageFiles()
+    if (!files.length) {
+      return
+    }
+
+    exporter.exportCoverage({
+      sessionId: this.testSessionSpan.context()._traceId,
+      files,
+    })
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
@@ -529,8 +658,10 @@ class CypressPlugin {
           this.hasLibraryConfiguration = true
           const {
             libraryConfig: {
+              isItrEnabled,
               isSuitesSkippingEnabled,
               isCodeCoverageEnabled,
+              isCoverageReportUploadEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
               earlyFlakeDetectionSlowTestRetries,
@@ -543,8 +674,10 @@ class CypressPlugin {
               isImpactedTestsEnabled,
             },
           } = libraryConfigurationResponse
+          this.isItrEnabled = isItrEnabled
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
+          this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
@@ -797,7 +930,10 @@ class CypressPlugin {
       isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
       getKnownTests: () => getKnownTests(this.tracer, this.testConfiguration),
       getTestManagementTests: () => getTestManagementTests(this.tracer, this.testConfiguration),
-      getSkippableSuites: () => getSkippableTests(this.tracer, this.testConfiguration),
+      getSkippableSuites: () => getSkippableTests(this.tracer, {
+        ...this.testConfiguration,
+        isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
+      }),
     })
 
     if (this.isKnownTestsEnabled) {
@@ -834,13 +970,17 @@ class CypressPlugin {
 
     if (this.isSuitesSkippingEnabled) {
       const skippableTestsResponse =
-        skippableTestsRequestResponse || await getSkippableTests(this.tracer, this.testConfiguration)
+        skippableTestsRequestResponse || await getSkippableTests(this.tracer, {
+          ...this.testConfiguration,
+          isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
+        })
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
         this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, value: 'true' })
       } else {
-        const { skippableTests, correlationId } = skippableTestsResponse
+        const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
+        this.skippableTestsCoverage = skippableTestsCoverage || {}
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -962,6 +1102,9 @@ class CypressPlugin {
     }
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = getSessionStatus(suiteStats)
+      const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
+      const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
+
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
 
@@ -972,12 +1115,15 @@ class CypressPlugin {
           isSuitesSkipped: this.isTestsSkipped,
           isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
           isCodeCoverageEnabled: this.isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
           skippingType: 'test',
           skippingCount: this.skippedTests.length,
           hasForcedToRunSuites: this.hasForcedToRunSuites,
           hasUnskippableSuites: this.hasUnskippableSuites,
         }
       )
+
+      this.reportTestSessionCoverage()
 
       if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
@@ -1296,11 +1442,18 @@ class CypressPlugin {
           isQuarantined: isQuarantinedFromSupport,
           isDisabled: isDisabledFromSupport,
         } = test
+        if (coverage && (this.isCodeCoverageEnabled || this.isCoverageReportUploadEnabled)) {
+          this.addTestSessionCoverage(coverage)
+        }
+
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
-          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
-            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
-          )
+          const coverageFiles = getCoveredFilesFromCoverage(coverage)
+          const relativeCoverageFiles = getRelativeCoverageFiles(coverageFiles, this.getCoverageRootDir())
+          if (testSuiteAbsolutePath) {
+            relativeCoverageFiles.push({
+              filename: getTestSuitePath(testSuiteAbsolutePath, this.getCoverageRootDir()),
+            })
+          }
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }

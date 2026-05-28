@@ -345,6 +345,7 @@ jobs:
         spec:
           - cypress-reporting
           - cypress-itr
+          - cypress-tia-code-coverage
           - cypress-efd
           - cypress-atr
           - cypress-test-management
