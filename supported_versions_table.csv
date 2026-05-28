@@ -23,6 +23,8 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @langchain/core,langchain,0.1.0,1.1.48,True
 @langchain/langgraph,langgraph,1.1.2,1.3.2,True
 @modelcontextprotocol/sdk,modelcontextprotocol-sdk,1.27.1,1.29.0,True
+@nats-io/nats-core,nats,3.0.0,3.4.0,True
+@nats-io/transport-node,nats,3.0.0,3.4.0,True
 @node-redis/client,redis,1.0.0,1.0.6,True
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True

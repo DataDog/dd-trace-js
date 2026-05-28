@@ -55,6 +55,11 @@ const messaging = {
       serviceName: ({ tracerService }) => `${tracerService}-kafka`,
       serviceSource: integrationSource('kafka'),
     },
+    nats: {
+      opName: () => 'nats.publish',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`,
+      serviceSource: integrationSource('nats'),
+    },
     rhea: {
       opName: () => 'amqp.send',
       serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`,
@@ -118,6 +123,11 @@ const messaging = {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`,
       serviceSource: integrationSource('kafka'),
+    },
+    nats: {
+      opName: () => 'nats.consume',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`,
+      serviceSource: integrationSource('nats'),
     },
     rhea: {
       opName: () => 'amqp.receive',
