@@ -120,7 +120,11 @@ PLUGINS="<name>" npm run test:plugins
 
 Use `node:assert/strict` for standard assertions. For partial deep object checks, use `assertObjectContains` from `integration-tests/helpers/index.js`.
 
-Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine existing calls, when touching test files.
+- Favor `assert.deepStrictEqual` for the data shape under test; use `assert.strictEqual` for unrelated scalars. Don't manufacture wrapper objects (`{ a, b, c }`) to compress assertion count — they hide which assertion broke and allocate two literals per run for no gain.
+- Use `assert.throws(fn, expected)` / `assert.rejects(fn, expected)` instead of `try { … ; assert.fail() } catch (error) { … }`. Pin the relevant error fields in the second argument (`{ code, message: /…/ }`).
+- For two awaits that should both settle, use `Promise.all([a, b])`. `await a; await b` leaves `b` unawaited until `a` settles; if `b` rejects in that window Node raises an unhandled rejection.
+- For limits / caps / thresholds / windows: pin the last accepted value AND the first rejected value (32-entry cap → cases for 32 and 33). Comfortable distances (10 / 50) miss off-by-one bugs.
+- A bug fix ships with cases for the failure AND its siblings sharing the fixed code path. Read the existing spec first so you don't duplicate a permutation already there.
 
 ### Time-Based Testing
 
@@ -195,6 +199,10 @@ Separate groups with empty line, sort alphabetically within each:
 - Do NOT use `async/await` or promises in production code (npm package)
   - Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
   - Use callbacks or synchronous patterns instead
+- Don't use `Object.keys(obj).length` as an emptiness probe — it allocates the keys array. Track presence with a boolean at the assignment site, probe a known key (`obj.knownField !== undefined`), or return `undefined` when there's nothing to report.
+- Fold gate + payload into one pass when the gate's question and the work share a computation. Stringify once and gate on `result.length` beats `Object.keys(dd).length === 0` then later `JSON.stringify(dd)`.
+- Cache compiled regexes and parsed values at module load; never compile per-call.
+- Order short-circuit chains by `frequency × cheapness`: the cheap common case first, the expensive rare case last. A `value === null` check outside an enclosing `typeof === 'object'` arm pays the null comparison on every primitive — move it inside.
 
 ### Debugging and Logging
 
@@ -219,6 +227,19 @@ Avoid try/catch in hot paths - validate inputs early
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of testing internal exports directly
+
+### Architecture Decisions
+
+When a change introduces a class hierarchy, a new module boundary, a shared helper layer, or duplication across two or more types, score it against six dimensions before committing. Bar: 8/10 on at least five.
+
+1. **Drift prevention** — behaviour duplicated across types lives in one place; a new precondition or branch touches one site, not N.
+2. **Module coupling** — cross-module reach goes through a public API the team has committed to, or through `_underscore` documented at the access site as internal. Expanding the surface of an npm-exported class (`Span`, `Tracer`, OTel-bridge spans) is a forever commitment — `_underscore` reach is the lesser evil there.
+3. **Explicit contracts** — invariants enforced by constructor signatures, typed params, abstract methods, `#private` fields; not by convention.
+4. **Testability at boundaries** — each boundary with multiple consumers or a spec/protocol contract has tests that pin its contract directly.
+5. **Extensibility** — adding a third type or method requires the smallest possible change.
+6. **Hot-path fitness** — per-call overhead at the architecture's edges, not its interior. The hot call path looks the same it would without the architecture.
+
+Composition is the default; inheritance only when ≤2 sibling types share a complete interface contract. Score the *baseline* alongside the proposal (`baseline → proposal` per dimension) so a 7 → 7 refactor doesn't dress up as progress. Score *test exports* the same way as class hierarchies — exposing internal state so a spec can reach in almost always fails dimension 2.
 
 ### Implementation and Testing Workflow
 
