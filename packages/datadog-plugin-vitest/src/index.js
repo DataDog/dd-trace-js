@@ -324,12 +324,10 @@ class VitestPlugin extends CiPlugin {
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       if (this.tracer._exporter.addMetadataTags) {
-        const metadataTags = {
+        this.tracer._exporter.addMetadataTags({
           '*': { [TEST_COMMAND]: testCommand, [TEST_SESSION_NAME]: testSessionName },
-        }
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
-        metadataTags.test = { ...libraryCapabilitiesTags }
-        this.tracer._exporter.addMetadataTags(metadataTags)
+          test: getLibraryCapabilitiesTags(this.constructor.id),
+        })
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)

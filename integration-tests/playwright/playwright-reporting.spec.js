@@ -27,6 +27,7 @@ const {
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
+  TEST_COMMAND,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
@@ -595,6 +596,7 @@ versions.forEach((version) => {
               }
               // capabilities logic does not overwrite test session name
               assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata['*'][TEST_COMMAND], 'playwright test -c playwright.config.js')
             })
           })
 

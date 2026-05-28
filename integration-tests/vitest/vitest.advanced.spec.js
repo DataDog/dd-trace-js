@@ -20,6 +20,7 @@ const {
   TEST_TYPE,
   TEST_IS_RETRY,
   TEST_SESSION_NAME,
+  TEST_COMMAND,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_NAME,
@@ -98,6 +99,7 @@ versions.forEach((version) => {
               })
               // capabilities logic does not overwrite test session name
               assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata['*'][TEST_COMMAND], 'vitest run')
             })
           })
 
