@@ -39,9 +39,12 @@ describe('Plugin', () => {
         if (connection && !connection.isClosed()) {
           // close() may hang if a subscription callback threw (the library's drain
           // path waits for inflight messages); race with a timer to keep tests fast.
+          // The AbortController cancels the timer once close() settles so the timer
+          // does not keep the process alive for the full 500ms window.
+          const ac = new AbortController()
           await Promise.race([
-            connection.close().catch(() => {}),
-            setTimeoutPromise(500),
+            connection.close().catch(() => {}).finally(() => ac.abort()),
+            setTimeoutPromise(500, undefined, { signal: ac.signal }).catch(() => {}),
           ])
         }
         connection = null
@@ -410,14 +413,19 @@ describe('Plugin', () => {
           it('passes through null/error deliveries without creating a span', async () => {
             // NATS calls the user's callback with `(err, {})` on subscription timeout —
             // exercises the `!message || err` short-circuit before the runStores branch.
-            let called = false
-            connection.subscribe(subject, {
-              max: 1,
-              timeout: 50,
-              callback: (err) => { called = true; assert.ok(err) },
+            const ac = new AbortController()
+            const received = new Promise(resolve => {
+              connection.subscribe(subject, {
+                max: 1,
+                timeout: 50,
+                callback: (err) => resolve(err),
+              })
             })
-            await setTimeoutPromise(200)
-            assert.ok(called)
+            const err = await Promise.race([
+              received.finally(() => ac.abort()),
+              setTimeoutPromise(500, undefined, { signal: ac.signal }).catch(() => null),
+            ])
+            assert.ok(err)
           })
         })
       })
