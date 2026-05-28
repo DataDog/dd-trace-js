@@ -27,7 +27,8 @@ describe('Plugin', () => {
 
         before(async function () {
           this.timeout(30000)
-          const mod = await import('@anthropic-ai/claude-agent-sdk') // eslint-disable-line n/no-missing-import
+          const sdkPath = require.resolve('@anthropic-ai/claude-agent-sdk')
+          const mod = await import(sdkPath)
           await testSetup.setup(mod)
         })
 
