@@ -35,7 +35,7 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
 
 class NextStreamLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_langgraph_next_stream'
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream_next'
+  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream:next'
 
   start () {} // no-op: span was already registered by PregelStreamLLMObsPlugin
 
