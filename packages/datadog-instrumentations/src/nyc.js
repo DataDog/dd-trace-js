@@ -22,8 +22,8 @@ addHook({
   setupSettingsCachePath()
 
   if (nycPackage.prototype.getCoverageMapFromAllCoverageFiles) {
-    // Mocha receives skipped-suite coverage in the test process, but nyc merges reports later in the nyc process.
-    // Reuse the settings cache path as the process handoff so nyc can backfill skipped files before reporting.
+    // Some test frameworks receive skipped-suite coverage in the test process, but nyc merges reports later in the nyc
+    // process. Reuse the settings cache path as the process handoff so nyc can backfill skipped files before reporting.
     shimmer.wrap(
       nycPackage.prototype,
       'getCoverageMapFromAllCoverageFiles',
