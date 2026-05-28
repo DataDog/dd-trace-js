@@ -1,0 +1,29 @@
+{
+  "name": "plugin-mongodb-core",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 30,
+  "instructions": true,
+  "variants": {
+    "plain-find": {
+      "env": { "VARIANT": "plain-find" }
+    },
+    "deep-aggregate": {
+      "baseline": "plain-find",
+      "env": { "VARIANT": "deep-aggregate" }
+    },
+    "bigint-id": {
+      "baseline": "plain-find",
+      "env": { "VARIANT": "bigint-id" }
+    },
+    "binary-hash": {
+      "baseline": "plain-find",
+      "env": { "VARIANT": "binary-hash" }
+    },
+    "mixed-ops": {
+      "baseline": "plain-find",
+      "env": { "VARIANT": "mixed-ops" }
+    }
+  }
+}
