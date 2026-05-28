@@ -19,7 +19,9 @@ jobs:
       - uses: ./.github/actions/node/latest
       - name: actionlint
         id: actionlint
-        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+        # TODO: Switch back to raven-actions/actionlint once
+        #       https://github.com/raven-actions/actionlint/pull/63 lands.
+        uses: rochdev/actionlint@1036c45c2ac9f15a8e8b0851ba7f25808a820f51
         with:
           matcher: true
           fail-on-error: true
