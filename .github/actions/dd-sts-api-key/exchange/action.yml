@@ -1,0 +1,25 @@
+name: Get Datadog API key (exchange)
+description: Internal implementation; exchange OIDC token for API key. Use `./.github/actions/dd-sts-api-key` instead.
+
+outputs:
+  api_key:
+    description: "Datadog API key"
+    value: ${{ steps.dd-sts.outputs.api_key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get Datadog API key
+      id: dd-sts
+      uses: DataDog/dd-sts-action@1f350ca511be980515cf08b0bd64182b9c6e5d32 # v1.0.3
+      with:
+        policy: dd-trace-js-api-key
+    - name: Verify API key was returned
+      shell: bash
+      env:
+        API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      run: |
+        if [ -z "$API_KEY" ]; then
+          echo "dd-sts succeeded but returned no API key"
+          exit 1
+        fi
