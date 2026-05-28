@@ -420,6 +420,7 @@ module.exports = {
   getCoveredFilenamesFromCoverage,
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
   getLineCoverageBitmap,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
@@ -1073,6 +1074,13 @@ function getExecutableFilesFromCoverage (coverage) {
   }
 
   return coverageFiles
+}
+
+function getRelativeCoverageFiles (coverageFiles, rootDir) {
+  return coverageFiles.map(({ filename, bitmap }) => ({
+    filename: getTestSuitePath(filename, rootDir),
+    bitmap,
+  }))
 }
 
 function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
