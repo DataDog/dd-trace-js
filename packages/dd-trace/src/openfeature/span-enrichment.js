@@ -82,7 +82,9 @@ class SpanEnrichmentState {
       return false
     }
 
-    let valueStr = String(defaultValue)
+    let valueStr = typeof defaultValue === 'object' && defaultValue !== null
+      ? JSON.stringify(defaultValue)
+      : String(defaultValue)
 
     if (valueStr.length > MAX_DEFAULT_VALUE_LENGTH) {
       valueStr = valueStr.slice(0, MAX_DEFAULT_VALUE_LENGTH)
