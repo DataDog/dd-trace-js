@@ -2004,7 +2004,21 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Instrumentation extends Integration, Analyzable {}
+    interface Instrumentation extends Integration, Analyzable { }
+
+    /** @hidden */
+    interface DatabaseInstrumentation extends Instrumentation {
+      /**
+       * Truncate the resource name (e.g. the query) to the given length.
+       * When set to `true`, truncates to 5000 characters (matching the
+       * Datadog agent's default). When set to a number, truncates to that
+       * many characters. This can help prevent large queries from blocking
+       * the event loop during trace encoding.
+       *
+       * @default false
+       */
+      truncate?: boolean | number;
+    }
 
     /** @hidden */
     interface Http extends Instrumentation {
