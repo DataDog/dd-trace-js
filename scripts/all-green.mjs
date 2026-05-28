@@ -114,8 +114,7 @@ async function pollUntilDone () {
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
     pollingRetryConclusions.has(r.conclusion) &&
-    !retriedRunIds.has(r.id) &&
-    !staleFailureRunIds.has(r.id)
+    !retriedRunIds.has(r.id)
   )
 
   const pending = runs.filter(r => r.status !== 'completed').length
