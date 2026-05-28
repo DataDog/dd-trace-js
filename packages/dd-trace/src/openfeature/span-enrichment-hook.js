@@ -67,7 +67,7 @@ class SpanEnrichmentHook {
    * @param {object} [evaluationDetails.flagMetadata] - Metadata from the provider
    * @param {number} [evaluationDetails.flagMetadata.__dd_split_serial_id] - Serial ID from UFC split
    * @param {boolean} [evaluationDetails.flagMetadata.__dd_do_log] - Whether to log subject
-   * @param {string} [evaluationDetails.reason] - Evaluation reason
+   * @param {string} [evaluationDetails.variant] - Variant key if flag was found in UFC
    * @param {boolean|string|number|object} [evaluationDetails.value] - Evaluated value
    * @returns {void}
    */
@@ -78,7 +78,7 @@ class SpanEnrichmentHook {
 
       const state = this._getOrCreateState(rootSpan)
       const { flagKey, context } = hookContext || {}
-      const { flagMetadata, reason, value } = evaluationDetails || {}
+      const { flagMetadata, variant, value } = evaluationDetails || {}
 
       const serialId = flagMetadata?.__dd_split_serial_id
       const doLog = flagMetadata?.__dd_do_log ?? false
@@ -90,7 +90,7 @@ class SpanEnrichmentHook {
         if (doLog && targetingKey) {
           state.addSubject(targetingKey, serialId)
         }
-      } else if (reason === 'DEFAULT' || reason === 'ERROR') {
+      } else if (variant === undefined) {
         state.addDefault(flagKey, value)
       }
     } catch (err) {
