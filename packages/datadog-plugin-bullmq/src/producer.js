@@ -35,10 +35,12 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 
   bindStart (ctx) {
     let instrument = true
-    try {
-      instrument = this.shouldInstrument(ctx)
-    } catch (error) {
-      log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
+    if (this.config.producerFilter) {
+      try {
+        instrument = this.shouldInstrument(ctx)
+      } catch (error) {
+        log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
+      }
     }
 
     if (!instrument) {
@@ -174,18 +176,22 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
 
-    const queueName = ctx.self?.name
     let allowedJobs
-    try {
-      allowedJobs = []
-      for (const job of jobs) {
-        if (job && this.config.producerFilter({ name: job.name, data: job.data, opts: job.opts, queueName })) {
-          allowedJobs.push(job)
+    if (this.config.producerFilter) {
+      const queueName = ctx.self?.name
+      try {
+        allowedJobs = []
+        for (const job of jobs) {
+          if (job && this.config.producerFilter({ name: job.name, data: job.data, opts: job.opts, queueName })) {
+            allowedJobs.push(job)
+          }
         }
+      } catch (error) {
+        log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
+        allowedJobs = jobs.filter(Boolean)
       }
-    } catch (error) {
-      log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
-      allowedJobs = jobs.filter(Boolean)
+    } else {
+      allowedJobs = jobs
     }
 
     ctx[filteredJobs] = allowedJobs
@@ -215,6 +221,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const cache = []
     for (let i = 0; i < jobs.length; i++) {
       const job = jobs[i]
+      if (!job) continue
       job.opts = job.opts || {}
       cache[i] = this._injectIntoOpts(span, job.opts)
     }
