@@ -157,11 +157,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
           assert.ok(
-            metadataDicts.some(metadata => metadata['*']?.[TEST_SESSION_NAME] === 'my-lage-package-a'),
+            metadataDicts.every(metadata => metadata['*'][TEST_SESSION_NAME] === 'my-lage-package-a'),
             `Got: ${inspect(metadataDicts)}`
           )
           assert.ok(
-            metadataDicts.some(metadata => metadata['*']?.[TEST_SESSION_NAME] === 'my-lage-package-b'),
+            metadataDicts.every(metadata => metadata['*'][TEST_SESSION_NAME] === 'my-lage-package-b'),
             `Got: ${inspect(metadataDicts)}`
           )
         })
