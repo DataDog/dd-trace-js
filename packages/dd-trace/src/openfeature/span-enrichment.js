@@ -21,7 +21,7 @@ class SpanEnrichmentState {
     /** @type {Map<string, Set<number>>} hashed targeting key -> serial IDs */
     this._subjects = new Map()
 
-    /** @type {Map<string, string>} flag key -> coded-default value */
+    /** @type {Map<string, string>} flag key -> runtime default value */
     this._defaults = new Map()
   }
 
