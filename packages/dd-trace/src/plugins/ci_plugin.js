@@ -52,7 +52,6 @@ const {
   TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_SUITE,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
@@ -128,7 +127,6 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const suiteTags = {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext.getTag(TEST_COMMAND),
     [TEST_MODULE]: testFramework,
   }
 
@@ -220,12 +218,7 @@ module.exports = class CiPlugin extends Plugin {
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
+      const metadataTags = { '*': { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName } }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {
         this.tracer._exporter.addMetadataTags(metadataTags)
@@ -262,7 +255,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context().getTag(TEST_COMMAND)
+      const testCommand = this.command
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
