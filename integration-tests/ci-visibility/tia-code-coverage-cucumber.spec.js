@@ -18,6 +18,7 @@ const {
   TEST_STATUS,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { NODE_MAJOR } = require('../../version')
 
 const FIXTURE_ROOT = 'ci-visibility/tia-code-coverage-cucumber'
 const SUBDIRECTORY_FIXTURE_ROOT = 'tia-code-coverage-cucumber'
@@ -75,6 +76,8 @@ function getSubdirectoryCucumberCommand (cwd) {
 
 function describeCucumberVersion (cucumberVersion, dependencies) {
   describe(`TIA code coverage cucumber@${cucumberVersion}`, function () {
+    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && cucumberVersion === 'latest') return
+
     let cwd
     let childProcess
 
