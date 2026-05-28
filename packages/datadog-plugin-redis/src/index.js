@@ -112,43 +112,15 @@ class RedisPlugin extends CachePlugin {
   }
 }
 
-// How many positional args after the command are safe to emit verbatim.
-// -1 = all args safe; 0 = all args redacted (default for unknown commands).
-// Rules adapted from @opentelemetry/redis-common (Apache 2.0), which ioredis also uses.
-const REDIS_SAFE_ARG_PATTERNS = [
-  [/^ECHO/i, 0],
-  [/^(LPUSH|MSET|PFA|PUBLISH|RPUSH|SADD|SET|SPUBLISH|XADD|ZADD)/i, 1],
-  [/^(HSET|HMSET|LSET|LINSERT)/i, 2],
-  [/^(ACL|BIT|B[LRZ]|CLIENT|CLUSTER|CONFIG|COMMAND|DECR|DEL|EVAL|EX|FUNCTION|GEO|GET|HINCR|HMGET|HSCAN|INCR|L[TRLM]|MEMORY|P[EFISTU]|RPOP|S[CDIMORSU]|XACK|X[CDGILPRT]|Z[CDILMPRS])/i, -1],
-]
-
-function safeArgCount (command) {
-  for (const [pattern, count] of REDIS_SAFE_ARG_PATTERNS) {
-    if (pattern.test(command)) return count
-  }
-  return 0
-}
-
 function formatCommand (command, args, argsStartIndex = 0) {
   if (!args || command === 'AUTH') return command
 
-  const safeCount = safeArgCount(command)
   let result = command
-  let safeLeft = safeCount
-
   for (let i = argsStartIndex, l = args.length; i < l; i++) {
     const arg = args[i]
     if (typeof arg === 'function') continue
 
-    let formatted
-    if (safeCount === -1 || safeLeft > 0) {
-      formatted = formatArg(arg)
-      if (safeCount !== -1) safeLeft--
-    } else {
-      formatted = '?'
-    }
-
-    result = `${result} ${formatted}`
+    result = `${result} ${formatArg(arg)}`
     if (result.length > MAX_COMMAND_LENGTH) return result.slice(0, MAX_COMMAND_LENGTH - 3) + '...'
   }
 

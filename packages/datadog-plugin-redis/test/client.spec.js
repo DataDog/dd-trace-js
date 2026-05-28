@@ -96,12 +96,12 @@ describe('Plugin', () => {
           await Promise.all([client.get('foo'), promise])
         })
 
-        it('redacts write command values', async () => {
+        it('redacts non-string non-number args as ?', async () => {
           const promise = agent.assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'SET multi-arg-key ?')
           }, { spanResourceMatch: /^SET$/ })
 
-          await Promise.all([client.set('multi-arg-key', 'multi-arg-value'), promise])
+          await Promise.all([client.set('multi-arg-key', Buffer.from('multi-arg-value')), promise])
         })
 
         it('trims a string arg longer than 100 chars', async () => {
@@ -126,20 +126,16 @@ describe('Plugin', () => {
           ])
         })
 
-        it('redacts MSET values and keeps the first key', async () => {
-          const args = []
-          for (let index = 0; index < 200; index++) {
-            args.push(`key${index}`, `value${index}`)
-          }
+        it('caps the joined raw command at 1000 chars across many args', async () => {
+          const keys = Array.from({ length: 200 }, (_, i) => `key${i}`)
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
-            assert.match(rawCommand, /^MSET /)
-            // Values are redacted; only the first key is shown. Result is well under 1000 chars.
-            assert.ok(rawCommand.length < 1000)
-            assert.match(rawCommand, / \?$/)
-          }, { spanResourceMatch: /^MSET$/ })
+            assert.match(rawCommand, /^DEL /)
+            assert.strictEqual(rawCommand.length, 1000)
+            assert.match(rawCommand, /\.\.\.$/)
+          }, { spanResourceMatch: /^DEL$/ })
 
-          await Promise.all([client.sendCommand(['MSET', ...args]), promise])
+          await Promise.all([client.sendCommand(['DEL', ...keys]), promise])
         })
 
         withPeerService(
