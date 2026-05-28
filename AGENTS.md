@@ -226,7 +226,7 @@ Avoid try/catch in hot paths - validate inputs early
 
 - **Search first**: Check for existing utilities/patterns before creating new code
 - **Avoid diverging implementations**: If behavior already exists elsewhere, reuse it or extract a shared helper instead of reimplementing it in a second place.
-- **Minimal public surface**: Don't add new programmatic public APIs without an explicit case — removing them later is painful. If a test or internal caller needs reach, add a narrow internal method or documented `_underscore` access, not a public one.
+- **Minimal public surface**: Don't add new programmatic public APIs without an explicit case — removing them later is painful. If an internal caller needs reach, add a narrow internal method on the producer, not a public one.
 - **Small PRs**: Break large efforts into incremental, reviewable changes
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
@@ -238,7 +238,7 @@ Avoid try/catch in hot paths - validate inputs early
 When a change introduces a class hierarchy, a new module boundary, a shared helper layer, or duplication across two or more types, score it against six dimensions before committing. Bar: 8/10 on at least five.
 
 1. **Drift prevention** — behaviour duplicated across types lives in one place; a new precondition or branch touches one site, not N.
-2. **Module coupling** — cross-module reach goes through a public API the team has committed to, or through `_underscore` documented at the access site as internal. Expanding the surface of an npm-exported class (`Span`, `Tracer`, OTel-bridge spans) is a forever commitment — `_underscore` reach is the lesser evil there.
+2. **Module coupling** — cross-module reach goes through a public API the team has committed to, never by reaching into another class's internals. Adding to the surface of an npm-exported class (`Span`, `Tracer`, OTel-bridge spans) is a forever commitment, so design the boundary so cross-module access doesn't need internal reach (callback in, diagnostic channel, restructured module boundary). If none of those fit, the architecture isn't done.
 3. **Explicit contracts** — invariants enforced by constructor signatures, typed params, abstract methods, `#private` fields; not by convention.
 4. **Testability at boundaries** — each boundary with multiple consumers or a spec/protocol contract has tests that pin its contract directly.
 5. **Extensibility** — adding a third type or method requires the smallest possible change.
