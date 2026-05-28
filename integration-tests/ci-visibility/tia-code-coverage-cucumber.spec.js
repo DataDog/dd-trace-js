@@ -24,6 +24,7 @@ const FIXTURE_ROOT = 'ci-visibility/tia-code-coverage-cucumber'
 const SUBDIRECTORY_FIXTURE_ROOT = 'tia-code-coverage-cucumber'
 const SKIPPED_SUITE = `${FIXTURE_ROOT}/features/skipped.feature`
 const SUBDIRECTORY_SKIPPED_SUITE = `${SUBDIRECTORY_FIXTURE_ROOT}/features/skipped.feature`
+const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
 const SKIPPED_SOURCE = `${FIXTURE_ROOT}/src/skipped-dependency.js`
 const FEATURE_FILES = `${FIXTURE_ROOT}/features/run.feature ${FIXTURE_ROOT}/features/skipped.feature`
 const LINE_PCT_RE = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
@@ -286,6 +287,25 @@ function describeCucumberVersion (cucumberVersion, dependencies) {
       assert.strictEqual(skippedWithCoverage.stdoutCodeCoverageLinesPct, baseline.stdoutCodeCoverageLinesPct)
       assert.strictEqual(skippedWithCoverage.codeCoverageLinesPct, baseline.codeCoverageLinesPct)
       assert.ok(sessionCoverage.files.some(file => file.filename === SKIPPED_SOURCE))
+    })
+
+    it('reports total coverage when skipped coverage only overlaps covered lines', async () => {
+      const result = await runCucumber({
+        suitesToSkip: [{
+          type: 'suite',
+          attributes: {
+            suite: SKIPPED_SUITE,
+          },
+        }],
+        skippableCoverage: {
+          [RUN_SOURCE]: getLinesBitmapBase64(1, 20),
+        },
+      })
+
+      assert.strictEqual(result.isTiaSkipped, 'true')
+      assert.strictEqual(result.skippedSuites.length, 1)
+      assert.strictEqual(result.skippedSuites[0].meta[TEST_STATUS], 'skip')
+      assert.strictEqual(result.codeCoverageLinesPct, result.stdoutCodeCoverageLinesPct)
     })
 
     it('only uploads suite coverage when TIA is enabled but coverage report upload is disabled', async () => {
