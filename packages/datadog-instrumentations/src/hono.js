@@ -40,10 +40,24 @@ function wrapUse (originalUse) {
   }
 }
 
+// `app.basePath()` returns a clone Hono instance built via the library's
+// internal class binding, so it never hits our instrumented constructor. The
+// clone shares the parent router (so `router.add` stays wrapped), but its
+// `use` is a fresh per-instance method that must be wrapped too, otherwise
+// middleware registered on the sub-app never lands in `middlewareHandlers`.
+function wrapBasePath (originalBasePath) {
+  return function (path) {
+    const clone = originalBasePath.apply(this, arguments)
+    shimmer.wrap(clone, 'use', wrapUse)
+    shimmer.wrap(clone, 'basePath', wrapBasePath)
+    return clone
+  }
+}
+
 function wrapRouterAdd (originalAdd) {
   return function (method, path, handlerData) {
-    const handler = handlerData[0]
-    if (!middlewareHandlers.has(handler)) {
+    const handler = handlerData?.[0]
+    if (typeof handler === 'function' && !middlewareHandlers.has(handler)) {
       const meta = handlerData[1]
       const wrappedHandler = function (context, next) {
         const req = context.env?.incoming
@@ -61,6 +75,7 @@ function wrapRouterAdd (originalAdd) {
 function instrumentHonoInstance (instance) {
   shimmer.wrap(instance, 'fetch', wrapFetch)
   shimmer.wrap(instance, 'use', wrapUse)
+  shimmer.wrap(instance, 'basePath', wrapBasePath)
   shimmer.wrap(instance.router, 'add', wrapRouterAdd)
 }
 
