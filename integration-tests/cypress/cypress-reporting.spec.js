@@ -34,7 +34,6 @@ const {
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_NAME,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
@@ -304,6 +303,86 @@ moduleTypes.forEach(({
         )
       })
     }
+
+    it('creates cypress.step spans for each command', async () => {
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
+      const specToRun = 'cypress/e2e/commands.cy.js'
+
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const passTestEvent = events.find(
+            event => event.type === 'test' && event.content.resource.includes('runs well-known commands')
+          )
+          const failTestEvent = events.find(
+            event => event.type === 'test' && event.content.resource.includes('fails on a step')
+          )
+          assert.ok(passTestEvent, 'passing cypress.test event exists')
+          assert.ok(failTestEvent, 'failing cypress.test event exists')
+
+          const stepEvents = events.filter(event => event.type === 'span' && event.content.name === 'cypress.step')
+          assert.ok(stepEvents.length > 0, 'cypress.step spans exist')
+
+          const visitStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'visit')
+          assert.ok(visitStep, 'visit step span exists')
+          assertObjectContains(visitStep.content, {
+            name: 'cypress.step',
+            resource: 'visit',
+            meta: { 'cypress.command': 'visit' },
+          })
+
+          const getStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'get')
+          assert.ok(getStep, 'get step span exists')
+          assertObjectContains(getStep.content, {
+            name: 'cypress.step',
+            resource: 'get',
+            meta: { 'cypress.command': 'get' },
+          })
+
+          const containsStep = stepEvents.find(event => event.content.meta['cypress.command'] === 'contains')
+          assert.ok(containsStep, 'contains step span exists')
+
+          for (const stepEvent of stepEvents) {
+            const matchesPass = stepEvent.content.trace_id.toString() === passTestEvent.content.trace_id.toString()
+            const matchesFail = stepEvent.content.trace_id.toString() === failTestEvent.content.trace_id.toString()
+            assert.ok(matchesPass || matchesFail, 'step span trace_id matches one of the test trace_ids')
+          }
+
+          const failedStep = stepEvents.find(event =>
+            event.content.trace_id.toString() === failTestEvent.content.trace_id.toString() &&
+            event.content.meta[ERROR_MESSAGE]
+          )
+          assert.ok(failedStep, 'failed step span with error exists')
+          assert.ok(failedStep.content.meta[ERROR_MESSAGE], 'failed step has error message')
+          assert.ok(failedStep.content.meta[ERROR_TYPE], 'failed step has error type')
+        },
+        { hardTimeout: 60000 }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
 
     // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
     const over10It = (version !== '6.7.0') ? it : it.skip
@@ -1888,9 +1967,8 @@ moduleTypes.forEach(({
             const ciVisMetadataDicts = ciVisPayloads.flatMap(({ payload }) => payload.metadata)
 
             ciVisMetadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.ok(metadata['*'][TEST_COMMAND])
             })
             const events = ciVisPayloads.flatMap(({ payload }) => payload.events)
 
@@ -1903,14 +1981,12 @@ moduleTypes.forEach(({
             const { content: testModuleEventContent } = testModuleEvent
 
             assert.ok(testSessionEventContent.test_session_id)
-            assert.ok(testSessionEventContent.meta[TEST_COMMAND])
             assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
             assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
             assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
             assert.ok(testModuleEventContent.test_session_id)
             assert.ok(testModuleEventContent.test_module_id)
-            assert.ok(testModuleEventContent.meta[TEST_COMMAND])
             assert.ok(testModuleEventContent.meta[TEST_MODULE])
             assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
             assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
@@ -1944,7 +2020,6 @@ moduleTypes.forEach(({
                 test_session_id: testSessionId,
               },
             }) => {
-              assert.ok(meta[TEST_COMMAND])
               assert.ok(meta[TEST_MODULE])
               assert.ok(testSuiteId)
               assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
@@ -1969,7 +2044,6 @@ moduleTypes.forEach(({
                 test_session_id: testSessionId,
               },
             }) => {
-              assert.ok(meta[TEST_COMMAND])
               assert.ok(meta[TEST_MODULE])
               assert.ok(testSuiteId)
               assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))

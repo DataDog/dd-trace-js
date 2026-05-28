@@ -18,8 +18,10 @@ import globals from 'globals'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
+import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
@@ -384,8 +386,10 @@ export default [
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
+          'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
@@ -424,6 +428,37 @@ export default [
         dynamicImports: 'always-multiline',
       }],
       'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-no-private-tags-access': ['error', {
+        allowFiles: [
+          // The span_context implementation defines and reads `_tags` directly.
+          'packages/dd-trace/src/opentracing/span_context.js',
+          // Unrelated `_tags` fields on other classes (not span contexts).
+          'packages/dd-trace/src/dogstatsd.js',
+          'packages/dd-trace/src/datastreams/processor.js',
+          // `LLMObservabilitySpan` (internal LLM-Obs DTO) has its own `_tags`
+          // field unrelated to the APM span context.
+          'packages/dd-trace/src/llmobs/span_processor.js',
+          // Test specs that intentionally mock the `_tags` field shape on a
+          // fake span context (their `getTag`/`getTags` mocks read `this._tags`).
+          'packages/dd-trace/test/opentracing/span_context.spec.js',
+          'packages/dd-trace/test/priority_sampler.spec.js',
+          'packages/dd-trace/test/sampling_rule.spec.js',
+          'packages/dd-trace/test/span_sampler.spec.js',
+          'packages/dd-trace/test/span_format.spec.js',
+          'packages/dd-trace/test/standalone/tracesource_priority_sampler.spec.js',
+          'packages/dd-trace/test/appsec/reporter.spec.js',
+          'packages/dd-trace/test/appsec/index.spec.js',
+          'packages/dd-trace/test/plugins/database-dbm-hash.spec.js',
+          'packages/dd-trace/test/plugins/outbound.spec.js',
+          'packages/dd-trace/test/llmobs/tagger.spec.js',
+          'packages/dd-trace/test/llmobs/span_processor.spec.js',
+          'packages/dd-trace/test/profiling/profilers/wall.spec.js',
+          // Benchmark stubs that mock the `_tags` field shape on a fake span
+          // context (their `getTag`/`getTags` mocks read from `_tags`).
+          'benchmark/stubs/span.js',
+          'benchmark/sirun/exporting-pipeline/index.js',
+        ],
+      }],
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
       'n/hashbang': 'error',
@@ -508,6 +543,7 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {
@@ -739,7 +775,8 @@ export default [
     },
     rules: {
       'eslint-rules/eslint-prefer-assert-match': 'error',
-      'eslint-rules/eslint-require-boolean-assert-message': 'error',
+      // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
+      'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',

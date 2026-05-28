@@ -201,6 +201,7 @@
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/baggage.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/sampler.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-capabilities-js
@@ -239,6 +240,7 @@
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
 /.github/playwright/ @DataDog/ci-app-libraries
+/.github/selenium/ @DataDog/ci-app-libraries
 /.github/actions/upload-node-reports/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/sdlc-security
@@ -260,6 +262,7 @@
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
 /.github/workflows/openfeature.yml @DataDog/feature-flagging-and-experimentation-sdk
+/.github/workflows/pr-title.yml @DataDog/lang-platform-js
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
