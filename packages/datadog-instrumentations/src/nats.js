@@ -44,7 +44,7 @@ function wrapSyncProducer (original, type) {
     if (!publishStartCh.hasSubscribers) {
       return original.apply(this, arguments)
     }
-    const opts = { ...(options ?? {}) }
+    const opts = { ...options }
     const ctx = { type, subject, data, options: opts, connection: this, createHeaders }
     return publishStartCh.runStores(ctx, () => {
       try {
@@ -68,7 +68,7 @@ function wrapAsyncProducer (original, type) {
     if (!publishStartCh.hasSubscribers) {
       return original.apply(this, arguments)
     }
-    const opts = { ...(options ?? {}) }
+    const opts = { ...options }
     const ctx = { type, subject, data, options: opts, connection: this, createHeaders }
     return publishStartCh.runStores(ctx, () => {
       requestsInFlight.add(this)
