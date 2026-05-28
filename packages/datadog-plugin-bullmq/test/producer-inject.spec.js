@@ -80,7 +80,7 @@ describe('bullmq producer telemetry metadata injection', () => {
     }
   })
 
-  it('logs an error and uses the default filter when producerFilter is not a function', () => {
+  it('logs an error and drops producerFilter when not a function', () => {
     const [QueueAddPlugin] = plugins
     const baseProto = Object.getPrototypeOf(QueueAddPlugin.prototype)
     const parentProto = Object.getPrototypeOf(baseProto)
@@ -93,8 +93,7 @@ describe('bullmq producer telemetry metadata injection', () => {
       sinon.assert.calledOnce(log.error)
       assert.match(log.error.firstCall.args[0], /Expected `producerFilter` to be a function/)
       const passed = superConfigure.firstCall.args[0]
-      assert.strictEqual(typeof passed.producerFilter, 'function')
-      assert.strictEqual(passed.producerFilter(), true)
+      assert.strictEqual(passed.producerFilter, undefined)
     } finally {
       superConfigure.restore()
     }
@@ -212,5 +211,57 @@ describe('bullmq producer telemetry metadata injection', () => {
     assert.deepStrictEqual(instance.bindStart(ctx), { noop: true })
     sinon.assert.calledTwice(producerFilter)
     sinon.assert.notCalled(tracer.inject)
+  })
+
+  it('instruments Queue.addBulk jobs without invoking shouldInstrument when no producerFilter is set', () => {
+    const [, QueueAddBulkPlugin] = plugins
+    const tracer = {
+      inject: sinon.stub().callsFake((span, format, carrier) => {
+        carrier['x-datadog-trace-id'] = '1'
+      }),
+    }
+    const instance = new QueueAddBulkPlugin(tracer, {})
+    const job1 = { name: 'a', data: { id: 1 }, opts: {} }
+    const job2 = { name: 'b', data: { id: 2 }, opts: {} }
+    const ctx = {
+      self: { name: 'q' },
+      arguments: [[job1, null, job2]],
+    }
+
+    instance.config = {}
+    instance.shouldInstrument = sinon.stub()
+    instance.startSpan = sinon.stub().callsFake((options, ctx) => {
+      ctx.currentStore = { span: {} }
+      return ctx.currentStore.span
+    })
+
+    assert.deepStrictEqual(instance.bindStart(ctx), ctx.currentStore)
+    // message_count matches raw jobs.length (incl. nulls) to preserve pre-filter behavior.
+    assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 3)
+    assert.ok(job1.opts.telemetry)
+    assert.ok(job2.opts.telemetry)
+    // Optimization: filter path must not run (no per-job allocation, no new array).
+    sinon.assert.notCalled(instance.shouldInstrument)
+  })
+
+  it('skips shouldInstrument on Queue.add when no producerFilter is set', () => {
+    const [QueueAddPlugin] = plugins
+    const tracer = {
+      inject: sinon.stub().callsFake((span, format, carrier) => {
+        carrier['x-datadog-trace-id'] = '1'
+      }),
+    }
+    const instance = new QueueAddPlugin(tracer, {})
+    const ctx = { self: { name: 'q' }, arguments: ['job', { id: 1 }] }
+
+    instance.config = {}
+    instance.shouldInstrument = sinon.stub()
+    instance.startSpan = sinon.stub().callsFake((options, ctx) => {
+      ctx.currentStore = { span: {} }
+      return ctx.currentStore.span
+    })
+
+    assert.deepStrictEqual(instance.bindStart(ctx), ctx.currentStore)
+    sinon.assert.notCalled(instance.shouldInstrument)
   })
 })
