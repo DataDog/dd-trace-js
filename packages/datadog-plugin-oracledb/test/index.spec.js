@@ -7,6 +7,7 @@ const { after, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const ddpv = require('mocha/package.json').version
+const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -474,6 +475,26 @@ describe('Plugin', () => {
         it('should not inject a comment when propagation is disabled', async () => {
           await connection.execute(dbQuery)
           assert.strictEqual(injected, dbQuery)
+        })
+      })
+
+      // When the legacy store handle is marked `noop` (the suppression mechanism used by the
+      // agent's own request loop), the plugin's bindStart is skipped and ctx.injected stays
+      // undefined; the instrumentation must not overwrite the caller's SQL with it.
+      describe('with tracing suppressed via the noop legacy store handle', () => {
+        before(async () => {
+          tracer = await agent.load('oracledb')
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          connection = await oracledb.getConnection(config)
+        })
+
+        after(async () => {
+          await connection.close()
+          await agent.close()
+        })
+
+        it('passes the caller SQL through unchanged when bindStart is skipped', async () => {
+          await storage('legacy').run({ noop: true }, () => connection.execute(dbQuery))
         })
       })
 
