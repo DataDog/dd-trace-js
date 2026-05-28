@@ -4,8 +4,9 @@ const log = require('../log')
 
 const { encodeDeltaVarint, hashTargetingKey } = require('./encoding')
 
-const MAX_SERIAL_IDS = 128
+const MAX_SERIAL_IDS = 200
 const MAX_SUBJECTS = 10
+const MAX_EXPERIMENTS_PER_SUBJECT = 20
 const MAX_DEFAULTS = 5
 const MAX_DEFAULT_VALUE_LENGTH = 64
 
@@ -52,7 +53,13 @@ class SpanEnrichmentState {
     const hashedKey = hashTargetingKey(targetingKey)
 
     if (this._subjects.has(hashedKey)) {
-      this._subjects.get(hashedKey).add(serialId)
+      const subjectIds = this._subjects.get(hashedKey)
+      if (subjectIds.size >= MAX_EXPERIMENTS_PER_SUBJECT) {
+        log.debug('SpanEnrichment: MAX_EXPERIMENTS_PER_SUBJECT limit (%d) reached for subject',
+          MAX_EXPERIMENTS_PER_SUBJECT)
+        return false
+      }
+      subjectIds.add(serialId)
       return true
     }
 
@@ -134,6 +141,7 @@ module.exports = {
   SpanEnrichmentState,
   MAX_SERIAL_IDS,
   MAX_SUBJECTS,
+  MAX_EXPERIMENTS_PER_SUBJECT,
   MAX_DEFAULTS,
   MAX_DEFAULT_VALUE_LENGTH,
 }

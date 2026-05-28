@@ -9,6 +9,7 @@ const {
   SpanEnrichmentState,
   MAX_SERIAL_IDS,
   MAX_SUBJECTS,
+  MAX_EXPERIMENTS_PER_SUBJECT,
   MAX_DEFAULTS,
   MAX_DEFAULT_VALUE_LENGTH,
 } = require('../../src/openfeature/span-enrichment')
@@ -77,12 +78,21 @@ describe('SpanEnrichmentState', () => {
       assert.strictEqual(state.addSubject('user-new', 999), false)
     })
 
-    it('should allow adding serial IDs to existing subject beyond limit', () => {
+    it('should allow adding serial IDs to existing subject when below per-subject limit', () => {
       for (let i = 0; i < MAX_SUBJECTS; i++) {
         state.addSubject(`user-${i}`, i)
       }
-      // Adding to existing subject should still work
+      // Adding to existing subject should still work (until per-subject limit)
       assert.strictEqual(state.addSubject('user-0', 999), true)
+    })
+
+    it('should enforce MAX_EXPERIMENTS_PER_SUBJECT limit', () => {
+      // Add max experiments for one subject
+      for (let i = 0; i < MAX_EXPERIMENTS_PER_SUBJECT; i++) {
+        assert.strictEqual(state.addSubject('user-0', i), true)
+      }
+      // 21st experiment for same subject should fail
+      assert.strictEqual(state.addSubject('user-0', 999), false)
     })
   })
 
@@ -198,8 +208,9 @@ describe('SpanEnrichmentState', () => {
 
 describe('constants', () => {
   it('should have correct limit values', () => {
-    assert.strictEqual(MAX_SERIAL_IDS, 128)
+    assert.strictEqual(MAX_SERIAL_IDS, 200)
     assert.strictEqual(MAX_SUBJECTS, 10)
+    assert.strictEqual(MAX_EXPERIMENTS_PER_SUBJECT, 20)
     assert.strictEqual(MAX_DEFAULTS, 5)
     assert.strictEqual(MAX_DEFAULT_VALUE_LENGTH, 64)
   })
