@@ -418,6 +418,11 @@ module.exports = {
   ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getLineCoverageBitmap,
+  applySkippedCoverageToCoverage,
+  getTestCoverageLinesPercentage,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
@@ -1030,15 +1035,225 @@ function addIntelligentTestRunnerSpanTags (
 }
 
 function getCoveredFilenamesFromCoverage (coverage) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
+  return getCoveredFilesFromCoverage(coverage).map(({ filename }) => filename)
+}
 
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      return Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-    })
+function getCoverageMap (coverage) {
+  if (coverage?.files && coverage?.fileCoverageFor) {
+    return coverage
+  }
+  return istanbul.createCoverageMap(coverage)
+}
+
+function getCoveredFilesFromCoverage (coverage) {
+  const coverageMap = getCoverageMap(coverage)
+  const coverageFiles = []
+
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const bitmap = getLineCoverageBitmap(fileCoverage.getLineCoverage(), true)
+    if (bitmap) {
+      coverageFiles.push({ filename, bitmap })
+    }
+  }
+
+  return coverageFiles
+}
+
+function getExecutableFilesFromCoverage (coverage) {
+  const coverageMap = getCoverageMap(coverage)
+  const coverageFiles = []
+
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const bitmap = getLineCoverageBitmap(fileCoverage.getLineCoverage())
+    if (bitmap) {
+      coverageFiles.push({ filename, bitmap })
+    }
+  }
+
+  return coverageFiles
+}
+
+function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
+  let maxLine = 0
+  const lines = []
+
+  for (const [line, hits] of Object.entries(lineCoverage)) {
+    if (onlyCoveredLines && !hits) continue
+
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    lines.push(lineNumber)
+    if (lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+
+  if (maxLine === 0) return
+
+  const bitmap = Buffer.alloc(Math.ceil((maxLine + 1) / 8))
+  for (const lineNumber of lines) {
+    bitmap[lineNumber >> 3] |= 1 << (lineNumber % 8)
+  }
+
+  return bitmap
+}
+
+function mergeCoverageBitmaps (targetBitmap, bitmap) {
+  if (!targetBitmap) {
+    return Buffer.from(bitmap)
+  }
+
+  if (targetBitmap.length < bitmap.length) {
+    const biggerBitmap = Buffer.alloc(bitmap.length)
+    targetBitmap.copy(biggerBitmap)
+    targetBitmap = biggerBitmap
+  }
+
+  for (let i = 0; i < bitmap.length; i++) {
+    targetBitmap[i] |= bitmap[i]
+  }
+
+  return targetBitmap
+}
+
+function countBitmapBits (bitmap) {
+  let count = 0
+
+  for (const byte of bitmap) {
+    let value = byte
+    while (value) {
+      value &= value - 1
+      count++
+    }
+  }
+
+  return count
+}
+
+function countCoveredExecutableBits (coveredBitmap, executableBitmap) {
+  if (!coveredBitmap) return 0
+
+  let count = 0
+  const length = Math.min(coveredBitmap.length, executableBitmap.length)
+
+  for (let i = 0; i < length; i++) {
+    let value = coveredBitmap[i] & executableBitmap[i]
+    while (value) {
+      value &= value - 1
+      count++
+    }
+  }
+
+  return count
+}
+
+function getCoverageFileBitmap (bitmap) {
+  if (!bitmap) return
+  if (Buffer.isBuffer(bitmap)) return bitmap
+  if (ArrayBuffer.isView(bitmap)) {
+    return Buffer.from(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength)
+  }
+  if (typeof bitmap === 'string') {
+    return Buffer.from(bitmap, 'base64')
+  }
+}
+
+function addCoverageFilesToMap (files, targetMap, rootDir) {
+  for (const file of files) {
+    const bitmap = getCoverageFileBitmap(file.bitmap)
+    if (!bitmap) continue
+
+    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
+    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
+  }
+}
+
+function addSkippedCoverageToMap (skippedCoverage, targetMap) {
+  if (!skippedCoverage) return
+
+  for (const [filename, bitmap] of Object.entries(skippedCoverage)) {
+    const coverageBitmap = getCoverageFileBitmap(bitmap)
+    if (!coverageBitmap) continue
+    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), coverageBitmap))
+  }
+}
+
+function hasSkippedCoverage (skippedCoverage) {
+  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  const executableLinesByFile = new Map()
+  const coveredLinesByFile = new Map()
+
+  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
+  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
+  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
+
+  let totalExecutableLines = 0
+  let totalCoveredLines = 0
+
+  for (const [filename, executableLines] of executableLinesByFile) {
+    totalExecutableLines += countBitmapBits(executableLines)
+    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
+  }
+
+  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+}
+
+function isLineCoveredByBitmap (bitmap, line) {
+  if (!Number.isSafeInteger(line) || line <= 0) return false
+
+  const byteIndex = line >> 3
+  return byteIndex < bitmap.length && !!(bitmap[byteIndex] & (1 << (line % 8)))
+}
+
+function getSkippedCoverageByFilename (skippedCoverage) {
+  const skippedCoverageByFilename = new Map()
+  addSkippedCoverageToMap(skippedCoverage, skippedCoverageByFilename)
+  return skippedCoverageByFilename
+}
+
+function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
+  let updated = false
+  for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
+    const startLine = statementLocation?.start?.line
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
+    if (fileCoverage.data.s[statementId] > 0) continue
+
+    fileCoverage.data.s[statementId] = 1
+    updated = true
+  }
+  return updated
+}
+
+/**
+ * Applies backend skipped-suite coverage to an Istanbul coverage map.
+ * @param {object} coverage
+ * @param {object} skippedCoverage
+ * @param {string} [rootDir]
+ * @returns {boolean}
+ */
+function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
+  if (!hasSkippedCoverage(skippedCoverage)) return false
+
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  let updated = false
+
+  for (const filename of coverageMap.files()) {
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const skippedBitmap = skippedCoverageByFilename.get(relativeFilename)
+    if (!skippedBitmap) continue
+
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    updated = applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap) || updated
+  }
+
+  return updated
 }
 
 function resetCoverage (coverage) {
