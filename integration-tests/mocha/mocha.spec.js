@@ -76,6 +76,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
+  getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -92,6 +93,14 @@ function assertItrSkippingEnabledTags (events, expected) {
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
   const test = events.find(event => event.type === 'test').content
   assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
+function getLinesBitmapBase64 (startLine, endLine) {
+  const lineCoverage = {}
+  for (let line = startLine; line <= endLine; line++) {
+    lineCoverage[line] = 1
+  }
+  return getLineCoverageBitmap(lineCoverage, true).toString('base64')
 }
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
@@ -1918,7 +1927,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
-    it('can report code coverage', (done) => {
+    it('can report code coverage', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: true,
+        tests_skipping: true,
+      })
+
       let testOutput = ''
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
@@ -1926,7 +1942,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
       const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
-      Promise.all([
+      const requestsPromise = Promise.all([
         libraryConfigRequestPromise,
         codeCovRequestPromise,
         eventsRequestPromise,
@@ -1973,7 +1989,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
         assert.strictEqual(numSuites, 2)
-      }).catch(done)
+      })
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -1985,11 +2001,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.on('exit', () => {
-        // coverage report
-        assert.match(testOutput, /Lines {7}/)
-        done()
-      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const [, [exitCode]] = await Promise.all([
+        requestsPromise,
+        once(childProcess, 'exit'),
+        stdoutEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+      // coverage report
+      assert.match(testOutput, /Lines {7}/)
     })
 
     it('does not report code coverage if disabled by the API', (done) => {
@@ -2029,19 +2049,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
     })
 
-    it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
+    it('can skip suites received by the intelligent test runner API and still reports code coverage', async () => {
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
           suite: 'ci-visibility/test/ci-visibility-test.js',
         },
       }])
+      receiver.setSkippableCoverage({
+        'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
+      })
 
       const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
       const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
       const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
-      Promise.all([
+      const requestsPromise = Promise.all([
         skippableRequestPromise,
         coverageRequestPromise,
         eventsRequestPromise,
@@ -2081,8 +2104,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
         assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
         assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
-        done()
-      }).catch(done)
+      })
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -2091,9 +2113,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
+      const [, [exitCode]] = await Promise.all([
+        requestsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
-    it('marks the test session as skipped if every suite is skipped', (done) => {
+    it('marks the test session as skipped if every suite is skipped', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
       receiver.setSuitesToSkip(
         [
           {
@@ -2124,11 +2156,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('does not skip tests if git metadata upload fails', (done) => {
@@ -2214,7 +2246,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
     })
 
-    it('does not skip suites if suite is marked as unskippable', (done) => {
+    it('does not skip suites if suite is marked as unskippable', async () => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
@@ -2229,6 +2262,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        'ci-visibility/unskippable-test/test-to-skip.js': coveredSkippedLines,
+        'ci-visibility/unskippable-test/test-unskippable.js': coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2282,14 +2319,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
-    it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+    it('only sets forced to run if suite was going to be skipped by ITR', async () => {
       receiver.setSuitesToSkip([
         {
           type: 'suite',
@@ -2298,6 +2335,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        'ci-visibility/unskippable-test/test-to-skip.js': getLinesBitmapBase64(1, 20),
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2351,11 +2391,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
@@ -2463,6 +2503,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           suite: 'ci-visibility/test/ci-visibility-test.js',
         },
       }])
+      receiver.setSkippableCoverage({
+        'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
