@@ -28,7 +28,7 @@ const FEATURE_FILES = `${FIXTURE_ROOT}/features/run.feature ${FIXTURE_ROOT}/feat
 const LINE_PCT_RE = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
 const CUCUMBER_COMMAND = './node_modules/nyc/bin/nyc.js --all ' +
   `--include '${FIXTURE_ROOT}/src/**' -r=text-summary node ./node_modules/.bin/cucumber-js ${FEATURE_FILES}`
-const MINIMUM_SUPPORTED_CUCUMBER_VERSION = '7.0.0'
+const MINIMUM_SUPPORTED_CUCUMBER_VERSION = '10.0.0'
 
 const CUCUMBER_VERSION_CONFIGS = [
   {
