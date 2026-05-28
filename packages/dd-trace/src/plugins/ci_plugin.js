@@ -172,7 +172,7 @@ module.exports = class CiPlugin extends Plugin {
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, requestErrorTags })
+        onDone({ err, libraryConfig, repositoryRoot: this.repositoryRoot, requestErrorTags })
       })
     })
 
