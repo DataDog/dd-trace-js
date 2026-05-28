@@ -3,7 +3,7 @@
 const crypto = require('node:crypto')
 
 /**
- * Encode a single value as a varint (variable-length integer).
+ * Encode a single value as a ULEB128 varint (variable-length integer).
  * Uses 7 bits per byte, with MSB as continuation flag.
  *
  * @param {number} value - Non-negative integer to encode
