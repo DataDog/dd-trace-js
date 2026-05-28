@@ -1070,7 +1070,24 @@ function main () {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
+  // Transitive closure: a script counts as "invoked" when CI either runs it directly or runs
+  // another script that calls it via `npm run X` / `yarn X`. Without this, chaining a `:ci`
+  // script into the body of a parent script (e.g. `lint` -> `npm run lint:codeowners:ci`)
+  // looks orphaned to the coverage check below even though the parent's CI step exercises it.
   const invokedScripts = new Set(invoked.map(i => i.script))
+  const closureQueue = [...invokedScripts]
+  while (closureQueue.length) {
+    const name = closureQueue.shift()
+    if (name === undefined) continue
+    const cmd = scripts[name]
+    if (typeof cmd !== 'string') continue
+    for (const inv of extractScriptInvocations(cmd, knownScripts)) {
+      if (!invokedScripts.has(inv.script)) {
+        invokedScripts.add(inv.script)
+        closureQueue.push(inv.script)
+      }
+    }
+  }
 
   /**
    * A script counts as "invoked" when either itself or its `:coverage` sibling (or base, if the
