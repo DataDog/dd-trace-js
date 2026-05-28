@@ -1,19 +1,13 @@
 ---
 name: apm-integrations
 description: |
-  This skill should be used when the user asks to "add a new integration",
-  "instrument a library", "add instrumentation for",
-  "create instrumentation", "new dd-trace integration",
-  "add tracing for", "TracingPlugin", "DatabasePlugin", "CachePlugin",
-  "ClientPlugin", "ServerPlugin", "CompositePlugin", "ConsumerPlugin",
-  "ProducerPlugin", "addHook", "shimmer.wrap", "orchestrion",
-  "bindStart", "bindFinish", "startSpan", "diagnostic channel",
-  "runStores", "reference plugin", "example plugin", "similar integration",
-  "read upstream source", "fix instrumentation", "debug instrumentation",
-  "modify instrumentation", "subscriber cardinality", "publish position",
-  "IAST taint", "AppSec subscriber", "channel.publish gate", "depth filter",
-  or needs to build, modify, or debug the instrumentation and plugin layers
-  for a third-party library in dd-trace-js.
+  Use when adding, debugging, fixing, or modifying instrumentation and plugins
+  for third-party libraries in dd-trace-js. Triggers: "add a new integration",
+  "instrument a library", any *Plugin base class (Tracing/Database/Cache/
+  Client/Server/Consumer/Producer/Composite), "addHook", "shimmer.wrap",
+  "orchestrion", "bindStart"/"bindFinish", "diagnostic channel", "runStores",
+  "subscriber cardinality", "channel.publish gate", "read upstream source",
+  "reference plugin".
 ---
 
 # APM Integrations

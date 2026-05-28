@@ -112,6 +112,7 @@ PLUGINS="<name>" npm run test:plugins
 
 **Philosophy:**
 
+- On a bug fix or new feature, scope `--include` to the changed paths and confirm those lines are covered before declaring the work done. Whole-package coverage passing is not the same as coverage on the lines you just touched.
 - Integration tests (running in sandboxes) don't count towards nyc coverage metrics
 - Don't add redundant unit tests solely to improve coverage numbers
 - Focus on covering important production code paths with whichever test type makes sense
@@ -141,6 +142,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 - Files shall end with a single new line at the end
 - Use destructuring for better code readability
 - Line length is capped at 120 characters
+- Comments only for non-obvious intent, trade-offs, or constraints the code can't carry. Don't narrate what the diff already shows.
 
 ### Linting & Naming
 
@@ -204,6 +206,8 @@ Separate groups with empty line, sort alphabetically within each:
 - Cache compiled regexes and parsed values at module load; never compile per-call.
 - Order short-circuit chains by `frequency × cheapness`: the cheap common case first, the expensive rare case last. A `value === null` check outside an enclosing `typeof === 'object'` arm pays the null comparison on every primitive — move it inside.
 
+**Verifying perf-motivated changes.** A rewrite justified by speed (`for` replacing `.map()`, hand-inlined helper, `new Array(n)` + indexed assignment over `.map()`) needs a one-file microbenchmark before it lands. Warm up for ~1 s, time ≥5 trials of each implementation, then re-run in a fresh shell to confirm the numbers reproduce. Decide: **equal** (within ~±2 %) → keep the more readable one; **marginal** (~5 %) → justify the trade-off in the commit body; **real** (≥10 %, reproducible) → keep, and put the numbers in the commit body. Throw the benchmark file away once the decision lands, or graduate it to `benchmark/sirun/` if it has lasting value.
+
 ### Debugging and Logging
 
 Use `log` (`packages/dd-trace/src/log/index.js`) with printf-style formatting (not template strings). Use the callback form for expensive formatting.
@@ -222,6 +226,7 @@ Avoid try/catch in hot paths - validate inputs early
 
 - **Search first**: Check for existing utilities/patterns before creating new code
 - **Avoid diverging implementations**: If behavior already exists elsewhere, reuse it or extract a shared helper instead of reimplementing it in a second place.
+- **Minimal public surface**: Don't add new programmatic public APIs without an explicit case — removing them later is painful. If a test or internal caller needs reach, add a narrow internal method or documented `_underscore` access, not a public one.
 - **Small PRs**: Break large efforts into incremental, reviewable changes
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
