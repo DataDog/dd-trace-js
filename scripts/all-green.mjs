@@ -112,18 +112,18 @@ async function pollUntilDone () {
     !retriedRunIds.has(r.id)
   )
 
-  if (toRetry.length > 0) {
-    await rerunFailedWorkflows(toRetry)
-    for (const run of toRetry) retriedRunIds.add(run.id)
-    runsCache = undefined
-  }
-
   const pending = runs.filter(r => r.status !== 'completed').length
   if (pending === 0 && toRetry.length === 0) return { runs, done: true }
 
   retries++
 
   if (RETRIES && retries > RETRIES) return { runs, done: false }
+
+  if (toRetry.length > 0) {
+    await rerunFailedWorkflows(toRetry)
+    for (const run of toRetry) retriedRunIds.add(run.id)
+    runsCache = undefined
+  }
 
   console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
   await setTimeout(POLLING_INTERVAL * 60_000)
@@ -160,6 +160,18 @@ async function rerunOnStartup () {
   }
 }
 
+async function cancelRunningWorkflows (runs) {
+  const running = runs.filter(r => r.status !== 'completed')
+  if (running.length === 0) return
+  console.log(`Cancelling ${running.length} still-running workflow(s).`)
+  await Promise.all(
+    running.map(run => {
+      console.log(`Cancelling workflow run ${run.id} (${run.name}).`)
+      return octokit.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id })
+    })
+  )
+}
+
 async function checkAllGreen () {
   await rerunOnStartup()
 
@@ -169,6 +181,7 @@ async function checkAllGreen () {
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
+    await cancelRunningWorkflows(runs)
     process.exitCode = 1
     return
   }
