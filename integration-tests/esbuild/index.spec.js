@@ -121,6 +121,12 @@ esbuildVersions.forEach((version) => {
         })
       })
 
+      it('runs minified ESM bundles without ReferenceError on arguments', () => {
+        execSync('node ./build-and-test-esm-minify.mjs', {
+          timeout,
+        })
+      })
+
       it('should not override existing js banner', () => {
         execSync('node ./build-and-run.esm-unrelated-js-banner.mjs', {
           timeout,

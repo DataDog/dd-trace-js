@@ -22,6 +22,7 @@
   "dependencies": {
     "@apollo/server": "5.5.1",
     "@koa/router": "15.5.0",
+    "@smithy/smithy-client": "4.13.5",
     "aws-sdk": "2.1693.0",
     "axios": "1.16.1",
     "express": "4.22.2",
