@@ -155,11 +155,23 @@ class MariadbCommandPlugin extends DatabasePlugin {
     this.addSub(`${prefix}:end`, ctx => this.startSpanFromCommand(ctx))
   }
 
+  /**
+   * Returns the connection config to use for span metadata.
+   * v2 overrides this because configAssign strips host/user/database/port from cmd.opts.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @param {object} cmd - Command instance (ctx.self)
+   * @returns {object}
+   */
+  getConf (ctx, cmd) {
+    return cmd.opts || {}
+  }
+
   startSpanFromCommand (ctx) {
     const cmd = ctx.self
     if (!cmd) return
 
-    const conf = cmd.opts || {}
+    const conf = this.getConf(ctx, cmd)
     const sql = cmd.sql
     const service = this.serviceName({ pluginConfig: this.config, dbConfig: conf, system: this.system })
 
@@ -178,8 +190,7 @@ class MariadbCommandPlugin extends DatabasePlugin {
       childOf: this.activeSpan,
     }, ctx)
 
-    this.injectDbmQuery(span, sql, service)
-
+    cmd.sql = this.injectDbmQuery(span, sql, service.name)
     cmd[DD_SPAN] = span
   }
 }
@@ -197,6 +208,17 @@ class ExecuteCommandPlugin extends MariadbCommandPlugin {
 class V2QueryCommandPlugin extends MariadbCommandPlugin {
   static id = 'mariadb'
   static prefix = 'tracing:orchestrion:mariadb:v2Query_construct'
+
+  /**
+   * v2 configAssign strips host/user/database/port from this.opts;
+   * the raw connOpts is passed as constructor argument index 3.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @returns {object}
+   */
+  getConf (ctx) {
+    return ctx.arguments?.[3] || {}
+  }
 }
 
 /**
