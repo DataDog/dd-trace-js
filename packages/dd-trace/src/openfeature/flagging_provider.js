@@ -12,7 +12,7 @@ const SpanEnrichmentHook = require('./span-enrichment-hook')
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
-  /** @type {SpanEnrichmentHook} */
+  /** @type {SpanEnrichmentHook?} */
   #spanEnrichmentHook
 
   /**
