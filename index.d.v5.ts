@@ -2242,7 +2242,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Prisma extends Instrumentation {}
+    interface Prisma extends DatabaseInstrumentation {}
 
     /** @hidden */
     interface PrismaClient extends Prisma {}
@@ -3025,7 +3025,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [pg](https://node-postgres.com/) module.
      */
-    interface pg extends Instrumentation {
+    interface pg extends DatabaseInstrumentation {
       /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
