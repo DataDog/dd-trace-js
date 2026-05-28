@@ -48,6 +48,7 @@ describe('FlaggingProvider', () => {
 
     log = {
       debug: sinon.spy(),
+      info: sinon.spy(),
       error: sinon.spy(),
       warn: sinon.spy(),
     }
@@ -168,10 +169,17 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
     })
 
-    it('should log debug message when span enrichment is enabled', () => {
+    it('should log info message when span enrichment is enabled', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
-      sinon.assert.calledWith(log.debug, '%s span enrichment enabled', 'FlaggingProvider')
+      sinon.assert.calledWith(log.info, '%s span enrichment enabled', 'FlaggingProvider')
+    })
+
+    it('should log info message when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledWith(log.info, '%s span enrichment disabled', 'FlaggingProvider')
     })
   })
 
