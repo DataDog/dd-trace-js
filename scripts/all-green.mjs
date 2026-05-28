@@ -112,18 +112,18 @@ async function pollUntilDone () {
     !retriedRunIds.has(r.id)
   )
 
-  if (toRetry.length > 0) {
-    await rerunFailedWorkflows(toRetry)
-    for (const run of toRetry) retriedRunIds.add(run.id)
-    runsCache = undefined
-  }
-
   const pending = runs.filter(r => r.status !== 'completed').length
   if (pending === 0 && toRetry.length === 0) return { runs, done: true }
 
   retries++
 
   if (RETRIES && retries > RETRIES) return { runs, done: false }
+
+  if (toRetry.length > 0) {
+    await rerunFailedWorkflows(toRetry)
+    for (const run of toRetry) retriedRunIds.add(run.id)
+    runsCache = undefined
+  }
 
   console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
   await setTimeout(POLLING_INTERVAL * 60_000)
