@@ -119,6 +119,9 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              // Playwright 1.18.0 runs all retries even after a pass (doesn't stop on first pass),
+              // so pin the count to match the fixture's pass threshold (retry < 2) for determinism.
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
             },
           }
         )
