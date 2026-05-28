@@ -11,10 +11,8 @@ const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers'
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
-// ioredis >= 5.11.0 uses built-in TracingChannel on Node.js >= 19.9 / 20.2, which
-// does not expose the connection name, so splitByInstance has no effect.
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const hasDcTracingChannel = typeof require('node:diagnostics_channel').tracingChannel === 'function'
+// ioredis >= 5.11.0 uses built-in TracingChannel (dc-polyfill ensures it's always available),
+// which does not expose the connection name, so splitByInstance has no effect for those versions.
 
 describe('Plugin', () => {
   let Redis
@@ -162,7 +160,7 @@ describe('Plugin', () => {
           // ioredis >= 5.11.0 on Node.js >= 20.2 uses built-in TracingChannel which does not
           // expose connectionName, so splitByInstance has no effect and the service is 'custom'.
           // `version` may be a range string like '>=5.11.0', so coerce before comparing.
-          const expectedService = hasDcTracingChannel && semver.satisfies(semver.coerce(version), '>=5.11.0')
+          const expectedService = semver.satisfies(semver.coerce(version), '>=5.11.0')
             ? 'custom'
             : 'custom-test'
 
@@ -184,10 +182,10 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              // ioredis >= 5.11.0 on Node.js >= 20.2 uses built-in TracingChannel which does not
-              // expose connectionName, so splitByInstance has no effect and the service is 'custom'.
+              // ioredis >= 5.11.0 uses built-in TracingChannel which does not expose connectionName,
+              // so splitByInstance has no effect and the service is 'custom'.
               // `version` may be a range string like '>=5.11.0', so coerce before comparing.
-              serviceName: hasDcTracingChannel && semver.satisfies(semver.coerce(version), '>=5.11.0')
+              serviceName: semver.satisfies(semver.coerce(version), '>=5.11.0')
                 ? 'custom'
                 : 'custom-test',
             },

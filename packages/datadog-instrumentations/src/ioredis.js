@@ -52,16 +52,7 @@ addHook({ name: 'ioredis', versions: ['>=4.11.0 <5'], file: 'built/redis/index.j
 addHook({ name: 'ioredis', versions: ['>=5 <5.11.0'] }, wrapRedis)
 
 // ioredis >= 5.11.0 exposes a built-in TracingChannel (tracing:ioredis:command).
-// On Node.js versions that support dc.tracingChannel (>= 19.9 / 20.2), the plugin
-// subscribes directly to those channels and no shimmer is needed. Fall back to the
-// shimmer approach on older Node.js runtimes.
-addHook({ name: 'ioredis', versions: ['>=5.11.0'] }, (Redis) => {
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  if (typeof require('node:diagnostics_channel').tracingChannel === 'function') {
-    return Redis
-  }
-  return wrapRedis(Redis)
-})
+// dc-polyfill ensures tracingChannel is always available, so no shimmer is needed.
 
 function finish (finishCh, errorCh, ctx, error) {
   if (error) {
