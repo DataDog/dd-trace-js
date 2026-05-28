@@ -50,6 +50,8 @@ lib-cov
 coverage/
 !integration-tests/coverage/
 !integration-tests/coverage/**
+!.github/actions/coverage/
+!.github/actions/coverage/**
 *.lcov
 
 # nyc test coverage
