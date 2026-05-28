@@ -8,12 +8,12 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @azure/service-bus,azure-service-bus,7.9.2,7.9.5,True
 @confluentinc/kafka-javascript,confluentinc-kafka-javascript,1.0.0,1.9.0,True
 @cucumber/cucumber,cucumber,7.0.0,12.9.0,True
-@elastic/elasticsearch,elasticsearch,5.6.16,9.4.0,True
-@elastic/transport,elasticsearch,8.0.0,9.3.5,True
+@elastic/elasticsearch,elasticsearch,5.6.16,9.4.1,True
+@elastic/transport,elasticsearch,8.0.0,9.3.6,True
 @google-cloud/pubsub,google-cloud-pubsub,1.2.0,5.3.0,True
 @google-cloud/vertexai,google-cloud-vertexai,1.0.0,1.12.0,True
 @google/genai,google-genai,1.19.0,2.6.0,True
-@grpc/grpc-js,grpc,1.0.3,1.14.3,True
+@grpc/grpc-js,grpc,1.0.3,1.14.4,True
 @hapi/hapi,hapi,17.9.0,21.4.9,True
 @happy-dom/jest-environment,jest,10.0.0,20.9.0,True
 @jest/core,jest,28.0.0,30.4.2,True
@@ -36,7 +36,7 @@ amqp10,amqp10,3.0.0,3.6.0,True
 amqplib,amqplib,0.5.0,2.0.1,True
 avsc,avsc,5.0.0,5.7.9,True
 aws-sdk,aws-sdk,2.1.35,2.1693.0,True
-bullmq,bullmq,5.66.0,5.76.10,True
+bullmq,bullmq,5.66.0,5.77.2,True
 bunyan,bunyan,1.0.0,2.0.5,True
 cassandra-driver,cassandra-driver,3.0.0,4.9.0,True
 child_process,child_process,18.0.0,26.2.0,True
@@ -46,13 +46,13 @@ cypress,cypress,12.0.0,15.15.0,True
 dns,dns,18.0.0,26.2.0,True
 durable-functions,azure-durable-functions,3.0.0,3.3.1,True
 elasticsearch,elasticsearch,10.0.0,16.7.3,True
-electron,electron,37.0.0,42.1.0,True
+electron,electron,37.0.0,42.2.0,True
 express,express,4.0.0,5.2.1,True
 fastify,fastify,1.0.0,5.8.5,True
 find-my-way,find-my-way,1.0.0,9.6.0,True
 graphql,graphql,0.10.0,16.14.0,True
 hapi,hapi,16.0.0,18.1.0,True
-hono,hono,4.0.0,4.12.19,True
+hono,hono,4.0.0,4.12.22,True
 http,http,18.0.0,26.2.0,True
 http2,http2,18.0.0,26.2.0,True
 https,http,18.0.0,26.2.0,True
@@ -65,9 +65,9 @@ jest-environment-node,jest,28.0.0,30.4.1,True
 jest-runtime,jest,28.0.0,30.4.2,True
 jest-worker,jest,28.0.0,30.4.1,True
 kafkajs,kafkajs,1.4.0,2.2.4,True
-koa,koa,2.0.0,3.2.0,True
+koa,koa,2.0.0,3.2.1,True
 koa-router,koa,7.0.0,14.0.0,True
-mariadb,mariadb,2.0.4,3.4.5,True
+mariadb,mariadb,2.0.4,3.5.2,True
 memcached,memcached,2.2.0,2.2.2,True
 microgateway-core,microgateway-core,2.1.0,3.3.7,True
 mocha,mocha,8.0.0,11.7.6,True
@@ -92,7 +92,7 @@ pg,pg,8.0.3,8.21.0,True
 pino,pino,2.0.0,10.3.1,True
 pino-pretty,pino,1.0.0,13.1.3,True
 playwright,playwright,1.38.0,1.60.0,True
-protobufjs,protobufjs,6.8.0,8.4.0,True
+protobufjs,protobufjs,6.8.0,8.4.2,True
 redis,redis,0.12.0,5.12.1,True
 restify,restify,3.0.0,11.1.0,True
 rhea,rhea,1.0.0,3.0.5,True
@@ -105,4 +105,4 @@ undici,undici,4.4.1,8.3.0,True
 vitest,vitest,1.6.0,4.1.7,True
 winston,winston,1.0.0,3.19.0,True
 workerpool,mocha,6.0.0,10.0.2,True
-ws,ws,8.0.0,8.20.1,True
+ws,ws,8.0.0,8.21.0,True
