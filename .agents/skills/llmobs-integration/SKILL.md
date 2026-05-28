@@ -38,6 +38,10 @@ This skill helps you create LLMObs plugins that instrument LLM library operation
 - Understanding LLMObsPlugin architecture and patterns
 - Determining how to instrument a new LLM package
 
+## Read Upstream Source First
+
+LLM libraries iterate fast — six-month-old assumptions about an SDK's response shape, streaming contract, or tool-call format are usually wrong. Before category detection or any plugin work, read the upstream library's source for the installed version (`versions/<lib>@<range>/node_modules/<lib>`). The category decision tree below depends on facts the source carries (does this package make HTTP calls? does it orchestrate? does it support multiple providers?). See [apm-integrations § Read Upstream Source First](../apm-integrations/SKILL.md#read-upstream-source-first) for the shallow-clone / `npm pack` shapes.
+
 ## Core Concepts
 
 ### 1. LLMObsPlugin Base Class
