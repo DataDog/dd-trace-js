@@ -695,6 +695,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   // --shard was added in jest@28
   onlyLatestIt('works when sharding', (done) => {
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: false,
+      tests_skipping: true,
+    })
     receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
       const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.strictEqual(testSuiteEvents.length, 3)
@@ -759,8 +764,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
         done()
-      })
-    })
+      }).catch(done)
+    }).catch(done)
     childProcess = exec(
       runTestsCommand,
       {
@@ -1271,16 +1276,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('does not report total code coverage % if user has not configured coverage manually', (done) => {
+  it('reports total code coverage % when TIA forces coverage collection', (done) => {
     receiver.setSettings({
       itr_enabled: true,
       code_coverage: true,
+      coverage_report_upload_enabled: true,
       tests_skipping: false,
     })
 
     receiver.assertPayloadReceived(({ payload }) => {
       const testSession = payload.events.find(event => event.type === 'test_session_end').content
-      assert.ok(!(TEST_CODE_COVERAGE_LINES_PCT in testSession.metrics))
+      assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(

@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
+const { INTEGRATION_SERVICE } = require('../service-naming/source-resolver')
 const Plugin = require('./plugin')
 
 const legacyStorage = storage('legacy')
@@ -127,6 +128,43 @@ class TracingPlugin extends Plugin {
   }
 
   /**
+   * Record the integration's intended `service.name` on a span without writing the tag.
+   *
+   * Use this when the plugin has already set `service.name` directly on the span (e.g. via
+   * the `tracer.startSpan` tags object) and only needs to stamp the marker so
+   * `Span#finish` can later detect user overrides and re-attribute the source.
+   *
+   * Prefer {@link TracingPlugin#setServiceName} when the tag itself also needs to be written.
+   *
+   * No-op when there is nothing meaningful to record
+   *
+   * @param {import('../opentracing/span')} span Internal DatadogSpan instance.
+   * @param {string|undefined} name Service name the integration is claiming.
+   */
+  stampIntegrationService (span, name) {
+    if (name === undefined) return
+    span[INTEGRATION_SERVICE] = name
+  }
+
+  /**
+   * Set `service.name` on a span on behalf of this integration and stamp the marker.
+   *
+   * Use this for late-binding cases where the service is not known at startSpan time
+   * (e.g. web framework config applied after the span is already open).
+   *
+   * For spans started via {@link TracingPlugin#startSpan}, pass `service` as an option
+   * instead — it sets the tag and stamps the marker in one step.
+   *
+   * @param {import('../opentracing/span')} span Internal DatadogSpan instance.
+   * @param {string} name Service name the integration is claiming.
+   */
+  setServiceName (span, name) {
+    // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name -- this is the implementation
+    span._spanContext.setTag('service.name', name)
+    this.stampIntegrationService(span, name)
+  }
+
+  /**
    * @param {unknown} error
    * @param {import('../../../..').Span} [span]
    */
@@ -221,6 +259,8 @@ class TracingPlugin extends Plugin {
       integrationName: integrationName || component,
       links: childOf?._links,
     })
+
+    this.stampIntegrationService(span, serviceName)
 
     analyticsSampler.sample(span, config.measured)
 

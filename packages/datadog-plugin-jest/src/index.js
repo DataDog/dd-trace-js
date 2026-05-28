@@ -114,7 +114,9 @@ class JestPlugin extends CiPlugin {
       isSuitesSkipped,
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
+      isCoverageReportUploadEnabled,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites,
       hasUnskippableSuites,
       hasForcedToRunSuites,
@@ -147,6 +149,13 @@ class JestPlugin extends CiPlugin {
             hasForcedToRunSuites,
           }
         )
+
+        if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+          this.tracer._exporter.exportCoverage({
+            sessionId: this.testSessionSpan.context()._traceId,
+            files: testSessionCoverageFiles,
+          })
+        }
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
