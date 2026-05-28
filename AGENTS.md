@@ -136,8 +136,8 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 ### Style
 
 - Prefer optional chaining
-- Prefer `#private` class fields for new/internal-only code (no cross-module access needed).
-- If other modules need access, prefer a small explicit method API over accessing internal fields.
+- Prefer `#private` class fields when state doesn't cross the class boundary; when it does, expose it as a plain property (`this.foo`). Internal cross-module reads and npm-exposed values both fall here — the distinction is documentation, not access pattern.
+- Avoid `get foo()` / `set foo()` accessors. They hide a function call behind property syntax and usually signal an undesigned boundary. Reach for one only for lazy first-read computation or a value that must recompute per access; both are rare. For behavior, use a plain method, not a setter / getter.
 - Avoid large refactors of existing `_underscore` fields unless you can prove they are not accessed externally (excluding tests).
 - Files shall end with a single new line at the end
 - Use destructuring for better code readability
@@ -231,6 +231,7 @@ Avoid try/catch in hot paths - validate inputs early
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
+- **Production code doesn't bend for tests**: Don't add a method, getter, export, or `_underscore` field purely to make a test work. If the public surface can't reach the behavior, the architecture needs the change, not test scaffolding.
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of testing internal exports directly
 
 ### Architecture Decisions
