@@ -2004,7 +2004,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Instrumentation extends Integration, Analyzable { }
+    interface Instrumentation extends Integration, Analyzable {}
 
     /** @hidden */
     interface DatabaseInstrumentation extends Instrumentation {
