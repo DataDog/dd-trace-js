@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert')
-const nodeHttp = require('node:http')
 const { URL } = require('node:url')
 const { inspect } = require('node:util')
 const dc = require('dc-polyfill')
@@ -281,7 +280,7 @@ describe('client', () => {
 
         describeIfHttp('with local http server', () => {
           function requestWithLocalServer ({ responseHeaders, responseBody, onResponse }, done) {
-            const server = nodeHttp.createServer((req, res) => {
+            const server = http.createServer((req, res) => {
               res.writeHead(200, responseHeaders)
               if (responseBody != null) {
                 res.end(responseBody)
