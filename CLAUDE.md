@@ -8,6 +8,5 @@ import above keeps both filenames discoverable without duplicating the
 project rules: the body lives in `AGENTS.md`, and other tools that already
 read `AGENTS.md` are unaffected.
 
-This file used to be a symlink, which most tools followed transparently and
 No symlink, to prevent two context copies being loaded by tooling. Claude Code only
 reads `CLAUDE.md` and follows the import syntax; Markdown links are not expanded. 
