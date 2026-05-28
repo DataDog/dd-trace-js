@@ -338,11 +338,12 @@ class LLMObsSpanProcessor {
   #objectTagsToStringArrayTags (tags) {
     const out = []
     for (const [key, value] of Object.entries(tags)) {
-      // Fan arrays out: comma is the inter-tag delimiter at intake, so a
-      // single `"key:v1,v2,v3"` entry gets split there and leaves every
-      // value after the first orphaned. One entry per element keeps each
-      // value addressable as its own facet.
-      if (Array.isArray(value)) {
+      // Comma is the intake-side tag delimiter, so a single `"key:v1,v2"`
+      // entry fans into two orphan tags. One-per-element keeps each value
+      // addressable; empty arrays fall through to the scalar branch and
+      // still emit `key:` so `_dd.cost_tags` references keep finding a
+      // wire entry.
+      if (Array.isArray(value) && value.length > 0) {
         for (const item of value) out.push(`${key}:${item ?? ''}`)
       } else {
         out.push(`${key}:${value ?? ''}`)
