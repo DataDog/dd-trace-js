@@ -5,6 +5,8 @@ function headersToTextMap (msgHdrs) {
   const textMap = {}
   for (const [key, values] of msgHdrs) {
     if (!Array.isArray(values) || values.length === 0) continue
+    // Trace headers are single-valued (injected via `set`, not `append`), so
+    // the first element is always the authoritative value.
     textMap[key] = values[0]
   }
   return textMap
@@ -21,7 +23,6 @@ function getOperationName (type) {
       // Surface unrecognized operations explicitly rather than silently
       // collapsing them into 'publish' — if NATS adds a new outbound API,
       // this lets us see it in traces and fix the mapping deliberately.
-      /* istanbul ignore next */
       return 'unknown'
   }
 }

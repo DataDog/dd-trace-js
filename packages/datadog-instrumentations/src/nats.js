@@ -17,11 +17,12 @@ const consumeStartCh = channel('apm:nats:consume:start')
 const consumeFinishCh = channel('apm:nats:consume:finish')
 const consumeErrorCh = channel('apm:nats:consume:error')
 
-// Marker placed on the connection while a `request`/`requestMany` call is
-// running so the nested `this.publish(...)` it issues short-circuits without
-// creating a second producer span (the outer request wrap already created
-// one and injected headers — the inner publish would double-count it).
-const REQUEST_IN_FLIGHT = Symbol('dd-nats-request-in-flight')
+// Tracks connections that are currently inside a `request`/`requestMany` call
+// so the nested `this.publish(...)` they issue short-circuits without creating
+// a second producer span (the outer request wrap already created one and
+// injected headers — the inner publish would double-count it). A WeakSet avoids
+// changing the shape of the user's connection object.
+const requestsInFlight = new WeakSet()
 
 // Captured from the `lib/headers.js` hook below. The nats-core package always
 // imports `./headers` from `lib/nats.js`, so by the time we wrap `publish` the
@@ -43,7 +44,7 @@ function wrapSyncProducer (original, type) {
     if (!publishStartCh.hasSubscribers) {
       return original.apply(this, arguments)
     }
-    const opts = options ?? {}
+    const opts = { ...(options ?? {}) }
     const ctx = { type, subject, data, options: opts, connection: this, createHeaders }
     return publishStartCh.runStores(ctx, () => {
       try {
@@ -67,10 +68,10 @@ function wrapAsyncProducer (original, type) {
     if (!publishStartCh.hasSubscribers) {
       return original.apply(this, arguments)
     }
-    const opts = options ?? {}
+    const opts = { ...(options ?? {}) }
     const ctx = { type, subject, data, options: opts, connection: this, createHeaders }
     return publishStartCh.runStores(ctx, () => {
-      this[REQUEST_IN_FLIGHT] = true
+      requestsInFlight.add(this)
       let promise
       try {
         // `request`/`requestMany` never throw synchronously — they wrap their own
@@ -80,7 +81,7 @@ function wrapAsyncProducer (original, type) {
         // The nested `this.publish(...)` runs during the synchronous body of
         // request/requestMany, so clearing the marker as soon as the call
         // returns is sufficient — the promise resolution happens later.
-        delete this[REQUEST_IN_FLIGHT]
+        requestsInFlight.delete(this)
       }
       return Promise.resolve(promise).then(
         result => {
@@ -104,7 +105,7 @@ function wrapPublish (original) {
   return function (subject, data, options) {
     // Called from inside request/requestMany — the outer wrap already produced
     // a span and injected headers; running the inner wrap would double-count.
-    if (this[REQUEST_IN_FLIGHT]) {
+    if (requestsInFlight.has(this)) {
       return original.apply(this, arguments)
     }
     return wrapped.apply(this, arguments)
@@ -138,7 +139,7 @@ function wrapSubscribeCallback (userCallback, subject, connection) {
 function wrapAsyncIteratorFactory (asyncIterator, subject, connection) {
   return function () {
     const iterator = asyncIterator.apply(this, arguments)
-    shimmer.wrap(iterator, 'next', next => function () {
+    iterator.next = shimmer.wrapCallback(iterator.next, next => function () {
       return next.apply(this, arguments).then(result => {
         if (result && !result.done && result.value) {
           const ctx = { subject, message: result.value, connection }

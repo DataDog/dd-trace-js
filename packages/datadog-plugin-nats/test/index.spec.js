@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setTimeout: setTimeoutPromise } = require('node:timers/promises')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -40,7 +41,7 @@ describe('Plugin', () => {
           // path waits for inflight messages); race with a timer to keep tests fast.
           await Promise.race([
             connection.close().catch(() => {}),
-            new Promise(resolve => setTimeout(resolve, 500)),
+            setTimeoutPromise(500),
           ])
         }
         connection = null
@@ -101,6 +102,14 @@ describe('Plugin', () => {
             return assertion
           })
 
+          it('does not throw when options object is frozen', () => {
+            const frozenOpts = Object.freeze({})
+            connection.publish(subject, 'hello', frozenOpts)
+            return agent.assertSomeTraces(traces => {
+              assert.ok(traces[0][0], 'expected a span')
+            })
+          })
+
           withNamingSchema(
             () => connection.publish(subject, 'hello'),
             rawExpectedSchema.send
@@ -135,6 +144,16 @@ describe('Plugin', () => {
               assertion,
             ])
           })
+
+          it('does not throw when options object is frozen', async () => {
+            const responder = connection.subscribe(subject, {
+              max: 1,
+              callback: (_e, msg) => msg.respond('pong'),
+            })
+            void responder
+            const frozenOpts = Object.freeze({ timeout: 2000 })
+            await connection.request(subject, 'ping', frozenOpts)
+          })
         })
 
         describe('subscribe (callback)', () => {
@@ -163,8 +182,10 @@ describe('Plugin', () => {
             })
 
             connection.publish(subject, 'hello')
-            await received
-            return assertion
+            return Promise.all([
+              received,
+              assertion,
+            ])
           })
 
           withNamingSchema(
@@ -195,8 +216,10 @@ describe('Plugin', () => {
             const receive = drainAll(sub)
 
             connection.publish(subject, 'hello')
-            await receive
-            return assertion
+            return Promise.all([
+              receive,
+              assertion,
+            ])
           })
         })
 
@@ -265,8 +288,10 @@ describe('Plugin', () => {
             // respondMessage internally calls this.publish(msg.reply, ...) which
             // hits the wrapped prototype method.
             connection.respondMessage({ subject, reply: replyInbox, data: 'pong' })
-            await received
-            return assertion
+            return Promise.all([
+              received,
+              assertion,
+            ])
           })
         })
 
@@ -297,8 +322,10 @@ describe('Plugin', () => {
             })
 
             connection.publish(concrete, 'hello')
-            await received
-            return assertion
+            return Promise.all([
+              received,
+              assertion,
+            ])
           })
         })
 
@@ -321,8 +348,10 @@ describe('Plugin', () => {
             })
 
             connection.publish(subject, 'hello')
-            await received
-            return assertion
+            return Promise.all([
+              received,
+              assertion,
+            ])
           })
         })
 
@@ -378,7 +407,7 @@ describe('Plugin', () => {
             await assertion
           })
 
-          it('passes through null/error deliveries without creating a span', () => {
+          it('passes through null/error deliveries without creating a span', async () => {
             // NATS calls the user's callback with `(err, {})` on subscription timeout —
             // exercises the `!message || err` short-circuit before the runStores branch.
             let called = false
@@ -387,7 +416,8 @@ describe('Plugin', () => {
               timeout: 50,
               callback: (err) => { called = true; assert.ok(err) },
             })
-            return new Promise(resolve => setTimeout(() => { assert.ok(called); resolve() }, 200))
+            await setTimeoutPromise(200)
+            assert.ok(called)
           })
         })
       })
