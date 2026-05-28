@@ -8,5 +8,5 @@ module.exports = [
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
   ...require('./playwright'),
-  ...require('./anthropic-ai-claude-agent-sdk')
+  ...require('./anthropic-ai-claude-agent-sdk'),
 ]

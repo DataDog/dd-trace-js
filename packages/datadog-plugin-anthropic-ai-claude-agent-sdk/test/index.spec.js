@@ -5,104 +5,115 @@ const assert = require('node:assert/strict')
 const sinon = require('sinon')
 
 const { ANY_STRING } = require('../../../integration-tests/helpers')
-const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
 
-createIntegrationTestSuite('anthropic-ai-claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', {
-  category: 'generative-ai',
-}, (meta) => {
-  const { agent } = meta
+describe('Plugin', () => {
+  describe('anthropic-ai-claude-agent-sdk', () => {
+    withVersions('anthropic-ai-claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', version => {
+      describe('without configuration', () => {
+        let tracer
 
-  before(async () => {
-    await testSetup.setup(meta.mod)
-  })
+        before(async () => {
+          tracer = await agent.load(['anthropic-ai-claude-agent-sdk'], [{}])
+        })
 
-  after(async () => {
-    await testSetup.teardown()
-  })
+        after(async () => {
+          await agent.close()
+        })
 
-  describe('query() - agent.execute', () => {
-    it('should generate span with correct tags (happy path)', async () => {
-      const traceAssertion = agent.assertFirstTraceSpan(
-        {
-          name: 'anthropic-ai-claude-agent-sdk.query',
-          meta: {
-            'span.kind': 'client',
-            component: 'anthropic-ai-claude-agent-sdk',
-            'out.host': 'api.anthropic.com',
-          },
-        }
-      )
+        before(async function () {
+          this.timeout(30000)
+          const mod = await import('@anthropic-ai/claude-agent-sdk') // eslint-disable-line n/no-missing-import
+          await testSetup.setup(mod)
+        })
 
-      const result = await testSetup.query()
-      assert.ok(result.isAsyncIterable, 'query() should return an async iterable')
-      assert.ok(result.hasClose, 'query() result should expose close()')
-      assert.strictEqual(result.messages.length, 3, 'should iterate through the full message sequence')
-      assert.strictEqual(result.messages.at(-1).type, 'result')
+        describe('query() - agent.execute', () => {
+          it('should generate span with correct tags (happy path)', async () => {
+            const traceAssertion = agent.assertFirstTraceSpan(
+              {
+                name: 'anthropic-ai-claude-agent-sdk.query',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'anthropic-ai-claude-agent-sdk',
+                  'out.host': 'api.anthropic.com',
+                },
+              }
+            )
 
-      return traceAssertion
-    })
+            const result = await testSetup.query()
+            assert.ok(result.isAsyncIterable, 'query() should return an async iterable')
+            assert.ok(result.hasClose, 'query() result should expose close()')
+            assert.strictEqual(result.messages.length, 3, 'should iterate through the full message sequence')
+            assert.strictEqual(result.messages.at(-1).type, 'result')
 
-    it('should generate span with error tags (error path)', async () => {
-      const traceAssertion = agent.assertFirstTraceSpan(
-        {
-          name: 'anthropic-ai-claude-agent-sdk.query',
-          meta: {
-            'span.kind': 'client',
-            component: 'anthropic-ai-claude-agent-sdk',
-            'out.host': 'api.anthropic.com',
-            'error.type': ANY_STRING,
-            'error.message': ANY_STRING,
-            'error.stack': ANY_STRING,
-          },
-          error: 1,
-        }
-      )
+            return traceAssertion
+          })
 
-      let caught
-      try {
-        await testSetup.queryError()
-      } catch (err) {
-        caught = err
-      }
-      assert.ok(caught, 'queryError() should throw')
-      assert.strictEqual(caught.name, 'TypeError')
+          it('should generate span with error tags (error path)', async () => {
+            const traceAssertion = agent.assertFirstTraceSpan(
+              {
+                name: 'anthropic-ai-claude-agent-sdk.query',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'anthropic-ai-claude-agent-sdk',
+                  'out.host': 'api.anthropic.com',
+                  'error.type': ANY_STRING,
+                  'error.message': ANY_STRING,
+                  'error.stack': ANY_STRING,
+                },
+                error: 1,
+              }
+            )
 
-      return traceAssertion
-    })
-  })
+            let caught
+            try {
+              await testSetup.queryError()
+            } catch (err) {
+              caught = err
+            }
+            assert.ok(caught, 'queryError() should throw')
+            assert.strictEqual(caught.name, 'TypeError')
 
-  describe('peer service', () => {
-    let computeStub
+            return traceAssertion
+          })
+        })
 
-    beforeEach(() => {
-      const plugin = meta.tracer._pluginManager._pluginsByName['anthropic-ai-claude-agent-sdk']
-      computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
-    })
+        describe('peer service', () => {
+          let computeStub
 
-    afterEach(() => {
-      computeStub.restore()
-    })
+          beforeEach(() => {
+            const plugin = tracer._pluginManager._pluginsByName['anthropic-ai-claude-agent-sdk']
+            computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
+          })
 
-    it('should compute peer.service from out.host precursor on the query span', async () => {
-      const traceAssertion = agent.assertFirstTraceSpan(
-        {
-          name: 'anthropic-ai-claude-agent-sdk.query',
-          meta: {
-            'span.kind': 'client',
-            component: 'anthropic-ai-claude-agent-sdk',
-            'out.host': 'api.anthropic.com',
-            'peer.service': 'api.anthropic.com',
-            '_dd.peer.service.source': 'out.host',
-          },
-        }
-      )
+          afterEach(() => {
+            computeStub.restore()
+          })
 
-      await testSetup.query()
+          it('should compute peer.service from out.host precursor on the query span', async () => {
+            const traceAssertion = agent.assertFirstTraceSpan(
+              {
+                name: 'anthropic-ai-claude-agent-sdk.query',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'anthropic-ai-claude-agent-sdk',
+                  'out.host': 'api.anthropic.com',
+                  'peer.service': 'api.anthropic.com',
+                  '_dd.peer.service.source': 'out.host',
+                },
+              }
+            )
 
-      return traceAssertion
+            await testSetup.query()
+
+            return traceAssertion
+          })
+        })
+      })
     })
   })
 })
