@@ -137,9 +137,11 @@ describe('RASP - ssrf', () => {
             // request context, which would otherwise cause a false-positive RASP LFI event.
             // We drain the resulting span synchronously within this `before` hook so it
             // cannot bleed into any test's assertion window.
-            const preloadSpanDrained = agent.assertSomeTraces(() => {}).catch(noop)
-            await axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop)
-            await preloadSpanDrained
+            const preloadSpanDrained = agent.assertSomeTraces(noop).catch(noop)
+            await Promise.all([
+              axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop),
+              preloadSpanDrained,
+            ])
           })
 
           it('Should not detect threat', async () => {
