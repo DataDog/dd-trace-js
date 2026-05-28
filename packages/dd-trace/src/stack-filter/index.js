@@ -125,20 +125,20 @@ function install (env) {
 
   priorPrepareStackTrace = Error.prepareStackTrace
   Error.prepareStackTrace = ddTraceStackFilter
+  module.exports.captureUnfilteredStack = activeCaptureUnfilteredStack
   installed = true
 }
 
 /**
- * Capture a stack on `target` that bypasses the filter for the carrier's
- * lifetime. The bypass add is skipped when the filter is not installed:
- * `install()` runs once at tracer init and never uninstalls, so a missed
- * bypass here cannot bite at read time either.
+ * Capture a stack on `target` and mark the carrier for bypass. Only ever
+ * runs after `install()`; the inactive path forwards directly to
+ * `Error.captureStackTrace` to keep `log.error` callers off a JS wrapper.
  *
  * @param {object} target
  * @param {Function} [constructorOpt]
  */
-function captureUnfilteredStack (target, constructorOpt) {
-  if (installed) bypassSet.add(target)
+function activeCaptureUnfilteredStack (target, constructorOpt) {
+  bypassSet.add(target)
   Error.captureStackTrace(target, constructorOpt)
 }
 
@@ -162,7 +162,10 @@ function formatUnfiltered (error) {
 
 module.exports = {
   install,
-  captureUnfilteredStack,
+  // `install()` swaps this slot in. Default is `Error.captureStackTrace`
+  // itself so `log.error` stays off a JS wrapper frame on the not-installed
+  // path; callers must reach it through the module object, not destructure.
+  captureUnfilteredStack: Error.captureStackTrace,
   formatUnfiltered,
   isDdFrame,
 }

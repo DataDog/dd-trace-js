@@ -3,7 +3,8 @@
 const { inspect } = require('util')
 
 const { defaults } = require('../config/defaults')
-const { captureUnfilteredStack } = require('../stack-filter')
+// Do not destructure: `stack-filter#install` hot-swaps `captureUnfilteredStack`.
+const stackFilter = require('../stack-filter')
 const { isTrue } = require('../util')
 const { getValueFromEnvSources } = require('../config/helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
@@ -65,7 +66,7 @@ const log = {
       Error.stackTraceLimit = 0
       const newError = new Error(formatted)
       Error.stackTraceLimit = stackTraceLimitBackup
-      captureUnfilteredStack(newError, log.error)
+      stackFilter.captureUnfilteredStack(newError, log.error)
       return newError
     }, ...args)
     return log
