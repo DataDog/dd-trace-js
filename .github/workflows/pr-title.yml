@@ -2,7 +2,7 @@ name: Pull Request Title
 
 on:
   pull_request_target:
-    types: [opened, edited, reopened, labeled, unlabeled]
+    types: [opened, edited, reopened]
     branches:
       - "master"
 
@@ -23,10 +23,7 @@ jobs:
       PR_TITLE_PATTERN: '^(revert(!)?: )?(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+'
     steps:
       - name: Validate PR title against Conventional Commits
-        if: >-
-          github.event.action == 'opened' ||
-          github.event.action == 'reopened' ||
-          (github.event.action == 'edited' && github.event.changes.title != null)
+        if: github.event.action != 'edited' || github.event.changes.title != null
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
