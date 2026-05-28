@@ -2112,7 +2112,8 @@ declare namespace tracer {
       middleware?: boolean;
 
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2191,7 +2192,8 @@ declare namespace tracer {
        */
       validateStatus?: (code: number) => boolean;
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation

@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
+const DEFAULT_SKIPPABLE_COVERAGE = {}
 const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_KNOWN_TESTS_RESPONSE_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
@@ -43,9 +44,19 @@ const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-n
 const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
+function getSkippableResponse () {
+  const meta = { correlation_id: correlationId }
+  if (Object.keys(skippableCoverage).length) {
+    meta.coverage = skippableCoverage
+  }
+
+  return { data: suitesToSkip, meta }
+}
+
 let settings = DEFAULT_SETTINGS
 let settingsResponseStatusCode = 200
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
+let skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
@@ -76,6 +87,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSuitesToSkip (newSuitesToSkip) {
     suitesToSkip = newSuitesToSkip
+  }
+
+  setSkippableCoverage (newSkippableCoverage) {
+    skippableCoverage = newSkippableCoverage
   }
 
   setItrCorrelationId (newCorrelationId) {
@@ -234,19 +249,15 @@ class FakeCiVisIntake extends FakeAgent {
     app.post([
       '/api/v2/ci/tests/skippable',
       '/evp_proxy/:version/api/v2/ci/tests/skippable',
-    ], (req, res) => {
+    ], express.json(), (req, res) => {
       if (skippableSuitesResponseStatusCode < 200 || skippableSuitesResponseStatusCode >= 300) {
         res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({ errors: ['error'] }))
         return
       }
-      res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({
-        data: suitesToSkip,
-        meta: {
-          correlation_id: correlationId,
-        },
-      }))
+      res.status(skippableSuitesResponseStatusCode).send(JSON.stringify(getSkippableResponse()))
       this.emit('message', {
         headers: req.headers,
+        payload: req.body,
         url: req.url,
       })
     })
@@ -354,6 +365,7 @@ class FakeCiVisIntake extends FakeAgent {
     settings = DEFAULT_SETTINGS
     settingsResponseStatusCode = 200
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
+    skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
     knownTestsPageIndex = 0

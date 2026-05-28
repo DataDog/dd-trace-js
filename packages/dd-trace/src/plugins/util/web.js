@@ -10,14 +10,14 @@ const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
+const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
-const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
+const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
 const RESOURCE_NAME = tags.RESOURCE_NAME
-const SERVICE_NAME = tags.SERVICE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
 const SPAN_KIND = tags.SPAN_KIND
 const ERROR = tags.ERROR
@@ -33,7 +33,6 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
-const ends = new WeakMap()
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -106,7 +105,7 @@ const web = {
     }
 
     if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
+      web.plugin.setServiceName(span, config.service)
     }
 
     analyticsSampler.sample(span, config.measured, true)
@@ -127,7 +126,6 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
-    context.store = storage('legacy').getStore()
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
@@ -205,7 +203,7 @@ const web = {
   startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
     let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
@@ -269,7 +267,16 @@ const web = {
 
     if (context.finished && !req.stream) return
 
+    // `addRequestTags` is idempotent: in the normal HTTP path it ran during
+    // `web.startSpan`. Serverless callers (e.g. Azure Functions) skip
+    // `web.startSpan` and rely on this call to do the request-side work.
     addRequestTags(context, spanType)
+    // Configured-header tagging runs at finish time. Framework plugins
+    // (connect, express, ...) install their own config via `setFramework`
+    // after `web.startSpan` has already locked the http-plugin config in;
+    // tagging earlier would use the http-plugin's `headers` list and drop
+    // the framework's.
+    addRequestHeaders(context)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -296,11 +303,18 @@ const web = {
     const writeHead = res.writeHead
 
     return function (statusCode, statusMessage, headers) {
-      headers = typeof statusMessage === 'string' ? headers : statusMessage
-      headers = { ...res.getHeaders(), ...headers }
+      // CORS preflight tagging only matters for OPTIONS requests. Skip the
+      // getHeaders() spread + isOriginAllowed work entirely for the common
+      // GET / POST / etc. case. Node's http module passes `req.method`
+      // through unchanged, so all standard methods are uppercase; the
+      // `toLowerCase` fallback covers any non-standard caller.
+      if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
+        headers = typeof statusMessage === 'string' ? headers : statusMessage
+        headers = { ...res.getHeaders(), ...headers }
 
-      if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
-        addAllowHeaders(req, res, headers)
+        if (isOriginAllowed(req, headers)) {
+          addAllowHeaders(req, res, headers)
+        }
       }
 
       return writeHead.apply(this, arguments)
@@ -308,34 +322,6 @@ const web = {
   },
   getContext (req) {
     return contexts.get(req)
-  },
-  wrapRes (context, req, res, end) {
-    return function (...args) {
-      web.finishAll(context)
-
-      return end.apply(res, args)
-    }
-  },
-  wrapEnd (context) {
-    const req = context.req
-    const res = context.res
-    const end = res.end
-
-    res.writeHead = web.wrapWriteHead(context)
-
-    ends.set(res, this.wrapRes(context, req, res, end))
-
-    Object.defineProperty(res, 'end', {
-      configurable: true,
-      get () {
-        return ends.get(this)
-      },
-      set (value) {
-        ends.set(this, function (...args) {
-          return storage('legacy').run(context.store, value, ...args)
-        })
-      },
-    })
   },
   setRouteOrEndpointTag (req) {
     const context = contexts.get(req)
@@ -382,6 +368,16 @@ function splitHeader (str) {
 
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
+  const spanContext = span.context()
+
+  // Idempotency guard. `addRequestTags` runs in `web.startSpan` for the
+  // normal HTTP path and again in `web.finishSpan`; without this guard the
+  // second call would re-extract the URL, re-obfuscate the query string,
+  // and re-publish five `tagsUpdateCh` events with the same values. The
+  // serverless path skips `startSpan` and lands here first, in which case
+  // HTTP_URL is unset and the work runs normally.
+  if (spanContext.hasTag(HTTP_URL)) return
+
   const url = extractURL(req)
   const type = spanType ?? WEB
 
@@ -394,7 +390,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.extractIp && !span.context().hasTag(HTTP_CLIENT_IP)) {
+  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
     const clientIp = config.extractIp(config, req)
 
     if (clientIp) {
@@ -413,8 +409,6 @@ function addRequestTags (context, spanType) {
   if (securityTest !== undefined) {
     span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-security-test`, securityTest)
   }
-
-  addHeaders(context)
 }
 
 function addResponseTags (context) {
@@ -429,6 +423,8 @@ function addResponseTags (context) {
     [HTTP_STATUS_CODE]: res.statusCode,
   })
 
+  addResponseHeaders(context)
+
   web.addStatusError(req, res.statusCode)
 }
 
@@ -436,7 +432,17 @@ function applyRouteOrEndpointTag (context) {
   const { paths, span, config } = context
   if (!span) return
   const spanContext = span.context()
-  const route = paths.join('')
+
+  // AppSec calls `web.setRouteOrEndpointTag` from a pre-finish hook so the
+  // route/endpoint tags are available for API Security sampling, and the
+  // normal finish-time path runs this again. Either tag being present
+  // means the work has already been done; paths are stable between the
+  // two calls, so the second pass has nothing to add.
+  if (spanContext.hasTag(HTTP_ROUTE) || spanContext.hasTag(HTTP_ENDPOINT)) return
+
+  // Skip the `Array.prototype.join` builtin in the empty / single-segment
+  // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
+  const route = paths.length > 1 ? paths.join('') : paths[0]
 
   if (route) {
     // Use http.route from trusted framework instrumentation.
@@ -444,9 +450,7 @@ function applyRouteOrEndpointTag (context) {
     return
   }
 
-  if (!config.resourceRenamingEnabled || spanContext.getTag(HTTP_ENDPOINT)) {
-    return
-  }
+  if (!config.resourceRenamingEnabled) return
 
   // Route is unavailable, compute http.endpoint once.
   const url = spanContext.getTag(HTTP_URL)
@@ -467,21 +471,28 @@ function addResourceTag (context) {
   span.setTag(RESOURCE_NAME, resource)
 }
 
-function addHeaders (context) {
-  const { req, res, config, span, inferredProxySpan } = context
+function addRequestHeaders (context) {
+  const { req, config, span, inferredProxySpan } = context
 
   for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
-    const resHeader = res.getHeader(key)
-
     if (reqHeader) {
-      span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
-      inferredProxySpan?.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+      const tagName = tag || `${HTTP_REQUEST_HEADERS}.${key}`
+      span.setTag(tagName, reqHeader)
+      inferredProxySpan?.setTag(tagName, reqHeader)
     }
+  }
+}
 
+function addResponseHeaders (context) {
+  const { res, config, span, inferredProxySpan } = context
+
+  for (const [key, tag] of config.headers) {
+    const resHeader = res.getHeader(key)
     if (resHeader) {
-      span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
-      inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
+      const tagName = tag || `${HTTP_RESPONSE_HEADERS}.${key}`
+      span.setTag(tagName, resHeader)
+      inferredProxySpan?.setTag(tagName, resHeader)
     }
   }
 }
@@ -527,32 +538,6 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
-  }
-
-  return true
-}
-
-function getQsObfuscator (config) {
-  const obfuscator = config.queryStringObfuscation
-
-  if (typeof obfuscator === 'boolean') {
-    return obfuscator
-  }
-
-  if (typeof obfuscator === 'string') {
-    if (obfuscator === '') return false // disable obfuscator
-
-    if (obfuscator === '.*') return true // optimize full redact
-
-    try {
-      return new RegExp(obfuscator, 'gi')
-    } catch (err) {
-      log.error('Web plugin error getting qs obfuscator', err)
-    }
-  }
-
-  if (config.hasOwnProperty('queryStringObfuscation')) {
-    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true

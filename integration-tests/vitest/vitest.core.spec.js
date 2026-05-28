@@ -21,7 +21,6 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SESSION_NAME,
   TEST_COMMAND,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_IS_NEW,
@@ -110,9 +109,8 @@ versions.forEach((version) => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.ok(metadata['*'][TEST_COMMAND])
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -231,7 +229,6 @@ versions.forEach((version) => {
               if (poolConfig === 'forks') {
                 assert.strictEqual(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               }
-              assert.strictEqual(test.content.meta[TEST_COMMAND], 'vitest run')
               assert.ok(test.content.metrics[DD_HOST_CPU_COUNT])
               assert.strictEqual(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
             })
@@ -241,7 +238,6 @@ versions.forEach((version) => {
               if (poolConfig === 'forks') {
                 assert.strictEqual(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               }
-              assert.strictEqual(testSuite.content.meta[TEST_COMMAND], 'vitest run')
               assert.strictEqual(
                 testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility'),
                 true

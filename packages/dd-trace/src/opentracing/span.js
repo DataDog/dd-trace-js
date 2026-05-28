@@ -10,6 +10,7 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
 const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
@@ -215,7 +216,38 @@ class DatadogSpan {
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    // v6 hot path: `Object.assign` straight onto the live tag map. The
+    // string and array shapes never appeared in the public TypeScript
+    // surface, and no internal v6 caller passes one (see MIGRATING.md).
+    // v5 still accepts both via `tagger.add` for `config.tags` /
+    // `options.tags` callers that pass `'key:val,key:val'` strings.
+    const tags = this._spanContext.getTags()
+    let mayChangeSamplingPriority
+
+    if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
+      Object.assign(tags, keyValueMap)
+      mayChangeSamplingPriority =
+        MANUAL_KEEP in keyValueMap ||
+        MANUAL_DROP in keyValueMap ||
+        SAMPLING_PRIORITY in keyValueMap
+    } else {
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
+        tagger.add(tags, keyValueMap)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
+      }
+    }
+
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
@@ -285,6 +317,8 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
     this._spanContext.setTag('_dd.integration', this._integrationName)
+
+    resolveServiceSource(this, this.#parentTracer._service)
 
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
@@ -415,16 +449,6 @@ class DatadogSpan {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
-  }
-
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext.getTags(), keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
-
-    if (tagsUpdateCh.hasSubscribers) {
-      tagsUpdateCh.publish(this)
-    }
   }
 }
 
