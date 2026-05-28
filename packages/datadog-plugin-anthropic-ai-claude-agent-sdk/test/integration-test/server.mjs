@@ -62,10 +62,8 @@ assert.ok(
   'query() should return an async iterable'
 )
 
-// Replace the SDK's subprocess-driven stream with an in-memory queue so
-// `for await` runs deterministically without spawning `claude-code`. The
-// `[Symbol.asyncIterator]` fix is applied at prototype level by the
-// instrumentation hook, so iteration goes through Query.next → sdkMessages.next.
+// Replace the SDK's transport-backed message stream with a static queue so the
+// test never spawns the Claude CLI subprocess or hits the network.
 const queue = messages.slice()
 q.sdkMessages = {
   next: () => Promise.resolve(
@@ -83,8 +81,3 @@ abortController.abort()
 if (typeof q.close === 'function') {
   try { q.close() } catch {}
 }
-
-// Allow dd-trace to flush the finished span to the agent before the process
-// exits. With `DD_TRACE_FLUSH_INTERVAL=0` the exporter flushes per finished
-// span, but the network write is still async.
-await new Promise(resolve => setTimeout(resolve, 500))

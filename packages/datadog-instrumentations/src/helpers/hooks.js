@@ -15,7 +15,7 @@ module.exports = {
   vm: () => require('../vm'),
   zlib: () => require('../zlib'),
   // Non Node.js modules
-  '@anthropic-ai/claude-agent-sdk': { esmFirst: false, fn: () => require('../anthropic-ai-claude-agent-sdk') },
+  '@anthropic-ai/claude-agent-sdk': { esmFirst: true, fn: () => require('../anthropic-ai-claude-agent-sdk') },
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),

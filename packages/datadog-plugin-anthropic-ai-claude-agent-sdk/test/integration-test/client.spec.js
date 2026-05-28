@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const {
   FakeAgent,
   sandboxCwd,
@@ -31,7 +32,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      // `query` is named-only (no default export), so only `star` and `destructure` variants.
+      // `query` is a named export with no default, so only star/destructure apply.
       variants = varySandbox('server.mjs', 'query', undefined, '@anthropic-ai/claude-agent-sdk', true)
     })
 
@@ -45,10 +46,7 @@ describe('esm', () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-          assert.strictEqual(
-            checkSpansForServiceName(payload, 'anthropic-ai-claude-agent-sdk.query'),
-            true
-          )
+          assert.strictEqual(checkSpansForServiceName(payload, 'anthropic-ai-claude-agent-sdk.query'), true)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
