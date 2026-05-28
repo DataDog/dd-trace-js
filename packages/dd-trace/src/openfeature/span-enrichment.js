@@ -103,6 +103,8 @@ class SpanEnrichmentState {
 
   /**
    * Check if there is any enrichment data to add to the span.
+   * Note: _subjects is not checked because addSubject() is never called without first
+   * calling addSerialId(), so _subjects having data necessitates _serialIds having data.
    *
    * @returns {boolean} True if there is data to add
    */
