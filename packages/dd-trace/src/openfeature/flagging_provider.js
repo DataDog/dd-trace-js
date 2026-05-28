@@ -34,9 +34,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
       this.hooks.push(this.#spanEnrichmentHook)
-      log.debug('%s span enrichment enabled', this.constructor.name)
+      log.info('%s span enrichment enabled', this.constructor.name)
     } else {
-      log.debug('%s span enrichment disabled', this.constructor.name)
+      log.info('%s span enrichment disabled', this.constructor.name)
     }
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
