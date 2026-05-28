@@ -528,6 +528,57 @@ describe('span processor', () => {
       assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
     })
 
+    it('fans out array-valued user tags into one wire entry per element', () => {
+      // Regression for https://github.com/DataDog/dd-trace-js/issues/8662 — a single
+      // `"key:v1,v2"` entry on the wire gets comma-split at intake, leaving every
+      // value after the first orphaned (UI shows a bare `v2` token, `@key:v2` filter
+      // does not match). One `key:value` per element preserves each value as its
+      // own facet.
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.tags': {
+          'tool.shell.bin': ['grep', 'head'],
+          'tool.shell.cmd': ['git log'],
+          'tool.shell.argv': [],
+          'tool.shell.flags': [null, 'verbose'],
+          'tool.shell.name': 'bash',
+        },
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assertObjectContains(payload.tags, [
+        'tool.shell.bin:grep',
+        'tool.shell.bin:head',
+        'tool.shell.cmd:git log',
+        'tool.shell.flags:',
+        'tool.shell.flags:verbose',
+        'tool.shell.name:bash',
+      ])
+      assert.ok(
+        !payload.tags.some(tag => tag.startsWith('tool.shell.argv')),
+        'empty arrays should not produce a tag entry',
+      )
+      assert.ok(
+        !payload.tags.includes('tool.shell.bin:grep,head'),
+        'array values must not collapse into a single comma-joined entry',
+      )
+    })
+
     it('marks the apm span with _dd.llmobs.submitted=1 for sdk-tagged spans', () => {
       const apmTags = {}
       span = {

@@ -332,8 +332,23 @@ class LLMObsSpanProcessor {
     return tags
   }
 
+  /**
+   * @param {Record<string, unknown>} tags
+   */
   #objectTagsToStringArrayTags (tags) {
-    return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
+    const out = []
+    for (const [key, value] of Object.entries(tags)) {
+      // Fan arrays out: comma is the inter-tag delimiter at intake, so a
+      // single `"key:v1,v2,v3"` entry gets split there and leaves every
+      // value after the first orphaned. One entry per element keeps each
+      // value addressable as its own facet.
+      if (Array.isArray(value)) {
+        for (const item of value) out.push(`${key}:${item ?? ''}`)
+      } else {
+        out.push(`${key}:${value ?? ''}`)
+      }
+    }
+    return out
   }
 
   /**
