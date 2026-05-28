@@ -19,7 +19,7 @@ class IORedisPlugin extends RedisPlugin {
    * Normalizes the ioredis built-in TracingChannel context to the format
    * expected by RedisPlugin.bindStart.
    *
-   * Built-in context: { command, args (sanitized, no command name), database, serverAddress, serverPort }
+   * Built-in context: { command, args (no command name), database, serverAddress, serverPort }
    *
    * @param {{ command: string, args: string[], database: number,
    *   serverAddress: string, serverPort: number | undefined }} builtinCtx

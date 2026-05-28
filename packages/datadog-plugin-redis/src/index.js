@@ -37,7 +37,7 @@ class RedisPlugin extends CachePlugin {
    * Normalizes the `@redis/client` built-in TracingChannel context to the format
    * expected by RedisPlugin.bindStart.
    *
-   * Built-in context: { command (uppercase), args (sanitized, includes command name at [0]),
+   * Built-in context: { command (uppercase), args (includes command name at [0]),
    *   database, clientId, serverAddress, serverPort }
    *
    * @param {{ command: string, args: string[], database: number,
@@ -112,15 +112,43 @@ class RedisPlugin extends CachePlugin {
   }
 }
 
+// How many positional args after the command are safe to emit verbatim.
+// -1 = all args safe; 0 = all args redacted (default for unknown commands).
+// Rules adapted from @opentelemetry/redis-common (Apache 2.0), which ioredis also uses.
+const REDIS_SAFE_ARG_PATTERNS = [
+  [/^ECHO/i, 0],
+  [/^(LPUSH|MSET|PFA|PUBLISH|RPUSH|SADD|SET|SPUBLISH|XADD|ZADD)/i, 1],
+  [/^(HSET|HMSET|LSET|LINSERT)/i, 2],
+  [/^(ACL|BIT|B[LRZ]|CLIENT|CLUSTER|CONFIG|COMMAND|DECR|DEL|EVAL|EX|FUNCTION|GEO|GET|HINCR|HMGET|HSCAN|INCR|L[TRLM]|MEMORY|P[EFISTU]|RPOP|S[CDIMORSU]|XACK|X[CDGILPRT]|Z[CDILMPRS])/i, -1],
+]
+
+function safeArgCount (command) {
+  for (const [pattern, count] of REDIS_SAFE_ARG_PATTERNS) {
+    if (pattern.test(command)) return count
+  }
+  return 0
+}
+
 function formatCommand (command, args, argsStartIndex = 0) {
   if (!args || command === 'AUTH') return command
 
+  const safeCount = safeArgCount(command)
   let result = command
+  let safeLeft = safeCount
+
   for (let i = argsStartIndex, l = args.length; i < l; i++) {
     const arg = args[i]
     if (typeof arg === 'function') continue
 
-    result = `${result} ${formatArg(arg)}`
+    let formatted
+    if (safeCount === -1 || safeLeft > 0) {
+      formatted = formatArg(arg)
+      if (safeCount !== -1) safeLeft--
+    } else {
+      formatted = '?'
+    }
+
+    result = `${result} ${formatted}`
     if (result.length > MAX_COMMAND_LENGTH) return result.slice(0, MAX_COMMAND_LENGTH - 3) + '...'
   }
 

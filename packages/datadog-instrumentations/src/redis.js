@@ -1,7 +1,6 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const satisfies = require('../../../vendor/dist/semifies')
 const {
   channel,
   addHook,
@@ -74,22 +73,13 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/index.js', versions
 })
 
 // @redis/client >= 5.12.0 emits built-in TracingChannel events (tracing:node-redis:command).
-// On Node.js versions that support dc.tracingChannel (>= 19.9 / 20.2), skip the shimmer to
-// avoid double-tracing. Fall back to the shimmer approach on older Node.js runtimes.
-addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1'] }, (redis, version) => {
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  if (satisfies(version, '>=5.12.0') && typeof require('node:diagnostics_channel').tracingChannel === 'function') {
-    return redis
-  }
+// dc-polyfill ensures tracingChannel is always available, so no shimmer is needed for >= 5.12.0.
+addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1 <5.12.0'] }, (redis) => {
   shimmer.wrap(redis.default, 'create', wrapCreateClient)
   return redis
 })
 
-addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, (redis, version) => {
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  if (satisfies(version, '>=5.12.0') && typeof require('node:diagnostics_channel').tracingChannel === 'function') {
-    return redis
-  }
+addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1 <5.12.0'] }, (redis) => {
   redis.default = wrapCommandQueueClass(redis.default)
   shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
   return redis

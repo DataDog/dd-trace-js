@@ -13,18 +13,13 @@ const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers'
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
-// @redis/client >= 5.12.0 uses built-in TracingChannel on Node.js >= 19.9 / 20.2, which
-// sanitizes command args and does not expose the connection name.
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const hasDcTracingChannel = typeof require('node:diagnostics_channel').tracingChannel === 'function'
-
 describe('Plugin', () => {
   describe('redis', () => {
     withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName, resolvedVersion) => {
-      // @redis/client >= 5.12.0 on Node.js >= 20.2 uses built-in TracingChannel which sanitizes
-      // SET/MSET values and does not expose connectionName, so splitByInstance has no effect.
+      // @redis/client >= 5.12.0 uses built-in TracingChannel (dc-polyfill ensures it's always
+      // available) which does not expose connectionName, so splitByInstance has no effect.
       const isBuiltinDcVersion = moduleName === '@redis/client' &&
-        hasDcTracingChannel && semver.satisfies(resolvedVersion, '>=5.12.0')
+        semver.satisfies(resolvedVersion, '>=5.12.0')
 
       let redis
       let client
@@ -101,30 +96,23 @@ describe('Plugin', () => {
           await Promise.all([client.get('foo'), promise])
         })
 
-        it('keeps every arg when formatting a multi-arg command', async () => {
-          // Built-in TracingChannel sanitizes SET values; only the key is kept.
-          const expectedRawCommand = isBuiltinDcVersion ? 'SET multi-arg-key ?' : 'SET multi-arg-key multi-arg-value'
+        it('redacts write command values', async () => {
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta['redis.raw_command'], expectedRawCommand)
+            assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'SET multi-arg-key ?')
           }, { spanResourceMatch: /^SET$/ })
 
           await Promise.all([client.set('multi-arg-key', 'multi-arg-value'), promise])
         })
 
         it('trims a string arg longer than 100 chars', async () => {
-          const longValue = 'x'.repeat(150)
+          const longKey = 'x'.repeat(150)
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
-            if (isBuiltinDcVersion) {
-              // Built-in TracingChannel sanitizes SET values to '?'.
-              assert.strictEqual(rawCommand, 'SET long-key ?')
-            } else {
-              assert.strictEqual(rawCommand, `SET long-key ${'x'.repeat(97)}...`)
-              assert.strictEqual(rawCommand.length, 'SET long-key '.length + 100)
-            }
-          }, { spanResourceMatch: /^SET$/ })
+            assert.strictEqual(rawCommand, `GET ${'x'.repeat(97)}...`)
+            assert.strictEqual(rawCommand.length, 'GET '.length + 100)
+          }, { spanResourceMatch: /^GET$/ })
 
-          await Promise.all([client.set('long-key', longValue), promise])
+          await Promise.all([client.get(longKey), promise])
         })
 
         it('redacts the AUTH password from the raw command', async () => {
@@ -138,7 +126,7 @@ describe('Plugin', () => {
           ])
         })
 
-        it('caps the joined raw command at 1000 chars across many args', async () => {
+        it('redacts MSET values and keeps the first key', async () => {
           const args = []
           for (let index = 0; index < 200; index++) {
             args.push(`key${index}`, `value${index}`)
@@ -146,15 +134,9 @@ describe('Plugin', () => {
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
             assert.match(rawCommand, /^MSET /)
-            if (isBuiltinDcVersion) {
-              // Built-in TracingChannel sanitizes all MSET values to '?'; the result is shorter
-              // than 1000 chars and does not end with '...'.
-              assert.ok(rawCommand.length < 1000)
-              assert.match(rawCommand, / \?$/)
-            } else {
-              assert.strictEqual(rawCommand.length, 1000)
-              assert.match(rawCommand, /\.\.\.$/)
-            }
+            // Values are redacted; only the first key is shown. Result is well under 1000 chars.
+            assert.ok(rawCommand.length < 1000)
+            assert.match(rawCommand, / \?$/)
           }, { spanResourceMatch: /^MSET$/ })
 
           await Promise.all([client.sendCommand(['MSET', ...args]), promise])
