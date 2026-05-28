@@ -9,7 +9,7 @@ const MAX_RESOURCE_NAME_LENGTH = 5000
 const MAX_META_KEY_LENGTH = 200
 // MAX_META_VALUE_LENGTH the maximum length of metadata value
 const MAX_META_VALUE_LENGTH = 25_000
-// MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION the maximum length of metadata value for test optimization libraries products
+// MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION the maximum length of metadata value for Test Optimization
 const MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION = 5000
 // MAX_METRIC_KEY_LENGTH the maximum length of a metric name key
 const MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH
