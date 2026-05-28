@@ -20,7 +20,7 @@ function encodeVarint (value) {
 }
 
 /**
- * Encode an array of serial IDs using delta-varint encoding.
+ * Encode a set of serial IDs using delta-varint encoding.
  *
  * Algorithm:
  * 1. Sort serial IDs in ascending order
@@ -28,11 +28,11 @@ function encodeVarint (value) {
  * 3. Encode each delta as varint
  * 4. Base64 encode the result
  *
- * @param {number[]} serialIds - Array of serial IDs to encode
+ * @param {Set<number>} serialIds - Set of serial IDs to encode
  * @returns {string} Base64-encoded delta-varint string
  */
 function encodeDeltaVarint (serialIds) {
-  if (!serialIds || serialIds.length === 0) {
+  if (!serialIds || serialIds.size === 0) {
     return ''
   }
 

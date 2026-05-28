@@ -110,12 +110,12 @@ class SpanEnrichmentState {
     const tags = {}
 
     if (this._serialIds.size > 0) {
-      tags.ffe_flags_enc = encodeDeltaVarint([...this._serialIds])
+      tags.ffe_flags_enc = encodeDeltaVarint(this._serialIds)
     }
 
     if (this._subjects.size > 0) {
       const subjectsObj = Object.fromEntries(
-        [...this._subjects].map(([key, ids]) => [key, encodeDeltaVarint([...ids])])
+        [...this._subjects].map(([key, ids]) => [key, encodeDeltaVarint(ids)])
       )
       tags.ffe_subjects_enc = JSON.stringify(subjectsObj)
     }
