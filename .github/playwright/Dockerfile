@@ -1,5 +1,5 @@
-FROM oven/bun:1.3.1 AS bun
-FROM node:24.14.1-bookworm-slim
+FROM oven/bun:1.3.1@sha256:c1526bc496336087e5bdfaf519746c12ac4d5ebdda6d8a99d27ebd5d9ad7304c AS bun
+FROM node:24.14.1-bookworm-slim@sha256:e484ae3f1e3c378021c967fd42254f343c302a9263e412280eac32bf5bca7008
 ARG PLAYWRIGHT_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive

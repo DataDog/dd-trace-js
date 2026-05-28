@@ -5,7 +5,7 @@ const chrome = require('selenium-webdriver/chrome')
 
 async function run () {
   const options = new chrome.Options()
-  options.addArguments('--headless')
+  options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage')
   const build = new Builder().forBrowser('chrome').setChromeOptions(options)
   const driver = await build.build()
 
