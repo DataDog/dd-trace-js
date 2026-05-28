@@ -16,7 +16,7 @@ const { withRequest } = require('../../../src/appsec/store')
 
 const DEFAULT_URL = 'http://example.com'
 
-describe.only('RASP - ssrf.js', () => {
+describe('RASP - ssrf.js', () => {
   let waf
   let downstream
   let ssrf

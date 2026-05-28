@@ -325,7 +325,7 @@ describe('client', () => {
                   assert(Buffer.isBuffer(payload.body), `Expected Buffer, got ${inspect(payload.body)}`)
 
                   const expectedBody = Buffer.concat(chunks)
-                  assert(payload.body.equals(expectedBody), `Got: ${inspect(payload.body)}`)
+                  assert.deepStrictEqual(payload.body, expectedBody)
 
                   server.close(() => done())
                 } catch (e) {
