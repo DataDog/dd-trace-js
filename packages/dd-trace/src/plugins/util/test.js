@@ -1249,7 +1249,7 @@ function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
 
   const coverageMap = getCoverageMap(coverage)
   const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
-  let updated = false
+  let matched = false
 
   for (const filename of coverageMap.files()) {
     const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
@@ -1257,10 +1257,11 @@ function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
     if (!skippedBitmap) continue
 
     const fileCoverage = coverageMap.fileCoverageFor(filename)
-    updated = applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap) || updated
+    applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap)
+    matched = true
   }
 
-  return updated
+  return matched
 }
 
 function resetCoverage (coverage) {

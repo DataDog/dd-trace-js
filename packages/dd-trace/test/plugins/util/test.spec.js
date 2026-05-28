@@ -1017,6 +1017,22 @@ describe('coverage utils', () => {
       assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
     })
 
+    it('reports skipped-suite coverage as applied when covered lines overlap', () => {
+      const partialCoverage = getPartialCoverage()
+      partialCoverage['file.js'].s[1] = 1
+      partialCoverage['file.js'].s[2] = 1
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
+    })
+
     it('does not alter coverage when skipped coverage is missing', () => {
       const partialCoverage = getPartialCoverage()
       const coverageMap = istanbul.createCoverageMap(partialCoverage)
