@@ -14,6 +14,11 @@ const enterChannel = channel('apm:hono:middleware:enter')
 const exitChannel = channel('apm:hono:middleware:exit')
 const finishChannel = channel('apm:hono:middleware:finish')
 
+// Tracks handlers registered via `app.use()` so route-publishing wrappers
+// installed by `wrapRouterAdd` can skip middleware-only matches (a request
+// matching only middleware should keep the bare HTTP-method resource name).
+const middlewareHandlers = new WeakSet()
+
 // `app.request()` and non-node adapters call `app.fetch` without an `incoming`
 // IncomingMessage; the APM `web` helpers depend on one, so the wrappers below
 // skip publishing whenever it is missing.
@@ -25,6 +30,38 @@ function wrapFetch (fetch) {
     }
     return fetch.apply(this, arguments)
   }
+}
+
+function wrapUse (originalUse) {
+  return function (arg1, ...handlers) {
+    if (typeof arg1 === 'function') middlewareHandlers.add(arg1)
+    for (const h of handlers) middlewareHandlers.add(h)
+    return originalUse.call(this, arg1, ...handlers)
+  }
+}
+
+function wrapRouterAdd (originalAdd) {
+  return function (method, path, handlerData) {
+    const handler = handlerData[0]
+    if (!middlewareHandlers.has(handler)) {
+      const meta = handlerData[1]
+      const wrappedHandler = function (context, next) {
+        const req = context.env?.incoming
+        if (req && routeChannel.hasSubscribers) {
+          routeChannel.publish({ req, route: meta?.path })
+        }
+        return handler.apply(this, arguments)
+      }
+      handlerData = [wrappedHandler, meta]
+    }
+    return originalAdd.call(this, method, path, handlerData)
+  }
+}
+
+function instrumentHonoInstance (instance) {
+  shimmer.wrap(instance, 'fetch', wrapFetch)
+  shimmer.wrap(instance, 'use', wrapUse)
+  shimmer.wrap(instance.router, 'add', wrapRouterAdd)
 }
 
 function onErrorFn (error, _context_) {
@@ -74,7 +111,6 @@ function wrapMiddleware (middleware, route) {
         if (!req) {
           return middleware.apply(this, arguments)
         }
-        routeChannel.publish({ req, route })
         enterChannel.publish({ req, name, route })
         if (typeof next === 'function') {
           arguments[1] = wrapNext(req, route, next)
@@ -113,7 +149,7 @@ addHook({
   class Hono extends hono.Hono {
     constructor (...args) {
       super(...args)
-      shimmer.wrap(this, 'fetch', wrapFetch)
+      instrumentHonoInstance(this)
     }
   }
 
@@ -130,7 +166,7 @@ addHook({
   class Hono extends hono.Hono {
     constructor (...args) {
       super(...args)
-      shimmer.wrap(this, 'fetch', wrapFetch)
+      instrumentHonoInstance(this)
     }
   }
 
