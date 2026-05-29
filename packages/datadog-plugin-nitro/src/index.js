@@ -8,6 +8,12 @@ class NitroPlugin extends ServerPlugin {
   static prefix = 'tracing:h3.request'
 
   bindStart (ctx) {
+    // h3's tracingPlugin wraps both route handlers (type='route') and middleware
+    // (type='middleware') with the same tracingChannel. Only the matched route
+    // produces a per-request HTTP server span; middleware events would create
+    // duplicate spans per request.
+    if (ctx?.type !== 'route') return ctx.currentStore
+
     const meta = this.getTags(ctx)
     const resource = this.getResource(ctx)
     // event.req.headers is a Web Headers object in h3 v2; convert to plain object for extract

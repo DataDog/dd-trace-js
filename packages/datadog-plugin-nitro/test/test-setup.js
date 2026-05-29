@@ -22,6 +22,9 @@ class NitroTestSetup {
     // Register tracingPlugin explicitly here. Real Nitro/h3 ESM apps get it automatically
     // via the addHook callback in packages/datadog-instrumentations/src/nitro.js.
     this.app.register(tracingPlugin())
+    // Middleware is also wrapped by h3's tracingPlugin (type='middleware'). The plugin must
+    // filter to type='route' so this middleware does not produce its own span per request.
+    this.app.use(() => {})
     this.app.get('/hello', () => ({ ok: true }))
     this.app.get('/users/:id', event => ({ id: event.context.params.id }))
     this.app.get('/error', () => {

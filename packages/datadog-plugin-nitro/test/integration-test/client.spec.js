@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const {
@@ -20,7 +21,7 @@ describe('esm', () => {
 
   withVersions('nitro', 'h3', version => {
     useSandbox([`'h3@${version}'`], false, [
-      `${__dirname}/*`,
+      path.join(__dirname, '*'),
     ])
 
     beforeEach(async () => {

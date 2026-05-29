@@ -97,6 +97,22 @@ createIntegrationTestSuite('nitro', 'h3', {
       return traceAssertion
     })
 
+    it('should not generate spans for middleware (type=middleware) — only the matched route', async () => {
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        // Exactly one trace, exactly one span — middleware (registered via app.use) must
+        // not produce its own span. Without the type==='route' filter, app.use(() => {})
+        // would emit a second tracing:h3.request:* event per request.
+        assert.strictEqual(traces.length, 1, `expected exactly 1 trace, got ${traces.length}`)
+        assert.strictEqual(traces[0].length, 1, `expected exactly 1 span, got ${traces[0].length}`)
+        assert.strictEqual(traces[0][0].name, 'nitro.server.request')
+        assert.strictEqual(traces[0][0].resource, 'GET /hello')
+      })
+
+      await testSetup.tracingPlugin()
+
+      return traceAssertion
+    })
+
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
         name: 'nitro.server.request',
