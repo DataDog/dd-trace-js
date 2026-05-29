@@ -6,11 +6,7 @@
   "iterations": 40,
   "instructions": true,
   "variants": {
-    "control": {
-      "env": { "USE_TRACER": "0" }
-    },
     "with-tracer": {
-      "baseline": "control",
       "env": { "USE_TRACER": "1" }
     }
   }
