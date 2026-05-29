@@ -18,9 +18,6 @@ const serviceName = 'bedrock-service-name-test'
 
 describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
-    // Real credentials (from the environment) are only needed when recording new
-    // cassettes against live Bedrock; replaying against existing cassettes uses
-    // the dummy values, since the request is matched and served by the test agent.
     useEnv({
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || '0000000000/00000000000000000000000000000',
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || '00000000000000000000',
