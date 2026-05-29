@@ -2,7 +2,7 @@
 
 const { describe, it, before } = require('mocha')
 
-const { assertLlmObsSpanEvent, useLlmObs, MOCK_STRING } = require('../../util')
+const { assertLlmObsSpanEvent, useLlmObs, MOCK_STRING, MOCK_NUMBER } = require('../../util')
 const { withAwsSdkVersions } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
 const {
   models,
@@ -10,6 +10,7 @@ const {
   cacheWriteRequest,
   cacheReadRequest,
   converseRequest,
+  converseToolResultRequest,
 } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
@@ -17,9 +18,12 @@ const serviceName = 'bedrock-service-name-test'
 
 describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
+    // Real credentials (from the environment) are only needed when recording new
+    // cassettes against live Bedrock; replaying against existing cassettes uses
+    // the dummy values, since the request is matched and served by the test agent.
     useEnv({
-      AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
-      AWS_ACCESS_KEY_ID: '00000000000000000000',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || '0000000000/00000000000000000000000000000',
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || '00000000000000000000',
     })
 
     const { getEvents } = useLlmObs({ plugin: 'aws-sdk' })
@@ -346,6 +350,68 @@ describe('Plugin', () => {
           assertLlmObsSpanEvent(llmobsSpans[0], {
             ...converseAssertion(converseRequest.streamedResponse),
             span: apmSpans[0],
+          })
+        })
+
+        it('should converse-stream a text answer after tool results in the history', async function () {
+          if (typeof AWS.ConverseStreamCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseStreamCommand({
+            modelId: converseToolResultRequest.modelId,
+            ...converseToolResultRequest.request,
+          })
+          const result = await bedrockRuntimeClient.send(command)
+          for await (const _event of result.stream) { // eslint-disable-line no-unused-vars
+            // drain
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [
+              { content: converseToolResultRequest.systemPrompt, role: 'system' },
+              { content: converseToolResultRequest.userPrompt, role: 'user' },
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  name: 'fetch_concept',
+                  arguments: { concept: 'tracing' },
+                  tool_id: converseToolResultRequest.toolUseId,
+                  type: 'toolUse',
+                }],
+              },
+              {
+                role: 'user',
+                tool_results: [{
+                  name: '',
+                  result: converseToolResultRequest.toolResultText,
+                  tool_id: converseToolResultRequest.toolUseId,
+                  type: 'tool_result',
+                }],
+              },
+            ],
+            outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+            toolDefinitions: converseToolResultRequest.request.toolConfig.tools.map(({ toolSpec }) => ({
+              name: toolSpec.name,
+              description: toolSpec.description,
+              schema: toolSpec.inputSchema,
+            })),
+            metrics: {
+              input_tokens: MOCK_NUMBER,
+              output_tokens: MOCK_NUMBER,
+              total_tokens: MOCK_NUMBER,
+              cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
+            },
+            modelName: converseToolResultRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
+            metadata: {
+              temperature: modelConfig.temperature,
+              max_tokens: modelConfig.maxTokens,
+              stop_reason: MOCK_STRING,
+            },
+            tags: { ml_app: 'test', integration: 'bedrock' },
           })
         })
 

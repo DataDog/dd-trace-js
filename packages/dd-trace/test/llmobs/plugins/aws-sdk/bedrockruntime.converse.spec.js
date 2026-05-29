@@ -10,11 +10,10 @@ require('../../../setup/core')
 
 const BedrockRuntimePlugin = require('../../../../src/llmobs/plugins/bedrockruntime')
 
-// Drives the diagnostic channels directly with crafted Converse payloads so the
-// content-block edge paths (toolResult, unsupported block types, malformed
-// stream tool JSON, multi-delta text) are exercised without a live SDK. The
-// integration counterpart is in `bedrockruntime.spec.js` (real SDK via VCR),
-// which only covers the happy paths.
+// Drives the diagnostic channels directly with crafted Converse payloads to
+// exercise the defensive content-block branches that cannot be recorded against
+// live Bedrock: unsupported block types, an unsupported tool-result item, and
+// malformed streamed tool-use JSON.
 describe('BedrockRuntime LLMObs plugin converse content blocks', () => {
   const completeCh = dc.channel('apm:aws:request:complete:bedrockruntime')
   const streamedChunkCh = dc.channel('apm:aws:response:streamed-chunk:bedrockruntime')
@@ -47,7 +46,7 @@ describe('BedrockRuntime LLMObs plugin converse content blocks', () => {
     plugin.configure({ enabled: false })
   })
 
-  it('renders tool results and labels unsupported content blocks (non-stream)', () => {
+  it('labels unsupported content blocks and unsupported tool-result items (non-stream)', () => {
     completeCh.publish({
       currentStore: { span: {} },
       response: {
@@ -60,7 +59,7 @@ describe('BedrockRuntime LLMObs plugin converse content blocks', () => {
           message: {
             role: 'assistant',
             content: [
-              { toolResult: { toolUseId: 'tr-1', content: [{ text: 'ok' }, { json: { a: 1 } }, { weird: 1 }] } },
+              { toolResult: { toolUseId: 'tr-1', content: [{ weird: 1 }] } },
               { reasoningContent: {} },
             ],
           },
@@ -74,18 +73,17 @@ describe('BedrockRuntime LLMObs plugin converse content blocks', () => {
     const outputMessages = tagLLMIOSpy.firstCall.args[2]
     assert.deepStrictEqual(outputMessages, [{
       role: 'assistant',
-      // resolveToolResultItem joins text, stringified json, and an unsupported-type label.
       content: '[Unsupported content type: reasoningContent]',
       toolResults: [{
         name: '',
-        result: 'ok{"a":1}[Unsupported content type(s): weird]',
+        result: '[Unsupported content type(s): weird]',
         toolId: 'tr-1',
         type: 'tool_result',
       }],
     }])
   })
 
-  it('accumulates multi-delta text and tolerates malformed tool JSON (stream)', () => {
+  it('tolerates malformed streamed tool-use JSON (stream)', () => {
     const ctx = {
       currentStore: { span: {} },
       response: {
@@ -95,12 +93,9 @@ describe('BedrockRuntime LLMObs plugin converse content blocks', () => {
     }
 
     const chunks = [
-      { messageStart: { role: 'assistant' } },
-      { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'hello ' } } },
-      { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'world' } } },
-      { contentBlockStart: { contentBlockIndex: 1, start: { toolUse: { toolUseId: 't-1', name: 'get_weather' } } } },
-      { contentBlockDelta: { contentBlockIndex: 1, delta: { toolUse: { input: 'not valid json{' } } } },
-      { messageStop: { stopReason: 'end_turn' } },
+      { contentBlockStart: { contentBlockIndex: 0, start: { toolUse: { toolUseId: 't-1', name: 'get_weather' } } } },
+      { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: 'not valid json{' } } } },
+      { messageStop: { stopReason: 'tool_use' } },
     ]
     for (const chunk of chunks) streamedChunkCh.publish({ ctx, chunk })
 
@@ -110,7 +105,6 @@ describe('BedrockRuntime LLMObs plugin converse content blocks', () => {
     const outputMessages = tagLLMIOSpy.firstCall.args[2]
     assert.deepStrictEqual(outputMessages, [{
       role: 'assistant',
-      content: 'hello world',
       // parseToolInput swallows the malformed JSON and emits empty arguments.
       toolCalls: [{ name: 'get_weather', arguments: {}, toolId: 't-1', type: 'toolUse' }],
     }])
