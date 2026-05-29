@@ -345,10 +345,6 @@ describe('profiler', function () {
       sinon.assert.calledWithExactly(submit, 'Submitted profiles')
     })
 
-    // A user-supplied logger must honor the tracer's logLevel: with
-    // logLevel: 'warn' the profiler's lifecycle debug messages (e.g.
-    // "Started ... profiler", "Submitted profiles") must not reach the
-    // user's debug() method.
     it('should not call user logger.debug when tracer logLevel suppresses debug', async () => {
       const userLogger = {
         debug: sinon.spy(),

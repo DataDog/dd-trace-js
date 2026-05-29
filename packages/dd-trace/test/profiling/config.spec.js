@@ -190,9 +190,6 @@ describe('config', () => {
     assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
   })
 
-  // A user-supplied logger must honor the tracer's logLevel. The profiling
-  // config's compression-level warning must not reach the user's warn()
-  // method directly; it must route through the centralized log module.
   it('should not call user logger.warn directly on invalid compression level', () => {
     process.env = {
       DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip-99',
@@ -210,8 +207,6 @@ describe('config', () => {
     assert.deepStrictEqual(warnCalls, [])
   })
 
-  // Same invariant for unknown-profiler errors emitted by the profiling
-  // config layer.
   it('should not call user logger.error directly on unknown profiler', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'nope',

@@ -40,9 +40,7 @@ function processInfo (infos, info, type) {
   }
 }
 
-// Route pprof's logger through the centralized log module so logLevel /
-// DD_TRACE_LOG_LEVEL filtering applies, instead of forwarding the raw user
-// logger directly.
+// Route pprof through the central log module so logLevel applies.
 const pprofLogger = {
   debug: msg => log.debug(msg),
   info: msg => log.info(msg),

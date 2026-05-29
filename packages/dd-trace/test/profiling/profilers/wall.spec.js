@@ -176,9 +176,6 @@ describe('profilers/native/wall', () => {
     sinon.assert.calledOnce(pprof.time.stop)
   })
 
-  // A user-supplied logger must honor the tracer's logLevel. The wall
-  // profiler's v8-bug warning must not reach the user's warn() method
-  // directly; it must route through the centralized log module.
   it('should not call user logger.warn directly on v8 bug detection', () => {
     pprof.time.v8ProfilerStuckEventLoopDetected = sinon.stub().returns(1)
     const userLogger = {
