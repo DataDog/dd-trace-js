@@ -1,1 +1,9 @@
-{}
+{
+  "playwright-tools": {
+    "latest": "ghcr.io/datadog/dd-trace-js/playwright-tools@sha256:d3a431c1f6293c6919be4027d2284f33f8721625691c038e4634f48088800711",
+    "oldest": "ghcr.io/datadog/dd-trace-js/playwright-tools@sha256:500201de5eb90d2cf815c6967aecfe15b089d3954b638d62477fcfb157afc3b6"
+  },
+  "selenium-tools": {
+    "default": "ghcr.io/datadog/dd-trace-js/selenium-tools@sha256:2adb99e76fc05033ff555e682ddfa3fc89ec82d3980cf99f68080df62ba11949"
+  }
+}
