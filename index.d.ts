@@ -280,6 +280,7 @@ interface Plugins {
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
@@ -795,6 +796,21 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Configuration for span enrichment with feature flag evaluation data.
+         */
+        spanEnrichment?: {
+          /**
+           * Whether to enable span enrichment with feature flag data.
+           * When enabled, feature flag evaluation metadata is attached to APM spans.
+           * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED environment variable.
+           *
+           * @default false
+           * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
       }
     };
 
@@ -842,11 +858,20 @@ declare namespace tracer {
 
     /**
      * Enables DBM to APM link using tag injection.
+     *
+     * - `disabled`: No SQL comment is injected (default).
+     * - `service`: Injects a SQL comment with service-level tags (database name, service, environment,
+     *   host, tracer service, tracer version). Enables DBM–APM correlation without full trace linking.
+     * - `full`: Same as `service`, plus a W3C `traceparent` for full distributed trace correlation.
+     * - `dynamic_service`: Same as `service`, but also automatically injects the propagation hash
+     *   (`ddsh`) when process tags are enabled (`DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true`).
+     *   This is a convenience shorthand for `service` + `DD_DBM_INJECT_SQL_BASEHASH=true`.
+     *
      * @default 'disabled'
      * @env DD_DBM_PROPAGATION_MODE
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    dbmPropagationMode?: 'disabled' | 'service' | 'full'
+    dbmPropagationMode?: 'disabled' | 'service' | 'full' | 'dynamic_service'
 
     /**
      * Whether to enable Data Streams Monitoring.
@@ -1992,7 +2017,8 @@ declare namespace tracer {
       middleware?: boolean;
 
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2071,7 +2097,8 @@ declare namespace tracer {
        */
       validateStatus?: (code: number) => boolean;
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2814,6 +2841,13 @@ declare namespace tracer {
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
     interface mysql2 extends mysql {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@nats-io/transport-node](https://github.com/nats-io/nats.js) and
+     * [@nats-io/nats-core](https://github.com/nats-io/nats.js) modules.
+     */
+    interface nats extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

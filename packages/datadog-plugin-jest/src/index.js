@@ -16,7 +16,6 @@ const {
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
-  TEST_COMMAND,
   TEST_FRAMEWORK_VERSION,
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
@@ -115,7 +114,9 @@ class JestPlugin extends CiPlugin {
       isSuitesSkipped,
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
+      isCoverageReportUploadEnabled,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites,
       hasUnskippableSuites,
       hasForcedToRunSuites,
@@ -148,6 +149,13 @@ class JestPlugin extends CiPlugin {
             hasForcedToRunSuites,
           }
         )
+
+        if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+          this.tracer._exporter.exportCoverage({
+            sessionId: this.testSessionSpan.context()._traceId,
+            files: testSessionCoverageFiles,
+          })
+        }
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
@@ -194,7 +202,7 @@ class JestPlugin extends CiPlugin {
       for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
-        config._ddTestCommand = this.testSessionSpan.context().getTag(TEST_COMMAND)
+        config._ddTestCommand = this.command
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled

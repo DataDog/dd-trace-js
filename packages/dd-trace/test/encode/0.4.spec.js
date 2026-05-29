@@ -139,7 +139,8 @@ describe('encode', () => {
       const debugEncoder = new AgentEncoder(writer)
       debugEncoder.encode(data)
 
-      const message = logger.debug.firstCall.args[0]()
+      const [formatter, ...args] = logger.debug.firstCall.args
+      const message = formatter(...args)
 
       assert.match(message, /^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
     })
@@ -242,7 +243,7 @@ describe('encode', () => {
     })
 
     it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
-      // Force enough unique strings to overflow the 2 MB initial chunk so
+      // Force enough unique strings to overflow the 1 MiB initial chunk so
       // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
       // entry is left pointing at a now-orphaned ArrayBuffer; the public
       // surface does not expose this retention directly.
@@ -376,6 +377,35 @@ describe('encode', () => {
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
+    })
+
+    it('emits error: 1 via the fallback when start does not fit u64', () => {
+      // The fused per-span block only fires for the steady-state shape
+      // (`error: 0/1` AND a nanosecond `start` ≥ 2³²). Synthetic test
+      // inputs with small starts fall back to the per-field emit chain;
+      // pin both the `error === 1` arm and the `error: 0` arm in one
+      // place so a future refactor can't drop either silently.
+      data[0].error = 1
+
+      encoder.encode(data)
+
+      const trace = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0]
+      assert.strictEqual(trace[0].error, 1)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
+    })
+
+    it('emits unusual error flags via writeIntOrFloat in the fallback', () => {
+      // OTel-bridge spans and a handful of plugins push non-binary error
+      // values. The pre-fused `[KEY_ERROR, 0x00/0x01]` constants would
+      // miscode them; the fallback routes through `writeIntOrFloat` so
+      // each value picks the shortest msgpack encoding.
+      data[0].error = 42
+
+      encoder.encode(data)
+
+      const trace = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0]
+      assert.strictEqual(trace[0].error, 42)
     })
 
     describe('meta_struct', () => {
@@ -723,11 +753,11 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      // Assert that log.debug was called only once for 'unsupported_key'
       sinon.assert.calledOnce(logger.debug)
       sinon.assert.calledWith(
         logger.debug,
-        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: unsupported_key/)
+        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: %s/),
+        'unsupported_key'
       )
     })
 
@@ -754,11 +784,10 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      // Assert that log.debug was called once for each unique unsupported key
       assert.strictEqual(logger.debug.callCount, 3)
-      assert.match(logger.debug.getCall(0).args[0], /unsupported_key1/)
-      assert.match(logger.debug.getCall(1).args[0], /unsupported_key2/)
-      assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
+      assert.strictEqual(logger.debug.getCall(0).args[1], 'unsupported_key1')
+      assert.strictEqual(logger.debug.getCall(1).args[1], 'unsupported_key2')
+      assert.strictEqual(logger.debug.getCall(2).args[1], 'unsupported_key3')
     })
 
     it('should skip events whose name is not a string without throwing', () => {

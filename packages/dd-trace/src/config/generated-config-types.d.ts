@@ -65,7 +65,7 @@ export interface GeneratedConfig {
   dbm: {
     injectSqlBaseHash: boolean;
   };
-  dbmPropagationMode: string;
+  dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
@@ -162,7 +162,6 @@ export interface GeneratedConfig {
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_SESSION_NAME: string | undefined;
-  DD_TEST_TIA_KEEP_COV_CONFIG: boolean;
   DD_TRACE_AEROSPIKE_ENABLED: boolean;
   DD_TRACE_AI_ENABLED: boolean;
   DD_TRACE_AMQP10_ENABLED: boolean;
@@ -332,6 +331,7 @@ export interface GeneratedConfig {
   DD_TRACE_MYSQL_ENABLED: boolean;
   DD_TRACE_MYSQL2_ENABLED: boolean;
   DD_TRACE_NATIVE_SPAN_EVENTS: boolean;
+  DD_TRACE_NATS_ENABLED: boolean;
   DD_TRACE_NET_ENABLED: boolean;
   DD_TRACE_NEXT_ENABLED: boolean;
   DD_TRACE_NODE_CHILD_PROCESS_ENABLED: boolean;
@@ -429,6 +429,9 @@ export interface GeneratedConfig {
     flaggingProvider: {
       enabled: boolean;
       initializationTimeoutMs: number;
+      spanEnrichment: {
+        enabled: boolean;
+      };
     };
   };
   flakyTestRetriesCount: number;

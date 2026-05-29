@@ -257,6 +257,7 @@ describe('agentless-ci-visibility-encode', () => {
   describe('addMetadataTags', () => {
     afterEach(() => {
       encoder.metadataTags = {}
+      encoder.wildcardMetadataTags = {}
     })
 
     it('should add simple metadata tags', () => {
@@ -332,6 +333,48 @@ describe('agentless-ci-visibility-encode', () => {
       assert.deepStrictEqual(secondDecoded.metadata.test, {
         'first.flush.tag': '1',
         'second.flush.tag': '2',
+      })
+    })
+
+    it('stores wildcard tags in wildcardMetadataTags and leaves metadataTags untouched', () => {
+      encoder.addMetadataTags({
+        '*': { 'test.command': 'mocha', 'test_session.name': 'my-session' },
+        test: { 'test_session.name': 'my-session' },
+      })
+
+      assert.deepStrictEqual(encoder.wildcardMetadataTags, {
+        'test.command': 'mocha',
+        'test_session.name': 'my-session',
+      })
+      assert.deepStrictEqual(encoder.metadataTags, {
+        test: { 'test_session.name': 'my-session' },
+      })
+    })
+
+    it('merges successive wildcard tags without clearing previously set ones', () => {
+      encoder.addMetadataTags({ '*': { 'test.command': 'mocha' } })
+      encoder.addMetadataTags({ '*': { 'test_session.name': 'my-session' } })
+
+      assert.deepStrictEqual(encoder.wildcardMetadataTags, {
+        'test.command': 'mocha',
+        'test_session.name': 'my-session',
+      })
+    })
+
+    it('encodes wildcard tags into metadata["*"] in the payload', () => {
+      encoder.addMetadataTags({
+        '*': { 'test.command': 'mocha', 'test_session.name': 'my-session' },
+        test: { '_dd.library_capabilities.auto_test_retries': '1' },
+      })
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      assert.strictEqual(decoded.metadata['*']['test.command'], 'mocha')
+      assert.strictEqual(decoded.metadata['*']['test_session.name'], 'my-session')
+      assert.deepStrictEqual(decoded.metadata.test, {
+        '_dd.library_capabilities.auto_test_retries': '1',
       })
     })
   })

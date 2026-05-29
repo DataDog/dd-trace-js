@@ -131,7 +131,11 @@ describe('PoissonProcessSamplingFilter', () => {
       now,
     })
     const prevNextSamplingInstant = filter.nextSamplingInstant
-    nowValue = 1000
+    // nowValue must comfortably exceed the initial nextSamplingInstant, which is an
+    // exponential RV with mean = samplingInterval = 100. P(initial > 100000) = e^-1000,
+    // so the first assertion below is effectively never flaky. The resetInterval still
+    // bounds the while loop in filter() to ~2 iterations, keeping the other assertions tight.
+    nowValue = 100000
     const event = { startTime: 0, duration: 1e6 }
     filter.filter(event)
     assert.ok(
