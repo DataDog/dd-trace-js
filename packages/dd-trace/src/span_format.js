@@ -54,6 +54,24 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {Record<string, string>} [attributes]
  */
 
+// The tracer service is fixed for a tracer's lifetime, so its lowercased form
+// is computed once per distinct service string instead of on every span. The
+// map stays single-entry in practice; keying on the raw string keeps it
+// correct when a second tracer (CI visibility) runs a different service.
+const lowerCaseServiceCache = new Map()
+
+/**
+ * @param {string} service
+ */
+function lowerCaseService (service) {
+  let lower = lowerCaseServiceCache.get(service)
+  if (lower === undefined) {
+    lower = service.toLowerCase()
+    lowerCaseServiceCache.set(service, lower)
+  }
+  return lower
+}
+
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
 
@@ -168,7 +186,7 @@ function extractTags (formattedSpan, span) {
     metrics[MEASURED] = 1
   }
 
-  const tracerService = span.tracer()._service.toLowerCase()
+  const tracerService = lowerCaseService(span.tracer()._service)
   if (tags['service.name']?.toLowerCase() !== tracerService) {
     span.setTag(BASE_SERVICE, tracerService)
 

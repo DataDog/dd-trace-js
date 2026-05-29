@@ -350,6 +350,14 @@ describe('spanFormat', () => {
         sinon.assert.notCalled(span.setTag)
       })
 
+      it('should treat a case-only service difference as no change', () => {
+        span.context()._tags['service.name'] = 'TEST'
+
+        trace = spanFormat(span)
+
+        sinon.assert.notCalled(span.setTag)
+      })
+
       it('should register extra service name', () => {
         span.context()._tags['service.name'] = 'foo'
 
