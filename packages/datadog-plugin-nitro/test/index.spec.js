@@ -13,7 +13,7 @@ createIntegrationTestSuite('nitro', 'h3', {
   const { agent } = meta
 
   before(async () => {
-    await testSetup.setup(meta.mod)
+    await testSetup.setup(meta)
   })
 
   after(async () => {
@@ -22,20 +22,30 @@ createIntegrationTestSuite('nitro', 'h3', {
 
   describe('h3.request - request', () => {
     it('should generate span with correct tags (happy path)', async () => {
-      const traceAssertion = agent.assertFirstTraceSpan({
-        name: 'nitro.server.request',
-        type: 'web',
-        resource: 'GET /hello',
-        meta: {
+      const traceAssertion = agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.name, 'nitro.server.request')
+        assert.strictEqual(span.type, 'web')
+        assert.strictEqual(span.resource, 'GET /hello')
+        // Service must be the tracer's default test service so traces are attributed correctly.
+        assert.strictEqual(span.service, 'test')
+        assert.deepStrictEqual({
+          component: span.meta.component,
+          'span.kind': span.meta['span.kind'],
+          'http.method': span.meta['http.method'],
+          'http.route': span.meta['http.route'],
+          'http.status_code': span.meta['http.status_code'],
+        }, {
           component: 'nitro',
           'span.kind': 'server',
           'http.method': 'GET',
           'http.route': '/hello',
           'http.status_code': '200',
-        },
+        })
       })
 
-      await testSetup.tracingPlugin()
+      // Also verify the library itself still works after instrumentation (no broken responses).
+      const response = await testSetup.tracingPlugin()
+      assert.strictEqual(response.statusCode, 200)
 
       return traceAssertion
     })
@@ -126,11 +136,10 @@ createIntegrationTestSuite('nitro', 'h3', {
         error: 1,
       })
 
-      try {
-        await testSetup.tracingPluginError()
-      } catch {
-        // request may complete with a 500 — that's not an exception on the client side
-      }
+      // The h3 handler should still return a real 500 response — verify the library wasn't
+      // broken by instrumentation. The client-side request itself does not throw on HTTP 500.
+      const response = await testSetup.tracingPluginError()
+      assert.strictEqual(response.statusCode, 500)
 
       return traceAssertion
     })

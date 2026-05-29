@@ -9,7 +9,6 @@ const {
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage,
-  checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   stopProc,
 } = require('../../../../integration-tests/helpers')
@@ -39,7 +38,20 @@ describe('esm', () => {
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-        assert.strictEqual(checkSpansForServiceName(payload, 'nitro.server.request'), true)
+
+        // Locate the nitro server span and verify the full set of tags an HTTP server
+        // integration must capture (method, route, status, component). Without these
+        // assertions a regression that broke any tag would still pass.
+        const spans = payload.flat()
+        const span = spans.find(s => s.name === 'nitro.server.request')
+        assert.ok(span, `expected a 'nitro.server.request' span; got ${inspect(spans.map(s => s.name))}`)
+        assert.strictEqual(span.resource, 'GET /hello')
+        assert.strictEqual(span.type, 'web')
+        assert.strictEqual(span.meta.component, 'nitro')
+        assert.strictEqual(span.meta['span.kind'], 'server')
+        assert.strictEqual(span.meta['http.method'], 'GET')
+        assert.strictEqual(span.meta['http.route'], '/hello')
+        assert.strictEqual(span.meta['http.status_code'], '200')
       })
     }).timeout(20000)
   })

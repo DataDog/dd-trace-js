@@ -10,11 +10,13 @@ class NitroTestSetup {
   }
 
   /**
-   * @param {object} mod - h3 module from withVersions (has H3, toNodeHandler, etc.)
+   * @param {{ mod: object, versionMod: { get: (id?: string) => object } }} meta - test meta from
+   *   createIntegrationTestSuite. `meta.mod` is the resolved h3 module; `meta.versionMod.get(id)`
+   *   loads any submodule pinned to the same version (avoids NODE_PATH leakage).
    */
-  async setup (mod) {
-    const { H3, toNodeHandler } = mod
-    const { tracingPlugin } = require('h3/tracing')
+  async setup (meta) {
+    const { H3, toNodeHandler } = meta.mod
+    const { tracingPlugin } = meta.versionMod.get('h3/tracing')
 
     this.app = new H3()
     // Unit tests use CJS require('h3') via withVersions; CJS require of ESM is not
@@ -60,19 +62,19 @@ class NitroTestSetup {
   }
 
   async tracingPlugin () {
-    await this._request('/hello')
+    return this._request('/hello')
   }
 
   async tracingPluginParameterized () {
-    await this._request('/users/42')
+    return this._request('/users/42')
   }
 
   async tracingPluginError () {
-    await this._request('/error')
+    return this._request('/error')
   }
 
   async tracingPluginWithHeaders (headers) {
-    await this._request('/hello', headers)
+    return this._request('/hello', headers)
   }
 
   _request (path, headers = {}) {

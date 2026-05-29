@@ -93,9 +93,10 @@ class NitroPlugin extends ServerPlugin {
     this.finish(ctx)
   }
 
+  // h3's tracingChannel emits both 'end' (sync completion) and 'asyncEnd' (promise
+  // resolution). Either fires for a given request; both go through the same finalization.
   asyncEnd (ctx) {
-    this.#applyResponseTags(ctx)
-    this.finish(ctx)
+    this.end(ctx)
   }
 
   error (ctx) {
