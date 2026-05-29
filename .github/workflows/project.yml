@@ -182,7 +182,7 @@ jobs:
 
   supported-integrations-push:
     # See yarn-dedupe-push: skip the bot's own re-trigger after it pushes.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.supported-integrations.outputs.has_changes == 'true' && github.actor != 'dd-octo-sts[bot]'
+    if: false
     runs-on: ubuntu-latest
     needs: supported-integrations
     permissions:
