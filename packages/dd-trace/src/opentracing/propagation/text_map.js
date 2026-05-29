@@ -865,11 +865,7 @@ class TextMapPropagator {
   }
 
   _getB3TraceId (spanContext) {
-    if (spanContext._traceId.toBuffer().length <= 8 && spanContext._trace.tags['_dd.p.tid']) {
-      return spanContext._trace.tags['_dd.p.tid'] + spanContext._traceId.toString(16)
-    }
-
-    return spanContext._traceId.toString(16)
+    return spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
   }
 
   /**

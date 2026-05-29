@@ -79,6 +79,21 @@ class Identifier {
   }
 
   /**
+   * Returns the full hex trace ID. When this is a 64-bit identifier and `traceIdHigh`
+   * is provided, prepends it to form the 128-bit trace ID. Otherwise returns
+   * only this identifier's hex representation.
+   *
+   * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits, or undefined
+   * @returns {string}
+   */
+  toTraceIdHex (traceIdHigh) {
+    if (traceIdHigh && this.#buffer.length <= 8) {
+      return traceIdHigh + this.toString(16)
+    }
+    return this.toString(16)
+  }
+
+  /**
    * @param {Identifier} other
    * @returns {boolean}
    */

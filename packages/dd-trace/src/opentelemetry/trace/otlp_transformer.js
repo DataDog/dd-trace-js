@@ -163,7 +163,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
     return {
-      traceId: this.#buildTraceIdHex(span.trace_id, traceIdHigh),
+      traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
       spanId: this.#idToBytes(span.span_id, 8),
       parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
       name: span.resource,
@@ -325,26 +325,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       droppedAttributesCount: 0,
       flags: link.flags,
     }
-  }
-
-  /**
-   * Builds the OTLP traceId hex string. DD splits a 128-bit trace ID into the low 64 bits
-   * on the span Identifier and the upper 64 bits as a hex string in `_dd.p.tid`. When the
-   * upper half is provided and the Identifier buffer is the 64-bit-only shape, prepend it
-   * so the OTLP traceId carries the full 128 bits. Full-width Identifiers pass through
-   * untouched, so this is safe regardless of how the trace ID was generated.
-   *
-   * `traceIdHigh` is validated to exactly 16 hex chars by `#findTraceIdHigh`.
-   *
-   * @param {Identifier} traceId - DD Identifier for the trace ID
-   * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits, or undefined
-   * @returns {string} 32-char lowercase hex trace ID
-   */
-  #buildTraceIdHex (traceId, traceIdHigh) {
-    if (traceIdHigh && traceId.toBuffer().length <= 8) {
-      return traceIdHigh + this.#idToBytes(traceId, 8)
-    }
-    return this.#idToBytes(traceId, 16)
   }
 
   /**
