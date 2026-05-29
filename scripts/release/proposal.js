@@ -172,8 +172,14 @@ try {
 
   start('Save release notes draft')
 
+  // Use the last applied main SHA as the upper bound to ensure links point to
+  // commits on main rather than cherry-picks on the proposal branch.
+  const notesContent = capture(
+    `${notesDiffCmd} --format=markdown v${releaseLine}.x ${shasToApply.at(-1) ?? main}`
+  )
+
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x HEAD`))
+  fs.writeFileSync(notesFile, notesContent)
 
   pass(notesFile)
 
