@@ -94,7 +94,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    */
-  constructor(resourceAttributes) {
+  constructor (resourceAttributes) {
     super(resourceAttributes, 'http/json', 'traces')
   }
 
@@ -104,7 +104,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans to transform
    * @returns {Buffer} JSON-encoded trace data
    */
-  transformSpans(spans) {
+  transformSpans (spans) {
     const traceData = {
       resourceSpans: [{
         resource: this.transformResource(),
@@ -121,7 +121,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans
    * @returns {object[]} Array of scope span objects
    */
-  #transformScopeSpans(spans) {
+  #transformScopeSpans (spans) {
     const traceIdHigh = this.#findTraceIdHigh(spans)
     return [{
       scope: {
@@ -144,7 +144,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans
    * @returns {string | undefined} 16-char lowercase hex of the upper 64 bits, or undefined when absent
    */
-  #findTraceIdHigh(spans) {
+  #findTraceIdHigh (spans) {
     for (const span of spans) {
       const tidHigh = span.meta?.[TRACE_ID_128]
       if (tidHigh && TRACE_ID_128_HEX.test(tidHigh)) return tidHigh.toLowerCase()
@@ -158,7 +158,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
    * @returns {object} OTLP Span object
    */
-  #transformSpan(span, traceIdHigh) {
+  #transformSpan (span, traceIdHigh) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
@@ -188,7 +188,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDFormattedSpan} span - DD-formatted span
    * @returns {object[]} Array of OTLP KeyValue objects
    */
-  #buildAttributes(span) {
+  #buildAttributes (span) {
     const attributes = []
 
     // Add top-level DD span fields as OTLP attributes
@@ -244,7 +244,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {string | undefined} kind - DD span kind string
    * @returns {number} OTLP SpanKind enum value
    */
-  #mapSpanKind(kind) {
+  #mapSpanKind (kind) {
     if (!kind) return SPAN_KIND_UNSPECIFIED
     return SPAN_KIND_MAP[kind] ?? SPAN_KIND_UNSPECIFIED
   }
@@ -257,7 +257,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDFormattedSpan} span - DD-formatted span
    * @returns {object} OTLP Status object with code and message
    */
-  #mapStatus(span) {
+  #mapStatus (span) {
     if (span.error !== 1) {
       return { code: STATUS_CODE_UNSET, message: '' }
     }
@@ -280,7 +280,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDSpanEvent} event - DD span event
    * @returns {object} OTLP Event object
    */
-  #transformEvent(event) {
+  #transformEvent (event) {
     return {
       timeUnixNano: event.time_unix_nano,
       name: event.name || '',
@@ -295,7 +295,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {string | undefined} spanLinksJson - JSON-encoded array of DD span links
    * @returns {object[]} Array of OTLP Link objects
    */
-  #extractLinks(spanLinksJson) {
+  #extractLinks (spanLinksJson) {
     if (!spanLinksJson) return []
 
     let parsedLinks
@@ -316,7 +316,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {DDSpanLink} link - DD span link
    * @returns {object} OTLP Link object
    */
-  #transformLink(link) {
+  #transformLink (link) {
     return {
       traceId: this.#hexToBytes(link.trace_id, 16),
       spanId: this.#hexToBytes(link.span_id, 8),
@@ -340,7 +340,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits, or undefined
    * @returns {string} 32-char lowercase hex trace ID
    */
-  #buildTraceIdHex(traceId, traceIdHigh) {
+  #buildTraceIdHex (traceId, traceIdHigh) {
     if (traceIdHigh && traceId.toBuffer().length <= 8) {
       return traceIdHigh + this.#idToBytes(traceId, 8)
     }
@@ -356,7 +356,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {number} targetLength - Target byte length (16 for trace ID, 8 for span ID)
    * @returns {string} Hex-encoded string of the specified length
    */
-  #idToBytes(identifier, targetLength) {
+  #idToBytes (identifier, targetLength) {
     const buffer = identifier.toBuffer()
     if (buffer.length === targetLength) {
       return Buffer.from(buffer).toString('hex')
@@ -379,7 +379,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {number} targetLength - Target byte length
    * @returns {string} Hex-encoded string of the specified length
    */
-  #hexToBytes(hexString, targetLength) {
+  #hexToBytes (hexString, targetLength) {
     if (!hexString) return '0'.repeat(targetLength * 2)
     const cleanHex = hexString.startsWith('0x') ? hexString.slice(2) : hexString
     return cleanHex.padStart(targetLength * 2, '0')

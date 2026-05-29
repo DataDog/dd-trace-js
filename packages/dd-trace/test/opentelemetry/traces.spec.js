@@ -34,7 +34,7 @@ describe('OpenTelemetry Traces', () => {
    * @param {object} [overrides] - Optional field overrides
    * @returns {object} A mock DD-formatted span
    */
-  function createMockSpan(overrides = {}) {
+  function createMockSpan (overrides = {}) {
     return {
       trace_id: id('1234567890abcdef1234567890abcdef'),
       span_id: id('abcdef1234567890'),
@@ -58,7 +58,7 @@ describe('OpenTelemetry Traces', () => {
     }
   }
 
-  function mockOtlpExport(validator) {
+  function mockOtlpExport (validator) {
     let capturedPayload, capturedHeaders
     let validatorCalled = false
 
@@ -72,21 +72,21 @@ describe('OpenTelemetry Traces', () => {
             validator(decoded, capturedHeaders)
             validatorCalled = true
           },
-          on: () => { },
-          once: () => { },
-          setTimeout: () => { },
+          on: () => {},
+          once: () => {},
+          setTimeout: () => {},
         }
-        callback({ statusCode: 200, on: () => { }, once: () => { }, setTimeout: () => { } })
+        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
       const mockReq = {
-        write: () => { },
-        end: () => { },
-        on: () => { },
-        once: () => { },
-        setTimeout: () => { },
+        write: () => {},
+        end: () => {},
+        on: () => {},
+        once: () => {},
+        setTimeout: () => {},
       }
-      callback({ statusCode: 200, on: () => { }, once: () => { }, setTimeout: () => { } })
+      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 
@@ -105,7 +105,7 @@ describe('OpenTelemetry Traces', () => {
    * @param {object} [extraEnv] - Extra environment variables for this one build
    * @returns {OtlpHttpTraceExporter}
    */
-  function buildExporter(extraEnv) {
+  function buildExporter (extraEnv) {
     if (extraEnv) Object.assign(process.env, extraEnv)
     return createOtlpTraceExporter(getConfigFresh())
   }
@@ -140,7 +140,7 @@ describe('OpenTelemetry Traces', () => {
      * @param {Buffer} payload - The JSON-encoded payload
      * @returns {object} Decoded JSON object
      */
-    function decodePayload(payload) {
+    function decodePayload (payload) {
       return JSON.parse(payload.toString())
     }
 
@@ -150,7 +150,7 @@ describe('OpenTelemetry Traces', () => {
      * @param {object[]} attributes - Array of OTLP KeyValue objects
      * @returns {Record<string, string|number>} Flat key-value map
      */
-    function extractAttrs(attributes) {
+    function extractAttrs (attributes) {
       const attrs = {}
       for (const attr of attributes) {
         if (attr.value.stringValue !== undefined) {
@@ -687,7 +687,7 @@ describe('OpenTelemetry Traces', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
         exportCalled = true
-        return { write: () => { }, end: () => { }, on: () => { }, once: () => { }, setTimeout: () => { } }
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
       const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
@@ -700,7 +700,7 @@ describe('OpenTelemetry Traces', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
         exportCalled = true
-        return { write: () => { }, end: () => { }, on: () => { }, once: () => { }, setTimeout: () => { } }
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
       const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
@@ -713,7 +713,7 @@ describe('OpenTelemetry Traces', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
         exportCalled = true
-        return { write: () => { }, end: () => { }, on: () => { }, once: () => { }, setTimeout: () => { } }
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
       const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
