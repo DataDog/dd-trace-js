@@ -85,18 +85,6 @@ try {
   // avoiding a circular dependency between isMinor and the proposal branch state.
   const allMainShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
     .split('\n').filter(Boolean)
-  const allDiff = capture(`${cherryPickDiffCmd} --format=markdown v${releaseLine}.x ${main}`)
-
-  // Only labeled commits (semver-patch/minor/major) warrant cutting a release;
-  // unlabeled commits (e.g. docs/chore) ride along but are not enough on their own.
-  if (
-    !allDiff.includes('SEMVER-MINOR') &&
-    !allDiff.includes('SEMVER-PATCH') &&
-    !allDiff.includes('SEMVER-MAJOR')
-  ) {
-    pass('none (already up to date)')
-    process.exit(0)
-  }
 
   // The upper bound is the last main SHA that will fit in the proposal across all
   // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
@@ -104,10 +92,28 @@ try {
   // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
   const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1)
 
-  // notesDiff serves two purposes: determining isMinor from capped commits only
-  // (not all of main), and as the release notes content.
+  if (!upperBoundSha) {
+    pass('none (already up to date)')
+    process.exit(0)
+  }
+
+  // Only labeled commits (semver-patch/minor/major) warrant cutting a release;
+  // unlabeled commits (e.g. docs/chore) ride along but are not enough on their own.
+  // Use the capped range so deferred commits beyond the limit don't trigger a release.
+  const cappedDiff = capture(`${cherryPickDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
+
+  if (
+    !cappedDiff.includes('SEMVER-MINOR') &&
+    !cappedDiff.includes('SEMVER-PATCH') &&
+    !cappedDiff.includes('SEMVER-MAJOR')
+  ) {
+    pass('none (already up to date)')
+    process.exit(0)
+  }
+
+  // notesDiff excludes semver-major (gated behind a flag, not user-visible) for release notes.
   const notesDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
-  const isMinor = notesDiff.includes('SEMVER-MINOR')
+  const isMinor = cappedDiff.includes('SEMVER-MINOR')
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
