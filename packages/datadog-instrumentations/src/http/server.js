@@ -38,27 +38,34 @@ addHook({ name: 'https' }, http => {
 })
 
 function wrapResponseEmit (emit) {
-  return function (eventName, event) {
+  // Rest params instead of named formals + `arguments`: a closure that both
+  // names parameters and reads `arguments` makes V8 materialise the mapped
+  // arguments object on every response event.
+  return function (...args) {
     if (!finishServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, args)
     }
 
+    const eventName = args[0]
     if ((eventName === 'finish' || eventName === 'close') && !requestFinishedSet.has(this)) {
       finishServerCh.publish({ req: this.req })
       requestFinishedSet.add(this)
     }
 
-    return emit.apply(this, arguments)
+    return Reflect.apply(emit, this, args)
   }
 }
 
 function wrapEmit (emit) {
-  return function (eventName, req, res) {
+  return function (...args) {
     if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, args)
     }
 
+    const eventName = args[0]
     if (eventName === 'request') {
+      const req = args[1]
+      const res = args[2]
       res.req = req
 
       const abortController = new AbortController()
@@ -75,7 +82,7 @@ function wrapEmit (emit) {
           return this.listenerCount(eventName) > 0
         }
 
-        return emit.apply(this, arguments)
+        return Reflect.apply(emit, this, args)
       } catch (err) {
         errorServerCh.publish(err)
 
@@ -84,7 +91,7 @@ function wrapEmit (emit) {
         exitServerCh.publish(ctx)
       }
     }
-    return emit.apply(this, arguments)
+    return Reflect.apply(emit, this, args)
   }
 }
 
