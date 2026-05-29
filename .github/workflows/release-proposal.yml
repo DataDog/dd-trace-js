@@ -48,7 +48,7 @@ jobs:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           errors: true
           payload: |
-            channel: ${{ secrets.SLACK_GUILD_CHANNEL_ID }}
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
             blocks:
               - type: "section"
                 text:
