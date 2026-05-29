@@ -13,7 +13,7 @@ const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
-const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
+const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -538,6 +538,32 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
+  }
+
+  return true
+}
+
+function getQsObfuscator (config) {
+  const obfuscator = config.queryStringObfuscation
+
+  if (typeof obfuscator === 'boolean') {
+    return obfuscator
+  }
+
+  if (typeof obfuscator === 'string') {
+    if (obfuscator === '') return false // disable obfuscator
+
+    if (obfuscator === '.*') return true // optimize full redact
+
+    try {
+      return new RegExp(obfuscator, 'gi')
+    } catch (err) {
+      log.error('Web plugin error getting qs obfuscator', err)
+    }
+  }
+
+  if (config.hasOwnProperty('queryStringObfuscation')) {
+    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true
