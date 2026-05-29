@@ -320,16 +320,18 @@ class AgentEncoder {
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
 
-      // Almost every span carries `error: 0` or `error: 1` AND a nanosecond
-      // `start` timestamp ≥ 2³² (so `start` always encodes as a u64). When
-      // both hold, the block fuses error key+value, the start key + 0xCF
-      // type byte + 8-byte timestamp, and the duration key into the per-span
-      // reserve. The fallback path covers synthetic/test inputs with small
-      // starts and rare non-binary error flags by keeping per-field emits so
-      // each integer picks the shortest msgpack encoding.
-      const errorIsFixint = span.error === 0 || span.error === 1
-      const startFitsU64 = span.start >= 0x1_00_00_00_00
-      const fuseTail = errorIsFixint && startFitsU64
+      // `error` is `0` or `1` on nearly every span, and `start` is a
+      // nanosecond timestamp ≥ 2³² (always a msgpack u64). Decide the fused
+      // error key+value up front (`KEY_ERROR_0` / `KEY_ERROR_1`, or `undefined`
+      // for the rare non-binary flag) so the tail fuses without re-deciding the
+      // error shape twice. The fused tail also needs `start` as a u64; when
+      // either misses (synthetic small `start`, non-binary error) the tail
+      // routes each integer through `writeIntOrFloat` for the shortest
+      // encoding.
+      const errorEntry = span.error === 0
+        ? KEY_ERROR_0
+        : span.error === 1 ? KEY_ERROR_1 : undefined
+      const fuseTail = errorEntry !== undefined && span.start >= 0x1_00_00_00_00
 
       let blockSize = 1 +
         KEY_TRACE_ID_PREFIX.length + 8 +
@@ -340,7 +342,7 @@ class AgentEncoder {
         KEY_SERVICE.length + serviceLen
       if (typeEntry) blockSize += KEY_TYPE.length + typeEntry.length
       if (fuseTail) {
-        blockSize += KEY_ERROR_0.length + KEY_START_PREFIX.length + 8 + KEY_DURATION.length
+        blockSize += errorEntry.length + KEY_START_PREFIX.length + 8 + KEY_DURATION.length
       }
 
       const blockOffset = bytes.length
@@ -377,8 +379,8 @@ class AgentEncoder {
       cursor += serviceLen
 
       if (fuseTail) {
-        target.set(span.error === 0 ? KEY_ERROR_0 : KEY_ERROR_1, cursor)
-        cursor += KEY_ERROR_0.length
+        target.set(errorEntry, cursor)
+        cursor += errorEntry.length
 
         target.set(KEY_START_PREFIX, cursor)
         cursor += KEY_START_PREFIX.length
@@ -389,15 +391,14 @@ class AgentEncoder {
         cursor += 8
 
         target.set(KEY_DURATION, cursor)
+      } else if (errorEntry) {
+        bytes.set(errorEntry)
+        bytes.set(KEY_START)
+        bytes.writeIntOrFloat(span.start)
+        bytes.set(KEY_DURATION)
       } else {
-        if (span.error === 0) {
-          bytes.set(KEY_ERROR_0)
-        } else if (span.error === 1) {
-          bytes.set(KEY_ERROR_1)
-        } else {
-          bytes.set(KEY_ERROR)
-          bytes.writeIntOrFloat(span.error)
-        }
+        bytes.set(KEY_ERROR)
+        bytes.writeIntOrFloat(span.error)
         bytes.set(KEY_START)
         bytes.writeIntOrFloat(span.start)
         bytes.set(KEY_DURATION)
