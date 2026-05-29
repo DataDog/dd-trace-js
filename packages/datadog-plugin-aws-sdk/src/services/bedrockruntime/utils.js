@@ -480,7 +480,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
  *
  * @param {string} role
  * @param {Array<object>} contentBlocks
- * @returns {Array<{ content?: string, role: string, toolCalls?: Array, toolResults?: Array }>}
+ * @returns {{ content?: string, role: string, toolCalls?: Array, toolResults?: Array } | undefined}
  */
 function extractMessagesFromConverseContent (role, contentBlocks) {
   let content = ''
@@ -496,24 +496,38 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
     } else if (block.toolResult) {
       toolResults.push(buildToolResult(block.toolResult))
     } else {
-      const type = Object.keys(block)[0] || 'unknown'
-      content += `[Unsupported content type: ${type}]`
+      content += `[Unsupported content type: ${getContentBlockType(block)}]`
     }
   }
 
-  if (!content && toolCalls.length === 0 && toolResults.length === 0) return []
+  if (!content && toolCalls.length === 0 && toolResults.length === 0) return undefined
 
   const message = { role }
   if (content) message.content = content
   if (toolCalls.length > 0) message.toolCalls = toolCalls
   if (toolResults.length > 0) message.toolResults = toolResults
-  return [message]
+  return message
+}
+
+/**
+ * Resolve a Converse `ContentBlock`'s member type. The block is a key-presence
+ * tagged union (no `type` discriminator), so the active member is its sole own
+ * key. For forward-compat `$unknown` members the real type is the first element
+ * of the `[name, value]` tuple.
+ *
+ * @param {object} block
+ * @returns {string}
+ */
+function getContentBlockType (block) {
+  const key = Object.keys(block)[0]
+  if (key === '$unknown') return block.$unknown?.[0] ?? 'unknown'
+  return key ?? 'unknown'
 }
 
 // Always emit at least one output message so downstream tagging has a role to attach to.
 function toOutputMessages (role, contentBlocks) {
-  const messages = extractMessagesFromConverseContent(role, contentBlocks)
-  return messages.length > 0 ? messages : [{ role, content: '' }]
+  const message = extractMessagesFromConverseContent(role, contentBlocks)
+  return message ? [message] : [{ role, content: '' }]
 }
 
 function buildToolCall ({ name, input, toolUseId, inputStr }) {
@@ -585,7 +599,8 @@ function extractRequestParamsConverse (params) {
   }
   for (const msg of params.messages || []) {
     if (msg == null || typeof msg !== 'object') continue
-    prompt.push(...extractMessagesFromConverseContent(msg.role || 'user', msg.content))
+    const message = extractMessagesFromConverseContent(msg.role || 'user', msg.content)
+    if (message) prompt.push(message)
   }
 
   const { temperature, topP, maxTokens, stopSequences } = params.inferenceConfig || {}
