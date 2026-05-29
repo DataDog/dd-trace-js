@@ -1755,6 +1755,20 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source }).catch(done)
         })
+
+        it('should fallback to the operation type', async () => {
+          const source = '{ friends { name } }'
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query')
+            }),
+            graphql.graphql({ schema, source }),
+          ])
+        })
       })
 
       describe('with hooks configuration', () => {

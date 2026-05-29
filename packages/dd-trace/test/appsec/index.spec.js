@@ -729,6 +729,47 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
+
+    it('should normalize response header names to lowercase before storing', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+        },
+        method: 'GET',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+      }
+      const res = { getHeaders: () => ({}), statusCode: 200 }
+
+      const mixedCaseHeaders = {
+        'Content-Type': 'application/json',
+        'Content-Length': 137,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: mixedCaseHeaders,
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {
+        'content-type': 'application/json',
+        'content-length': 137,
+      }, undefined)
+    })
   })
 
   describe('Api Security', () => {

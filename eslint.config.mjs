@@ -21,6 +21,7 @@ import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
+import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -99,8 +100,6 @@ export default [
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
-      'packages/datadog-plugin-graphql/src/tools/signature.js', // Inlined from apollo-graphql
-      'packages/datadog-plugin-graphql/src/tools/transforms.js', // Inlined from apollo-graphql
     ],
   },
   eslintPluginJs.configs.recommended,
@@ -276,8 +275,7 @@ export default [
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
-      // no-defaults: This should be activated, since the defaults will not be picked up in a description.
-      'jsdoc/no-defaults': 'off',
+      'jsdoc/no-defaults': 'error',
       'jsdoc/no-undefined-types': 'off',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
@@ -384,6 +382,7 @@ export default [
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-require-export-exists': eslintRequireExportExists,
+          'eslint-timer-unref': eslintTimerUnref,
         },
       },
       import: eslintPluginImport,
@@ -421,11 +420,11 @@ export default [
       'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
-      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/hashbang': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
-      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-process-exit': 'error',
       'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
         allowModules: Object.keys(dependencies),
@@ -462,11 +461,14 @@ export default [
       sonarjs: eslintPluginSonar,
     },
     rules: {
+      'sonarjs/duplicates-in-character-class': 'error',
       'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-code-after-done': 'error',
       'sonarjs/no-commented-code': 'error',
       'sonarjs/no-duplicated-branches': 'error',
       'sonarjs/no-extra-arguments': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
+      'sonarjs/no-identical-functions': 'error',
       'sonarjs/no-invariant-returns': 'error',
       'sonarjs/no-nested-assignment': 'error',
       'sonarjs/no-parameter-reassignment': 'error',
@@ -479,17 +481,14 @@ export default [
       'sonarjs/prefer-single-boolean-return': 'error',
       'sonarjs/single-char-in-character-classes': 'error',
       'sonarjs/single-character-alternation': 'error',
+      'sonarjs/stable-tests': 'error',
       'sonarjs/test-check-exception': 'error',
+      'sonarjs/updated-loop-counter': 'error',
 
       // --- Rules to check later ------------------
-      'sonarjs/duplicates-in-character-class': 'off', // 86 errors
-      'sonarjs/no-code-after-done': 'off', // 13 errors
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
-      'sonarjs/no-identical-functions': 'off', // 25 errors
       'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
-      'sonarjs/stable-tests': 'off',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
-      'sonarjs/updated-loop-counter': 'off', // 4 errors
     },
   },
   {
@@ -502,6 +501,7 @@ export default [
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+      'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {
         // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
@@ -579,7 +579,9 @@ export default [
       'eslint.config.mjs',
     ],
     rules: {
-      'eslint-rules/eslint-config-names-sync': 'error',
+      'eslint-rules/eslint-config-names-sync': ['error', {
+        indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
+      }],
     },
   },
   {
@@ -590,8 +592,35 @@ export default [
     ],
     rules: {
       'eslint-rules/eslint-process-env': 'off',
-      // Scripts are CLI/dev tooling where process.exit is acceptable.
+      // Scripts are CLI/dev tooling where process.exit and shebangs are acceptable.
+      'n/hashbang': 'off',
+      'n/no-process-exit': 'off',
       'unicorn/no-process-exit': 'off',
+    },
+  },
+  {
+    // Benchmarks and integration test scaffolding are standalone scripts. Shebangs
+    // are used so they can be invoked as `./script.js`, and `process.exit` is the
+    // expected exit signal for these driver / harness programs.
+    name: 'dd-trace/scripts/runnable-fixtures',
+    files: [
+      'benchmark/**/*.js',
+      'benchmark/**/*.mjs',
+      'integration-tests/**/*.js',
+      'integration-tests/**/*.mjs',
+      'packages/datadog-instrumentations/test/helpers/check-require-cache/**/*.js',
+      'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
+      'packages/datadog-plugin-openai/test/no-init.js',
+      'packages/dd-trace/test/custom-metrics-app.js',
+      'packages/datadog-plugin-fastify/test/integration-test/helper.mjs',
+      'packages/datadog-plugin-light-my-request/test/integration-test/server.mjs',
+    ],
+    plugins: {
+      n: eslintPluginN,
+    },
+    rules: {
+      'n/hashbang': 'off',
+      'n/no-process-exit': 'off',
     },
   },
   {
@@ -749,6 +778,25 @@ export default [
     rules: {
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
+    },
+  },
+  {
+    // CI-visibility retry fixtures intentionally call `this.retries(N)` to
+    // exercise the dd-trace test-optimization retry code paths. The fixtures
+    // ARE the flaky tests that the plugin watches.
+    name: 'dd-trace/tests/ci-visibility-retry-fixtures',
+    files: [
+      'integration-tests/ci-visibility/jest-plugin-tests/**/*.js',
+      'integration-tests/ci-visibility/mocha-hooks/**/*.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/**/*.js',
+      'integration-tests/ci-visibility/mocha-retries-test-fn/**/*.js',
+      'integration-tests/ci-visibility/test-nested-hooks/**/*.js',
+    ],
+    plugins: {
+      sonarjs: eslintPluginSonar,
+    },
+    rules: {
+      'sonarjs/stable-tests': 'off',
     },
   },
   {

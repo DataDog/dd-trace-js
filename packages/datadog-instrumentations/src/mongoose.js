@@ -66,14 +66,14 @@ addHook({
     if (!(methodName in Model)) continue
 
     shimmer.wrap(Model, methodName, method => {
-      return function wrappedModelMethod () {
+      return function wrappedModelMethod (...args) {
         if (!startCh.hasSubscribers) {
-          return method.apply(this, arguments)
+          return method.apply(this, args)
         }
 
-        const filters = [arguments[0]]
+        const filters = [args[0]]
         if (useTwoArguments) {
-          filters.push(arguments[1])
+          filters.push(args[1])
         }
 
         let callbackWrapped = false
@@ -84,10 +84,10 @@ addHook({
           if (typeof args[lastArgumentIndex] === 'function') {
             // is a callback, wrap it to execute finish()
             shimmer.wrap(args, lastArgumentIndex, originalCb => {
-              return function () {
+              return function (...args) {
                 finishCh.publish(ctx)
 
-                return originalCb.apply(this, arguments)
+                return originalCb.apply(this, args)
               }
             })
 
@@ -101,19 +101,19 @@ addHook({
         }
 
         return startCh.runStores(ctx, () => {
-          wrapCallbackIfExist(arguments, ctx)
+          wrapCallbackIfExist(args, ctx)
 
-          const res = method.apply(this, arguments)
+          const res = method.apply(this, args)
 
           // if it is not callback, wrap exec method and its then
           if (!callbackWrapped) {
             shimmer.wrap(res, 'exec', originalExec => {
-              return function wrappedExec () {
+              return function wrappedExec (...args) {
                 if (!callbackWrapped) {
-                  wrapCallbackIfExist(arguments, ctx)
+                  wrapCallbackIfExist(args, ctx)
                 }
 
-                const execResult = originalExec.apply(this, arguments)
+                const execResult = originalExec.apply(this, args)
 
                 if (callbackWrapped || typeof execResult?.then !== 'function') {
                   return execResult
@@ -121,27 +121,27 @@ addHook({
 
                 // wrap them method, wrap resolve and reject methods
                 shimmer.wrap(execResult, 'then', originalThen => {
-                  return function wrappedThen () {
-                    const resolve = arguments[0]
-                    const reject = arguments[1]
+                  return function wrappedThen (...args) {
+                    const resolve = args[0]
+                    const reject = args[1]
 
-                    arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
+                    args[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve (...args) {
                       finishCh.publish(ctx)
 
                       if (resolve) {
-                        return resolve.apply(this, arguments)
+                        return resolve.apply(this, args)
                       }
                     })
 
-                    arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
+                    args[1] = shimmer.wrapFunction(reject, reject => function wrappedReject (...args) {
                       finishCh.publish(ctx)
 
                       if (reject) {
-                        return reject.apply(this, arguments)
+                        return reject.apply(this, args)
                       }
                     })
 
-                    return originalThen.apply(this, arguments)
+                    return originalThen.apply(this, args)
                   }
                 })
 
@@ -165,8 +165,8 @@ addHook({
   versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js',
 }, sanitizeFilter => {
-  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
-    const sanitizedObject = sanitizeFilter.apply(this, arguments)
+  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter (...args) {
+    const sanitizedObject = sanitizeFilter.apply(this, args)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {
       sanitizeFilterFinishCh.publish({

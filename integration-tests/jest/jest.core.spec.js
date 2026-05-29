@@ -1108,6 +1108,42 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  it('keeps default stack formatting when imported modules read error stacks', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const suites = events.filter(event => event.type === 'test_suite_end')
+        const stackImportSuites = suites.filter(
+          suite => suite.content.meta[TEST_SUITE] ===
+            'ci-visibility/jest-stack-on-import/jest-stack-on-import-test.js'
+        )
+
+        assert.strictEqual(stackImportSuites.length, 1)
+        assert.strictEqual(stackImportSuites[0].content.meta[TEST_STATUS], 'pass')
+      })
+
+    childProcess = exec(runTestsCommand, {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        TESTS_TO_RUN: 'jest-stack-on-import/jest-stack-on-import-test',
+        SHOULD_CHECK_RESULTS: 'true',
+      },
+    })
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [exitCode] = await once(childProcess, 'exit')
+
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.doesNotMatch(testOutput, /originalPrepareStackTrace is not a function/)
+    await eventsPromise
+  })
+
   it('reports parsing errors in the test file', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

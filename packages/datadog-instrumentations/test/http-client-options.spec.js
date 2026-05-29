@@ -156,6 +156,7 @@ describe('http client option ownership', () => {
 
   it('keeps tracing on http.request(undefined) without callback', () => {
     const events = []
+    // eslint-disable-next-line sonarjs/no-identical-functions -- per-test events buffer
     const onStart = (payload) => {
       if (payload?.args?.originalUrl === undefined) {
         events.push(payload)

@@ -4,7 +4,8 @@ const assert = require('node:assert')
 const { once } = require('node:events')
 
 const dc = require('dc-polyfill')
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
@@ -26,6 +27,7 @@ function findSpan (traces, predicate) {
 }
 
 function closeWsServer (server) {
+  if (!server) return
   for (const ws of server.clients) {
     ws.terminate()
   }
@@ -36,7 +38,7 @@ describe('Plugin', () => {
   let WebSocket
   let wsServer
   let connectionReceived
-  let clientPort = 6015
+  let clientPort
   let client
   let messageReceived
   let route
@@ -44,7 +46,10 @@ describe('Plugin', () => {
   describe('ws', () => {
     withVersions('ws', 'ws', '>=8.0.0', version => {
       describe('regression tests', () => {
-        before(async () => {
+        let regressionServer
+        let regressionSocket
+
+        beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'some',
             traceWebsocketMessagesEnabled: true,
@@ -52,41 +57,52 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
         })
 
+        afterEach(() => {
+          regressionSocket?.terminate()
+          regressionSocket = undefined
+        })
+
+        afterEach(async () => {
+          await closeWsServer(regressionServer)
+        })
+
+        afterEach(() => {
+          regressionServer = undefined
+        })
+
+        afterEach(async () => {
+          await agent.close({ ritmReset: false, wipe: true })
+        })
+
         it('should not crash when sending on a socket without spanContext', async () => {
-          const server = new WebSocket.Server({ port: 16015 })
-          const connectionPromise = once(server, 'connection')
+          regressionServer = new WebSocket.Server({ port: 0 })
+          await once(regressionServer, 'listening')
+          const { port } = regressionServer.address()
+          const connectionPromise = once(regressionServer, 'connection')
 
-          const socket = new WebSocket('ws://localhost:16015')
+          regressionSocket = new WebSocket(`ws://localhost:${port}`)
           const [serverSocket] = await connectionPromise
-          await once(socket, 'open')
+          await once(regressionSocket, 'open')
 
-          assert.strictEqual(socket.spanContext, undefined)
+          assert.strictEqual(regressionSocket.spanContext, undefined)
 
           const messagePromise = once(serverSocket, 'message')
           await new Promise((resolve, reject) => {
-            socket.send('test message', {}, (err) => err ? reject(err) : resolve())
+            regressionSocket.send('test message', {}, (err) => err ? reject(err) : resolve())
           })
           await messagePromise
-
-          socket.close()
-          await once(socket, 'close')
-          server.close()
         })
 
         it('should emit original error in case close is called before connection is established', async () => {
-          const socket = new WebSocket('wss://localhost:12345')
+          regressionSocket = new WebSocket('wss://localhost:12345')
 
-          const errorPromise = once(socket, 'error')
-          socket.close()
+          const errorPromise = once(regressionSocket, 'error')
+          regressionSocket.close()
 
           const error = await errorPromise
 
           // Some versions emit an array with an error, some directly emit the error
           assert.strictEqual(error?.[0]?.message, 'WebSocket was closed before the connection was established')
-        })
-
-        after(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
         })
       })
 
@@ -106,22 +122,27 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
         })
 
-        afterEach(async () => {
-          clientPort++
+        afterEach(() => {
           if (client) {
             client.removeAllListeners('error')
             client.on('error', () => {})
           }
+        })
+
+        afterEach(async () => {
           await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
           await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should not retain the connection span during socket setup', async () => {
-          const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
           let resolve
           const promise = new Promise((_resolve) => {
             resolve = _resolve
@@ -464,17 +485,23 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
         })
 
-        afterEach(async () => {
-          clientPort++
+        afterEach(() => {
           if (client) {
             client.removeAllListeners('error')
             client.on('error', () => {})
           }
+        })
+
+        afterEach(async () => {
           await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -576,17 +603,22 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
         })
 
-        afterEach(async () => {
-          clientPort++
+        afterEach(() => {
           if (client) {
             client.removeAllListeners('error')
             client.on('error', () => {})
           }
+        })
+
+        afterEach(async () => {
           await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -625,17 +657,23 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
         })
 
-        afterEach(async () => {
-          clientPort++
+        afterEach(() => {
           if (client) {
             client.removeAllListeners('error')
             client.on('error', () => {})
           }
+        })
+
+        afterEach(async () => {
           await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
           await agent.close({ ritmReset: false, wipe: true })
         })
 
@@ -721,8 +759,9 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
 
           parentHeaders = {}
           tracer.trace('test.parent', parentSpan => {
@@ -730,13 +769,18 @@ describe('Plugin', () => {
           })
         })
 
-        afterEach(async () => {
-          clientPort++
+        afterEach(() => {
           if (client) {
             client.removeAllListeners('error')
             client.on('error', () => {})
           }
+        })
+
+        afterEach(async () => {
           await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
           await agent.close({ ritmReset: false, wipe: true })
         })
 

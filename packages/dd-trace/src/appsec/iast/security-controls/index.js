@@ -111,8 +111,8 @@ function resolve (path, obj, separator = '.') {
 }
 
 function wrapSanitizer (target, secureMarks) {
-  return shimmer.wrapFunction(target, orig => function () {
-    const result = orig.apply(this, arguments)
+  return shimmer.wrapFunction(target, orig => function (...args) {
+    const result = orig.apply(this, args)
 
     try {
       return addSecureMarks(result, secureMarks)

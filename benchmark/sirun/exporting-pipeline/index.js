@@ -2,6 +2,11 @@
 
 // TODO: Update setup script to not leave agent process running in background.
 
+const assert = require('node:assert/strict')
+
+// Entry point normally primes this; bench imports src directly.
+globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
+
 const hostname = require('os').hostname()
 const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
@@ -59,7 +64,12 @@ for (let i = 0, parent = null; i < 30; i++) {
   parent = createSpan(parent)
 }
 
-let iterations = 0
+const writerCountBefore = exporter._writer?._encoder?.count?.() ?? 0
+sp.process(finished[0])
+const writerCountAfter = exporter._writer?._encoder?.count?.() ?? 0
+assert.ok(writerCountAfter > writerCountBefore, 'span processor did not advance encoder count')
+
+let iterations = 1
 function processSpans () {
   sp.process(finished[0])
   trace.finished = finished

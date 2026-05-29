@@ -1619,7 +1619,7 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      assert.strictEqual(carrier['x-datadog-tags'], `,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      assert.strictEqual(carrier['x-datadog-tags'], `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
     })
   })
 })

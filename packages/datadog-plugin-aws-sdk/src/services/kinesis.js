@@ -68,7 +68,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    if (!params || !params.StreamName) return {}
+    if (!params || !params.StreamName) return
 
     return {
       'resource.name': `${operation} ${params.StreamName}`,

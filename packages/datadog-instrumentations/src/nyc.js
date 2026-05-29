@@ -17,7 +17,7 @@ addHook({
   setupSettingsCachePath()
 
   // `wrap` is an async function
-  shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function () {
+  shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function (...args) {
     // Only relevant if the config `all` is set to true (for untested code coverage)
     try {
       if (JSON.parse(getEnvironmentVariable('NYC_CONFIG')).all) {
@@ -27,16 +27,16 @@ addHook({
       // ignore errors
     }
 
-    return wrap.apply(this, arguments)
+    return wrap.apply(this, args)
   })
 
   // `report` is an async function, so we wait for it to complete before publishing
-  shimmer.wrap(nycPackage.prototype, 'report', report => function () {
+  shimmer.wrap(nycPackage.prototype, 'report', report => function (...args) {
     if (!codeCoverageReportCh.hasSubscribers) {
-      return report.apply(this, arguments)
+      return report.apply(this, args)
     }
     const nycInstance = this
-    const reportPromise = report.apply(this, arguments)
+    const reportPromise = report.apply(this, args)
 
     if (reportPromise && typeof reportPromise.then === 'function') {
       // Return a new promise that waits for both the report AND the coverage upload

@@ -258,6 +258,61 @@ describe('Plugin', () => {
         })
       })
 
+      // see https://github.com/DataDog/dd-trace-js/issues/2334
+      describe('with hooks configuration', () => {
+        beforeEach(() => {
+          return agent.load('http', {
+            client: false,
+            server: {
+              hooks: {
+                request: (span, req) => {
+                  span.setTag('test.hook', 'ran')
+                  if (req.url?.startsWith('/products')) {
+                    span.setTag('resource.name', 'GET /products')
+                  }
+                },
+              },
+            },
+          })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
+        })
+
+        it('should let the request hook override the default resource name', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, 'GET /products')
+              assert.strictEqual(traces[0][0].meta['test.hook'], 'ran')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/products`).catch(done)
+        })
+
+        it('should keep the default resource name when the hook does not touch it', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].meta['test.hook'], 'ran')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/health`).catch(done)
+        })
+      })
+
       describe('with a blocklist configuration', () => {
         beforeEach(() => {
           return agent.load('http', { client: false, blocklist: '/health' })

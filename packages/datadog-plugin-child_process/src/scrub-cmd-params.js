@@ -104,13 +104,13 @@ function scrubChildProcessCmd (expression) {
           result.push(token)
 
           if (PROCESS_DENYLIST.has(token)) {
-            for (index++; index < expressionTokens.length; index++) {
-              const token = expressionTokens[index]
+            for (let i = index + 1; i < expressionTokens.length; i++) {
+              const innerToken = expressionTokens[i]
 
-              if (token.op) {
-                result.push(token.op)
+              if (innerToken.op) {
+                result.push(innerToken.op)
               } else {
-                expressionTokens[index] = REDACTED
+                expressionTokens[i] = REDACTED
                 result.push(REDACTED)
               }
             }

@@ -52,7 +52,7 @@
     "dependency": "@cucumber/cucumber",
     "integration": "cucumber",
     "minimum_tracer_supported": "7.0.0",
-    "max_tracer_supported": "12.5.0",
+    "max_tracer_supported": "12.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -115,21 +115,21 @@
     "dependency": "@jest/core",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@jest/test-sequencer",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@jest/transform",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
@@ -199,7 +199,7 @@
     "dependency": "@vitest/runner",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.0",
+    "max_tracer_supported": "4.1.5",
     "auto-instrumented": "True"
   },
   {
@@ -282,7 +282,7 @@
   {
     "dependency": "couchbase",
     "integration": "couchbase",
-    "minimum_tracer_supported": "2.6.12",
+    "minimum_tracer_supported": "3.0.7",
     "max_tracer_supported": "4.6.0",
     "auto-instrumented": "True"
   },
@@ -290,7 +290,7 @@
     "dependency": "cypress",
     "integration": "cypress",
     "minimum_tracer_supported": "12.0.0",
-    "max_tracer_supported": "15.13.0",
+    "max_tracer_supported": "15.14.2",
     "auto-instrumented": "True"
   },
   {
@@ -312,6 +312,13 @@
     "integration": "elasticsearch",
     "minimum_tracer_supported": "10.0.0",
     "max_tracer_supported": "16.7.3",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "electron",
+    "integration": "electron",
+    "minimum_tracer_supported": "37.0.0",
+    "max_tracer_supported": "39.2.4",
     "auto-instrumented": "True"
   },
   {
@@ -395,42 +402,42 @@
     "dependency": "jest-circus",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-config",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-environment-jsdom",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-environment-node",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-runtime",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-worker",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.2.0",
+    "max_tracer_supported": "30.4.1",
     "auto-instrumented": "True"
   },
   {
@@ -626,7 +633,7 @@
     "dependency": "playwright",
     "integration": "playwright",
     "minimum_tracer_supported": "1.38.0",
-    "max_tracer_supported": "1.57.0",
+    "max_tracer_supported": "1.59.1",
     "auto-instrumented": "True"
   },
   {
@@ -703,7 +710,7 @@
     "dependency": "vitest",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.0",
+    "max_tracer_supported": "4.1.5",
     "auto-instrumented": "True"
   },
   {

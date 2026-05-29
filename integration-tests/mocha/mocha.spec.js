@@ -70,7 +70,10 @@ const {
   TEST_FRAMEWORK_VERSION,
   LIBRARY_VERSION,
   TEST_PARAMETERS,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
@@ -82,6 +85,13 @@ const {
   ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
+
+function assertItrSkippingEnabledTags (events, expected) {
+  const testSuite = events.find(event => event.type === 'test_suite_end').content
+  assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+  const test = events.find(event => event.type === 'test').content
+  assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
 const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summary ${runTestsCommand}`
@@ -1118,6 +1128,306 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           once(childProcess, 'exit'),
         ])
       })
+
+      context('suite reporting - tests with no describe wrapper', () => {
+        // When a test file uses only top-level it() calls (no describe() block),
+        // mocha never emits a non-root 'suite' event for that file.
+        //
+        // The 'suite' handler in packages/datadog-instrumentations/src/mocha/main.js
+        // only fires testSuiteStartCh when it encounters a non-root suite with
+        // suite.tests.length > 0. With no non-root suites at all, the condition is
+        // never met: no suite context is stored in testFileToSuiteCtx, no suite
+        // span is created by the plugin, and no test_suite_end event is emitted.
+        //
+        // Meanwhile tests run and report normally as mocha.test spans.
+
+        it('reports a suite event for a single file with only top-level tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 2)
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+              tests.forEach(test => assert.strictEqual(test.meta[TEST_SUITE], suiteFile))
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports suite events for two files with only top-level tests', async () => {
+          const suiteFiles = [
+            'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
+            'ci-visibility/mocha-plugin-tests/top-level-it-no-describe2.js',
+          ]
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 4)
+              assert.strictEqual(suiteEvents.length, 2)
+              suiteFiles.forEach(suiteFile => {
+                const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+                assert.ok(suite, `Expected suite event for ${suiteFile}`)
+                assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+              })
+              tests.forEach(test => assert.ok(suiteFiles.includes(test.meta[TEST_SUITE])))
+            })
+
+          childProcess = exec(
+            'node node_modules/mocha/bin/mocha' +
+            ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports a suite event for a file with mixed top-level and nested tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 2)
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+              tests.forEach(test => assert.strictEqual(test.meta[TEST_SUITE], suiteFile))
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports suite events for two files with mixed top-level and nested tests', async () => {
+          const suiteFiles = [
+            'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js',
+            'ci-visibility/mocha-plugin-tests/top-level-it-mixed2.js',
+          ]
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(tests.length, 4)
+              assert.strictEqual(suiteEvents.length, 2)
+              suiteFiles.forEach(suiteFile => {
+                const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+                assert.ok(suite, `Expected suite event for ${suiteFile}`)
+                assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+              })
+              tests.forEach(test => assert.ok(suiteFiles.includes(test.meta[TEST_SUITE])))
+            })
+
+          childProcess = exec(
+            'node node_modules/mocha/bin/mocha' +
+            ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports fail status when a top-level test fails alongside passing nested tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed-failing.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        it('reports a suite event when a beforeEach hook fails on top-level tests', async () => {
+          const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-with-failing-hook.js'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              assert.strictEqual(suiteEvents.length, 1)
+              assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+              // beforeEach failure aborts after the first test starts — only 1 test span is emitted
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+            })
+
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+            { cwd, env: envVars }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
+        context('suite span timing', () => {
+          it('suite spans for top-level-only files are bounded to their own file execution', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-no-describe2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.notStrictEqual(suiteA.start, suiteB.start,
+              'Suite spans for different files must not start simultaneously')
+
+            // Files run fully sequentially: suite A must finish before suite B starts
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+              'Suite A must end before suite B starts'
+            )
+          })
+
+          it('suite spans for files with afterEach hooks are bounded to their own file execution', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-with-hooks.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-with-hooks2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.notStrictEqual(suiteA.start, suiteB.start,
+              'Suite spans for different files must not start simultaneously')
+
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+              'Suite A must end before suite B starts'
+            )
+          })
+
+          // Mixed files have an inherent overlap: root tests from all files run before any
+          // describes, so suite B starts while suite A is still open. What we can assert:
+          // start times are ordered (a's root test runs before b's root test) and end times
+          // are ordered (a's describe finishes before b's describe).
+          it('suite spans for mixed files have ordered start and end times', async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-mixed2.js',
+            ]
+            let suiteEvents = []
+            let tests = []
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                tests = events.filter(e => e.type === 'test').map(e => e.content)
+                suiteEvents = events.filter(e => e.type === 'test_suite_end').map(e => e.content)
+                assert.strictEqual(suiteEvents.length, 2)
+                assert.strictEqual(tests.length, 4)
+              })
+
+            childProcess = exec(
+              `node node_modules/mocha/bin/mocha ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+              { cwd, env: envVars }
+            )
+
+            await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+            const [suiteA, suiteB] = suiteFiles.map(f => suiteEvents.find(e => e.meta[TEST_SUITE] === f))
+
+            for (const suiteFile of suiteFiles) {
+              const suite = suiteEvents.find(e => e.meta[TEST_SUITE] === suiteFile)
+              const suiteTests = tests.filter(t => t.meta[TEST_SUITE] === suiteFile)
+              const firstTestStart = suiteTests.reduce(
+                (min, t) => t.start < min ? t.start : min, suiteTests[0].start
+              )
+              assert.ok(suite.start <= firstTestStart,
+                `Suite for ${suiteFile} must start at or before its first test`)
+            }
+
+            assert.ok(suiteA.start < suiteB.start, 'Suite A must start before suite B')
+
+            assert.ok(
+              suiteA.start + BigInt(suiteA.duration) < suiteB.start + BigInt(suiteB.duration),
+              'Suite A must end before suite B ends'
+            )
+          })
+        })
+      })
     })
   })
 
@@ -1700,6 +2010,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assertItrSkippingEnabledTags(payload.events, 'false')
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
@@ -1762,6 +2073,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
         assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
         done()
       }).catch(done)
 
@@ -1844,6 +2156,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
         assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+        assertItrSkippingEnabledTags(payload.events, 'true')
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
@@ -2056,6 +2369,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
           assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
           assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assertItrSkippingEnabledTags(events, 'true')
         }, 25000)
 
       childProcess = exec(
@@ -2171,6 +2485,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.length, 1)
           assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+          assertItrSkippingEnabledTags(events, 'true')
         })
 
       childProcess = exec(
@@ -2191,23 +2506,115 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('error tags', () => {
-    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
-      receiver.setSettingsResponseCode(404)
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
-          const testEvent = events.find(event => event.type === 'test')
-          assert.ok(testEvent, 'should have test event')
-          assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+    it(
+      'tags session and children with _dd.ci.library_configuration_error.settings when settings fails 4xx',
+      async () => {
+        receiver.setSettingsResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+            const testModule = events.find(event => event.type === 'test_module_end')
+            assert.ok(testModule, 'should have test module event')
+            assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+            assert.ok(testSuiteEvent, 'should have test suite event')
+            assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+          })
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
         })
-      childProcess = exec(runTestsCommand, {
-        cwd,
-        env: getCiVisAgentlessConfig(receiver.port),
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
       })
-      await Promise.all([eventsPromise, once(childProcess, 'exit')])
-    })
+
+    it(
+      'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails 4xx',
+      async () => {
+        receiver.setSkippableSuitesResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+            const testModule = events.find(event => event.type === 'test_module_end')
+            assert.ok(testModule, 'should have test module event')
+            assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+            assert.ok(testSuiteEvent, 'should have test suite event')
+            assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+          })
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
+      })
+
+    it(
+      'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',
+      async () => {
+        receiver.setSettings({ known_tests_enabled: true })
+        receiver.setKnownTestsResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+            const testModule = events.find(event => event.type === 'test_module_end')
+            assert.ok(testModule, 'should have test module event')
+            assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+            assert.ok(testSuiteEvent, 'should have test suite event')
+            assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
+          })
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
+      })
+
+    it(
+      'tags session and children with _dd.ci.library_configuration_error.test_management_tests when request fails',
+      async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTestsResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
+            const testModule = events.find(event => event.type === 'test_module_end')
+            assert.ok(testModule, 'should have test module event')
+            assert.strictEqual(
+              testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
+            )
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+            assert.ok(testSuiteEvent, 'should have test suite event')
+            assert.strictEqual(
+              testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
+            )
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
+          })
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
+      })
   })
 
   context('early flake detection', () => {
@@ -3884,6 +4291,53 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(snapshotIdByTest, snapshotIdByLog)
           assert.strictEqual(spanIdByTest, spanIdByLog)
           assert.strictEqual(traceIdByTest, traceIdByLog)
+          done()
+        }).catch(done)
+      })
+    })
+
+    onlyLatestIt('reports a passing suite for top-level tests retried with dynamic instrumentation', (done) => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const suiteFile = 'ci-visibility/dynamic-instrumentation/top-level-test-hit-breakpoint.js'
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(suiteEvents.length, 1)
+          assertObjectContains(suiteEvents[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'pass' } })
+
+          assert.strictEqual(retriedTests.length, 1)
+          assert.strictEqual(retriedTests[0].meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/top-level-test-hit-breakpoint',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            TEST_SHOULD_PASS_AFTER_RETRY: '1',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        eventsPromise.then(() => {
+          assert.strictEqual(code, 0)
           done()
         }).catch(done)
       })

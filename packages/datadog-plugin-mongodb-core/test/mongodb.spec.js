@@ -378,6 +378,42 @@ describe('Plugin', () => {
             }).toArray()
           })
 
+          it('should collapse beyond max depth', done => {
+            let nested = { a: 1 }
+            for (let i = 0; i < 12; i++) {
+              nested = { a: nested }
+            }
+
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                assert.strictEqual(span.resource, `find test.${collectionName}`)
+                // 10 levels of `{"a":` then `"?"`, then 10 closing braces.
+                assert.strictEqual(span.meta['mongodb.query'], `${'{"a":'.repeat(10)}"?"${'}'.repeat(10)}`)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.find(nested).toArray().catch(() => {})
+          })
+
+          it('should collapse cyclic queries to ?', done => {
+            const cyclic = { name: 'foo' }
+            cyclic.self = cyclic
+
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                assert.strictEqual(span.resource, `find test.${collectionName}`)
+                assert.strictEqual(span.meta['mongodb.query'], '{"name":"foo","self":"?"}')
+              })
+              .then(done)
+              .catch(done)
+
+            // Driver rejects cyclic structures before the wire write; sanitisation runs before that.
+            collection.find(cyclic).toArray().catch(() => {})
+          })
+
           it('should skip functions when sanitizing', done => {
             agent
               .assertSomeTraces(traces => {
@@ -529,6 +565,86 @@ describe('Plugin', () => {
             },
           }
         )
+      })
+
+      describe('with obfuscateQuery: "types"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'types',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should report scalar value types in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"string","age":"number"}`,
+            meta: {
+              'mongodb.query': '{"user":"string","age":"number"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while reporting value types', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
+            },
+          })
+        })
+      })
+
+      describe('with obfuscateQuery: "redact"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'redact',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should redact scalar values in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"?","age":"?"}`,
+            meta: {
+              'mongodb.query': '{"user":"?","age":"?"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while redacting their values', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"?","$lte":"?"}}',
+            },
+          })
+        })
       })
 
       describe('with dbmPropagationMode service', () => {

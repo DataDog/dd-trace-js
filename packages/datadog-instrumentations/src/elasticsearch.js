@@ -37,8 +37,8 @@ addHook({ name: 'elasticsearch', file: 'src/lib/connection_pool.js', versions: [
 function createWrapGetConnection (name) {
   const connectCh = channel(`apm:${name}:query:connect`)
   return function wrapRequest (request) {
-    return function () {
-      const connection = request.apply(this, arguments)
+    return function (...args) {
+      const connection = request.apply(this, args)
       if (connectCh.hasSubscribers && connection && connection.url) {
         connectCh.publish(connection.url)
       }
@@ -50,17 +50,17 @@ function createWrapGetConnection (name) {
 function createWrapSelect () {
   const connectCh = channel('apm:elasticsearch:query:connect')
   return function wrapRequest (request) {
-    return function () {
-      if (arguments.length === 1) {
-        const cb = arguments[0]
-        arguments[0] = shimmer.wrapFunction(cb, cb => function (err, connection) {
+    return function (...args) {
+      if (args.length === 1) {
+        const cb = args[0]
+        args[0] = shimmer.wrapFunction(cb, cb => function (err, connection) {
           if (connectCh.hasSubscribers && connection && connection.host) {
             connectCh.publish({ hostname: connection.host.host, port: connection.host.port })
           }
           cb(err, connection)
         })
       }
-      return request.apply(this, arguments)
+      return request.apply(this, args)
     }
   }
 }

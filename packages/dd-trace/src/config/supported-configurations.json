@@ -254,7 +254,8 @@
           "appsec.extendedHeadersCollection.redaction",
           "experimental.appsec.extendedHeadersCollection.redaction"
         ],
-        "default": "true"
+        "default": "true",
+        "deprecated": true
       }
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": [
@@ -289,7 +290,8 @@
           "appsec.extendedHeadersCollection.maxHeaders",
           "experimental.appsec.extendedHeadersCollection.maxHeaders"
         ],
-        "default": "50"
+        "default": "50",
+        "deprecated": true
       }
     ],
     "DD_APPSEC_MAX_STACK_TRACES": [
@@ -597,6 +599,13 @@
         "default": "true"
       }
     ],
+    "DD_CUSTOM_PARENT_ID": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null
+      }
+    ],
     "DD_CUSTOM_TRACE_ID": [
       {
         "implementation": "A",
@@ -780,9 +789,9 @@
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
-        "default": "${os.tmpdir()}/dd-trace-git-cache"
+        "default": null
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": [
@@ -1062,10 +1071,7 @@
       {
         "implementation": "B",
         "type": "string",
-        "configurationNames": [
-          "iast.securityControlsConfiguration",
-          "experimental.iast.securityControlsConfiguration"
-        ],
+        "internalPropertyName": "iast.securityControlsConfiguration",
         "default": null
       }
     ],
@@ -1934,9 +1940,9 @@
     ],
     "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_AWS_ENABLED": [
@@ -1948,16 +1954,16 @@
     ],
     "DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED": [
@@ -1969,9 +1975,9 @@
     ],
     "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_ENABLED": [
@@ -1983,9 +1989,9 @@
     ],
     "DD_TRACE_AWS_SDK_DYNAMODB_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_DYNAMODB_ENABLED": [
@@ -2004,9 +2010,9 @@
     ],
     "DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_EVENTBRIDGE_ENABLED": [
@@ -2018,9 +2024,9 @@
     ],
     "DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_KINESIS_ENABLED": [
@@ -2032,9 +2038,9 @@
     ],
     "DD_TRACE_AWS_SDK_LAMBDA_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_LAMBDA_ENABLED": [
@@ -2053,9 +2059,9 @@
     ],
     "DD_TRACE_AWS_SDK_REDSHIFT_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_REDSHIFT_ENABLED": [
@@ -2067,9 +2073,9 @@
     ],
     "DD_TRACE_AWS_SDK_S3_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_S3_ENABLED": [
@@ -2081,9 +2087,9 @@
     ],
     "DD_TRACE_AWS_SDK_SFN_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_SFN_CLIENT_ENABLED": [
@@ -2109,9 +2115,9 @@
     ],
     "DD_TRACE_AWS_SDK_SNS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_SNS_ENABLED": [
@@ -2123,9 +2129,9 @@
     ],
     "DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_SQS_ENABLED": [
@@ -2137,9 +2143,9 @@
     ],
     "DD_TRACE_AWS_SDK_STATES_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_STATES_ENABLED": [
@@ -2151,9 +2157,9 @@
     ],
     "DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED": [
@@ -2479,6 +2485,13 @@
       }
     ],
     "DD_TRACE_ELASTIC_TRANSPORT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_ELECTRON_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -3118,6 +3131,15 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_MONGODB_OBFUSCATE_QUERY": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "none",
+        "allowed": "none|types|redact",
+        "transform": "toLowerCase"
       }
     ],
     "DD_TRACE_MONGOOSE_ENABLED": [

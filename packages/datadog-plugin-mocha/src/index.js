@@ -105,6 +105,7 @@ class MochaPlugin extends CiPlugin {
           'mocha'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'

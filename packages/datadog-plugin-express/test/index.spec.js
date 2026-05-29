@@ -1438,12 +1438,12 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             try {
               assert.strictEqual(storage.getStore(), store)
+              res.status(200).send()
               done()
             } catch (e) {
+              res.status(200).send()
               done(e)
             }
-
-            res.status(200).send()
           })
 
           appListener = app.listen(0, 'localhost', () => {

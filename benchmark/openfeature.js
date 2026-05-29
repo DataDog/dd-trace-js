@@ -45,10 +45,6 @@ suite
     },
     fn () {
       writer.append(singleEvent)
-      // Clear buffer periodically to prevent unbounded growth during benchmarking
-      if (writer._pendingEvents.length >= 1000) {
-        writer._pendingEvents = []
-      }
     },
   })
   .add('ExposuresWriter#append (disabled, event array)', {
@@ -59,10 +55,6 @@ suite
     },
     fn () {
       writer.append(eventArray)
-      // Clear buffer periodically to prevent unbounded growth during benchmarking
-      if (writer._pendingEvents.length >= 1000) {
-        writer._pendingEvents = []
-      }
     },
   })
   .add('ExposuresWriter#makePayload', {

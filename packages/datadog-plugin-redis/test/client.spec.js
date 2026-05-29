@@ -90,6 +90,51 @@ describe('Plugin', () => {
           await Promise.all([client.get('foo'), promise])
         })
 
+        it('keeps every arg when formatting a multi-arg command', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'SET multi-arg-key multi-arg-value')
+          }, { spanResourceMatch: /^SET$/ })
+
+          await Promise.all([client.set('multi-arg-key', 'multi-arg-value'), promise])
+        })
+
+        it('trims a string arg longer than 100 chars', async () => {
+          const longValue = 'x'.repeat(150)
+          const promise = agent.assertSomeTraces(traces => {
+            const rawCommand = traces[0][0].meta['redis.raw_command']
+            assert.strictEqual(rawCommand, `SET long-key ${'x'.repeat(97)}...`)
+            assert.strictEqual(rawCommand.length, 'SET long-key '.length + 100)
+          }, { spanResourceMatch: /^SET$/ })
+
+          await Promise.all([client.set('long-key', longValue), promise])
+        })
+
+        it('redacts the AUTH password from the raw command', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'AUTH')
+          }, { spanResourceMatch: /^AUTH$/ })
+
+          await Promise.all([
+            client.sendCommand(['AUTH', 'super-secret-password']).catch(() => {}),
+            promise,
+          ])
+        })
+
+        it('caps the joined raw command at 1000 chars across many args', async () => {
+          const args = []
+          for (let index = 0; index < 200; index++) {
+            args.push(`key${index}`, `value${index}`)
+          }
+          const promise = agent.assertSomeTraces(traces => {
+            const rawCommand = traces[0][0].meta['redis.raw_command']
+            assert.strictEqual(rawCommand.length, 1000)
+            assert.ok(rawCommand.startsWith('MSET '))
+            assert.ok(rawCommand.endsWith('...'))
+          }, { spanResourceMatch: /^MSET$/ })
+
+          await Promise.all([client.sendCommand(['MSET', ...args]), promise])
+        })
+
         withPeerService(
           () => tracer,
           'redis',

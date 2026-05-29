@@ -163,8 +163,12 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_m
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
 
-// Library configuration request error tag
-const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
+// Library configuration request error tags
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS = '_dd.ci.library_configuration_error.settings'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS = '_dd.ci.library_configuration_error.skippable_tests'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS = '_dd.ci.library_configuration_error.known_tests'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS =
+  '_dd.ci.library_configuration_error.test_management_tests'
 
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -230,13 +234,118 @@ const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trun
  */
 function getSessionRequestErrorTags (sessionSpan) {
   const tags = sessionSpan?.context()._tags
+  const sessionRequestErrorTags = {}
   if (!tags || typeof tags !== 'object') return {}
-  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS] = 'true'
+  }
+  return sessionRequestErrorTags
+}
+
+/**
+ * Returns ITR skipping-enabled tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionItrSkippingEnabledTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[TEST_ITR_SKIPPING_ENABLED] !== undefined) {
     return {
-      [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
+      [TEST_ITR_SKIPPING_ENABLED]: tags[TEST_ITR_SKIPPING_ENABLED],
     }
   }
   return {}
+}
+
+/**
+ * Starts supported test optimization requests together when each feature is enabled.
+ *
+ * @param {{
+ *   isKnownTestsEnabled: boolean,
+ *   isTestManagementTestsEnabled: boolean,
+ *   isSuitesSkippingEnabled?: boolean,
+ *   getKnownTests: () => Promise<object>,
+ *   getTestManagementTests: () => Promise<object>,
+ *   getSkippableSuites?: () => Promise<object>
+ * }} options - Test optimization request factories.
+ * @returns {Promise<{
+ *   knownTestsResponse?: object,
+ *   testManagementTestsResponse?: object,
+ *   skippableSuitesResponse?: object
+ * }>}
+ */
+function getTestOptimizationRequestResults ({
+  isKnownTestsEnabled,
+  isTestManagementTestsEnabled,
+  isSuitesSkippingEnabled,
+  getKnownTests,
+  getTestManagementTests,
+  getSkippableSuites,
+}) {
+  const requestPromises = []
+  const responseNames = []
+
+  if (isKnownTestsEnabled) {
+    addTestOptimizationRequest(requestPromises, responseNames, 'knownTestsResponse', getKnownTests)
+  }
+
+  if (isTestManagementTestsEnabled) {
+    addTestOptimizationRequest(
+      requestPromises,
+      responseNames,
+      'testManagementTestsResponse',
+      getTestManagementTests
+    )
+  }
+
+  if (isSuitesSkippingEnabled && getSkippableSuites) {
+    addTestOptimizationRequest(requestPromises, responseNames, 'skippableSuitesResponse', getSkippableSuites)
+  }
+
+  if (!requestPromises.length) {
+    return Promise.resolve({})
+  }
+
+  return Promise.allSettled(requestPromises).then(requestResults => {
+    const responses = {}
+
+    for (let index = 0; index < requestResults.length; index++) {
+      const requestResult = requestResults[index]
+      responses[responseNames[index]] = requestResult.status === 'fulfilled'
+        ? requestResult.value
+        : { err: requestResult.reason }
+    }
+
+    return responses
+  })
+}
+
+/**
+ * Starts a test optimization request.
+ *
+ * @param {Promise<object>[]} requestPromises - Test optimization request promises.
+ * @param {string[]} responseNames - Response keys matching request promises.
+ * @param {string} responseName - Response key for this request.
+ * @param {() => Promise<object>} getRequest - Test optimization request factory.
+ */
+function addTestOptimizationRequest (requestPromises, responseNames, responseName, getRequest) {
+  responseNames.push(responseName)
+
+  try {
+    requestPromises.push(Promise.resolve(getRequest()))
+  } catch (err) {
+    requestPromises.push(Promise.reject(err))
+  }
 }
 
 module.exports = {
@@ -350,7 +459,12 @@ module.exports = {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
   getSessionRequestErrorTags,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  getSessionItrSkippingEnabledTags,
+  getTestOptimizationRequestResults,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,

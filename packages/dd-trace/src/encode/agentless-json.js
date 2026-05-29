@@ -85,7 +85,7 @@ function spanToJSON (span) {
 class AgentlessJSONEncoder {
   /**
    * @param {object} writer - Writer instance with a flush() method, called when the buffer exceeds the soft limit
-   * @param {object} [metadata={}] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
+   * @param {object} [metadata] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
    */
   constructor (writer, metadata = {}) {
     this._writer = writer

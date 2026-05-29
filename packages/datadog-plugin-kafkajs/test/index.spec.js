@@ -12,7 +12,7 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { assertObjectContains, deepFreeze } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -32,12 +32,10 @@ describe('Plugin', () => {
       let tracer
       let Kafka
       let Broker
-      let clusterIdAvailable
       let testTopic
 
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
-        const messages2 = [{ key: 'key2', value: 'test3' }]
 
         beforeEach(async () => {
           tracer = require('../../dd-trace')
@@ -60,25 +58,25 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
-          clusterIdAvailable = semver.intersects(version, '>=1.13')
         })
 
         describe('producer', () => {
           it('should be instrumented', async () => {
-            const meta = {
-              'span.kind': 'producer',
-              component: 'kafkajs',
-              'messaging.destination.name': testTopic,
-              'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
-            }
-            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
-
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.send.opName,
               service: expectedSchema.send.serviceName,
-              meta,
+              meta: {
+                'span.kind': 'producer',
+                component: 'kafkajs',
+                'messaging.destination.name': testTopic,
+                'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
+                'kafka.cluster_id': testKafkaClusterId,
+                'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                'kafka.message.offset': '0',
+              },
               metrics: {
                 'kafka.batch_size': messages.length,
+                'kafka.partition': 0,
               },
               resource: testTopic,
               error: 0,
@@ -90,6 +88,46 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
+          it('should not emit flat partition/offset tags for multi-message batches', async () => {
+            const batch = [
+              { key: 'a', value: '1' },
+              { key: 'b', value: '2' },
+              { key: 'c', value: '3' },
+            ]
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              assertObjectContains(span, {
+                name: expectedSchema.send.opName,
+                meta: {
+                  'kafka.messages.offsets': JSON.stringify([{ partition: 0, start_offset: '0' }]),
+                },
+                metrics: {
+                  'kafka.batch_size': batch.length,
+                },
+              })
+              assert.ok(!Object.hasOwn(span.metrics, 'kafka.partition'),
+                'kafka.partition must not be set for multi-message batches')
+              assert.ok(!Object.hasOwn(span.meta, 'kafka.message.offset'),
+                'kafka.message.offset must not be set for multi-message batches')
+            })
+
+            await sendMessages(kafka, testTopic, batch)
+
+            return expectedSpanPromise
+          })
+
+          it('should not call Kafka.admin from instrumentation during normal send', async () => {
+            // Spy after the test setup has already created topics; from here
+            // on no internal admin connection should be opened.
+            const adminSpy = sinon.spy(kafka, 'admin')
+            try {
+              await sendMessages(kafka, testTopic, messages)
+              assert.strictEqual(adminSpy.callCount, 0)
+            } finally {
+              adminSpy.restore()
+            }
+          })
+
           withPeerService(
             () => tracer,
             'kafkajs',
@@ -97,6 +135,17 @@ describe('Plugin', () => {
             '127.0.0.1:9092',
             'messaging.kafka.bootstrap.servers'
           )
+
+          it('should not mutate user-supplied message objects', async () => {
+            // Deep-freezing the input means any accidental write to a
+            // message, its headers, or the array itself throws synchronously.
+            const userMessages = deepFreeze([
+              { key: 'key', value: 'value', headers: { foo: 'bar' } },
+              { key: 'key2', value: 'value2' },
+            ])
+
+            await sendMessages(kafka, testTopic, userMessages)
+          })
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
@@ -190,16 +239,38 @@ describe('Plugin', () => {
             })
 
             it('should hit an error for the first send and not inject headers in later sends', async () => {
-              await assert.rejects(producer.send({ topic: testTopic, messages }), error)
+              const startCh = dc.channel('apm:kafkajs:produce:start')
+              const sentMessageBatches = []
+              const captureStart = (ctx) => sentMessageBatches.push(ctx.messages)
+              startCh.subscribe(captureStart)
 
-              assert.ok(Object.hasOwn(messages[0].headers, 'x-datadog-trace-id'))
+              // Freeze both batches: any boundary or plugin write to the
+              // user's array, its messages, or their headers throws here.
+              const firstBatch = deepFreeze([{ key: 'key1', value: 'test2' }])
+              const secondBatch = deepFreeze([{ key: 'key2', value: 'test3' }])
 
-              // restore the stub to allow the next send to succeed
-              sendRequestStub.restore()
+              try {
+                await assert.rejects(producer.send({ topic: testTopic, messages: firstBatch }), error)
 
-              const result2 = await producer.send({ topic: testTopic, messages: messages2 })
-              assert.strictEqual(messages2[0].headers, undefined)
-              assert.strictEqual(result2[0].errorCode, 0)
+                // The first send injects trace headers into the cloned
+                // batch that kafkajs serializes.
+                assert.ok(Object.hasOwn(sentMessageBatches[0][0].headers, 'x-datadog-trace-id'))
+
+                sendRequestStub.restore()
+
+                const result2 = await producer.send({ topic: testTopic, messages: secondBatch })
+
+                // After UNKNOWN the boundary clones with `cloneMessages`
+                // (frozen input stays untouched) and the clone has no
+                // `headers` field at all — brokers that reject any header
+                // field can recover.
+                const [clonedAfterDisable] = sentMessageBatches[1]
+                assert.notStrictEqual(clonedAfterDisable, secondBatch[0])
+                assert.strictEqual(Object.hasOwn(clonedAfterDisable, 'headers'), false)
+                assert.strictEqual(result2[0].errorCode, 0)
+              } finally {
+                startCh.unsubscribe(captureStart)
+              }
             })
           })
 
@@ -252,11 +323,11 @@ describe('Plugin', () => {
               try {
                 assert.notDeepStrictEqual(currentSpan, firstSpan)
                 assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                eachMessage = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachMessage = () => {}
                 done(e)
-              } finally {
-                eachMessage = () => {} // avoid being called for each message
               }
             }
 
@@ -315,11 +386,11 @@ describe('Plugin', () => {
             let eachBatch = async ({ batch }) => {
               try {
                 assert.strictEqual(batch.isEmpty(), false)
+                eachBatch = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachBatch = () => {}
                 done(e)
-              } finally {
-                eachBatch = () => {} // avoid being called for each message
               }
             }
 
@@ -358,11 +429,11 @@ describe('Plugin', () => {
                 const name = spy.firstCall.args[1]
                 assert.strictEqual(name, afterStart.name)
 
+                eachMessage = () => {}
                 done()
               } catch (e) {
-                done(e)
-              } finally {
                 eachMessage = () => {}
+                done(e)
               }
             }
 
@@ -421,19 +492,17 @@ describe('Plugin', () => {
           })
 
           it('should be instrumented', async () => {
-            const meta = {
-              'span.kind': 'consumer',
-              component: 'kafkajs',
-              'kafka.topic': testTopic,
-              'messaging.destination.name': testTopic,
-              'messaging.system': 'kafka',
-            }
-            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
-
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
-              meta,
+              meta: {
+                'span.kind': 'consumer',
+                component: 'kafkajs',
+                'kafka.topic': testTopic,
+                'messaging.destination.name': testTopic,
+                'messaging.system': 'kafka',
+                'kafka.cluster_id': testKafkaClusterId,
+              },
               metrics: {
                 'messaging.batch.message_count': batchMessages.length,
               },
@@ -457,11 +526,11 @@ describe('Plugin', () => {
               try {
                 assert.notEqual(currentSpan, firstSpan)
                 assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                eachBatch = () => {} // avoid being called for each message
                 done()
               } catch (e) {
+                eachBatch = () => {}
                 done(e)
-              } finally {
-                eachBatch = () => {} // avoid being called for each message
               }
             }
 
@@ -492,19 +561,17 @@ describe('Plugin', () => {
             const messagesWithHeaders = [
               { key: 'key1', value: 'test1', headers: { 'x-custom-header': 'value' } },
             ]
-            const meta = {
-              'span.kind': 'consumer',
-              component: 'kafkajs',
-              'kafka.topic': testTopic,
-              'messaging.destination.name': testTopic,
-              'messaging.system': 'kafka',
-            }
-            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
-
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
-              meta,
+              meta: {
+                'span.kind': 'consumer',
+                component: 'kafkajs',
+                'kafka.topic': testTopic,
+                'messaging.destination.name': testTopic,
+                'messaging.system': 'kafka',
+                'kafka.cluster_id': testKafkaClusterId,
+              },
               resource: testTopic,
               error: 0,
               type: 'worker',

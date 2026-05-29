@@ -163,8 +163,8 @@ describe('shimmer', () => {
       }
       const obj = { Counter }
 
-      shimmer.wrap(obj, 'Counter', Counter => function () {
-        Counter.apply(this, arguments)
+      shimmer.wrap(obj, 'Counter', Counter => function (...args) {
+        Counter.apply(this, args)
         this.value++
       })
 
@@ -443,7 +443,7 @@ describe('shimmer', () => {
         shimmer.wrapFunction(count, count => () => {})
 
         function legacyCtor (start) { this.value = start }
-        shimmer.wrapFunction(legacyCtor, ctor => function () { ctor.apply(this, arguments) })
+        shimmer.wrapFunction(legacyCtor, ctor => function (...args) { ctor.apply(this, args) })
 
         class Counter {}
         assert.throws(

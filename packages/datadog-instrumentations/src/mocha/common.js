@@ -20,9 +20,9 @@ addHook({
 
   patched.add(mochaEach)
 
-  return shimmer.wrapFunction(mochaEach, mochaEach => function () {
-    const [params] = arguments
-    const { it, ...rest } = mochaEach.apply(this, arguments)
+  return shimmer.wrapFunction(mochaEach, mochaEach => function (...args) {
+    const [params] = args
+    const { it, ...rest } = mochaEach.apply(this, args)
     return {
       it: function (title) {
         parameterizedTestCh.publish({ title, params })

@@ -37,6 +37,8 @@ const {
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
 
+const legacyStorage = storage('legacy')
+
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
 function sanitizedExec (
@@ -47,7 +49,7 @@ function sanitizedExec (
   errorMetric,
   shouldTrim = true
 ) {
-  return storage('legacy').run({ noop: true }, () => {
+  return legacyStorage.run({ noop: true }, () => {
     let startTime
     if (operationMetric) {
       incrementCountMetric(operationMetric.name, operationMetric.tags)

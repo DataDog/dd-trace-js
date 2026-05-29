@@ -40,15 +40,15 @@ function wrapVerify (verify) {
 }
 
 function wrapStrategy (Strategy) {
-  return function wrappedStrategy () {
+  return function wrappedStrategy (...args) {
     // verify function can be either the first or second argument
-    if (typeof arguments[0] === 'function') {
-      arguments[0] = wrapVerify(arguments[0])
+    if (typeof args[0] === 'function') {
+      args[0] = wrapVerify(args[0])
     } else {
-      arguments[1] = wrapVerify(arguments[1])
+      args[1] = wrapVerify(args[1])
     }
 
-    return Strategy.apply(this, arguments)
+    return Strategy.apply(this, args)
   }
 }
 

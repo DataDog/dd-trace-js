@@ -175,6 +175,7 @@ function parseJsonToTree (json) {
     switch (json.charCodeAt(index)) {
       case 34: { // 34: double quote
         const stringStart = index + 1
+        // eslint-disable-next-line sonarjs/updated-loop-counter -- skip past the string token
         index = skipString(json, index)
         const stringLength = index - stringStart
 

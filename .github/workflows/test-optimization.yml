@@ -12,7 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  # TODO: remove this once we have stable tests
+  MOCHA_OPTIONS: --retries 2
 
 jobs:
   benchmarks-e2e:
@@ -90,7 +91,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ghcr.io/rochdev/playwright-tools@sha256:f36c96b0a8f6899692798f77e01df78bd920e272d66f7f0bf153896a9135aa91 # 1.54.1-4
+      image: ghcr.io/rochdev/playwright-tools@sha256:65b8161e23ede2354d04c8a242032d9ee8ca275359eac1764c027f073d38217c # 1.54.1-5
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1

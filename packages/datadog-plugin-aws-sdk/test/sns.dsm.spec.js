@@ -10,15 +10,14 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let sns
     let sqs
     let subParams

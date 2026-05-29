@@ -17,17 +17,11 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
-const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash) => {
-  let edgeTags
-  if (isProducer) {
-    edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
-  } else {
-    edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
-  }
-
-  if (clusterIdAvailable) {
-    edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
-  }
+const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
+  const edgeTags = isProducer
+    ? ['direction:out', 'topic:' + testTopic, 'type:kafka']
+    : ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
+  edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
   edgeTags.sort()
   return computePathwayHash('test', 'tester', edgeTags, parentHash, propagationHash.getHash())
 }
@@ -45,7 +39,6 @@ describe('Plugin', () => {
       let admin
       let tracer
       let Kafka
-      let clusterIdAvailable
       let expectedProducerHash
       let expectedConsumerHash
       let testTopic
@@ -86,9 +79,8 @@ describe('Plugin', () => {
               replicationFactor: 1,
             })),
           })
-          clusterIdAvailable = semver.intersects(version, '>=1.13')
-          expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
-          expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
+          expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
+          expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })
 
         describe('checkpoints', () => {
@@ -310,15 +302,11 @@ describe('Plugin', () => {
               assert.strictEqual(runArg?.offset, commitMeta.offset)
               assert.strictEqual(runArg?.partition, commitMeta.partition)
               assert.strictEqual(runArg?.topic, commitMeta.topic)
-              const expectedBacklog = {
+              assertObjectContains(runArg, {
                 type: 'kafka_commit',
                 consumer_group: 'test-group',
-              }
-              // kafka_cluster_id is only available in kafkajs >=1.13
-              if (clusterIdAvailable) {
-                expectedBacklog.kafka_cluster_id = testKafkaClusterId
-              }
-              assertObjectContains(runArg, expectedBacklog)
+                kafka_cluster_id: testKafkaClusterId,
+              })
             })
           }
 
@@ -327,10 +315,7 @@ describe('Plugin', () => {
             sinon.assert.calledOnce(setOffsetSpy)
             const runArg = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(runArg.topic, testTopic)
-            // kafka_cluster_id is only available in kafkajs >=1.13
-            if (clusterIdAvailable) {
-              assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
-            }
+            assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
           })
         })
       })

@@ -6,20 +6,19 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Kinesis', function () {
   this.timeout(10000)
   setup()
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let AWS
     let kinesis
     let tracer

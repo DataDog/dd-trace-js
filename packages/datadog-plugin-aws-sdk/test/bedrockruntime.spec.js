@@ -4,8 +4,7 @@ const assert = require('node:assert')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
 const serviceName = 'bedrock-service-name-test'
 
@@ -13,7 +12,7 @@ describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
     setup()
 
-    withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
+    withAwsSdkVersions('>=3', (version, moduleName) => {
       let AWS
       let bedrockRuntimeClient
 

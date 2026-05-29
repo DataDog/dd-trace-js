@@ -100,27 +100,27 @@ class DatadogTracer extends Tracer {
   wrap (name, options, fn) {
     const tracer = this
 
-    return function () {
+    return function (...args) {
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
-        optionsObj = optionsObj.apply(this, arguments)
+        optionsObj = optionsObj.apply(this, args)
       }
 
-      const lastArgId = arguments.length - 1
-      const cb = arguments[lastArgId]
+      const lastArgId = args.length - 1
+      const cb = args[lastArgId]
 
       if (typeof cb === 'function') {
         const scopeBoundCb = tracer.scope().bind(cb)
         return tracer.trace(name, optionsObj, (span, done) => {
-          arguments[lastArgId] = function (err) {
+          args[lastArgId] = function (err) {
             done(err)
             return scopeBoundCb.apply(this, arguments)
           }
 
-          return fn.apply(this, arguments)
+          return fn.apply(this, args)
         })
       }
-      return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
+      return tracer.trace(name, optionsObj, () => fn.apply(this, args))
     }
   }
 

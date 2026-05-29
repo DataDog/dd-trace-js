@@ -1383,12 +1383,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
             const testSession = events.find(event => event.type === 'test_session_end').content
 
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
               // test session is passed even though a test fails because the test is quarantined
               assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+              const quarantinedSuite = suites.find(
+                suite => suite.meta[TEST_SUITE] === 'ci-visibility/test-management/test-quarantine-1.js'
+              )
+              assert.strictEqual(quarantinedSuite.meta[TEST_STATUS], 'pass')
             } else {
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')

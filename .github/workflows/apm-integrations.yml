@@ -334,8 +334,6 @@ jobs:
       matrix:
         node-version: [eol]
         range:
-          # - '^2.6.12' skipping due to bug with couchbase integration that is blocking CI.
-          # TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
           - "^3.0.7"
           - ">=4.0.0 <4.2.0"
         include:
@@ -441,6 +439,31 @@ jobs:
         if: "!cancelled()"
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  electron:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: electron
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      # Ubuntu 24.04 tightened AppArmor defaults and now blocks unprivileged user
+      # namespaces, which Electron's Chromium sandbox requires to run. Setting
+      # this to 0 re-enables them for the duration of the job.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: |
+          sudo apt-get update
+          # Xvfb provides a virtual X display so Electron (a GUI app) can start
+          # on the headless CI runner without a physical screen.
+          sudo apt-get install -y xvfb
+          # Launch the virtual display on screen :99 with a 24-bit 1024×768
+          # framebuffer. Output is discarded; the & backgrounds it so the step
+          # does not block.
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+      # Point Electron at the virtual display started above.
+      - run: DISPLAY=:99 yarn test:plugins:ci
 
   express:
     runs-on: ubuntu-latest
@@ -931,31 +954,17 @@ jobs:
           - 18
           - latest
         range:
-          - ">=10.2.0 <11"
-          - ">=11.0.0 <13"
           - "11.1.4"
-          - ">=13.0.0 <14"
+          - "12.3.7"
+          - "13.0.0"
           - "13.2.0"
-          - ">=14.0.0 <=14.2.6"
-          - ">=14.2.7 <15"
-          - ">=15.0.0 <15.4.1"
-        include:
-          - range: ">=10.2.0 <11"
-            range_clean: gte.10.2.0.and.lt.11
-          - range: ">=11.0.0 <13"
-            range_clean: gte.11.0.0.and.lt.13
-          - range: "11.1.4"
-            range_clean: 11.1.4
-          - range: ">=13.0.0 <14"
-            range_clean: gte.13.0.0.and.lt.14
-          - range: "13.2.0"
-            range_clean: 13.2.0
-          - range: ">=14.0.0 <=14.2.6"
-            range_clean: gte.14.0.0.and.lte.14.2.6
-          - range: ">=14.2.7 <15"
-            range_clean: gte.14.2.7.and.lt.15
-          - range: ">=15.0.0 <15.4.1"
-            range_clean: gte.15.0.0
+          - "13.5.11"
+          - "14.0.0"
+          - "14.2.6"
+          - "14.2.7"
+          - "14.2.35"
+          - "15.0.0"
+          - "15.4.0"
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -971,7 +980,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: apm-integrations-next-${{ matrix.range_clean }}
+          flags: apm-integrations-next-${{ matrix.range }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"

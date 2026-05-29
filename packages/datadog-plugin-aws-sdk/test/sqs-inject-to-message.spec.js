@@ -14,11 +14,11 @@ const Sqs = require('../src/services/sqs')
  * a hand-rolled stub is enough to exercise the inject-time ordering.
  *
  * @param {object} options
- * @param {boolean} [options.dsmEnabled=false]
+ * @param {boolean} [options.dsmEnabled]
  * @param {(span: unknown, format: string, info: object) => void} [options.inject]
  *        Stand-in for `tracer.inject` that may populate the trace context
  *        in `info`.
- * @param {unknown} [options.dataStreamsContext=null]
+ * @param {unknown} [options.dataStreamsContext]
  *        Value returned by the stubbed `setDSMCheckpoint`.
  * @returns {Sqs & { dsmCalls: Array<{ datadog: object | undefined }> }}
  */

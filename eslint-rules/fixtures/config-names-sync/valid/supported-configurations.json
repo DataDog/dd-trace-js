@@ -23,14 +23,6 @@
           "experimental.appsec"
         ]
       }
-    ],
-    "DD_IAST_ENABLED": [
-      {
-        "configurationNames": [
-          "experimental.iast.enabled",
-          "experimental.iast"
-        ]
-      }
     ]
   }
 }

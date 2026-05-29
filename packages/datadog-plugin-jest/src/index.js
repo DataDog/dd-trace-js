@@ -21,6 +21,7 @@ const {
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
@@ -107,6 +108,7 @@ class JestPlugin extends CiPlugin {
       process.on('message', handler)
     }
     this.testSuiteSpanPerTestSuiteAbsolutePath = new Map()
+    this.pendingTestSuiteFinishes = new Set()
 
     this.addSub('ci:jest:session:finish', ({
       status,
@@ -123,58 +125,66 @@ class JestPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       onDone,
     }) => {
-      this.testSessionSpan.setTag(TEST_STATUS, status)
-      this.testModuleSpan.setTag(TEST_STATUS, status)
+      const finishSession = () => {
+        this.testSessionSpan.setTag(TEST_STATUS, status)
+        this.testModuleSpan.setTag(TEST_STATUS, status)
 
-      if (error) {
-        this.testSessionSpan.setTag('error', error)
-        this.testModuleSpan.setTag('error', error)
-      }
-
-      addIntelligentTestRunnerSpanTags(
-        this.testSessionSpan,
-        this.testModuleSpan,
-        {
-          isSuitesSkipped,
-          isSuitesSkippingEnabled,
-          isCodeCoverageEnabled,
-          testCodeCoverageLinesTotal,
-          skippingType: 'suite',
-          skippingCount: numSkippedSuites,
-          hasUnskippableSuites,
-          hasForcedToRunSuites,
+        if (error) {
+          this.testSessionSpan.setTag('error', error)
+          this.testModuleSpan.setTag('error', error)
         }
-      )
 
-      if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
-      }
-      if (isEarlyFlakeDetectionFaulty) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
-      }
-      if (isTestManagementTestsEnabled) {
-        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
-      }
+        addIntelligentTestRunnerSpanTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          {
+            isSuitesSkipped,
+            isSuitesSkippingEnabled,
+            isCodeCoverageEnabled,
+            testCodeCoverageLinesTotal,
+            skippingType: 'suite',
+            skippingCount: numSkippedSuites,
+            hasUnskippableSuites,
+            hasForcedToRunSuites,
+          }
+        )
 
-      this.testModuleSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
-      this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
-        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
-      })
-      finishAllTraceSpans(this.testSessionSpan)
-
-      this.telemetry.count(TELEMETRY_TEST_SESSION, {
-        provider: this.ciProviderName,
-        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
-      })
-
-      appClosingTelemetry()
-      this.tracer._exporter.flush(() => {
-        if (onDone) {
-          onDone()
+        if (isEarlyFlakeDetectionEnabled) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
-      })
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+        }
+        if (isTestManagementTestsEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+        }
+
+        this.testModuleSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
+        this.testSessionSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+          hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+        })
+        finishAllTraceSpans(this.testSessionSpan)
+
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        })
+
+        appClosingTelemetry()
+        this.tracer._exporter.flush(() => {
+          if (onDone) {
+            onDone()
+          }
+        })
+      }
+
+      if (this.pendingTestSuiteFinishes.size > 0) {
+        Promise.all(this.pendingTestSuiteFinishes).then(finishSession)
+      } else {
+        finishSession()
+      }
     })
 
     // Test suites can be run in a different process from jest's main one.
@@ -197,6 +207,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
+        config._ddItrSkippingEnabledTags = this.getSessionItrSkippingEnabledTags()
       }
     })
 
@@ -217,6 +228,7 @@ class JestPlugin extends CiPlugin {
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
+        _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -228,6 +240,7 @@ class JestPlugin extends CiPlugin {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
         // requestErrorTags from test env options may be undefined
         ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+        ...(itrSkippingEnabledTags !== undefined && itrSkippingEnabledTags !== null ? itrSkippingEnabledTags : {}),
       }
 
       if (_ddUnskippable) {
@@ -305,10 +318,18 @@ class JestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {
+    this.addSub('ci:jest:test-suite:finish', ({
+      status,
+      errorMessage,
+      error,
+      testSuiteAbsolutePath,
+      waitForFinish,
+      onDone,
+    }) => {
       const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
       if (!testSuiteSpan) {
         log.warn('"ci:jest:test-suite:finish": no span found for test suite absolute path %s', testSuiteAbsolutePath)
+        onDone?.()
         return
       }
       testSuiteSpan.setTag(TEST_STATUS, status)
@@ -319,8 +340,13 @@ class JestPlugin extends CiPlugin {
         testSuiteSpan.setTag('error', new Error(errorMessage))
         testSuiteSpan.setTag(TEST_STATUS, 'fail')
       }
-      // We need to give the potential error in 'ci:jest:test-suite:error' time to be published
-      process.nextTick(() => {
+      let resolvePendingFinish
+      const pendingFinish = new Promise(resolve => {
+        resolvePendingFinish = resolve
+      })
+      this.pendingTestSuiteFinishes.add(pendingFinish)
+
+      const finish = () => {
         testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
         // Suites potentially run in a different process than the session,
@@ -334,7 +360,19 @@ class JestPlugin extends CiPlugin {
         }
         this.removeAllDiProbes()
         this.testSuiteSpanPerTestSuiteAbsolutePath.delete(testSuiteAbsolutePath)
-      })
+        this.pendingTestSuiteFinishes.delete(pendingFinish)
+        resolvePendingFinish()
+        if (onDone) {
+          onDone()
+        }
+      }
+
+      if (waitForFinish) {
+        // Give late async work time to run before Jest restarts a worker because of workerIdleMemoryLimit.
+        realSetTimeout(finish)
+      } else {
+        process.nextTick(finish)
+      }
     })
 
     this.addSub('ci:jest:test-suite:error', ({ error, errorMessage, testSuiteAbsolutePath }) => {
@@ -558,6 +596,10 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
+    const skippingEnabled = testSuiteSpan?.context()._tags?.[TEST_ITR_SKIPPING_ENABLED]
+    if (skippingEnabled !== undefined) {
+      extraTags[TEST_ITR_SKIPPING_ENABLED] = skippingEnabled
+    }
 
     return super.startTestSpan(name, suite, testSuiteSpan, extraTags)
   }

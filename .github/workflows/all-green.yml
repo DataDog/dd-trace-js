@@ -15,9 +15,13 @@ jobs:
   all-green:
     runs-on: ubuntu-latest
     permissions:
-      actions: write
-      contents: read
+      id-token: write
     steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: all-green
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout-cone-mode: false
@@ -31,7 +35,8 @@ jobs:
       - run: node scripts/all-green.mjs
         env:
           DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 30

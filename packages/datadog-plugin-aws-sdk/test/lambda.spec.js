@@ -6,10 +6,10 @@ const JSZip = require('jszip')
 const { after, before, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./lambda-naming')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const zip = new JSZip()
 
@@ -20,7 +20,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let lambda
       let tracer
