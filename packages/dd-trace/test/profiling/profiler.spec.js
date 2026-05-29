@@ -345,6 +345,28 @@ describe('profiler', function () {
       sinon.assert.calledWithMatch(submit, 'Submitted profiles')
     })
 
+    // A user-supplied logger must honor the tracer's logLevel: with
+    // logLevel: 'warn' the profiler's lifecycle debug messages (e.g.
+    // "Started ... profiler", "Submitted profiles") must not reach the
+    // user's debug() method.
+    it('should not call user logger.debug when tracer logLevel suppresses debug', async () => {
+      const userLogger = {
+        debug: sinon.spy(),
+        info: sinon.spy(),
+        warn: sinon.spy(),
+        error: sinon.spy(),
+      }
+
+      await profiler.start(makeStartOptions({ logger: userLogger, logLevel: 'warn' }))
+
+      clock.tick(interval)
+
+      await waitForExport()
+      await clock.tickAsync(1)
+
+      sinon.assert.notCalled(userLogger.debug)
+    })
+
     it('should have a new start time for each capture', async () => {
       await profiler.start(makeStartOptions())
 
