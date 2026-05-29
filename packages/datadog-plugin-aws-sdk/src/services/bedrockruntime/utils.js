@@ -530,9 +530,8 @@ function toOutputMessages (role, contentBlocks) {
   return message ? [message] : [{ role, content: '' }]
 }
 
-function buildToolCall ({ name, input, toolUseId, inputStr }) {
-  const args = inputStr ? parseToolInput(inputStr) : (input ?? {})
-  return { name: name ?? '', arguments: args, toolId: toolUseId ?? '', type: 'toolUse' }
+function buildToolCall ({ name, input, toolUseId }) {
+  return { name: name ?? '', arguments: input ?? {}, toolId: toolUseId ?? '', type: 'toolUse' }
 }
 
 function parseToolInput (inputStr) {
@@ -669,7 +668,14 @@ function extractTextAndResponseReasonConverseFromStream (chunks) {
     }
   }
 
-  const contentBlocks = [...blocksByIdx.keys()].sort((a, b) => a - b).map(i => blocksByIdx.get(i))
+  const contentBlocks = [...blocksByIdx.keys()].sort((a, b) => a - b).map(i => {
+    const block = blocksByIdx.get(i)
+    if (block.toolUse) {
+      const { toolUseId, name, inputStr } = block.toolUse
+      block.toolUse = { toolUseId, name, input: parseToolInput(inputStr) }
+    }
+    return block
+  })
 
   return new Generation({
     role,
