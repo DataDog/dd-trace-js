@@ -336,13 +336,13 @@ describe('profiler', function () {
         submit,
       ] = consoleLogger.debug.getCalls()
 
-      sinon.assert.calledWithMatch(startWall, 'Started wall profiler')
-      sinon.assert.calledWithMatch(startSpace, 'Started space profiler')
+      sinon.assert.calledWithExactly(startWall, 'Started %s profiler in %s thread', 'wall', 'Main')
+      sinon.assert.calledWithExactly(startSpace, 'Started %s profiler in %s thread', 'space', 'Main')
 
       assert.match(collectWall.args[0](), /^Collected wall profile: /)
       assert.match(collectSpace.args[0](), /^Collected space profile: /)
 
-      sinon.assert.calledWithMatch(submit, 'Submitted profiles')
+      sinon.assert.calledWithExactly(submit, 'Submitted profiles')
     })
 
     // A user-supplied logger must honor the tracer's logLevel: with
