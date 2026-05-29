@@ -21,8 +21,28 @@ jobs:
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
     steps:
+      - name: Auto-rename GitHub revert title to Conventional Commit
+        id: rename
+        if: startsWith(github.event.pull_request.title, 'Revert "')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const title = context.payload.pull_request.title
+            const m = title.match(/^Revert "(.+)"$/)
+            if (!m) return
+            const newTitle = `revert: ${m[1]}`
+            core.notice(`Auto-renaming PR title to: ${newTitle}`)
+            await github.rest.pulls.update({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+              title: newTitle,
+            })
+            core.setOutput('renamed', 'true')
+
       - name: Validate PR title against Conventional Commits
-        if: github.event.action != 'edited' || github.event.changes.title != null
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action != 'edited' || github.event.changes.title != null)
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -37,6 +57,7 @@ jobs:
           echo "PR title OK: $PR_TITLE"
 
       - name: Sync labels with PR title
+        if: steps.rename.outputs.renamed != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
