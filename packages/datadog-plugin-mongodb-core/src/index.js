@@ -229,7 +229,10 @@ function buildNone (value, ancestors) {
   if (typeof value.toJSON === 'function') {
     const json = value.toJSON()
     if (json === value) return REDACT_LEAF
-    if (typeof json !== 'object' || json === null) return classifyLeafForNone(json)
+    // JSON.stringify keeps a null result as null (an invalid Date's toJSON
+    // returns null); only function / symbol / undefined results drop the key.
+    if (json === null) return 'null'
+    if (typeof json !== 'object') return classifyLeafForNone(json)
     // A wrapper that exposes binary state through toJSON (Buffer-backed
     // class with WeakMap state, etc.) returns a TypedArray here. Re-screen
     // before the per-key walk would expand it element by element.

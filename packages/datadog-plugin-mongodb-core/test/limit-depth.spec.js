@@ -928,15 +928,22 @@ describe('mongodb-core query sanitization (none mode)', () => {
     assert.deepStrictEqual(JSON.parse(actual), { count: '123', big: '9' })
   })
 
-  it('drops a field whose toJSON returns null', () => {
-    const nullish = { toJSON: () => null }
-    const actual = callBindStart({
+  it('keeps a null toJSON result as null, matching JSON.stringify', () => {
+    const invalidDate = new Date(NaN)
+    assert.strictEqual(invalidDate.toJSON(), null)
+
+    const object = callBindStart({
       ns: 'db.coll',
-      ops: { filter: { gone: nullish, big: 9n } },
+      ops: { filter: { expiresAt: invalidDate, big: 9n } },
       name: 'find',
     })
+    assert.deepStrictEqual(JSON.parse(object), { expiresAt: null, big: '9' })
 
-    assert.deepStrictEqual(JSON.parse(actual), { big: '9' })
+    const topLevel = callBindStart({ ns: 'db.coll', ops: { filter: invalidDate }, name: 'find' })
+    assert.strictEqual(topLevel, 'null')
+
+    const inArray = callBindStart({ ns: 'db.coll', ops: { filter: { at: [invalidDate, 1] } }, name: 'find' })
+    assert.deepStrictEqual(JSON.parse(inArray), { at: [null, 1] })
   })
 
   it('renders a RegExp as its source and flags through the fast and slow paths', () => {
