@@ -97,23 +97,11 @@ try {
     process.exit(0)
   }
 
-  // Only labeled commits (semver-patch/minor/major) warrant cutting a release;
-  // unlabeled commits (e.g. docs/chore) ride along but are not enough on their own.
-  // Use the capped range so deferred commits beyond the limit don't trigger a release.
-  const cappedDiff = capture(`${cherryPickDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
-
-  if (
-    !cappedDiff.includes('SEMVER-MINOR') &&
-    !cappedDiff.includes('SEMVER-PATCH') &&
-    !cappedDiff.includes('SEMVER-MAJOR')
-  ) {
-    pass('none (already up to date)')
-    process.exit(0)
-  }
-
-  // notesDiff excludes semver-major (gated behind a flag, not user-visible) for release notes.
+  // notesDiff is scoped to upperBoundSha so isMinor and release notes only reflect
+  // the capped commits actually included in the proposal, not deferred ones.
+  // Excludes semver-major (gated behind a flag, not user-visible).
   const notesDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
-  const isMinor = cappedDiff.includes('SEMVER-MINOR')
+  const isMinor = notesDiff.includes('SEMVER-MINOR')
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
