@@ -6,7 +6,7 @@ const MongodbCorePlugin = require('../../../packages/datadog-plugin-mongodb-core
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 2_000_000
+const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
 
 // Every traced mongo op walks `bindStart` -> `getQuery` ->
 // `sanitiseAndStringify`, builds the meta literal, calls `serviceName` /

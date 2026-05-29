@@ -3,27 +3,23 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 30,
+  "iterations": 15,
   "instructions": true,
   "variants": {
     "plain-find": {
-      "env": { "VARIANT": "plain-find" }
+      "env": { "VARIANT": "plain-find", "ITERATIONS": "11000000" }
     },
     "deep-aggregate": {
-      "baseline": "plain-find",
-      "env": { "VARIANT": "deep-aggregate" }
+      "env": { "VARIANT": "deep-aggregate", "ITERATIONS": "1600000" }
     },
     "bigint-id": {
-      "baseline": "plain-find",
-      "env": { "VARIANT": "bigint-id" }
+      "env": { "VARIANT": "bigint-id", "ITERATIONS": "11000000" }
     },
     "binary-hash": {
-      "baseline": "plain-find",
-      "env": { "VARIANT": "binary-hash" }
+      "env": { "VARIANT": "binary-hash", "ITERATIONS": "4500000" }
     },
     "mixed-ops": {
-      "baseline": "plain-find",
-      "env": { "VARIANT": "mixed-ops" }
+      "env": { "VARIANT": "mixed-ops", "ITERATIONS": "5000000" }
     }
   }
 }
