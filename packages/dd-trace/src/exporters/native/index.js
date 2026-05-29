@@ -6,6 +6,7 @@ const { channel } = require('dc-polyfill')
 
 const defaults = require('../../config/defaults')
 const log = require('../../log')
+const processTags = require('../../process-tags')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
@@ -190,6 +191,11 @@ class NativeExporter {
         !context.hasTag(key)) {
         context.setTag(key, value)
       }
+    }
+
+    if (this._config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED &&
+      processTags.serialized && !context.hasTag(processTags.TRACING_FIELD_NAME)) {
+      context.setTag(processTags.TRACING_FIELD_NAME, processTags.serialized)
     }
   }
 
