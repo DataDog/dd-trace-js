@@ -195,7 +195,6 @@ describe('spanFormat', () => {
         },
         start: Math.round(1_500_000_000_000.123 * 1e6),
         duration: Math.round(1.234 * 1e6),
-        links: [],
         span_events: undefined,
       })
     })
