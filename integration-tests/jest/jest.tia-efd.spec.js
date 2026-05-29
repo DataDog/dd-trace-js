@@ -65,6 +65,7 @@ const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const isJestCoverageBackfillSupported = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -207,18 +208,26 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         assertObjectContains(allCoverageFiles.sort(), expectedCoverageFiles.sort())
         assert.ok(coveredSourceFile.bitmap, 'covered source files should report line coverage bitmaps')
-        assert.ok(sessionCoverage, 'session executable line coverage should be reported')
-        assert.ok(
-          sessionCoverage.files.every(file => file.bitmap),
-          'session executable line coverage files should report bitmaps'
-        )
+        if (isJestCoverageBackfillSupported) {
+          assert.ok(sessionCoverage, 'session executable line coverage should be reported')
+          assert.ok(
+            sessionCoverage.files.every(file => file.bitmap),
+            'session executable line coverage files should report bitmaps'
+          )
+        } else {
+          assert.strictEqual(sessionCoverage, undefined)
+        }
 
         const [coveragePayload] = codeCovRequest.payload
         assert.ok(coveragePayload.content.coverages[0].test_session_id)
         assert.ok(coveragePayload.content.coverages[0].test_suite_id)
 
         const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+        if (isJestCoverageBackfillSupported) {
+          assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+        } else {
+          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+        }
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
         assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
@@ -839,7 +848,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           // Jest still adds untested files to total coverage, including unused-dependency.js from the skipped
           // suite. The result stays at 100% because backend meta.coverage backfills those skipped lines before the
           // test session total is published.
-          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+          if (isJestCoverageBackfillSupported) {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+          } else {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+          }
         })
 
       childProcess = exec(
@@ -940,7 +953,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
           assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
-          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+          if (isJestCoverageBackfillSupported) {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+          } else {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+          }
         })
 
       childProcess = exec(
