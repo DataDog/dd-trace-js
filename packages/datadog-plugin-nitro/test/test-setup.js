@@ -66,21 +66,26 @@ class NitroTestSetup {
     await this._request('/hello')
   }
 
-  async tracingPluginError () {
-    await this._request('/error')
-  }
-
   async tracingPluginParameterized () {
     await this._request('/users/42')
   }
 
-  _request (path) {
+  async tracingPluginError () {
+    await this._request('/error')
+  }
+
+  async tracingPluginWithHeaders (headers) {
+    await this._request('/hello', headers)
+  }
+
+  _request (path, headers = {}) {
     return new Promise((resolve, reject) => {
       const req = http.request({
         host: '127.0.0.1',
         port: this.port,
         path,
         method: 'GET',
+        headers,
       }, res => {
         res.resume()
         res.once('end', () => resolve({ statusCode: res.statusCode }))

@@ -75,6 +75,21 @@ createIntegrationTestSuite('nitro', 'h3', {
       return traceAssertion
     })
 
+    it('should propagate distributed trace context from incoming headers', async () => {
+      const traceAssertion = agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.meta['http.method'], 'GET')
+        assert.ok(span.parent_id && span.parent_id.toString() !== '0', 'expected non-zero parent_id from injected headers')
+      })
+
+      await testSetup.tracingPluginWithHeaders({
+        'x-datadog-trace-id': '1234567890',
+        'x-datadog-parent-id': '9876543210',
+        'x-datadog-sampling-priority': '1',
+      })
+
+      return traceAssertion
+    })
+
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
         name: 'nitro.server.request',

@@ -10,12 +10,17 @@ class NitroH3ServerPlugin extends ServerPlugin {
   bindStart (ctx) {
     const meta = this.getTags(ctx)
     const resource = this.getResource(ctx)
+    // event.req.headers is a Web Headers object in h3 v2; convert to plain object for extract
+    const rawHeaders = ctx?.event?.req?.headers
+    const headers = rawHeaders instanceof Headers ? Object.fromEntries(rawHeaders) : rawHeaders
+    const childOf = headers ? this.tracer.extract('http_headers', headers) || undefined : undefined
 
     this.startSpan(this.operationName(), {
       type: 'web',
       kind: 'server',
       meta,
       resource,
+      childOf,
     }, ctx)
 
     return ctx.currentStore
