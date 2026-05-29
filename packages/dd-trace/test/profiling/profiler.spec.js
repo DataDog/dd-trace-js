@@ -345,22 +345,34 @@ describe('profiler', function () {
       sinon.assert.calledWithExactly(submit, 'Submitted profiles')
     })
 
-    it('should not call user logger.debug when tracer logLevel suppresses debug', async () => {
-      const userLogger = {
-        debug: sinon.spy(),
-        info: sinon.spy(),
-        warn: sinon.spy(),
-        error: sinon.spy(),
+    it('should publish lifecycle debug messages to the central log debug channel', async () => {
+      // Re-proxyquire without stubbing ../log so log.debug actually publishes
+      // to the real debugChannel.
+      const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
+        './config': { Config: ConfigStub },
+        '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
+      }).Profiler
+      const realProfiler = new RealLogProfiler()
+      const { debugChannel } = require('../../src/log/channels')
+      const messages = []
+      const subscriber = msg => messages.push(msg)
+      debugChannel.subscribe(subscriber)
+
+      try {
+        await realProfiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+        await clock.tickAsync(1)
+
+        assert.ok(
+          messages.includes('Started wall profiler in Main thread'),
+          `Expected 'Started wall profiler in Main thread' in: ${inspect(messages)}`
+        )
+        assert.ok(messages.includes('Submitted profiles'))
+      } finally {
+        debugChannel.unsubscribe(subscriber)
+        realProfiler.stop()
       }
-
-      await profiler.start(makeStartOptions({ logger: userLogger, logLevel: 'warn' }))
-
-      clock.tick(interval)
-
-      await waitForExport()
-      await clock.tickAsync(1)
-
-      sinon.assert.notCalled(userLogger.debug)
     })
 
     it('should have a new start time for each capture', async () => {

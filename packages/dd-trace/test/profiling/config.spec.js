@@ -17,7 +17,6 @@ const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const EventsProfiler = require('../../src/profiling/profilers/events')
-const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const samplingContextsAvailable = process.platform !== 'win32'
@@ -82,7 +81,6 @@ describe('config', () => {
       version: config.version,
     })
     assert.strictEqual(config.tags.host, undefined)
-    assert.ok(config.logger instanceof ConsoleLogger)
     assert.deepStrictEqual(
       config.profilers.slice(0, 2).map(profiler => profiler.constructor),
       [SpaceProfiler, WallProfiler]
@@ -190,38 +188,24 @@ describe('config', () => {
     assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
   })
 
-  it('should not call user logger.warn directly on invalid compression level', () => {
+  it('should publish invalid-compression warning to the central log warn channel', () => {
     process.env = {
       DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip-99',
     }
-    const warnCalls = []
-    const logger = {
-      debug () {},
-      info () {},
-      warn (message) { warnCalls.push(String(message)) },
-      error () {},
+    const warnings = []
+    const { warnChannel } = require('../../src/log/channels')
+    const subscriber = msg => warnings.push(msg)
+    warnChannel.subscribe(subscriber)
+
+    try {
+      getProfilerConfig()
+      assert.ok(
+        warnings.some(m => m.includes('Invalid compression level 99')),
+        `Expected compression warning in: ${inspect(warnings)}`
+      )
+    } finally {
+      warnChannel.unsubscribe(subscriber)
     }
-
-    getProfilerConfig({ logger })
-
-    assert.deepStrictEqual(warnCalls, [])
-  })
-
-  it('should not call user logger.error directly on unknown profiler', () => {
-    process.env = {
-      DD_PROFILING_PROFILERS: 'nope',
-    }
-    const errorCalls = []
-    const logger = {
-      debug () {},
-      info () {},
-      warn () {},
-      error (message) { errorCalls.push(String(message)) },
-    }
-
-    getProfilerConfig({ logger })
-
-    assert.deepStrictEqual(errorCalls, [])
   })
 
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {

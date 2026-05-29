@@ -15,7 +15,6 @@ const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
-const { ConsoleLogger } = require('./loggers/console')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
@@ -55,7 +54,6 @@ class Config {
     this.pprofPrefix = options.DD_PROFILING_PPROF_PREFIX
     this.v8ProfilerBugWorkaroundEnabled = options.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 
-    this.logger = ensureLogger(options.logger)
     this.url = getAgentUrl(options)
 
     this.libraryInjected = !!options.DD_INJECTION_ENABLED
@@ -276,17 +274,6 @@ function ensureProfilers (profilers, options) {
   }
 
   return filteredProfilers
-}
-
-function ensureLogger (logger) {
-  if (typeof logger?.debug !== 'function' ||
-    typeof logger.info !== 'function' ||
-    typeof logger.warn !== 'function' ||
-    typeof logger.error !== 'function') {
-    return new ConsoleLogger()
-  }
-
-  return logger
 }
 
 function buildExportCommand (options) {

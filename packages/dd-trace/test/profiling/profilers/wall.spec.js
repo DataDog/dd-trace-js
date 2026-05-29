@@ -176,21 +176,26 @@ describe('profilers/native/wall', () => {
     sinon.assert.calledOnce(pprof.time.stop)
   })
 
-  it('should not call user logger.warn directly on v8 bug detection', () => {
+  it('should publish v8 bug warning to the central log warn channel', () => {
     pprof.time.v8ProfilerStuckEventLoopDetected = sinon.stub().returns(1)
-    const userLogger = {
-      debug: sinon.spy(),
-      info: sinon.spy(),
-      warn: sinon.spy(),
-      error: sinon.spy(),
+    const { warnChannel } = require('../../../src/log/channels')
+    const warnings = []
+    const subscriber = msg => warnings.push(msg)
+    warnChannel.subscribe(subscriber)
+
+    try {
+      const profiler = new NativeWallProfiler()
+      profiler.start()
+      profiler.profile(true)
+      profiler.stop()
+
+      assert.ok(
+        warnings.some(m => m.includes('v8 profiler stuck event loop')),
+        `Expected v8 warning in: ${inspect(warnings)}`
+      )
+    } finally {
+      warnChannel.unsubscribe(subscriber)
     }
-    const profiler = new NativeWallProfiler({ logger: userLogger })
-
-    profiler.start()
-    profiler.profile(true)
-    profiler.stop()
-
-    sinon.assert.notCalled(userLogger.warn)
   })
 
   it('should encode profiles calling their encodeAsync method', () => {

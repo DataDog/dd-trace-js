@@ -42,10 +42,12 @@ function processInfo (infos, info, type) {
 
 // Route pprof through the central log module so logLevel applies.
 const pprofLogger = {
-  debug: msg => log.debug(msg),
-  info: msg => log.info(msg),
-  warn: msg => log.warn(msg),
-  error: msg => log.error(msg),
+  trace: (...args) => log.trace(...args),
+  debug: (...args) => log.debug(...args),
+  info: (...args) => log.info(...args),
+  warn: (...args) => log.warn(...args),
+  error: (...args) => log.error(...args),
+  fatal: (...args) => log.error(...args),
 }
 
 class Profiler extends EventEmitter {
