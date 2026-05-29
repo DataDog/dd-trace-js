@@ -334,6 +334,7 @@ export interface GeneratedConfig {
   DD_TRACE_NATS_ENABLED: boolean;
   DD_TRACE_NET_ENABLED: boolean;
   DD_TRACE_NEXT_ENABLED: boolean;
+  DD_TRACE_NITRO_ENABLED: boolean;
   DD_TRACE_NODE_CHILD_PROCESS_ENABLED: boolean;
   DD_TRACE_NODE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_NODE_SERIALIZE_ENABLED: boolean;

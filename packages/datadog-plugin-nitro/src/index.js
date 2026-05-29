@@ -8,11 +8,19 @@ class NitroPlugin extends ServerPlugin {
   static prefix = 'tracing:h3.request'
 
   bindStart (ctx) {
+    // h3's tracingPlugin wraps both route handlers (type='route') and middleware
+    // (type='middleware') with the same tracingChannel. Only the matched route
+    // produces a per-request HTTP server span; middleware events would create
+    // duplicate spans per request.
+    if (ctx?.type !== 'route') return ctx.currentStore
+
     const meta = this.getTags(ctx)
     const resource = this.getResource(ctx)
     // event.req.headers is a Web Headers object in h3 v2; convert to plain object for extract
     const rawHeaders = ctx?.event?.req?.headers
-    const headers = rawHeaders instanceof Headers ? Object.fromEntries(rawHeaders) : rawHeaders
+    // Check for entries method instead of instanceof Headers for Node.js 18 compatibility
+    const isHeadersObject = rawHeaders && typeof rawHeaders.entries === 'function'
+    const headers = isHeadersObject ? Object.fromEntries(rawHeaders) : rawHeaders
     const childOf = headers ? this.tracer.extract('http_headers', headers) || undefined : undefined
 
     this.startSpan(this.operationName(), {
@@ -85,9 +93,10 @@ class NitroPlugin extends ServerPlugin {
     this.finish(ctx)
   }
 
+  // h3's tracingChannel emits both 'end' (sync completion) and 'asyncEnd' (promise
+  // resolution). Either fires for a given request; both go through the same finalization.
   asyncEnd (ctx) {
-    this.#applyResponseTags(ctx)
-    this.finish(ctx)
+    this.end(ctx)
   }
 
   error (ctx) {
