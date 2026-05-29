@@ -164,22 +164,20 @@ describe('config', () => {
 
     /** @type {string[]} */
     const errors = []
-    const logger = {
-      debug () {},
-      info () {},
-      warn () {},
-      error (message) {
-        errors.push(String(message))
-      },
+    const { errorChannel } = require('../../src/log/channels')
+    const subscriber = err => errors.push(err.message)
+    errorChannel.subscribe(subscriber)
+
+    try {
+      const { config } = getProfilerConfig()
+      assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
+      assert.deepStrictEqual(errors, [
+        'Unknown profiler "nope"',
+        'Unknown profiler "also_nope"',
+      ])
+    } finally {
+      errorChannel.unsubscribe(subscriber)
     }
-
-    const { config } = getProfilerConfig({ logger })
-
-    assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
-    assert.deepStrictEqual(errors, [
-      'Unknown profiler "nope"',
-      'Unknown profiler "also_nope"',
-    ])
   })
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {

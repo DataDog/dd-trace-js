@@ -5,6 +5,7 @@ const { pathToFileURL } = require('url')
 
 const satisfies = require('../../../../vendor/dist/semifies')
 const getGitMetadata = require('../git_metadata')
+const log = require('../log')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
@@ -73,7 +74,7 @@ class Config {
     const heapLimitExtensionSize = options.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE
     const maxHeapExtensionCount = options.DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT
     const exportStrategies = oomMonitoringEnabled
-      ? ensureOOMExportStrategies(options.DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES, this)
+      ? ensureOOMExportStrategies(options.DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES)
       : []
     const exportCommand = oomMonitoringEnabled ? buildExportCommand(this) : undefined
     this.oomMonitoring = {
@@ -102,7 +103,7 @@ class Config {
     if (level !== undefined) {
       const maxLevel = { gzip: 9, zstd: 22 }[uploadCompression]
       if (level > maxLevel) {
-        this.logger.warn(`Invalid compression level ${level}. Will use ${maxLevel}.`)
+        log.warn('Invalid compression level %d. Will use %d.', level, maxLevel)
         level = maxLevel
       }
     }
@@ -119,8 +120,7 @@ class Config {
 
     const that = this
     function turnOffAsyncContextFrame (msg) {
-      that.logger.warn(
-        `DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set ${msg}, it will have no effect.`)
+      log.warn('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set %s, it will have no effect.', msg)
       that.asyncContextFrameEnabled = false
     }
 
@@ -215,18 +215,18 @@ function getProfilers ({
   return profilersArray
 }
 
-function getExportStrategy (name, options) {
+function getExportStrategy (name) {
   const strategy = Object.values(oomExportStrategies).find(value => value === name)
   if (strategy === undefined) {
-    options.logger.error(`Unknown oom export strategy "${name}"`)
+    log.error('Unknown oom export strategy "%s"', name)
   }
   return strategy
 }
 
-function ensureOOMExportStrategies (strategies, options) {
+function ensureOOMExportStrategies (strategies) {
   const set = new Set()
   for (const strategy of strategies) {
-    set.add(getExportStrategy(strategy, options))
+    set.add(getExportStrategy(strategy))
   }
 
   return [...set]
@@ -239,7 +239,7 @@ function getExporter (name, options) {
     case 'file':
       return new FileExporter(options)
     default:
-      options.logger.error(`Unknown exporter "${name}"`)
+      log.error('Unknown exporter "%s"', name)
   }
 }
 
@@ -255,7 +255,7 @@ function getProfiler (name, options) {
     case 'space':
       return new SpaceProfiler(options)
     default:
-      options.logger.error(`Unknown profiler "${name}"`)
+      log.error('Unknown profiler "%s"', name)
   }
 }
 
