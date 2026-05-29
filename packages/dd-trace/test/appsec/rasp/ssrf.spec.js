@@ -326,6 +326,31 @@ describe('RASP - ssrf.js', () => {
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
     })
 
+    it('stores redirect decision when guards reject collection on a redirect response', () => {
+      const ctx = makeCtx()
+      const { req } = stubStore({}, {})
+
+      downstream.handleRedirectResponse.returns(true)
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: true })
+
+      const response = createResponse({ statusCode: 302, headers: { location: 'http://example.com/redirect' } })
+      httpClientResponseFinish.publish({
+        ctx,
+        res: response,
+        body: null,
+        responseBodyIgnoredReason: 'content_length_missing',
+      })
+
+      sinon.assert.calledOnceWithExactly(downstream.handleRedirectResponse, req, response)
+      sinon.assert.notCalled(downstream.recordResponseBodyIgnored)
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
+
     it('records ignored body metric and skips WAF body when guards reject collection', () => {
       const ctx = makeCtx()
       const { req } = stubStore({}, {})

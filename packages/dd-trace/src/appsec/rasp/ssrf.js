@@ -74,14 +74,14 @@ function handleResponseFinish ({ ctx, res, body, responseBodyIgnoredReason }) {
   const originatingRequest = getActiveRequest()
   if (!originatingRequest) return
 
-  if (responseBodyIgnoredReason) {
+  const shouldCollectBodyAfterRedirect = ctx.shouldCollectBody &&
+    downstream.handleRedirectResponse(originatingRequest, res)
+
+  if (!shouldCollectBodyAfterRedirect && responseBodyIgnoredReason) {
     downstream.recordResponseBodyIgnored(originatingRequest, responseBodyIgnoredReason)
   }
 
-  // Skip body analysis for redirect responses or when guards rejected collection
-  const evaluateBody = ctx.shouldCollectBody &&
-    !responseBodyIgnoredReason &&
-    !downstream.handleRedirectResponse(originatingRequest, res)
+  const evaluateBody = ctx.shouldCollectBody && !shouldCollectBodyAfterRedirect && !responseBodyIgnoredReason
   const responseBody = evaluateBody ? body : null
   runResponseEvaluation(res, originatingRequest, responseBody)
 }
