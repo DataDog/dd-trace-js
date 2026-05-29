@@ -10,6 +10,7 @@ module.exports = {
   http2: () => require('../http2'),
   https: () => require('../http'),
   net: () => require('../net'),
+  nitro: () => require('../nitro'),
   url: () => require('../url'),
   vm: () => require('../vm'),
   zlib: () => require('../zlib'),

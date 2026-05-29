@@ -82,6 +82,7 @@ tracer.use('pg', {
 <h5 id="mysql2"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="nitro"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
 <h5 id="opensearch"></h5>
@@ -164,6 +165,7 @@ tracer.use('pg', {
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
+* [nitro](./interfaces/export_.plugins.nitro.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)
 * [openai](./interfaces/export_.plugins.openai.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)

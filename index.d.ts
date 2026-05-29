@@ -281,6 +281,7 @@ interface Plugins {
   "mysql2": tracer.plugins.mysql2;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
+  "nitro": tracer.plugins.nitro;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
   "opensearch": tracer.plugins.opensearch;
@@ -2833,6 +2834,12 @@ declare namespace tracer {
     /**
      * This plugin integrates with [nyc](https://github.com/istanbuljs/nyc) for CI visibility.
      */
+    /**
+     * This plugin automatically instruments the
+     * [nitro](https://github.com/npmjs/package/nitro) web framework.
+     */
+    interface nitro extends WebFramework {}
+
     interface nyc extends Integration {}
 
     /**
