@@ -60,14 +60,14 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   // checkpoint, which subsequent invocations consume to extract the parent
   // trace context.
   _installTerminationCheckpointHook (ctx, event) {
-    if (!isCrossInvocationTracingEnabled()) return
+    if (!this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED) return
 
     const args = ctx.arguments || []
     if (args.length < 6 || typeof args[5] !== 'function') return
 
     const executionContext = args[2]
     const terminationManager = executionContext?.terminationManager
-    if (!terminationManager || typeof terminationManager.terminate !== 'function') return
+    if (typeof terminationManager?.terminate !== 'function') return
 
     const span = ctx.currentStore?.span
     if (!span) return
@@ -127,7 +127,7 @@ function finishOpenChildSpans (executeSpan) {
 }
 
 function maybeSaveCheckpoint (state) {
-  if (!state || state.saved || state.savePromise) return state.savePromise
+  if (state.saved || state.savePromise) return state.savePromise
   if (!state.tracer || !state.span || !state.durableContext) return null
 
   state.savePromise = saveTraceContextCheckpointIfUpdated(

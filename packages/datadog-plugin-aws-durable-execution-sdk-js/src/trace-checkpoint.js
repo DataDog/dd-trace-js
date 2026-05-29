@@ -64,7 +64,7 @@ function injectHeaders (tracer, span) {
  * @param {string | number | undefined} parentId
  */
 function overrideParentId (headers, parentId) {
-  if (parentId === undefined || parentId === null) return
+  if (!parentId) return
   if ('x-datadog-trace-id' in headers) {
     headers['x-datadog-parent-id'] = String(parentId)
   }
@@ -84,9 +84,7 @@ function findLastCheckpointOrNull (event) {
   let best = null
   for (const op of operations) {
     const name = op?.Name
-    if (typeof name !== 'string') continue
-
-    if (!name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
+    if (typeof name !== 'string' || !name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
     const suffix = name.slice(CHECKPOINT_NAME_PREFIX.length)
     const n = Number.parseInt(suffix, 10)
     if (Number.isNaN(n) || String(n) !== suffix) continue
@@ -152,8 +150,10 @@ async function saveCheckpoint (checkpointManager, executionArn, number, headers)
     Name: name,
     Payload: payload,
   })
-  await startPromise
-  await succeedPromise
+  await Promise.all([
+    startPromise,
+    succeedPromise,
+  ])
   log.debug('Saved trace context checkpoint %s', name)
 }
 
@@ -224,6 +224,5 @@ async function saveTraceContextCheckpointIfUpdated (
 }
 
 module.exports = {
-  CHECKPOINT_NAME_PREFIX,
   saveTraceContextCheckpointIfUpdated,
 }

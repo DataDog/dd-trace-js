@@ -78,10 +78,7 @@ describe('handler checkpoint hook', () => {
     assert.equal(terminateCalls, 1)
     assert.equal(checkpointSaveCalls.length, 1)
     assert.equal(checkpointSaveCalls[0].length, 5, 'expected 5 positional args (no trailing status)')
-    assert.equal(checkpointSaveCalls[0][0], tracer)
-    assert.equal(checkpointSaveCalls[0][2], durableContext)
-    assert.equal(checkpointSaveCalls[0][3], '123')
-    assert.equal(checkpointSaveCalls[0][4], invocationEvent)
+    assertObjectContains(checkpointSaveCalls, [[tracer, durableContext, '123', invocationEvent])
   })
 
   it('does not save a checkpoint for non-pending termination reasons', async () => {
