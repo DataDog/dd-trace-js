@@ -131,11 +131,11 @@ try {
   const shasToApply = proposalShas.slice(0, remainingSlots)
   const limitedDiff = shasToApply.join(' ')
   const totalCommits = existingCherryPicked + shasToApply.length + 1
+  const truncated = shasToApply.length < proposalShas.length
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
     const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${main}`)
-    const truncated = shasToApply.length < proposalShas.length
     const truncationNote = truncated
       ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
         ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
@@ -175,9 +175,14 @@ try {
 
   start('Save release notes draft')
 
-  // Write release notes to a file that can be copied to the GitHub release.
+  // When commits were capped, recompute notes from the actual proposal branch
+  // contents to exclude commits that were deferred to a subsequent release.
+  const notesContent = truncated
+    ? capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x HEAD`)
+    : lineDiff
+
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, lineDiff)
+  fs.writeFileSync(notesFile, notesContent)
 
   pass(notesFile)
 
