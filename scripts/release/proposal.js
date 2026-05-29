@@ -122,31 +122,48 @@ try {
   const proposalDiff = capture(`${cherryPickDiffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
     .replaceAll('\n', ' ').trim()
 
+  // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
+  const MAX_CHERRY_PICKS = 99
+  const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
+  const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
+  const proposalShas = proposalDiff ? proposalDiff.split(' ').filter(Boolean) : []
+  const remainingSlots = Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked)
+  const shasToApply = proposalShas.slice(0, remainingSlots)
+  const limitedDiff = shasToApply.join(' ')
+  const totalCommits = existingCherryPicked + shasToApply.length + 1
+
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
     const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${main}`)
+    const truncated = shasToApply.length < proposalShas.length
+    const truncationNote = truncated
+      ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
+        ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
+      : ''
 
-    pass(`\n${newChanges}`)
+    pass(`\n${newChanges}${truncationNote}`)
 
-    start('Apply changes from the main branch')
+    if (limitedDiff) {
+      start('Apply changes from the main branch')
 
-    // We have new commits to add, so revert the version commit if it exists.
-    if (lastCommit === `v${newVersion}`) {
-      run('git reset --hard HEAD~1')
-    }
+      // We have new commits to add, so revert the version commit if it exists.
+      if (lastCommit === `v${newVersion}`) {
+        run('git reset --hard HEAD~1')
+      }
 
-    // Cherry pick all new commits to the proposal branch.
-    try {
-      run(`git cherry-pick ${proposalDiff}`)
+      // Cherry pick commits up to the GitHub rebase limit.
+      try {
+        run(`git cherry-pick ${limitedDiff}`)
 
-      pass()
-    } catch {
-      run('git cherry-pick --abort')
+        pass()
+      } catch {
+        run('git cherry-pick --abort')
 
-      fatal(
-        'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
-        'Please make sure the release branch contains all changes from the main branch.'
-      )
+        fatal(
+          'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
+          'Please make sure the release branch contains all changes from the main branch.'
+        )
+      }
     }
   } else {
     pass('none')
@@ -234,6 +251,14 @@ try {
 
   if (process.env.CI) {
     log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
+  }
+
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+      `commit_count=${totalCommits}`,
+      `version=v${newVersion}`,
+      `pr_url=${pullRequest.url}`,
+    ].join('\n') + '\n')
   }
 } catch (e) {
   fail(e)
