@@ -517,6 +517,7 @@ describe('Plugin', function () {
           hooks: {
             request: (span, req, res) => {
               span.setTag('foo', '/foo')
+              span.setTag('service.name', 'override')
             },
           },
         }
@@ -539,6 +540,25 @@ describe('Plugin', function () {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].meta.foo, '/foo')
+            })
+            .then(done)
+            .catch(done)
+
+          fetch(`http://localhost:${port}/user`).catch(() => {})
+        })
+      })
+
+      it('should have manual stamp when doing an override through config hook', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+
+        appListener = server(app, port => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'm')
             })
             .then(done)
             .catch(done)

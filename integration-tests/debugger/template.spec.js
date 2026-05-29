@@ -49,18 +49,20 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), '[ [Object], 2, 3, ... 2 more items ]')
         assert.strictEqual(messages.shift(), '{}')
         const obj = messages.shift()
-        assert.strictEqual(
-          obj,
-          '{ ' +
-            'foo: [Object], ' +
-            'bar: true, ' +
-            'baz: [Getter], ' +
-            (NODE_MAJOR >= 24
-              ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
-              : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
-          '}'
-        )
-        assert.strictEqual(messages.shift(), obj) // a proxy should just be stringified to the wrapped object
+        let expectedObjectShape = '{ ' +
+          'foo: [Object], ' +
+          'bar: true, ' +
+          'baz: [Getter], ' +
+          (NODE_MAJOR >= 24
+            ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
+            : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
+        '}'
+        assert.strictEqual(obj, expectedObjectShape)
+        if (NODE_MAJOR >= 26) {
+          // A proxy should be stringified to the wrapped object plus the proxy type in newer Node.js versions
+          expectedObjectShape = `Proxy(${expectedObjectShape})`
+        }
+        assert.strictEqual(messages.shift(), expectedObjectShape)
         assert.strictEqual(messages.shift(), '<ref *1> { circular: [Circular *1] }')
         assert.strictEqual(messages.shift(), '[class CustomClass]')
         // Notice execution of `Symbol.toStringTag` getter (`foo`). There's nothing we can do about it when using

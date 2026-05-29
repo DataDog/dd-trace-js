@@ -89,7 +89,7 @@ jobs:
 
   windows:
     name: ${{ github.workflow }} / windows
-    runs-on: windows-latest
+    runs-on: windows-2022
     permissions:
       id-token: write
     steps:

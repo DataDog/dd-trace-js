@@ -280,6 +280,7 @@ interface Plugins {
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
@@ -795,6 +796,21 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Configuration for span enrichment with feature flag evaluation data.
+         */
+        spanEnrichment?: {
+          /**
+           * Whether to enable span enrichment with feature flag data.
+           * When enabled, feature flag evaluation metadata is attached to APM spans.
+           * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED environment variable.
+           *
+           * @default false
+           * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
       }
     };
 
@@ -2001,7 +2017,8 @@ declare namespace tracer {
       middleware?: boolean;
 
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2080,7 +2097,8 @@ declare namespace tracer {
        */
       validateStatus?: (code: number) => boolean;
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
+       * Whether (or how) to obfuscate querystring values in `http.url` on both
+       * inbound (server) and outbound (client) HTTP spans.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2823,6 +2841,13 @@ declare namespace tracer {
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
     interface mysql2 extends mysql {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@nats-io/transport-node](https://github.com/nats-io/nats.js) and
+     * [@nats-io/nats-core](https://github.com/nats-io/nats.js) modules.
+     */
+    interface nats extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

@@ -9,7 +9,7 @@ const {
 } = require('../ci-visibility/telemetry')
 const { MsgpackChunk } = require('../msgpack')
 const { AgentEncoder } = require('./0.4')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { truncateSpanTestOpt, normalizeSpan } = require('./tags-processors')
 
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
@@ -32,7 +32,7 @@ function formatSpan (span) {
   return {
     type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
-    content: normalizeSpan(truncateSpan(span)),
+    content: normalizeSpan(truncateSpanTestOpt(span)),
   }
 }
 
@@ -48,11 +48,18 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._eventCount = 0
 
     this.metadataTags = {}
+    this.wildcardMetadataTags = {}
 
     this.reset()
   }
 
   addMetadataTags (tags) {
+    if (tags['*']) {
+      this.wildcardMetadataTags = {
+        ...this.wildcardMetadataTags,
+        ...tags['*'],
+      }
+    }
     for (const type of ALLOWED_CONTENT_TYPES) {
       if (tags[type]) {
         this.metadataTags[type] = {
@@ -318,6 +325,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         '*': {
           language: 'javascript',
           library_version: ddTraceVersion,
+          ...this.wildcardMetadataTags,
         },
         ...this.metadataTags,
       },

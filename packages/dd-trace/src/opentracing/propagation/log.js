@@ -11,20 +11,31 @@ class LogPropagator {
   inject (spanContext, carrier) {
     if (!carrier) return
 
-    carrier.dd = {}
+    const dd = {}
+    let hasField = false
 
     if (spanContext) {
-      carrier.dd.trace_id = this._config.traceId128BitGenerationEnabled &&
+      dd.trace_id = this._config.traceId128BitGenerationEnabled &&
         this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']
         ? spanContext.toTraceId(true)
         : spanContext.toTraceId()
-
-      carrier.dd.span_id = spanContext.toSpanId()
+      dd.span_id = spanContext.toSpanId()
+      hasField = true
+    }
+    if (this._config.service) {
+      dd.service = this._config.service
+      hasField = true
+    }
+    if (this._config.version) {
+      dd.version = this._config.version
+      hasField = true
+    }
+    if (this._config.env) {
+      dd.env = this._config.env
+      hasField = true
     }
 
-    if (this._config.service) carrier.dd.service = this._config.service
-    if (this._config.version) carrier.dd.version = this._config.version
-    if (this._config.env) carrier.dd.env = this._config.env
+    if (hasField) carrier.dd = dd
   }
 
   extract (carrier) {

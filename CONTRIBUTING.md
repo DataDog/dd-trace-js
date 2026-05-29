@@ -71,9 +71,9 @@ In the event that some existing functionality _does_ need to change, as much as 
 
 ## Indicate intended release targets
 
-When writing major changes we use a series of labels in the form of `dont-land-on-vN.x` where N is the major release line which a PR should not land in. Every PR marked as semver-major should include these tags. These tags allow our [branch-diff](https://github.com/bengl/branch-diff) tooling to work smoothly as we can exclude PRs not intended for the release line we're preparing a release proposal for. The `semver-major` labels on their own are not sufficient as they don't encode any indication of from _which_ releases they are a major change.
+When writing changes that should only land on the next major release line (master) and not on any current stable release line, add the `only-land-on-next` label. This tells our [branch-diff](https://github.com/bengl/branch-diff) tooling to exclude those PRs when preparing a release proposal for a stable line.
 
-For outside contributions we will have the relevant team add these labels when they review and determine when they plan to release it.
+For outside contributions we will have the relevant team add this label when they review and determine the intended release target.
 
 ## Ensure all tests are green
 
@@ -104,6 +104,7 @@ The `scope` is optional. Valid types are:
 | `refactor` | Code change that neither fixes a bug nor adds a feature |
 | `perf` | A code change that improves performance |
 | `test` | Adding or updating tests |
+| `bench` | Adding or updating benchmarks (e.g. under `benchmark/sirun/`) |
 | `build` | Changes to build system or external dependencies |
 | `ci` | Changes to CI configuration files and scripts |
 | `chore` | Other changes that don't modify src or test files |
