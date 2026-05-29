@@ -108,7 +108,7 @@
     "cookie": "1.1.1",
     "cookie-parser": "1.4.7",
     "couchbase": "4.7.0",
-    "cypress": "15.15.0",
+    "cypress": "15.16.0",
     "cypress-fail-fast": "8.1.0",
     "dd-trace-api": "1.0.1",
     "ejs": "5.0.2",
