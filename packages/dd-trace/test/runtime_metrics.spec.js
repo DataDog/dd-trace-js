@@ -267,8 +267,8 @@ function createGarbage (count = 50) {
           })
         })
 
-        it('should include resolved process tags on the runtime-metrics client', function () {
-          config.dogstatsd.processTags = ['entrypoint.type:node']
+        it('should include process tags when propagateProcessTags is enabled', function () {
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -278,7 +278,9 @@ function createGarbage (count = 50) {
           assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
         })
 
-        it('should not include process tags when none are resolved', function () {
+        it('should not include process tags when propagateProcessTags is disabled', function () {
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = false
+
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
 
