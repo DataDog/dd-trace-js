@@ -66,7 +66,7 @@ function overrideParentId(headers, parentId) {
 /**
  * Find the checkpoint with the highest N for _datadog_{N} in the event's operations.
  * @param {unknown} event
- * @returns {{ number: number, operation: object } | null}
+ * @returns {{ checkpointNumber: number, operation: object } | null}
  */
 function findLastCheckpointOrNull(event) {
   if (!event || typeof event !== 'object') return null
@@ -74,20 +74,20 @@ function findLastCheckpointOrNull(event) {
   const operations = event.InitialExecutionState?.Operations
   if (!Array.isArray(operations)) return null
 
-  let best = null
+  let highest = null
   for (const op of operations) {
     const name = op?.Name
     if (typeof name !== 'string' || !name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
     const suffix = name.slice(CHECKPOINT_NAME_PREFIX.length)
-    const n = Number.parseInt(suffix, 10)
-    if (Number.isNaN(n) || String(n) !== suffix) continue
+    const checkpointNumber = Number.parseInt(suffix, 10)
+    if (Number.isNaN(checkpointNumber) || String(checkpointNumber) !== suffix) continue
 
-    if (!best || n > best.number) {
-      best = { number: n, operation: op }
+    if (!highest || checkpointNumber > highest.checkpointNumber) {
+      highest = { checkpointNumber, operation: op }
     }
   }
 
-  return best
+  return highest
 }
 
 /**
@@ -202,7 +202,7 @@ async function saveTraceContextCheckpointIfUpdated(
       delete latestHeaders['x-datadog-parent-id']
       if (JSON.stringify(currentHeaders) === JSON.stringify(latestHeaders)) return
 
-      newNumber = latest.number + 1
+      newNumber = latest.checkpointNumber + 1
       overrideParentId(currentHeaders, anchoredSpanId)
     } else {
       newNumber = 0
