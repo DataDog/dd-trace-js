@@ -135,7 +135,9 @@ try {
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${main}`)
+    // When truncated, compare up to the last applied SHA to exclude deferred commits.
+    const changesTarget = truncated ? shasToApply.at(-1) : main
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${changesTarget}`)
     const truncationNote = truncated
       ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
         ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
