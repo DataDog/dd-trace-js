@@ -1,21 +1,19 @@
 'use strict'
 
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('../../../packages/dd-trace/src/plugins/util/url')
+const configManifest = require('../../../packages/dd-trace/src/config/supported-configurations.json')
 
 const COUNT = Number(process.env.COUNT)
 
-// The shipped default query-string obfuscation regex. The per-request server
-// path in addRequestTags runs extractURL (rebuild the URL from the request),
-// obfuscateQs (redact secrets from the query string) and calculateHttpEndpoint
-// (normalize the path for endpoint aggregation) once per inbound request.
-const qsRegex = new RegExp(
-  '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|' +
-  'token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)' +
-  '(?:(?:\\s|%20)*(?:=|%3D)[^&]+)|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|' +
-  'gh[opsu]_[0-9a-zA-Z]{36}',
-  'gi'
-)
-const config = { queryStringObfuscation: qsRegex }
+// The per-request server path in addRequestTags runs extractURL (rebuild the URL
+// from the request), obfuscateQs (redact secrets from the query string) and
+// calculateHttpEndpoint (normalize the path for endpoint aggregation) once per
+// inbound request. Compile the shipped default obfuscation regex from the config
+// manifest so the bench tracks the production default rather than a hand-copied
+// snapshot.
+const qsDefault =
+  configManifest.supportedConfigurations.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP[0].default
+const config = { queryStringObfuscation: new RegExp(qsDefault, 'gi') }
 
 // Duck-typed inbound requests matching what Node's HTTP server hands the tracer:
 // headers (host, user-agent), a socket (tls flag) and the raw url. A mix of REST
