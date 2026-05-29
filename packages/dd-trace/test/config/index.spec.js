@@ -4513,55 +4513,21 @@ rules:
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
     })
 
-    it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
+    it('should not be affected by _DD_APM_TRACING_AGENTLESS_ENABLED', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      const config = getConfig()
-      assert.strictEqual(config.experimental.exporter, 'agentless')
-    })
-
-    it('should disable rate limiting when agentless is enabled', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      const config = getConfig()
-      assert.strictEqual(config.sampler.rateLimit, -1)
-    })
-
-    it('should disable stats computation when agentless is enabled', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      const config = getConfig()
-      assert.strictEqual(config.stats.enabled, false)
-    })
-
-    it('should enable hostname reporting when agentless is enabled', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      const config = getConfig()
-      assert.strictEqual(config.reportHostname, true)
-    })
-
-    it('should clear sampling rules when agentless is enabled', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      const config = getConfig()
-      assert.deepStrictEqual(config.sampler.rules, [])
-    })
-
-    it('should disable 128-bit trace ID generation when agentless is enabled', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      const config = getConfig()
-      assert.strictEqual(config.traceId128BitGenerationEnabled, false)
-    })
-
-    it('should allow env var to override agentless 128-bit disable', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
-      const config = getConfig()
-      // Env var has higher priority than calculated; encoder truncation is the safety net
-      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
-    })
-
-    it('should not affect other config when agentless is disabled', () => {
-      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+      assert.strictEqual(config.stats.enabled, false) // will be false by default in this test env
+      assert.notStrictEqual(config.reportHostname, true)
+      assert.deepStrictEqual(config.sampler.rules, [])
+      assert.notStrictEqual(config.traceId128BitGenerationEnabled, false)
+    })
+
+    it('should have stats.enabled true when DD_TRACE_STATS_COMPUTATION_ENABLED is true', () => {
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.stats.enabled, true)
     })
   })
 
