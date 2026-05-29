@@ -24,8 +24,10 @@ class NitroTestSetup {
 
   async setup () {
     const { H3, toNodeHandler } = require('h3')
+    const { tracingPlugin } = require('h3/tracing')
 
     this.app = new H3()
+    this.app.register(tracingPlugin())
     this.app.get('/hello', () => ({ ok: true }))
     this.app.get('/error', () => {
       throw new Error('nitro test boom')

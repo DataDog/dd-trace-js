@@ -5,7 +5,7 @@ const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
 
-createIntegrationTestSuite('nitro', 'nitro', {
+createIntegrationTestSuite('nitro', 'h3', {
   category: 'http-server',
 }, (meta) => {
   const { agent } = meta
@@ -21,7 +21,7 @@ createIntegrationTestSuite('nitro', 'nitro', {
   describe('h3.request - request', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
-        name: 'h3.request',
+        name: 'nitro.server.request',
         type: 'web',
         meta: {
           component: 'nitro',
@@ -38,7 +38,7 @@ createIntegrationTestSuite('nitro', 'nitro', {
 
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
-        name: 'h3.request',
+        name: 'nitro.server.request',
         meta: {
           component: 'nitro',
           'span.kind': 'server',
