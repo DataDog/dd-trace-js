@@ -36,7 +36,7 @@ describe('Plugin', () => {
 
       describe('with middleware disabled', () => {
         before(() => {
-          return agent.load(['http', 'router'], { router: { middleware: false } })
+          return agent.load(['http', 'router'], [{}, { middleware: false }])
         })
 
         after(() => {
