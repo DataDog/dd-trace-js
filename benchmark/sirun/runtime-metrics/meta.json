@@ -12,7 +12,6 @@
       }
     },
     "with-runtime-metrics": {
-      "baseline": "control",
       "env": {
         "DD_RUNTIME_METRICS_ENABLED": "true",
         "DD_RUNTIME_METRICS_FLUSH_INTERVAL": "20"

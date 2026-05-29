@@ -22,13 +22,11 @@
       }
     },
     "extract-baggage-ascii": {
-      "baseline": "extract",
       "env": {
         "VARIANT": "extract-baggage-ascii"
       }
     },
     "extract-baggage-percent": {
-      "baseline": "extract",
       "env": {
         "VARIANT": "extract-baggage-percent"
       }

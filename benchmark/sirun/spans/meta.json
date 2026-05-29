@@ -19,7 +19,6 @@
       }
     },
     "finish-immediately-with-tags": {
-      "baseline": "finish-immediately",
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
@@ -27,7 +26,6 @@
       }
     },
     "finish-immediately-with-tags-and-otel": {
-      "baseline": "finish-immediately",
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
