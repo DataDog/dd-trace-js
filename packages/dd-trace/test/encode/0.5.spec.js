@@ -244,6 +244,33 @@ describe('encode 0.5', () => {
     assert.strictEqual(buffer[parentIdOffset + idMarker.length + 2], 0x01)
   })
 
+  it('should rewind the fixint speculation in _encodeMap for non-fixint metrics', () => {
+    // Exercise the speculation-miss branch: the speculative value byte
+    // is rewound and the value goes through writeIntOrFloat to pick the
+    // shortest valid encoding. The string entry shares the fused-pair
+    // path; both have to round-trip correctly.
+    data[0].metrics = {
+      smallInt: 1, // fixint, speculation hits
+      bigInt: 65_536, // does not fit a fixint, speculation rewinds to uint32
+      negative: -5, // signed, speculation rewinds to int8
+      float: 1.5, // not an integer, speculation rewinds to float64
+    }
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
+    const stringMap = decoded[0]
+    const metrics = decoded[1][0][0][10]
+
+    assert.deepStrictEqual(metrics, {
+      [stringMap.indexOf('smallInt')]: 1,
+      [stringMap.indexOf('bigInt')]: 65_536,
+      [stringMap.indexOf('negative')]: -5,
+      [stringMap.indexOf('float')]: 1.5,
+    })
+  })
+
   it('should ignore meta_struct property', () => {
     data[0].meta_struct = { foo: 'bar' }
 
