@@ -8,14 +8,13 @@
   "variants": {
     "base": {
       "env": {
-        "COUNT": "7000000"
+        "COUNT": "100000000"
       }
     },
     "scope_enabled": {
-      "baseline": "base",
       "env": {
         "SCOPE_ENABLED": "true",
-        "COUNT": "7000000"
+        "COUNT": "8000000"
       }
     }
   }
