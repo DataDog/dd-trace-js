@@ -127,6 +127,7 @@
     "graphql-tools": "9.0.28",
     "graphql-yoga": "5.21.0",
     "handlebars": "4.7.9",
+    "h3": "2.0.1-rc.22",
     "hapi": "18.1.0",
     "hono": "4.12.19",
     "ioredis": "5.10.1",

@@ -1,12 +1,106 @@
 'use strict'
 
-const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const { NitroH3ServerPlugin } = require('./server')
+const ServerPlugin = require('../../dd-trace/src/plugins/server')
 
-class NitroPlugin extends CompositePlugin {
+class NitroPlugin extends ServerPlugin {
   static id = 'nitro'
-  static plugins = {
-    server: NitroH3ServerPlugin,
+  static operation = 'request'
+  static prefix = 'tracing:h3.request'
+
+  bindStart (ctx) {
+    const meta = this.getTags(ctx)
+    const resource = this.getResource(ctx)
+    // event.req.headers is a Web Headers object in h3 v2; convert to plain object for extract
+    const rawHeaders = ctx?.event?.req?.headers
+    const headers = rawHeaders instanceof Headers ? Object.fromEntries(rawHeaders) : rawHeaders
+    const childOf = headers ? this.tracer.extract('http_headers', headers) || undefined : undefined
+
+    this.startSpan(this.operationName(), {
+      type: 'web',
+      kind: 'server',
+      meta,
+      resource,
+      childOf,
+    }, ctx)
+
+    return ctx.currentStore
+  }
+
+  getTags (ctx) {
+    const event = ctx?.event
+    const req = event?.req
+    const meta = {
+      component: 'nitro',
+      'span.kind': 'server',
+    }
+
+    if (!req) return meta
+
+    if (req.method) meta['http.method'] = req.method
+
+    const url = req.url || event?.url?.href
+    if (url) meta['http.url'] = typeof url === 'string' ? url : String(url)
+
+    // Prefer the matched route pattern (e.g. /users/:id) over actual path (e.g. /users/42).
+    const route = this.#getRoute(event)
+    if (route) meta['http.route'] = route
+
+    return meta
+  }
+
+  getResource (ctx) {
+    const event = ctx?.event
+    const method = event?.req?.method
+    const route = this.#getRoute(event)
+
+    if (method && route) return `${method} ${route}`
+    return method
+  }
+
+  #getRoute (event) {
+    return event?.context?.matchedRoute?.route || event?.url?.pathname || event?.path
+  }
+
+  #applyResponseTags (ctx) {
+    const span = ctx?.currentStore?.span
+    if (!span) return
+
+    // h3 v2 leaves event.res.status undefined for default responses (status is computed
+    // inside prepareResponse() after the handler resolves). Resolve from the handler result,
+    // an explicit setResponseStatus() call, or fall back to 200 / 500.
+    let status
+    if (ctx?.error) {
+      status = ctx.error.status ?? ctx.error.statusCode ?? 500
+    } else if (ctx?.result?.status === undefined) {
+      status = ctx?.event?.res?.status ?? 200
+    } else {
+      status = ctx.result.status
+    }
+
+    span.setTag('http.status_code', String(status))
+  }
+
+  end (ctx) {
+    this.#applyResponseTags(ctx)
+    this.finish(ctx)
+  }
+
+  asyncEnd (ctx) {
+    this.#applyResponseTags(ctx)
+    this.finish(ctx)
+  }
+
+  error (ctx) {
+    const span = ctx?.currentStore?.span
+    const error = ctx?.error
+    if (span && error) {
+      span.setTag('error', error)
+    }
+  }
+
+  finish (ctx) {
+    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
+    super.finish(ctx)
   }
 }
 
