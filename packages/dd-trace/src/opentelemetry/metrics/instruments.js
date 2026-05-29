@@ -121,10 +121,11 @@ class Gauge extends Instrument {
  */
 class ObservableInstrument extends Instrument {
   #callbacks = []
+  #type
 
   constructor (name, options, instrumentationScope, reader, type) {
     super(name, options, instrumentationScope, reader)
-    this.type = type
+    this.#type = type
   }
 
   /**
@@ -163,7 +164,7 @@ class ObservableInstrument extends Instrument {
     const observations = []
     const observableResult = {
       observe: (value, attributes) => {
-        observations.push(this.createMeasurement(this.type, value, attributes))
+        observations.push(this.createObservation(value, attributes))
       },
     }
 
@@ -177,6 +178,18 @@ class ObservableInstrument extends Instrument {
     }
 
     return observations
+  }
+
+  /**
+   * Builds a measurement for this instrument's metric type. Keeps the type
+   * encapsulated so callers (e.g. batch observable callbacks) don't read it.
+   *
+   * @param {number} value
+   * @param {Attributes} attributes
+   * @returns {Measurement}
+   */
+  createObservation (value, attributes) {
+    return this.createMeasurement(this.#type, value, attributes)
   }
 }
 
@@ -218,6 +231,7 @@ module.exports = {
   UpDownCounter,
   Histogram,
   Gauge,
+  ObservableInstrument,
   ObservableGauge,
   ObservableCounter,
   ObservableUpDownCounter,

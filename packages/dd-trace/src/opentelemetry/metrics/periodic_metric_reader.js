@@ -5,6 +5,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
 const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE,
 } = require('./constants')
+const { ObservableInstrument } = require('./instruments')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -180,14 +181,14 @@ class PeriodicMetricReader {
       const result = {
         observe: (instrument, value, attributes) => {
           if (instruments.has(instrument)) {
-            out.push(instrument.createMeasurement(instrument.type, value, attributes))
+            out.push(instrument.createObservation(value, attributes))
           }
         },
       }
       try {
         callback(result)
-      } catch {
-        // Swallow per OTel spec — callback errors must not break collection.
+      } catch (e) {
+        log.error('Error running batch observable callback', e)
       }
     }
     return out
@@ -628,13 +629,11 @@ class MetricAggregator {
 }
 
 /**
- * Duck-types an observable instrument by checking for the public surface used during collection.
  * @param {object} x
  * @returns {boolean}
  */
 function isObservableInstrument (x) {
-  return x !== null && typeof x === 'object' &&
-    typeof x.createMeasurement === 'function' && typeof x.type === 'string'
+  return x instanceof ObservableInstrument
 }
 
 /**

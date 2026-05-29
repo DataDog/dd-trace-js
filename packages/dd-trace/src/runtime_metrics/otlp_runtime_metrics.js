@@ -4,9 +4,8 @@ const v8 = require('node:v8')
 const process = require('node:process')
 const { performance, monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks')
 const { metrics } = require('@opentelemetry/api')
-const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const processTags = require('../process-tags')
+const { createMetricsClient } = require('./client')
 
 const METER_NAME = 'datadog.runtime_metrics'
 
@@ -62,13 +61,7 @@ module.exports = {
   start (config) {
     this.stop()
 
-    const clientConfig = DogStatsDClient.generateClientConfig(config)
-    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
-      for (const tag of processTags.tagsArray) {
-        clientConfig.tags.push(tag)
-      }
-    }
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    client = createMetricsClient(config)
     flushInterval = setInterval(() => {
       client.flush()
     }, config.DD_RUNTIME_METRICS_FLUSH_INTERVAL ?? 10_000)

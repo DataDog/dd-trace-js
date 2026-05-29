@@ -346,6 +346,13 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
+    // Resolve process tags once here so the side effect is visible at config time.
+    // They're applied to runtime metrics only (see runtime_metrics/client.js); custom
+    // metrics intentionally don't pick them up to avoid changing that public surface.
+    if (this.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
+      const processTags = require('../process-tags')
+      setAndTrack(this, 'dogstatsd.processTags', processTags.tagsArray)
+    }
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {

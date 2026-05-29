@@ -179,9 +179,10 @@ function createGarbage (count = 50) {
         }
 
         const proxiedObject = {
-          '../dogstatsd': {
-            DogStatsDClient: Client,
-          },
+          // Exercise the real client factory (incl. process tags) but with the spy DogStatsD client.
+          './client': proxyquire('../src/runtime_metrics/client', {
+            '../dogstatsd': { DogStatsDClient: Client },
+          }),
         }
         if (!nativeMetrics) {
           proxiedObject['@datadog/native-metrics'] = {
@@ -266,8 +267,8 @@ function createGarbage (count = 50) {
           })
         })
 
-        it('should include process tags when propagateProcessTags is enabled', function () {
-          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
+        it('should include resolved process tags on the runtime-metrics client', function () {
+          config.dogstatsd.processTags = ['entrypoint.type:node']
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -277,9 +278,7 @@ function createGarbage (count = 50) {
           assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
         })
 
-        it('should not include process tags when propagateProcessTags is disabled', function () {
-          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = false
-
+        it('should not include process tags when none are resolved', function () {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
 
@@ -505,9 +504,9 @@ function createGarbage (count = 50) {
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-            '../dogstatsd': {
-              DogStatsDClient: LocalClient,
-            },
+            './client': proxyquire('../src/runtime_metrics/client', {
+              '../dogstatsd': { DogStatsDClient: LocalClient },
+            }),
             '@datadog/native-metrics': nativeMetricsModule,
           })
 
@@ -984,16 +983,12 @@ describe('otlp_runtime_metrics', () => {
 
     const realPerfHooks = require('node:perf_hooks')
 
-    class FakeDogStatsDClient {}
-    FakeDogStatsDClient.generateClientConfig = () => ({ tags: [] })
-
-    class FakeMetricsAggregationClient {
-      constructor () { this.flushed = 0 }
-      boolean (name, value, tag) { statsdCalls.push(['boolean', name, value, tag]) }
-      histogram (name, value, tag) { statsdCalls.push(['histogram', name, value, tag]) }
-      count (name, count, tag, monotonic) { statsdCalls.push(['count', name, count, tag, monotonic]) }
-      gauge (name, value, tag) { statsdCalls.push(['gauge', name, value, tag]) }
-      flush () { this.flushed++ }
+    const fakeMetricsClient = {
+      boolean (name, value, tag) { statsdCalls.push(['boolean', name, value, tag]) },
+      histogram (name, value, tag) { statsdCalls.push(['histogram', name, value, tag]) },
+      count (name, count, tag, monotonic) { statsdCalls.push(['count', name, count, tag, monotonic]) },
+      gauge (name, value, tag) { statsdCalls.push(['gauge', name, value, tag]) },
+      flush () {},
     }
 
     otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
@@ -1007,11 +1002,9 @@ describe('otlp_runtime_metrics', () => {
         PerformanceObserver: FakePerformanceObserver,
         constants: realPerfHooks.constants,
       },
-      '../dogstatsd': {
-        DogStatsDClient: FakeDogStatsDClient,
-        MetricsAggregationClient: FakeMetricsAggregationClient,
+      './client': {
+        createMetricsClient: () => fakeMetricsClient,
       },
-      '../process-tags': { tagsArray: [] },
     })
   })
 
@@ -1160,21 +1153,15 @@ describe('otlp_runtime_metrics', () => {
       addBatchObservableCallback () {},
       removeBatchObservableCallback () {},
     }
-    class NoopStatsdClient {
-      flush () {}
-    }
-    NoopStatsdClient.generateClientConfig = () => ({ tags: [] })
     const errorLog = sinon.spy()
     const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
       },
       '../log': { debug () {}, error: errorLog },
-      '../dogstatsd': {
-        DogStatsDClient: NoopStatsdClient,
-        MetricsAggregationClient: class { flush () {} },
+      './client': {
+        createMetricsClient: () => ({ flush () {} }),
       },
-      '../process-tags': { tagsArray: [] },
     })
     const dispatcher = proxyquire.noCallThru()('../src/runtime_metrics', {
       './otlp_runtime_metrics': otlpMetricsFailing,
