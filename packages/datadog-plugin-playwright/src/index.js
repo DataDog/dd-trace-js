@@ -15,6 +15,7 @@ const {
   TEST_COMMAND,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_FRAMEWORK_VERSION,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
@@ -235,6 +236,7 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             Object.assign(formattedSpan.meta, this.getSessionRequestErrorTags())
             formattedSpan.meta[TEST_COMMAND] = this.command
+            formattedSpan.meta[TEST_FRAMEWORK_VERSION] = this.frameworkVersion
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
             const testSuite = this._testSuiteSpansByTestSuiteAbsolutePath.get(
@@ -326,7 +328,7 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       if (!span) return
 
-      const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
+      const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -416,7 +418,7 @@ class PlaywrightPlugin extends CiPlugin {
         TELEMETRY_EVENT_FINISHED,
         'test',
         {
-          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
           isNew,
           isRum: isRUMActive,
           browserDriver: 'playwright',

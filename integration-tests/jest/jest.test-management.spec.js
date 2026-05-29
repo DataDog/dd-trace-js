@@ -79,7 +79,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     'office-addin-mock',
     'winston',
     'jest-image-snapshot',
-    '@fast-check/jest',
   ].filter(Boolean), true)
 
   before(function () {
@@ -2552,14 +2551,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  context('fast-check', () => {
-    onlyLatestIt('should remove seed from the test name if @fast-check/jest is used in the test', async () => {
+  context('seed suffix normalization', () => {
+    onlyLatestIt('should remove seed suffix from reported test names', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.length, 1)
-          assert.strictEqual(tests[0].meta[TEST_NAME], 'fast check will not include seed')
+          assert.strictEqual(tests[0].meta[TEST_NAME], 'seed suffix should strip seed')
         })
 
       childProcess = exec(
@@ -2568,7 +2567,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-fast-check/jest-fast-check',
+            TESTS_TO_RUN: 'jest-seed-suffix/jest-seed-suffix',
           },
         }
       )
@@ -2579,13 +2578,32 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
-    onlyLatestIt('should not remove seed if @fast-check/jest is not used', async () => {
+    onlyLatestIt('does not mark seed-suffixed tests as new when known tests use the stripped name', async () => {
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/jest-seed-suffix/jest-seed-suffix.js': [
+            'seed suffix should strip seed',
+          ],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.length, 1)
-          assert.strictEqual(tests[0].meta[TEST_NAME], 'fast check with seed should include seed (with seed=12)')
+          assert.strictEqual(tests[0].meta[TEST_NAME], 'seed suffix should strip seed')
+          assert.ok(!(TEST_IS_NEW in tests[0].meta))
         })
 
       childProcess = exec(
@@ -2594,7 +2612,67 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-fast-check/jest-no-fast-check',
+            TESTS_TO_RUN: 'jest-seed-suffix/jest-seed-suffix',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
+    onlyLatestIt('keeps seed-like describe suffixes when matching test management tests', async () => {
+      const testName = 'seed suffix (with seed=12) should preserve describe seed suffix'
+      receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            'ci-visibility/jest-seed-suffix/jest-describe-seed-suffix.js': {
+              tests: {
+                [testName]: {
+                  properties: {
+                    attempt_to_fix: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_NAME] === testName)
+
+          assert.strictEqual(retriedTests.length, 3)
+          assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta))
+          assert.deepStrictEqual(
+            retriedTests.map(test => test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]),
+            ['true', 'true', 'true']
+          )
+          assert.deepStrictEqual(
+            retriedTests.slice(1).map(test => ({
+              reason: test.meta[TEST_RETRY_REASON],
+              retry: test.meta[TEST_IS_RETRY],
+            })),
+            [
+              { reason: TEST_RETRY_REASON_TYPES.atf, retry: 'true' },
+              { reason: TEST_RETRY_REASON_TYPES.atf, retry: 'true' },
+            ]
+          )
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-seed-suffix/jest-describe-seed-suffix',
           },
         }
       )

@@ -1,12 +1,13 @@
 'use strict'
 
 const assert = require('assert')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const { once } = require('events')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
@@ -29,11 +30,7 @@ describe('test optimization automatic log submission', () => {
 
   before(async () => {
     cwd = sandboxCwd()
-    const { NODE_OPTIONS, ...restOfEnv } = process.env
-    // Install chromium (configured in integration-tests/playwright.config.js)
-    // *Be advised*: this means that we'll only be using chromium for this test suite
-    // Must run in before hook: sandbox is created at test time so workflow can't install
-    execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+    installPlaywrightChromium(cwd)
     await new Promise((resolve, reject) => {
       webAppServer.listen(0, () => {
         const address = webAppServer.address()

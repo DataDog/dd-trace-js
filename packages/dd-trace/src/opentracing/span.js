@@ -10,7 +10,9 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const SpanContext = require('./span_context')
 
@@ -104,7 +106,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    this._spanContext._tags = tags
+    Object.assign(this._spanContext.getTags(), tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -146,7 +148,7 @@ class DatadogSpan {
 
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name'] || ''
+    const resourceName = spanContext.getTag('resource.name') || ''
     const resource = resourceName.length > 100
       ? `${resourceName.slice(0, 97)}...`
       : resourceName
@@ -154,7 +156,7 @@ class DatadogSpan {
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
-      service: spanContext._tags['service.name'],
+      service: spanContext.getTag('service.name'),
       name: spanContext._name,
       resource,
     })
@@ -200,12 +202,52 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    this._spanContext.setTag(key, value)
+
+    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    // v6 hot path: `Object.assign` straight onto the live tag map. The
+    // string and array shapes never appeared in the public TypeScript
+    // surface, and no internal v6 caller passes one (see MIGRATING.md).
+    // v5 still accepts both via `tagger.add` for `config.tags` /
+    // `options.tags` callers that pass `'key:val,key:val'` strings.
+    const tags = this._spanContext.getTags()
+    let mayChangeSamplingPriority
+
+    if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
+      Object.assign(tags, keyValueMap)
+      mayChangeSamplingPriority =
+        MANUAL_KEEP in keyValueMap ||
+        MANUAL_DROP in keyValueMap ||
+        SAMPLING_PRIORITY in keyValueMap
+    } else {
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
+        tagger.add(tags, keyValueMap)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
+      }
+    }
+
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
@@ -269,12 +311,14 @@ class DatadogSpan {
       return
     }
 
-    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext.getTag('service.name')) {
       log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
-    this._spanContext._tags['_dd.integration'] = this._integrationName
+    this._spanContext.setTag('_dd.integration', this._integrationName)
+
+    resolveServiceSource(this, this.#parentTracer._service)
 
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
@@ -406,16 +450,6 @@ class DatadogSpan {
 
     return startTime + now() - ticks
   }
-
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
-
-    if (tagsUpdateCh.hasSubscribers) {
-      tagsUpdateCh.publish(this)
-    }
-  }
 }
 
 function createRegistry (type) {
@@ -423,6 +457,10 @@ function createRegistry (type) {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)
     runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
   })
+}
+
+function isSamplingPriorityTag (key) {
+  return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
 }
 
 module.exports = DatadogSpan

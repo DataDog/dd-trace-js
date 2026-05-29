@@ -43,7 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { validateCostTags } = require('./util')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -97,6 +97,13 @@ class LLMObsTagger {
 
     this._register(span)
 
+    // When the registering span sits below an OTel `gen_ai.*` ancestor, use
+    // that ancestor as the parent_id fallback and suppress the bridge
+    // parent_id tag so the indexer doesn't invert the trace.
+    const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
+
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null })
+
     this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
@@ -113,6 +120,7 @@ class LLMObsTagger {
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
 

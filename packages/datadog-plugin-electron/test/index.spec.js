@@ -8,6 +8,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
+const IPC_TIMEOUT_MS = 10_000
+
 describe('Plugin', () => {
   let child
   let listener
@@ -52,7 +54,8 @@ describe('Plugin', () => {
     }
 
     describe('electron', () => {
-      describe('without configuration', () => {
+      describe('without configuration', function () {
+        this.timeout(IPC_TIMEOUT_MS + 5_000)
         beforeEach(() => agent.load('electron'))
         beforeEach(function (done) {
           this.timeout(30_000)
@@ -129,7 +132,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -151,7 +154,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -172,7 +175,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'producer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -195,7 +198,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -216,7 +219,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'producer')
-            })
+            }, { timeoutMs: IPC_TIMEOUT_MS })
             .then(done)
             .catch(done)
 

@@ -13,6 +13,7 @@ const triggerMap = {
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
   eventHub: 'EventHubs',
+  cosmosDB: 'CosmosDB',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -53,7 +54,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       )
 
       span._integrationName = 'azure-functions'
-      span.context()._tags.component = 'azure-functions'
+      span.context().setTag('component', 'azure-functions')
       span.addTags(meta)
       webContext.span = span
       webContext.azureFunctionCtx = ctx
@@ -127,6 +128,8 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `EventHubs ${functionName}`,
       'span.kind': 'consumer',
     }
+  } else if (triggerMap[methodName] === 'CosmosDB') {
+    meta['resource.name'] = `CosmosDB ${functionName}`
   }
 
   return meta

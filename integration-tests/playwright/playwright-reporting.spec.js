@@ -2,13 +2,14 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
@@ -22,6 +23,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_PARAMETERS,
   TEST_BROWSER_NAME,
+  TEST_FRAMEWORK_VERSION,
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -42,12 +44,11 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -73,11 +74,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
@@ -319,6 +316,7 @@ versions.forEach((version) => {
                 true
               )
               assert.strictEqual(testEvent.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              assert.ok(testEvent.content.meta[TEST_FRAMEWORK_VERSION])
               // Can read DD_TAGS
               assertObjectContains(testEvent.content.meta, {
                 'test.customtag': 'customvalue',

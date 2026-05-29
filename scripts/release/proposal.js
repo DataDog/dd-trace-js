@@ -66,14 +66,26 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  // Notes exclude semver-major (gated behind a flag, not user-visible).
+  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded.
+  const notesDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
+    ' --exclude-label=semver-major --exclude-label=only-land-on-next'
+  const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
+    ' --exclude-label=only-land-on-next'
 
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
+  const lineDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${main}`)
+  const allDiff = capture(`${cherryPickDiffCmd} --format=markdown v${releaseLine}.x ${main}`)
 
-  if (!lineDiff) {
+  // Only labeled commits (semver-patch/minor/major) warrant cutting a release;
+  // unlabeled commits (e.g. docs/chore) ride along but are not enough on their own.
+  if (
+    !allDiff.includes('SEMVER-MINOR') &&
+    !allDiff.includes('SEMVER-PATCH') &&
+    !allDiff.includes('SEMVER-MAJOR')
+  ) {
     pass('none (already up to date)')
     process.exit(0)
   }
@@ -107,12 +119,12 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
+  const proposalDiff = capture(`${cherryPickDiffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
     .replaceAll('\n', ' ').trim()
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${main}`)
 
     pass(`\n${newChanges}`)
 

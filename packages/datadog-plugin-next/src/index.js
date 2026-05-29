@@ -33,10 +33,12 @@ class NextPlugin extends ServerPlugin {
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method,
-        ...(serviceSource === undefined ? {} : { [SVC_SRC_KEY]: serviceSource }),
+        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
       },
       integrationName: this.constructor.id,
     })
+
+    this.stampIntegrationService(span, serviceName)
 
     analyticsSampler.sample(span, this.config.measured, true)
 
@@ -60,7 +62,7 @@ class NextPlugin extends ServerPlugin {
     if (!store) return
 
     const span = store.span
-    const error = span.context()._tags.error
+    const error = span.context().getTag('error')
     const requestError = req.error || nextRequest.error
 
     if (requestError) {
@@ -97,7 +99,7 @@ class NextPlugin extends ServerPlugin {
     if (!req) return
 
     // Only use error page names if there's not already a name
-    const current = span.context()._tags['next.page']
+    const current = span.context().getTag('next.page')
     const isErrorPage = errorPages.has(page)
 
     if (current && isErrorPage) {
