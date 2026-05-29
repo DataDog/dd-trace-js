@@ -73,18 +73,70 @@ function lowerCaseService (service) {
   return lower
 }
 
-function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
-  const formatted = formatSpan(span)
+/**
+ * Collects the meta / metrics / head writes the driver emits while it walks a
+ * span once. The driver does the categorization and truncation; the sink only
+ * stores. `ObjectSink` reproduces the formatted-span object the rest of the
+ * exporter pipeline expects; the 0.4 encoder pairs the same driver with a
+ * `ByteSink` that emits msgpack directly and never builds the object.
+ *
+ * @typedef {object} SpanSink
+ * @property {(value: string) => void} setService
+ * @property {(value: string) => void} setType
+ * @property {(value: string) => void} setResource
+ * @property {() => void} setError Flag the span as an error (error = 1).
+ * @property {(events: Array<SpanEvent>) => void} setSpanEvents
+ * @property {(key: string, value: string) => void} writeMeta
+ * @property {(key: string, value: number) => void} writeMetric
+ */
 
-  extractSpanLinks(formatted, span)
-  extractSpanEvents(formatted, span)
-  extractRootTags(formatted, span)
-  if (isFirstSpanInChunk) {
-    extractChunkTags(formatted, span, tagForFirstSpanInChunk)
+/**
+ * @implements {SpanSink}
+ */
+class ObjectSink {
+  /**
+   * @param {import('./opentracing/span')} span
+   */
+  constructor (span) {
+    this.span = formatSpan(span)
+    this.meta = this.span.meta
+    this.metrics = this.span.metrics
   }
-  extractTags(formatted, span)
 
-  return formatted
+  setService (value) { this.span.service = value }
+  setType (value) { this.span.type = value }
+  setResource (value) { this.span.resource = value }
+  setError () { this.span.error = 1 }
+  setSpanEvents (events) { this.span.span_events = events }
+  writeMeta (key, value) { this.meta[key] = value }
+  writeMetric (key, value) { this.metrics[key] = value }
+}
+
+function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
+  const sink = new ObjectSink(span)
+  walkSpan(span, sink, isFirstSpanInChunk, tagForFirstSpanInChunk)
+  return sink.span
+}
+
+/**
+ * Single pass over a finished span: emit span links, events, root / chunk
+ * tags, and the categorized tag set through `sink`, in the exact order the
+ * formatted-span object used to gain its keys. The order is load-bearing for
+ * the 0.4 `ByteSink`, whose msgpack maps emit in call order.
+ *
+ * @param {import('./opentracing/span')} span
+ * @param {SpanSink} sink
+ * @param {boolean} isFirstSpanInChunk
+ * @param {string | false} tagForFirstSpanInChunk
+ */
+function walkSpan (span, sink, isFirstSpanInChunk, tagForFirstSpanInChunk) {
+  extractSpanLinks(sink, span)
+  extractSpanEvents(sink, span)
+  extractRootTags(sink, span)
+  if (isFirstSpanInChunk) {
+    extractChunkTags(sink, span, tagForFirstSpanInChunk)
+  }
+  extractTags(sink, span)
 }
 
 function formatSpan (span) {
@@ -111,25 +163,28 @@ function formatSpan (span) {
   }
 }
 
-function setSingleSpanIngestionTags (formattedSpan, options) {
+/**
+ * @param {SpanSink} sink
+ * @param {{ sampleRate?: number, maxPerSecond?: number } | undefined} options
+ */
+function setSingleSpanIngestionTags (sink, options) {
   if (!options) return
-  const metrics = formattedSpan.metrics
-  metrics[SPAN_SAMPLING_MECHANISM] = SAMPLING_MECHANISM_SPAN
+  sink.writeMetric(SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
   const sampleRate = options.sampleRate
   if (typeof sampleRate === 'number') {
-    metrics[SPAN_SAMPLING_RULE_RATE] = sampleRate
+    sink.writeMetric(SPAN_SAMPLING_RULE_RATE, sampleRate)
   }
   const maxPerSecond = options.maxPerSecond
   if (typeof maxPerSecond === 'number') {
-    metrics[SPAN_SAMPLING_MAX_PER_SECOND] = maxPerSecond
+    sink.writeMetric(SPAN_SAMPLING_MAX_PER_SECOND, maxPerSecond)
   }
 }
 
 /**
- * @param {FormattedSpan} formattedSpan
+ * @param {SpanSink} sink
  * @param {import('./opentracing/span')} span
  */
-function extractSpanLinks (formattedSpan, span) {
+function extractSpanLinks (sink, span) {
   if (!span._links?.length) {
     return
   }
@@ -151,7 +206,7 @@ function extractSpanLinks (formattedSpan, span) {
   if (serialized.length > MAX_META_VALUE_LENGTH) {
     serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
   }
-  formattedSpan.meta['_dd.span_links'] = serialized
+  sink.writeMeta('_dd.span_links', serialized)
 }
 
 /**
@@ -161,17 +216,21 @@ function extractSpanLinks (formattedSpan, span) {
  * attribute objects itself, so the per-event allocation here is pure waste on
  * every event-bearing span.
  *
- * @param {FormattedSpan} formattedSpan
+ * @param {SpanSink} sink
  * @param {import('./opentracing/span')} span
  */
-function extractSpanEvents (formattedSpan, span) {
+function extractSpanEvents (sink, span) {
   if (!span._events?.length) {
     return
   }
-  formattedSpan.span_events = span._events
+  sink.setSpanEvents(span._events)
 }
 
-function extractTags (formattedSpan, span) {
+/**
+ * @param {SpanSink} sink
+ * @param {import('./opentracing/span')} span
+ */
+function extractTags (sink, span) {
   const context = span.context()
   const origin = context._trace.origin
   // TODO(BridgeAR)[31.03.2025]: Look into changing the way we store tags. Using
@@ -179,11 +238,9 @@ function extractTags (formattedSpan, span) {
   const tags = context.getTags()
   const hostname = context._hostname
   const priority = context._sampling.priority
-  const meta = formattedSpan.meta
-  const metrics = formattedSpan.metrics
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
-    metrics[MEASURED] = 1
+    sink.writeMetric(MEASURED, 1)
   }
 
   const tracerService = lowerCaseService(span.tracer()._service)
@@ -203,47 +260,47 @@ function extractTags (formattedSpan, span) {
     switch (tag) {
       case 'service.name':
         if (typeof value === 'string') {
-          formattedSpan.service = value.length > MAX_META_VALUE_LENGTH
+          sink.setService(value.length > MAX_META_VALUE_LENGTH
             ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
-            : value
+            : value)
         }
         break
       case 'span.type':
         if (typeof value === 'string') {
-          formattedSpan.type = value.length > MAX_META_VALUE_LENGTH
+          sink.setType(value.length > MAX_META_VALUE_LENGTH
             ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
-            : value
+            : value)
         }
         break
       case 'resource.name':
         if (typeof value === 'string') {
-          formattedSpan.resource = value.length > MAX_META_VALUE_LENGTH
+          sink.setResource(value.length > MAX_META_VALUE_LENGTH
             ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
-            : value
+            : value)
         }
         break
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code': {
         const stringValue = value && String(value)
         if (typeof stringValue === 'string') {
-          meta[tag] = stringValue.length > MAX_META_VALUE_LENGTH
+          sink.writeMeta(tag, stringValue.length > MAX_META_VALUE_LENGTH
             ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
-            : stringValue
+            : stringValue)
         }
         break
       }
       case 'analytics.event':
-        metrics[ANALYTICS] = value === undefined || value ? 1 : 0
+        sink.writeMetric(ANALYTICS, value === undefined || value ? 1 : 0)
         break
       case HOSTNAME_KEY:
       case MEASURED:
-        metrics[tag] = value === undefined || value ? 1 : 0
+        sink.writeMetric(tag, value === undefined || value ? 1 : 0)
         break
       // TODO(BridgeAR)[31.03.2025]: How come we use two different ways to pass
       // through errors? Can we just unify the behavior to always use one way?
       case 'error':
         if (context._name !== 'fs.operation') {
-          extractError(formattedSpan, value)
+          extractError(sink, value)
         }
         break
       case ERROR_TYPE:
@@ -253,9 +310,9 @@ function extractTags (formattedSpan, span) {
         if (context._name === 'fs.operation') break
         // otel.recordException should not influence trace.error
         if (!tags[IGNORE_OTEL_ERROR]) {
-          formattedSpan.error = 1
+          sink.setError()
         }
-        if (value != null) writeErrorMeta(meta, tag, value)
+        if (value != null) writeErrorMeta(sink, tag, value)
         break
       }
       default: {
@@ -265,84 +322,90 @@ function extractTags (formattedSpan, span) {
           if (writeKey.length > MAX_META_KEY_LENGTH) {
             writeKey = `${writeKey.slice(0, MAX_META_KEY_LENGTH)}...`
           }
-          meta[writeKey] = value.length > MAX_META_VALUE_LENGTH
+          sink.writeMeta(writeKey, value.length > MAX_META_VALUE_LENGTH
             ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
-            : value
+            : value)
         } else if (valueType === 'number') {
           if (!Number.isNaN(value)) {
             let writeKey = tag
             if (writeKey.length > MAX_METRIC_KEY_LENGTH) {
               writeKey = `${writeKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
             }
-            metrics[writeKey] = value
+            sink.writeMetric(writeKey, value)
           }
         } else if (valueType === 'boolean') {
           let writeKey = tag
           if (writeKey.length > MAX_METRIC_KEY_LENGTH) {
             writeKey = `${writeKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
           }
-          metrics[writeKey] = value ? 1 : 0
+          sink.writeMetric(writeKey, value ? 1 : 0)
         } else {
-          addMixedTag(meta, metrics, tag, value)
+          addMixedTag(sink, tag, value)
         }
       }
     }
   }
-  setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
+  setSingleSpanIngestionTags(sink, context._spanSampling)
 
-  meta.language = 'javascript'
-  metrics[PROCESS_ID] = process.pid
+  sink.writeMeta('language', 'javascript')
+  sink.writeMetric(PROCESS_ID, process.pid)
   if (typeof priority === 'number') {
-    metrics[SAMPLING_PRIORITY_KEY] = priority
+    sink.writeMetric(SAMPLING_PRIORITY_KEY, priority)
   }
   if (typeof origin === 'string') {
-    meta[ORIGIN_KEY] = origin.length > MAX_META_VALUE_LENGTH
+    sink.writeMeta(ORIGIN_KEY, origin.length > MAX_META_VALUE_LENGTH
       ? `${origin.slice(0, MAX_META_VALUE_LENGTH)}...`
-      : origin
+      : origin)
   }
   if (typeof hostname === 'string') {
-    meta[HOSTNAME_KEY] = hostname.length > MAX_META_VALUE_LENGTH
+    sink.writeMeta(HOSTNAME_KEY, hostname.length > MAX_META_VALUE_LENGTH
       ? `${hostname.slice(0, MAX_META_VALUE_LENGTH)}...`
-      : hostname
+      : hostname)
   }
 }
 
-function extractRootTags (formattedSpan, span) {
+/**
+ * @param {SpanSink} sink
+ * @param {import('./opentracing/span')} span
+ */
+function extractRootTags (sink, span) {
   const context = span.context()
   const parentId = context._parentId
 
   if (span !== context._trace.started[0] || (parentId && parentId.toString(10) !== '0')) return
 
   const trace = context._trace
-  const metrics = formattedSpan.metrics
   const ruleDecision = trace[SAMPLING_RULE_DECISION]
   if (typeof ruleDecision === 'number') {
-    metrics[SAMPLING_RULE_DECISION] = ruleDecision
+    sink.writeMetric(SAMPLING_RULE_DECISION, ruleDecision)
   }
   const limitDecision = trace[SAMPLING_LIMIT_DECISION]
   if (typeof limitDecision === 'number') {
-    metrics[SAMPLING_LIMIT_DECISION] = limitDecision
+    sink.writeMetric(SAMPLING_LIMIT_DECISION, limitDecision)
   }
   const agentDecision = trace[SAMPLING_AGENT_DECISION]
   if (typeof agentDecision === 'number') {
-    metrics[SAMPLING_AGENT_DECISION] = agentDecision
+    sink.writeMetric(SAMPLING_AGENT_DECISION, agentDecision)
   }
-  metrics[TOP_LEVEL_KEY] = 1
+  sink.writeMetric(TOP_LEVEL_KEY, 1)
 }
 
-function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {
-  const meta = formattedSpan.meta
+/**
+ * @param {SpanSink} sink
+ * @param {import('./opentracing/span')} span
+ * @param {string | false} tagForFirstSpanInChunk
+ */
+function extractChunkTags (sink, span, tagForFirstSpanInChunk) {
   if (typeof tagForFirstSpanInChunk === 'string') {
-    meta[TRACING_FIELD_NAME] = tagForFirstSpanInChunk.length > MAX_META_VALUE_LENGTH
+    sink.writeMeta(TRACING_FIELD_NAME, tagForFirstSpanInChunk.length > MAX_META_VALUE_LENGTH
       ? `${tagForFirstSpanInChunk.slice(0, MAX_META_VALUE_LENGTH)}...`
-      : tagForFirstSpanInChunk
+      : tagForFirstSpanInChunk)
   }
 
   // Chunk tags are always strings in production (`_dd.p.dm`, `_dd.p.tid`,
   // `_dd.p.ts`, `baggage.*`). Inline only the string branch; non-string
   // values fall through to `addMixedTag` so we don't carry duplicate
   // truncation logic for branches no real chunk tag ever takes.
-  const metrics = formattedSpan.metrics
   const traceTags = span.context()._trace.tags
   for (const key of Object.keys(traceTags)) {
     const value = traceTags[key]
@@ -351,29 +414,32 @@ function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {
       if (writeKey.length > MAX_META_KEY_LENGTH) {
         writeKey = `${writeKey.slice(0, MAX_META_KEY_LENGTH)}...`
       }
-      meta[writeKey] = value.length > MAX_META_VALUE_LENGTH
+      sink.writeMeta(writeKey, value.length > MAX_META_VALUE_LENGTH
         ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
-        : value
+        : value)
     } else {
-      addMixedTag(meta, metrics, key, value)
+      addMixedTag(sink, key, value)
     }
   }
 }
 
-function extractError (formattedSpan, error) {
+/**
+ * @param {SpanSink} sink
+ * @param {unknown} error
+ */
+function extractError (sink, error) {
   if (!error) return
 
-  formattedSpan.error = 1
+  sink.setError()
 
   if (isError(error)) {
     // AggregateError only has a code and no message.
     // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
     // the code just generally be added, if available?
-    const meta = formattedSpan.meta
     const message = error.message || error.code
-    if (message != null) writeErrorMeta(meta, ERROR_MESSAGE, message)
-    if (error.name != null) writeErrorMeta(meta, ERROR_TYPE, error.name)
-    if (error.stack != null) writeErrorMeta(meta, ERROR_STACK, error.stack)
+    if (message != null) writeErrorMeta(sink, ERROR_MESSAGE, message)
+    if (error.name != null) writeErrorMeta(sink, ERROR_TYPE, error.name)
+    if (error.stack != null) writeErrorMeta(sink, ERROR_STACK, error.stack)
   }
 }
 
@@ -381,15 +447,15 @@ function extractError (formattedSpan, error) {
  * Coerces `value` to string and truncates at `MAX_META_VALUE_LENGTH` before
  * writing it to one of the three error meta fields.
  *
- * @param {Record<string, string>} meta
+ * @param {SpanSink} sink
  * @param {string} key
  * @param {unknown} value
  */
-function writeErrorMeta (meta, key, value) {
+function writeErrorMeta (sink, key, value) {
   const stringValue = typeof value === 'string' ? value : String(value)
-  meta[key] = stringValue.length > MAX_META_VALUE_LENGTH
+  sink.writeMeta(key, stringValue.length > MAX_META_VALUE_LENGTH
     ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
-    : stringValue
+    : stringValue)
 }
 
 /**
@@ -398,13 +464,12 @@ function writeErrorMeta (meta, key, value) {
  * The scalar branches are kept here so a single `addMixedTag` call covers
  * recursion (nested object values) without re-entering the inlined paths.
  *
- * @param {Record<string, string>} meta
- * @param {Record<string, number>} metrics
+ * @param {SpanSink} sink
  * @param {string} key
  * @param {unknown} value
  * @param {boolean} [nested]
  */
-function addMixedTag (meta, metrics, key, value, nested) {
+function addMixedTag (sink, key, value, nested) {
   switch (typeof value) {
     case 'string':
       if (key.length > MAX_META_KEY_LENGTH) {
@@ -413,20 +478,20 @@ function addMixedTag (meta, metrics, key, value, nested) {
       if (value.length > MAX_META_VALUE_LENGTH) {
         value = `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
       }
-      meta[key] = value
+      sink.writeMeta(key, value)
       break
     case 'number':
       if (Number.isNaN(value)) break
       if (key.length > MAX_METRIC_KEY_LENGTH) {
         key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       }
-      metrics[key] = value
+      sink.writeMetric(key, value)
       break
     case 'boolean':
       if (key.length > MAX_METRIC_KEY_LENGTH) {
         key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       }
-      metrics[key] = value ? 1 : 0
+      sink.writeMetric(key, value ? 1 : 0)
       break
     default:
       if (value == null) break
@@ -437,10 +502,10 @@ function addMixedTag (meta, metrics, key, value, nested) {
         if (key.length > MAX_METRIC_KEY_LENGTH) {
           key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
         }
-        metrics[key] = value.toString()
+        sink.writeMetric(key, value.toString())
       } else if (!Array.isArray(value) && !nested) {
         for (const [prop, val] of Object.entries(value)) {
-          addMixedTag(meta, metrics, `${key}.${prop}`, val, true)
+          addMixedTag(sink, `${key}.${prop}`, val, true)
         }
       }
   }
@@ -457,5 +522,8 @@ function isUrl (obj) {
     typeof obj.href === 'string' &&
     typeof obj.toString === 'function'
 }
+
+format.walkSpan = walkSpan
+format.ObjectSink = ObjectSink
 
 module.exports = format
