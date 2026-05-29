@@ -168,6 +168,20 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@nats-io/nats-core",
+    "integration": "nats",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.4.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@nats-io/transport-node",
+    "integration": "nats",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.4.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@node-redis/client",
     "integration": "redis",
     "minimum_tracer_supported": "1.0.0",
@@ -304,7 +318,7 @@
     "dependency": "cypress",
     "integration": "cypress",
     "minimum_tracer_supported": "12.0.0",
-    "max_tracer_supported": "15.15.0",
+    "max_tracer_supported": "15.16.0",
     "auto-instrumented": "True"
   },
   {
