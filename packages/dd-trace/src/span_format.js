@@ -89,7 +89,6 @@ function formatSpan (span) {
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
-    links: [],
     span_events: undefined,
   }
 }
