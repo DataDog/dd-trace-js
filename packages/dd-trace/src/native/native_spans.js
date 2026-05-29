@@ -591,12 +591,12 @@ class NativeSpansInterface {
    * @param {boolean} [firstIsLocalRoot] Whether the first span is the local root (defaults to true)
    * @returns {Promise<string>} Response from the agent
    */
-  async flushSpans (slots, firstIsLocalRoot = true) {
+  flushSpans (slots, firstIsLocalRoot = true) {
     // Flush any pending change queue operations first
     this.flushChangeQueue()
 
     if (slots.length === 0) {
-      return 'no spans to flush'
+      return Promise.resolve('no spans to flush')
     }
 
     // Ensure flush buffer is large enough
@@ -619,7 +619,6 @@ class NativeSpansInterface {
       // can trigger memory.grow which detaches our cached ArrayBuffer views.
       // Refresh now so the next queueOp doesn't write through a stale view.
       this.#checkDetach()
-      return await this._state.sendPreparedChunk()
     } catch (e) {
       // prepareChunk may throw partway through, after consuming some of the
       // change queue or growing WASM memory. Reset both pieces of state so
@@ -634,8 +633,17 @@ class NativeSpansInterface {
       this.resetChangeQueue()
       this.#checkDetach()
       log.error('Error flushing spans to agent:', e)
-      throw e
+      return Promise.reject(e)
     }
+
+    return this._state.sendPreparedChunk()
+      .catch(e => {
+        // sendPreparedChunk may also fail. The cleanup path is the same.
+        this.resetChangeQueue()
+        this.#checkDetach()
+        log.error('Error flushing spans to agent:', e)
+        throw e
+      })
   }
 
   // Note: sample() is not available in the WASM pipeline module.

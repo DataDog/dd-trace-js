@@ -341,6 +341,18 @@ describe('NativeSpansInterface', () => {
       assert.notStrictEqual(cqbCountBeforeThrow, 0)
     })
 
+    it('should reset queue state when sendPreparedChunk rejects', async () => {
+      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
+      assert.notStrictEqual(nativeSpans._cqbCount, 0)
+      const err = new Error('send failed')
+      mockState.sendPreparedChunk = sinon.stub().rejects(err)
+
+      await assert.rejects(nativeSpans.flushSpans([slot], true), err)
+
+      assert.strictEqual(nativeSpans._cqbIndex, 8)
+      assert.strictEqual(nativeSpans._cqbCount, 0)
+    })
+
     it('should rethrow + recover when flushChangeQueue throws', () => {
       nativeSpans.queueOp(OpCode.SetName, slot, 'test')
       mockState.flushChangeQueue = sinon.stub().throws(new Error('drain failed'))
