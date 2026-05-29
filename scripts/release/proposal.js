@@ -76,6 +76,15 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
+
+  // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
+  const MAX_CHERRY_PICKS = 99
+
+  // Get all applicable commits from the release branch to main.
+  // Used to derive the capped upper bound before checking out any branch,
+  // avoiding a circular dependency between isMinor and the proposal branch state.
+  const allMainShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
+    .split('\n').filter(Boolean)
   const allDiff = capture(`${cherryPickDiffCmd} --format=markdown v${releaseLine}.x ${main}`)
 
   // Only labeled commits (semver-patch/minor/major) warrant cutting a release;
@@ -89,7 +98,16 @@ try {
     process.exit(0)
   }
 
-  const isMinor = allDiff.includes('SEMVER-MINOR')
+  // The upper bound is the last main SHA that will fit in the proposal across all
+  // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
+  // how many commits are already on the branch (proven by:
+  // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
+  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1)
+
+  // notesDiff serves two purposes: determining isMinor from capped commits only
+  // (not all of main), and as the release notes content.
+  const notesDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
+  const isMinor = notesDiff.includes('SEMVER-MINOR')
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
@@ -118,20 +136,16 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
-    .split('\n').filter(Boolean)
-
-  // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
-  const MAX_CHERRY_PICKS = 99
   const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
   const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
+  const proposalShas = allMainShas.slice(existingCherryPicked)
   const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
   const truncated = shasToApply.length < proposalShas.length
   const totalCommits = existingCherryPicked + shasToApply.length + 1
 
   if (shasToApply.length > 0) {
-    // Show only commits being applied; shasToApply.at(-1) is the upper bound.
-    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${shasToApply.at(-1)}`)
+    // Show only commits being applied; upperBoundSha is the last main SHA that fits.
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundSha}`)
     const truncationNote = truncated
       ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
         ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
@@ -172,14 +186,8 @@ try {
 
   start('Save release notes draft')
 
-  // Use the last applied main SHA as the upper bound to ensure links point to
-  // commits on main rather than cherry-picks on the proposal branch.
-  const notesContent = capture(
-    `${notesDiffCmd} --format=markdown v${releaseLine}.x ${shasToApply.at(-1) ?? main}`
-  )
-
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, notesContent)
+  fs.writeFileSync(notesFile, notesDiff)
 
   pass(notesFile)
 
