@@ -3,7 +3,7 @@
 const getConfig = require('../config')
 const { MsgpackChunk } = require('../msgpack')
 const log = require('../log')
-const { normalizeSpan } = require('./tags-processors')
+const { normalizeSpan, eventTimeNano } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 // Values longer than this byte threshold skip the `_stringMap` lookup and
@@ -114,8 +114,10 @@ const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0x
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
-    // TODO: this is currently a main cost driver. By unifying it with the formatter
-    // it should be possible to improve performance significantly overall.
+    // Reads the raw `_events` array directly (no formatter pre-reshape) and
+    // serializes to the legacy meta.events JSON string. The serialization is
+    // still the main cost on the legacy path; the native span_events slot
+    // (`#encodeSpanEvents`) avoids it entirely.
     span.meta.events = stringifySpanEvents(span.span_events)
     // `= undefined` over `delete` to keep the span's hidden class — `delete`
     // would push every event-bearing span into V8 dictionary mode.
@@ -125,14 +127,15 @@ function formatSpanWithLegacyEvents (span) {
 }
 
 /**
- * Hand-written stringifier for `span.span_events`. The shape is fixed by
- * `extractSpanEvents` (`{ name, time_unix_nano, attributes? }`) and attribute
- * values are pre-sanitized to primitives or arrays of primitives, so we can
- * skip everything `JSON.stringify` does for the generic case (toJSON probing,
- * key iteration over the prototype chain, replacer hooks). Output matches
- * `JSON.stringify(spanEvents)` byte-for-byte for the post-sanitization shape.
+ * Hand-written stringifier for `span.span_events`. Events arrive in their raw
+ * `{ name, startTime, attributes? }` shape; `time_unix_nano` is derived per
+ * event via `eventTimeNano` and empty attribute objects are dropped, matching
+ * what the formatter used to precompute. Attribute values are pre-sanitized to
+ * primitives or arrays of primitives, so we skip everything `JSON.stringify`
+ * does for the generic case (toJSON probing, prototype-chain key iteration,
+ * replacer hooks).
  *
- * @param {Array<{ name: string, time_unix_nano: number, attributes?: object }>} spanEvents
+ * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
  * @returns {string}
  */
 function stringifySpanEvents (spanEvents) {
@@ -140,17 +143,21 @@ function stringifySpanEvents (spanEvents) {
   for (let index = 0; index < spanEvents.length; index++) {
     if (index > 0) result += ','
     const event = spanEvents[index]
+    // `_sanitizeEventAttributes` leaves `attributes` undefined when empty, so a
+    // present value always has entries — no emptiness probe here.
+    const attributes = event.attributes
     // `addEvent` does not type-check `name`; defer the unusual cases to
-    // `JSON.stringify` so non-string names match the prior behaviour
-    // instead of throwing in `escapeJsonString`.
+    // `JSON.stringify` so non-string names match the prior behaviour instead
+    // of throwing in `escapeJsonString`. Build the wire-shaped object so the
+    // emitted key stays `time_unix_nano`, not the raw `startTime`.
     if (typeof event.name !== 'string') {
-      result += JSON.stringify(event)
+      result += JSON.stringify({ name: event.name, time_unix_nano: eventTimeNano(event), attributes })
       continue
     }
     result += '{"name":' + escapeJsonString(event.name) +
-      ',"time_unix_nano":' + jsonNumber(event.time_unix_nano)
-    if (event.attributes) {
-      result += ',"attributes":' + stringifyAttributes(event.attributes)
+      ',"time_unix_nano":' + jsonNumber(eventTimeNano(event))
+    if (attributes) {
+      result += ',"attributes":' + stringifyAttributes(attributes)
     }
     result += '}'
   }
@@ -241,8 +248,8 @@ class AgentEncoder {
     this.#config = getConfig()
     this.#debugEncoding = this.#config.DD_TRACE_ENCODING_DEBUG
     // Pick the per-span formatter once so the hot loop pays no per-span
-    // config check. The native path doesn't need to reshape `span_events`
-    // because `#encodeSpanEvents` works directly on the raw attributes.
+    // config check. The native path keeps the raw `span_events` slot for
+    // `#encodeSpanEvents`; the legacy path serializes it into meta.events.
     this.#formatSpan = this.#config.DD_TRACE_NATIVE_SPAN_EVENTS
       ? normalizeSpan
       : formatSpanWithLegacyEvents
@@ -764,7 +771,7 @@ class AgentEncoder {
    * values — no `formatSpanEvents` pre-pass and no recursive generic walk.
    *
    * @param {MsgpackChunk} bytes
-   * @param {Array<{ name: string, time_unix_nano: number, attributes?: object }>} spanEvents
+   * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
    */
   #encodeSpanEvents (bytes, spanEvents) {
     const offset = bytes.length
@@ -785,7 +792,7 @@ class AgentEncoder {
       bytes.set(KEY_NAME)
       this._encodeString(bytes, event.name)
       bytes.set(KEY_EVENT_TIME)
-      bytes.writeFloat(event.time_unix_nano)
+      bytes.writeFloat(eventTimeNano(event))
 
       const attributes = event.attributes
       if (attributes !== null && typeof attributes === 'object') {

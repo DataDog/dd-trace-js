@@ -99,7 +99,10 @@ describe('spanFormat', () => {
   })
 
   describe('spanFormat', () => {
-    it('should format span events', () => {
+    it('should pass span events through to the encoder as the raw _events array', () => {
+      // The formatter no longer reshapes events; each encoder derives
+      // time_unix_nano from startTime via eventTimeNano. extractSpanEvents
+      // must hand the raw array straight through without copying.
       span._events = [
         { name: 'Something went so wrong', startTime: 1 },
         {
@@ -110,16 +113,8 @@ describe('spanFormat', () => {
       ]
 
       trace = spanFormat(span)
-      const spanEvents = trace.span_events
-      assert.deepStrictEqual(spanEvents, [{
-        name: 'Something went so wrong',
-        time_unix_nano: 1000000,
-        attributes: undefined,
-      }, {
-        name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-        time_unix_nano: 1633023102000000,
-        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
-      }])
+
+      assert.strictEqual(trace.span_events, span._events)
     })
 
     it('should convert a span to the correct trace format', () => {
