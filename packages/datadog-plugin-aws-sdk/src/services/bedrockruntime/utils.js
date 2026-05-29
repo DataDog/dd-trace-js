@@ -500,7 +500,7 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
     }
   }
 
-  if (!content && toolCalls.length === 0 && toolResults.length === 0) return undefined
+  if (!content && toolCalls.length === 0 && toolResults.length === 0) return
 
   const message = { role }
   if (content) message.content = content
