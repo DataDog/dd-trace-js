@@ -78,7 +78,14 @@ createIntegrationTestSuite('nitro', 'h3', {
     it('should propagate distributed trace context from incoming headers', async () => {
       const traceAssertion = agent.assertFirstTraceSpan(span => {
         assert.strictEqual(span.meta['http.method'], 'GET')
-        assert.ok(span.parent_id && span.parent_id.toString() !== '0', 'expected non-zero parent_id from injected headers')
+        assert.strictEqual(
+          span.trace_id.toString(), '1234567890',
+          'trace_id should be inherited from x-datadog-trace-id header'
+        )
+        assert.strictEqual(
+          span.parent_id.toString(), '9876543210',
+          'parent_id should be inherited from x-datadog-parent-id header'
+        )
       })
 
       await testSetup.tracingPluginWithHeaders({

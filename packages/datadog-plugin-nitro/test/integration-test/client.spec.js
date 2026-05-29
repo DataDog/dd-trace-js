@@ -20,7 +20,7 @@ describe('esm', () => {
 
   withVersions('nitro', 'h3', version => {
     useSandbox([`'h3@${version}'`], false, [
-      './packages/datadog-plugin-nitro/test/integration-test/*',
+      `${__dirname}/*`,
     ])
 
     beforeEach(async () => {
