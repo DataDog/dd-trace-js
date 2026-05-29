@@ -1188,9 +1188,15 @@ function isTiaCoverageBackfillEnabled () {
   return isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled && hasJestCoverageMap()
 }
 
-// Non-TIA Jest coverage keeps the legacy metric. TIA only reports it from the backfill-capable path.
+// Non-TIA Jest coverage keeps the legacy metric. TIA only reports it when Datadog Code Coverage is enabled and
+// either the run is complete locally or the skipped suites can be backfilled.
 function shouldReportCodeCoverageLinesPct () {
-  return hasJestCoverageMap() && (!isItrEnabled || isTiaCoverageBackfillEnabled())
+  if (!hasJestCoverageMap()) return false
+  if (!isItrEnabled) return true
+  if (!isCoverageReportUploadEnabled) return false
+
+  // If no suites were actually skipped, the local Jest coverage map is complete and does not need backfill.
+  return !isSuitesSkipped || isTiaCoverageBackfillEnabled()
 }
 
 function getHookRequire (hookMeta) {

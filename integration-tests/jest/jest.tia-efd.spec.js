@@ -223,11 +223,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.ok(coveragePayload.content.coverages[0].test_suite_id)
 
         const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-        if (isJestCoverageBackfillSupported) {
-          assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
-        } else {
-          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
-        }
+        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
         assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
