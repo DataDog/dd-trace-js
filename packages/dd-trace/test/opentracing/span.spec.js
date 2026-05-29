@@ -614,6 +614,12 @@ describe('Span', () => {
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar' })
       })
+
+      it('should start with empty baggage on restart when there is no parent to inherit from', () => {
+        tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+        assert.deepStrictEqual(span._spanContext._baggageItems, {})
+      })
     })
   })
 })
