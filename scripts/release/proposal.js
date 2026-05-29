@@ -76,7 +76,6 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${main}`)
   const allDiff = capture(`${cherryPickDiffCmd} --format=markdown v${releaseLine}.x ${main}`)
 
   // Only labeled commits (semver-patch/minor/major) warrant cutting a release;
@@ -90,7 +89,7 @@ try {
     process.exit(0)
   }
 
-  const isMinor = lineDiff.includes('SEMVER-MINOR')
+  const isMinor = allDiff.includes('SEMVER-MINOR')
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
@@ -119,25 +118,20 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalDiff = capture(`${cherryPickDiffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
-    .replaceAll('\n', ' ').trim()
+  const proposalShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
+    .split('\n').filter(Boolean)
 
   // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
   const MAX_CHERRY_PICKS = 99
   const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
   const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
-  const proposalShas = proposalDiff ? proposalDiff.split(' ').filter(Boolean) : []
-  const remainingSlots = Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked)
-  const shasToApply = proposalShas.slice(0, remainingSlots)
-  const limitedDiff = shasToApply.join(' ')
-  const totalCommits = existingCherryPicked + shasToApply.length + 1
+  const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
   const truncated = shasToApply.length < proposalShas.length
+  const totalCommits = existingCherryPicked + shasToApply.length + 1
 
-  if (proposalDiff) {
-    // Get new changes since last commit of the proposal branch.
-    // When truncated, compare up to the last applied SHA to exclude deferred commits.
-    const changesTarget = truncated ? shasToApply.at(-1) : main
-    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${changesTarget}`)
+  if (shasToApply.length > 0) {
+    // Show only commits being applied; shasToApply.at(-1) is the upper bound.
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${shasToApply.at(-1)}`)
     const truncationNote = truncated
       ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
         ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
@@ -145,28 +139,29 @@ try {
 
     pass(`\n${newChanges}${truncationNote}`)
 
-    if (limitedDiff) {
-      start('Apply changes from the main branch')
+    start('Apply changes from the main branch')
 
-      // We have new commits to add, so revert the version commit if it exists.
-      if (lastCommit === `v${newVersion}`) {
-        run('git reset --hard HEAD~1')
-      }
-
-      // Cherry pick commits up to the GitHub rebase limit.
-      try {
-        run(`git cherry-pick ${limitedDiff}`)
-
-        pass()
-      } catch {
-        run('git cherry-pick --abort')
-
-        fatal(
-          'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
-          'Please make sure the release branch contains all changes from the main branch.'
-        )
-      }
+    // We have new commits to add, so revert the version commit if it exists.
+    if (lastCommit === `v${newVersion}`) {
+      run('git reset --hard HEAD~1')
     }
+
+    // Cherry pick commits up to the GitHub rebase limit.
+    try {
+      run(`git cherry-pick ${shasToApply.join(' ')}`)
+
+      pass()
+    } catch {
+      run('git cherry-pick --abort')
+
+      fatal(
+        'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
+        'Please make sure the release branch contains all changes from the main branch.'
+      )
+    }
+  } else if (proposalShas.length > 0) {
+    pass(`⚠️  Proposal is at the commit limit (${MAX_CHERRY_PICKS}/${MAX_CHERRY_PICKS}).` +
+      ` ${proposalShas.length} new commit(s) require a separate release.`)
   } else {
     pass('none')
   }
@@ -177,14 +172,8 @@ try {
 
   start('Save release notes draft')
 
-  // When commits were capped, recompute notes from the actual proposal branch
-  // contents to exclude commits that were deferred to a subsequent release.
-  const notesContent = truncated
-    ? capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x HEAD`)
-    : lineDiff
-
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, notesContent)
+  fs.writeFileSync(notesFile, capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x HEAD`))
 
   pass(notesFile)
 
