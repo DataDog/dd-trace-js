@@ -27,20 +27,26 @@ function wrapCreateServer (createServer) {
 }
 
 function wrapResponseEmit (emit, ctx) {
-  return function (eventName, event) {
+  return function (...args) {
     ctx.req = this.req
-    ctx.eventName = eventName
-    return emitCh.runStores(ctx, emit, this, ...arguments)
+    ctx.eventName = args[0]
+    return emitCh.runStores(ctx, emit, this, ...args)
   }
 }
 
 function wrapEmit (emit) {
-  return function (eventName, req, res) {
+  // Rest params + Reflect.apply instead of named formals + `arguments`: naming
+  // params while reading `arguments` materialises the mapped arguments object
+  // on every emitted event, including the no-subscriber fast path.
+  return function (...args) {
     if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, args)
     }
 
+    const eventName = args[0]
     if (eventName === 'request') {
+      const req = args[1]
+      const res = args[2]
       res.req = req
 
       const ctx = { req, res }
@@ -48,7 +54,7 @@ function wrapEmit (emit) {
         shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
 
         try {
-          return emit.apply(this, arguments)
+          return Reflect.apply(emit, this, args)
         } catch (error) {
           ctx.error = error
           errorServerCh.publish(ctx)
@@ -57,6 +63,6 @@ function wrapEmit (emit) {
         }
       })
     }
-    return emit.apply(this, arguments)
+    return Reflect.apply(emit, this, args)
   }
 }

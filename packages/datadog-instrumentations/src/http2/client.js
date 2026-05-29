@@ -12,13 +12,13 @@ const errorChannel = channel('apm:http2:client:request:error')
 
 function createWrapEmit (ctx) {
   return function wrapEmit (emit) {
-    return function (event, arg1) {
-      ctx.eventName = event
-      ctx.eventData = arg1
+    return function (...args) {
+      ctx.eventName = args[0]
+      ctx.eventData = args[1]
 
       return asyncStartChannel.runStores(ctx, () => {
         try {
-          return emit.apply(this, arguments)
+          return Reflect.apply(emit, this, args)
         } finally {
           asyncEndChannel.publish(ctx)
         }
@@ -29,14 +29,14 @@ function createWrapEmit (ctx) {
 
 function createWrapRequest (authority, options) {
   return function wrapRequest (request) {
-    return function (headers) {
-      if (!startChannel.hasSubscribers) return request.apply(this, arguments)
+    return function (...args) {
+      if (!startChannel.hasSubscribers) return Reflect.apply(request, this, args)
 
-      const ctx = { headers, authority, options }
+      const ctx = { headers: args[0], authority, options }
 
       return startChannel.runStores(ctx, () => {
         try {
-          const req = request.apply(this, arguments)
+          const req = Reflect.apply(request, this, args)
 
           shimmer.wrap(req, 'emit', createWrapEmit(ctx))
 
@@ -54,13 +54,14 @@ function createWrapRequest (authority, options) {
 }
 
 function wrapConnect (connect) {
-  return function (authority, options) {
+  return function (...args) {
+    const authority = args[0]
     if (connectChannel.hasSubscribers) {
       connectChannel.publish({ authority })
     }
-    const session = connect.apply(this, arguments)
+    const session = Reflect.apply(connect, this, args)
 
-    shimmer.wrap(session, 'request', createWrapRequest(authority, options))
+    shimmer.wrap(session, 'request', createWrapRequest(authority, args[1]))
 
     return session
   }

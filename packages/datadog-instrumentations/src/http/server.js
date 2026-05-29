@@ -96,10 +96,17 @@ function wrapEmit (emit) {
 }
 
 function wrapWriteHead (writeHead) {
-  return function wrappedWriteHead (statusCode, reason, obj) {
+  // Rest params + Reflect.apply instead of named formals + `arguments`: naming
+  // params while reading `arguments` makes V8 materialise the mapped arguments
+  // object on every call, including the no-subscriber fast path.
+  return function wrappedWriteHead (...args) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return writeHead.apply(this, arguments)
+      return Reflect.apply(writeHead, this, args)
     }
+
+    const statusCode = args[0]
+    const reason = args[1]
+    let obj = args[2]
 
     const abortController = new AbortController()
 
@@ -133,7 +140,7 @@ function wrapWriteHead (writeHead) {
       return this
     }
 
-    return writeHead.apply(this, arguments)
+    return Reflect.apply(writeHead, this, args)
   }
 }
 
@@ -164,9 +171,9 @@ function wrapWrite (write) {
 }
 
 function wrapSetHeader (setHeader) {
-  return function wrappedSetHeader (name, value) {
+  return function wrappedSetHeader (...args) {
     if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
-      return setHeader.apply(this, arguments)
+      return Reflect.apply(setHeader, this, args)
     }
 
     if (startSetHeaderCh.hasSubscribers) {
@@ -178,10 +185,10 @@ function wrapSetHeader (setHeader) {
       }
     }
 
-    const setHeaderResult = setHeader.apply(this, arguments)
+    const setHeaderResult = Reflect.apply(setHeader, this, args)
 
     if (finishSetHeaderCh.hasSubscribers) {
-      finishSetHeaderCh.publish({ name, value, res: this })
+      finishSetHeaderCh.publish({ name: args[0], value: args[1], res: this })
     }
 
     return setHeaderResult

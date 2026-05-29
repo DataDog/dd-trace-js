@@ -49,20 +49,20 @@ addHook({ name: 'net' }, (net) => {
 
       const emit = this.emit
       let pendingReadyEvents = 2
-      this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
-        switch (eventName) {
+      this.emit = shimmer.wrapFunction(emit, emit => function (...args) {
+        switch (args[0]) {
           case 'ready':
           case 'connect':
             if (--pendingReadyEvents === 0) this.emit = emit
             return readyCh.runStores(ctx, () => {
-              return emit.apply(this, arguments)
+              return Reflect.apply(emit, this, args)
             })
           case 'error':
           case 'close':
             this.emit = emit
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, args)
           default:
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, args)
         }
       })
 
