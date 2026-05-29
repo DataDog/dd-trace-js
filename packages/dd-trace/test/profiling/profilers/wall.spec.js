@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const dc = require('dc-polyfill')
@@ -446,7 +447,7 @@ describe('profilers/native/wall', () => {
       assert.ok(called)
       sinon.assert.calledOnce(localPprof.time.runWithContext)
       const [ctx] = localPprof.time.runWithContext.firstCall.args
-      assert.ok(Array.isArray(ctx))
+      assert.ok(Array.isArray(ctx), `Expected array, got ${inspect(ctx)}`)
       assert.deepStrictEqual(ctx[0], { spanId: '123' })
       assert.deepStrictEqual(ctx[1], { customer: 'acme' })
 
@@ -471,7 +472,7 @@ describe('profilers/native/wall', () => {
       })
 
       const innerCtx = localPprof.time.runWithContext.secondCall.args[0]
-      assert.ok(Array.isArray(innerCtx))
+      assert.ok(Array.isArray(innerCtx), `Expected array, got ${inspect(innerCtx)}`)
       assert.deepStrictEqual(innerCtx[0], { spanId: '123' })
       assert.deepStrictEqual(innerCtx[1], { customer: 'acme', region: 'us-east' })
 

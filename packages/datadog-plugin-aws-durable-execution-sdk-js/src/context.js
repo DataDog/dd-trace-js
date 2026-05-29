@@ -62,7 +62,7 @@ class BaseContextPlugin extends TracingPlugin {
   }
 
   settle (ctx) {
-    if (ctx._ddSuppressed) return
+    if (ctx.suppressed) return
     if (ctx.error !== undefined) {
       const errCtx = unwrapDurableError(ctx)
       ctx.currentStore?.span?.setTag('error', errCtx.error)
@@ -92,7 +92,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
     if (SUPPRESSED_CHILD_CONTEXT_SUBTYPES.has(getRunInChildContextSubType(ctx))) {
       // Pass the active store through unchanged so any nested spans
       // remain parented to the surrounding map/parallel span
-      ctx._ddSuppressed = true
+      ctx.suppressed = true
       return storage('legacy').getStore()
     }
     return super.bindStart(ctx)

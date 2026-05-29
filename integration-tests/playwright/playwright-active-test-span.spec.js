@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
 const {
@@ -23,14 +24,13 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -179,7 +179,10 @@ versions.forEach((version) => {
                   [TEST_STATUS]: 'pass',
                   [TEST_IS_RUM_ACTIVE]: 'true',
                 })
-                assert.ok(Object.hasOwn(test.meta, TEST_BROWSER_VERSION))
+                assert.ok(
+                  Object.hasOwn(test.meta, TEST_BROWSER_VERSION),
+                  `Available keys: ${inspect(Object.keys(test.meta))}`
+                )
               }
             })
           })
@@ -224,8 +227,8 @@ versions.forEach((version) => {
               .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
             eventFinishedTestEvents.forEach(({ tags }) => {
-              assert.ok(tags.includes('is_rum'))
-              assert.ok(tags.includes('test_framework:playwright'))
+              assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+              assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
             })
           })
 

@@ -342,7 +342,7 @@ describe('esm', () => {
           trigger: () => curl('http://127.0.0.1:7071/api/eh2-eventdata'),
           predicate: hasSpanLinks,
         })
-        assert.ok(groups.length >= 1)
+        assert.ok(groups.length >= 1, `Expected ${groups.length} >= 1`)
       }).timeout(60000)
     })
   })

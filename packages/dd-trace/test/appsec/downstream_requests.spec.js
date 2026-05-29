@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 
 const downstream = require('../../src/appsec/downstream_requests')
@@ -206,7 +207,10 @@ describe('appsec downstream_requests', () => {
 
       const addressesMap = downstream.extractRequestData(ctx, true)
 
-      assert.ok(!Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_HEADERS))
+      assert.ok(
+        !Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_HEADERS),
+        `Available keys: ${inspect(Object.keys(addressesMap))}`
+      )
     })
   })
 
@@ -243,7 +247,10 @@ describe('appsec downstream_requests', () => {
     it('omits body when not provided', () => {
       const addressesMap = downstream.extractResponseData(res)
 
-      assert.ok(!Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_RESPONSE_BODY))
+      assert.ok(
+        !Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_RESPONSE_BODY),
+        `Available keys: ${inspect(Object.keys(addressesMap))}`
+      )
     })
   })
 
@@ -452,8 +459,8 @@ describe('appsec downstream_requests', () => {
       const trueCount = results.filter(r => r).length
       const falseCount = results.filter(r => !r).length
 
-      assert.ok(trueCount > 0)
-      assert.ok(falseCount > 0)
+      assert.ok(trueCount > 0, `Expected ${trueCount} > 0`)
+      assert.ok(falseCount > 0, `Expected ${falseCount} > 0`)
     })
 
     it('tracks per-request body analysis count independently', () => {

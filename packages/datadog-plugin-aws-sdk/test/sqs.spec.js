@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
+const { inspect } = require('node:util')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -216,9 +217,15 @@ describe('Plugin', () => {
                 try {
                   for (const message in data.Messages) {
                     const recordData = data.Messages[message].MessageAttributes
-                    assert.ok(Object.hasOwn(recordData, '_datadog'))
+                    assert.ok(
+                      Object.hasOwn(recordData, '_datadog'),
+                      `Available keys: ${inspect(Object.keys(recordData))}`
+                    )
                     const traceContext = JSON.parse(recordData._datadog.StringValue)
-                    assert.ok(Object.hasOwn(traceContext, 'x-datadog-trace-id'))
+                    assert.ok(
+                      Object.hasOwn(traceContext, 'x-datadog-trace-id'),
+                      `Available keys: ${inspect(Object.keys(traceContext))}`
+                    )
                   }
 
                   resolve()

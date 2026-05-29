@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -492,7 +493,7 @@ describe('AIGuard SDK', () => {
         if (span.name === 'root') {
           assert.strictEqual(span.meta[EVENT_TAG_KEY], 'true')
         } else {
-          assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY))
+          assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY), `Available keys: ${inspect(Object.keys(span.meta))}`)
         }
       }
     })
