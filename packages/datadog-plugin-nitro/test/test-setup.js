@@ -29,6 +29,7 @@ class NitroTestSetup {
     this.app = new H3()
     this.app.register(tracingPlugin())
     this.app.get('/hello', () => ({ ok: true }))
+    this.app.get('/users/:id', event => ({ id: event.context.params.id }))
     this.app.get('/error', () => {
       throw new Error('nitro test boom')
     })
@@ -67,6 +68,10 @@ class NitroTestSetup {
 
   async tracingPluginError () {
     await this._request('/error')
+  }
+
+  async tracingPluginParameterized () {
+    await this._request('/users/42')
   }
 
   _request (path) {

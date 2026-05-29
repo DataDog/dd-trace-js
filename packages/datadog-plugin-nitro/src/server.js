@@ -31,14 +31,14 @@ class NitroH3ServerPlugin extends ServerPlugin {
 
     if (!req) return meta
 
-    const method = req.method
-    if (method) meta['http.method'] = method
+    if (req.method) meta['http.method'] = req.method
 
     const url = req.url || event?.url?.href
     if (url) meta['http.url'] = typeof url === 'string' ? url : String(url)
 
-    const path = event?.url?.pathname || event?.path
-    if (path) meta['http.route'] = path
+    // Prefer the matched route pattern (e.g. /users/:id) over the actual path (e.g. /users/42).
+    const route = this.#getRoute(event)
+    if (route) meta['http.route'] = route
 
     return meta
   }
@@ -46,19 +46,33 @@ class NitroH3ServerPlugin extends ServerPlugin {
   getResource (ctx) {
     const event = ctx?.event
     const method = event?.req?.method
-    const path = event?.url?.pathname || event?.path
+    const route = this.#getRoute(event)
 
-    if (method && path) return `${method} ${path}`
+    if (method && route) return `${method} ${route}`
     return method
+  }
+
+  #getRoute (event) {
+    return event?.context?.matchedRoute?.route || event?.url?.pathname || event?.path
   }
 
   #applyResponseTags (ctx) {
     const span = ctx?.currentStore?.span
-    const status = ctx?.event?.res?.status
+    if (!span) return
 
-    if (span && status !== undefined) {
-      span.setTag('http.status_code', String(status))
+    // h3 v2 leaves event.res.status undefined for default responses (status is computed
+    // inside prepareResponse() after the handler resolves). Resolve the status from the
+    // handler result, an explicit setResponseStatus() call, or fall back to 200 / 500.
+    let status
+    if (ctx?.error) {
+      status = ctx.error.status ?? ctx.error.statusCode ?? 500
+    } else if (ctx?.result?.status === undefined) {
+      status = ctx?.event?.res?.status ?? 200
+    } else {
+      status = ctx.result.status
     }
+
+    span.setTag('http.status_code', String(status))
   }
 
   end (ctx) {
