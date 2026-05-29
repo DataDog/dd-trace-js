@@ -1,7 +1,7 @@
 'use strict'
 
 const DatadogSpanContext = require('../opentracing/span_context')
-const { BASE_SERVICE } = require('../../../../ext/tags')
+const { BASE_SERVICE, MEASURED } = require('../../../../ext/tags')
 const { OpCode } = require('./index')
 
 /**
@@ -22,7 +22,7 @@ const { OpCode } = require('./index')
 // Everything else is a plain meta string or metric number.
 const SPECIAL_KEYS = new Set([
   'service.name', 'service', 'resource.name', 'span.type',
-  'error', 'http.status_code', 'error.type',
+  'error', 'http.status_code', 'error.type', 'span.kind',
 ])
 
 // Symbol keys for internal backing storage — avoids Object.defineProperty deopt
@@ -291,6 +291,26 @@ class NativeSpanContext extends DatadogSpanContext {
             OpCode.SetError,
             this._slotIndex,
             ['i32', 1]
+          )
+        }
+        // Fall through to add the meta tag
+        this.#nativeSpans.queueOp(
+          OpCode.SetMetaAttr,
+          this._slotIndex,
+          key,
+          String(value)
+        )
+        return
+
+      // Setting span.kind automatically marks the span as measured
+      // so the agent computes metrics, unless the kind is 'internal'.
+      case 'span.kind':
+        if (String(value) !== 'internal') {
+          this.#nativeSpans.queueOp(
+            OpCode.SetMetricAttr,
+            this._slotIndex,
+            MEASURED,
+            ['f64', 1]
           )
         }
         // Fall through to add the meta tag

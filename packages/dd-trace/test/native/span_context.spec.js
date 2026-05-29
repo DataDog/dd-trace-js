@@ -171,6 +171,38 @@ describe('NativeSpanContext', () => {
       }
     })
 
+    it('should set _dd.measured when span.kind is non-internal', () => {
+      // span.kind:client, server, producer, consumer → _dd.measured = 1
+      // span.kind:internal → no _dd.measured
+      // In both cases, span.kind itself is always stored as meta
+      const MEASURED = '_dd.measured'
+
+      for (const kind of ['client', 'server', 'producer', 'consumer']) {
+        nativeSpans.queueOp.resetHistory()
+        spanContext.setTag('span.kind', kind)
+        // First call: SetMetricAttr for _dd.measured
+        assert.strictEqual(nativeSpans.queueOp.callCount, 2)
+        assert.strictEqual(nativeSpans.queueOp.getCall(0).args[0], OpCode.SetMetricAttr)
+        assert.strictEqual(nativeSpans.queueOp.getCall(0).args[1], slotIndex)
+        assert.strictEqual(nativeSpans.queueOp.getCall(0).args[2], MEASURED)
+        assert.deepStrictEqual(nativeSpans.queueOp.getCall(0).args[3], ['f64', 1])
+        // Second call: SetMetaAttr for span.kind
+        assert.strictEqual(nativeSpans.queueOp.getCall(1).args[0], OpCode.SetMetaAttr)
+        assert.strictEqual(nativeSpans.queueOp.getCall(1).args[1], slotIndex)
+        assert.strictEqual(nativeSpans.queueOp.getCall(1).args[2], 'span.kind')
+        assert.strictEqual(nativeSpans.queueOp.getCall(1).args[3], kind)
+      }
+
+      // internal should NOT set _dd.measured — only meta tag
+      nativeSpans.queueOp.resetHistory()
+      spanContext.setTag('span.kind', 'internal')
+      assert.strictEqual(nativeSpans.queueOp.callCount, 1)
+      assert.strictEqual(nativeSpans.queueOp.getCall(0).args[0], OpCode.SetMetaAttr)
+      assert.strictEqual(nativeSpans.queueOp.getCall(0).args[1], slotIndex)
+      assert.strictEqual(nativeSpans.queueOp.getCall(0).args[2], 'span.kind')
+      assert.strictEqual(nativeSpans.queueOp.getCall(0).args[3], 'internal')
+    })
+
     it('should store tag in JS cache', () => {
       spanContext.setTag('test.key', 'test-value')
 
