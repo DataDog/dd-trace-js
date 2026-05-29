@@ -22,16 +22,16 @@ describe('trace-checkpoint', () => {
       },
     }
 
-    const tracer = {
-      inject (_span, _format, headers) {
-        headers['x-datadog-trace-id'] = '123'
-        headers['x-datadog-parent-id'] = '456'
-      },
-    }
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      trace: { started: [], finished: [], tags: {} },
+    })
 
     const savePromise = saveTraceContextCheckpointIfUpdated(
-      tracer,
-      { context: () => ({}) },
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
       { checkpoint: checkpointManager },
       '999',
       {
@@ -65,13 +65,9 @@ describe('trace-checkpoint', () => {
       },
     }
 
-    const currentHeaders = {
-      'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '999',
-      'x-datadog-sampling-priority': '1',
-      'x-datadog-tags': '_dd.p.tid=5d89697714596e3',
-    }
-
+    // Previous checkpoint: same non-parent-id fields the propagator will emit
+    // below; only parent-id differs. Key order matches the propagator's
+    // emission order (trace-id, parent-id, sampling-priority, tags).
     const previousCheckpointHeaders = {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '111',
@@ -79,15 +75,17 @@ describe('trace-checkpoint', () => {
       'x-datadog-tags': '_dd.p.tid=5d89697714596e3',
     }
 
-    const tracer = {
-      inject (_span, _format, headers) {
-        Object.assign(headers, currentHeaders)
-      },
-    }
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      sampling: { priority: 1 },
+      trace: { started: [], finished: [], tags: { '_dd.p.tid': '5d89697714596e3' } },
+    })
 
     await saveTraceContextCheckpointIfUpdated(
-      tracer,
-      { context: () => ({}) },
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
       { checkpoint: checkpointManager },
       '999',
       {
