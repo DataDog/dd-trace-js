@@ -2,19 +2,6 @@
 
 const http = require('node:http')
 
-/**
- * Test setup for the nitro / h3 integration.
- *
- * Spins up a real h3 v2 app (the HTTP framework Nitro v3 uses under the
- * hood) and serves it via Node's built-in http module by wrapping the
- * app with h3's `toNodeHandler`. This avoids depending on srvx's
- * `serve` helper which has additional runtime detection and is harder
- * to drive deterministically inside mocha.
- *
- * The `withVersions` helper extends `NODE_PATH` to include the
- * version-specific node_modules tree before this setup runs, so a
- * top-level `require('h3')` resolves to the version under test.
- */
 class NitroTestSetup {
   constructor () {
     this.server = null
@@ -22,11 +9,18 @@ class NitroTestSetup {
     this.app = null
   }
 
-  async setup () {
-    const { H3, toNodeHandler } = require('h3')
+  /**
+   * @param {object} mod - h3 module from withVersions (has H3, toNodeHandler, etc.)
+   */
+  async setup (mod) {
+    const { H3, toNodeHandler } = mod
     const { tracingPlugin } = require('h3/tracing')
 
     this.app = new H3()
+    // Unit tests use CJS require('h3') via withVersions; CJS require of ESM is not
+    // intercepted by iitm so the instrumentation's auto-registration cannot fire.
+    // Register tracingPlugin explicitly here. Real Nitro/h3 ESM apps get it automatically
+    // via the addHook callback in packages/datadog-instrumentations/src/nitro.js.
     this.app.register(tracingPlugin())
     this.app.get('/hello', () => ({ ok: true }))
     this.app.get('/users/:id', event => ({ id: event.context.params.id }))
