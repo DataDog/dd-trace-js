@@ -1,8 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const { isFalse } = require('../../dd-trace/src/util')
 const { saveTraceContextCheckpointIfUpdated } = require('./trace-checkpoint')
 
 // Termination reasons that indicate the execution is suspending rather than exiting permanently.
@@ -17,11 +15,6 @@ const PENDING_TERMINATION_REASONS = new Set([
 ])
 
 const DEFAULT_TERMINATION_REASON = 'OPERATION_TERMINATED'
-
-// Default on; users opt out by setting to false.
-function isCrossInvocationTracingEnabled () {
-  return !isFalse(getEnvironmentVariable('DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED'))
-}
 
 class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -49,7 +42,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       meta,
     }, ctx)
 
-    this._installTerminationCheckpointHook(ctx, event)
+    this.#installTerminationCheckpointHook(ctx, event)
 
     return ctx.currentStore
   }
@@ -59,7 +52,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   // suspends (PENDING) we persist the current trace context as a `_datadog`
   // checkpoint, which subsequent invocations consume to extract the parent
   // trace context.
-  _installTerminationCheckpointHook (ctx, event) {
+  #installTerminationCheckpointHook (ctx, event) {
     if (!this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED) return
 
     const args = ctx.arguments || []
