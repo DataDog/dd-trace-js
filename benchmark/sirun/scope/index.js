@@ -5,41 +5,23 @@ const {
   COUNT,
 } = process.env
 
+const count = Number(COUNT)
+
+// Drives a long chain of promise continuations, the microtask shape the tracer
+// rides under each traced async operation. When enabled, every continuation is
+// wrapped in scope.activate() exactly as the tracer does; the delta against the
+// base variant is the per-hop AsyncLocalStorage enterWith plus store-copy cost.
+let activate
 if (SCOPE_ENABLED === 'true') {
   const Scope = require('../../../packages/dd-trace/src/scope')
   const scope = new Scope()
-  if (scope.enable) {
-    scope.enable()
-  }
+  const span = { _store: {} }
+  activate = (cb) => scope.activate(span, cb)
+} else {
+  activate = (cb) => cb()
 }
 
-function promises (n, cb) {
-  let p = Promise.resolve()
-  for (let i = 1; i < n; i++) {
-    p = p.then(() => {})
-  }
-  p.then(cb)
+let p = Promise.resolve()
+for (let i = 1; i < count; i++) {
+  p = p.then(() => activate(() => {}))
 }
-
-function awaits (n, cb) {
-  (async () => {
-    for (let i = 0; i < n; i++) {
-      await 0
-    }
-  })().then(cb)
-}
-
-function immediates (n, cb) {
-  if (n === 0) {
-    cb()
-    return
-  }
-  setImmediate(immediates, n - 1, cb)
-}
-
-promises(COUNT, () => {
-  awaits(COUNT, () => {
-    immediates(COUNT, () => {
-    })
-  })
-})
