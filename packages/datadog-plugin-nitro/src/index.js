@@ -1,12 +1,12 @@
 'use strict'
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const serverPlugin = require('./server')
+const { NitroH3ServerPlugin } = require('./server')
 
 class NitroPlugin extends CompositePlugin {
   static id = 'nitro'
   static plugins = {
-    ...serverPlugin
+    server: NitroH3ServerPlugin,
   }
 }
 
