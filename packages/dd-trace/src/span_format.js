@@ -48,9 +48,10 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {Array} links
  * @property {Array<SpanEvent> | undefined} span_events
  *
- * @typedef {object} SpanEvent
+ * @typedef {object} SpanEvent Raw span event as stored on the span; the encoder
+ *   layer derives `time_unix_nano` from `startTime` via `eventTimeNano`.
  * @property {string} name
- * @property {number} time_unix_nano
+ * @property {number} startTime Milliseconds with sub-millisecond precision.
  * @property {Record<string, string>} [attributes]
  */
 
@@ -155,6 +156,12 @@ function extractSpanLinks (formattedSpan, span) {
 }
 
 /**
+ * Hand the raw `_events` array to the encoder layer instead of copying it into
+ * reshaped `{ name, time_unix_nano, attributes }` objects. Each encoder derives
+ * `time_unix_nano` from `event.startTime` via `eventTimeNano` and drops empty
+ * attribute objects itself, so the per-event allocation here is pure waste on
+ * every event-bearing span.
+ *
  * @param {FormattedSpan} formattedSpan
  * @param {import('./opentracing/span')} span
  */
@@ -162,13 +169,7 @@ function extractSpanEvents (formattedSpan, span) {
   if (!span._events?.length) {
     return
   }
-  formattedSpan.span_events = span._events.map(event => {
-    return {
-      name: event.name,
-      time_unix_nano: Math.round(event.startTime * 1e6),
-      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
-    }
-  })
+  formattedSpan.span_events = span._events
 }
 
 function extractTags (formattedSpan, span) {

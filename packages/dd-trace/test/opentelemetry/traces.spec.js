@@ -369,10 +369,11 @@ describe('OpenTelemetry Traces', () => {
 
     it('transforms span events', () => {
       const transformer = new OtlpTraceTransformer({})
+      // Raw events carry startTime; the transformer derives timeUnixNano = round(startTime * 1e6).
       const span = createMockSpan({
         span_events: [{
           name: 'exception',
-          time_unix_nano: 1700000000010000000,
+          startTime: 1700000000010,
           attributes: {
             'exception.message': 'test error',
             'exception.type': 'Error',
@@ -385,6 +386,7 @@ describe('OpenTelemetry Traces', () => {
 
       assert.strictEqual(otlpSpan.events.length, 1)
       assert.strictEqual(otlpSpan.events[0].name, 'exception')
+      assert.strictEqual(Number(otlpSpan.events[0].timeUnixNano), 1700000000010000000)
 
       const eventAttrs = extractAttrs(otlpSpan.events[0].attributes)
       assert.deepStrictEqual(

@@ -46,6 +46,19 @@ function truncateSpanTestOpt (span) {
   return span
 }
 
+/**
+ * Convert a raw span event's `startTime` (milliseconds, sub-millisecond
+ * precision) to the wire `time_unix_nano`. Single source of truth for the
+ * formula so the four encoders that consume `span_events` stay in lockstep;
+ * the formatter no longer reshapes events, it hands the raw array through.
+ *
+ * @param {{ startTime: number }} event
+ * @returns {number}
+ */
+function eventTimeNano (event) {
+  return Math.round(event.startTime * 1e6)
+}
+
 function normalizeSpan (span) {
   span.service = span.service || DEFAULT_SERVICE_NAME
   if (span.service.length > MAX_SERVICE_LENGTH) {
@@ -69,6 +82,7 @@ module.exports = {
   truncateSpan,
   truncateSpanTestOpt,
   normalizeSpan,
+  eventTimeNano,
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
   MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION,
