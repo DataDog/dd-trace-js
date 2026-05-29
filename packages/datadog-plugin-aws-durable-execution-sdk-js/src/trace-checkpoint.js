@@ -12,7 +12,7 @@ const CHECKPOINT_NAME_PREFIX = '_datadog_'
 // style preferences would only complicate the payload contract.
 const datadogOnlyPropagatorCache = new WeakMap()
 
-function getDatadogOnlyPropagator(tracer) {
+function getDatadogOnlyPropagator (tracer) {
   const config = tracer._config
   const cached = datadogOnlyPropagatorCache.get(config)
   if (cached) return cached
@@ -39,7 +39,7 @@ function getDatadogOnlyPropagator(tracer) {
  * @param {object} span
  * @returns {Record<string, string>}
  */
-function injectHeaders(tracer, span) {
+function injectHeaders (tracer, span) {
   const headers = {}
   try {
     const propagator = getDatadogOnlyPropagator(tracer)
@@ -56,7 +56,7 @@ function injectHeaders(tracer, span) {
  * @param {Record<string, string>} headers
  * @param {string | number | undefined} parentId
  */
-function overrideParentId(headers, parentId) {
+function overrideParentId (headers, parentId) {
   if (!parentId) return
   if ('x-datadog-trace-id' in headers) {
     headers['x-datadog-parent-id'] = String(parentId)
@@ -68,7 +68,7 @@ function overrideParentId(headers, parentId) {
  * @param {unknown} event
  * @returns {{ checkpointNumber: number, operation: object } | null}
  */
-function findLastCheckpointOrNull(event) {
+function findLastCheckpointOrNull (event) {
   if (!event || typeof event !== 'object') return null
 
   const operations = event.InitialExecutionState?.Operations
@@ -95,7 +95,7 @@ function findLastCheckpointOrNull(event) {
  * @param {object} op
  * @returns {Record<string, string> | null}
  */
-function parseCheckpointPayload(op) {
+function parseCheckpointPayload (op) {
   try {
     const raw = op?.Payload ?? op?.StepDetails?.Result
     if (!raw || typeof raw !== 'string') return null
@@ -117,7 +117,7 @@ function parseCheckpointPayload(op) {
  * @param {Record<string, string>} headers
  * @returns {Promise<void>}
  */
-async function saveCheckpoint(checkpointManager, executionArn, number, headers) {
+async function saveCheckpoint (checkpointManager, executionArn, number, headers) {
   const name = `${CHECKPOINT_NAME_PREFIX}${number}`
   const stepId = crypto
     .createHash('blake2b512')
@@ -177,7 +177,7 @@ async function saveCheckpoint(checkpointManager, executionArn, number, headers) 
  * @param {unknown} event - raw invocation event (has InitialExecutionState)
  * @returns {Promise<void>}
  */
-async function saveTraceContextCheckpointIfUpdated(
+async function saveTraceContextCheckpointIfUpdated (
   tracer, span, durableContext, firstExecutionSpanId, event,
 ) {
   try {

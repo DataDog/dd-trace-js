@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const proxyquire = require('proxyquire').noCallThru()
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 function loadHandlerPlugin (checkpointSaveCalls) {
   return proxyquire('../src/handler', {
     './trace-checkpoint': {
@@ -78,7 +80,7 @@ describe('handler checkpoint hook', () => {
     assert.equal(terminateCalls, 1)
     assert.equal(checkpointSaveCalls.length, 1)
     assert.equal(checkpointSaveCalls[0].length, 5, 'expected 5 positional args (no trailing status)')
-    assertObjectContains(checkpointSaveCalls, [[tracer, durableContext, '123', invocationEvent])
+    assertObjectContains(checkpointSaveCalls, [[tracer, durableContext, '123', invocationEvent]])
   })
 
   it('does not save a checkpoint for non-pending termination reasons', async () => {
