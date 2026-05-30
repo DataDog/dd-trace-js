@@ -3,23 +3,23 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 5,
+  "iterations": 15,
   "instructions": true,
   "variants": {
     "with-async-hooks": {
-      "env": { "WITH_ASYNC_HOOKS": "1" }
+      "env": { "WITH_ASYNC_HOOKS": "1", "QUERIES": "500" }
     },
     "with-depth-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "500" }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "500" }
     },
     "with-depth-and-collapse-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "QUERIES": "500" }
     },
     "with-depth-and-collapse-on": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1", "QUERIES": "500" }
     }
   }
 }

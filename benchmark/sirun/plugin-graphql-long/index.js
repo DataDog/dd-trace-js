@@ -45,7 +45,22 @@ const source = `
 
 const variableValues = { who: 'world' }
 
-const queries = process.env.QUERIES || 100
-for (let i = 0; i < queries; i++) {
-  graphql.graphql({ schema, source, variableValues })
+// Total queries per process. A large total keeps the fixed startup (tracer load
+// plus graphql require) a small fraction of the run. Fire them in sequential
+// waves and await each wave so the unresolved query promises and their result
+// graphs do not accumulate; otherwise a few thousand in flight at once exhausts
+// the heap. Live memory stays flat while QUERIES scales.
+const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 500
+const WAVE = 50
+
+function runWave (remaining) {
+  if (remaining <= 0) return
+  const size = remaining < WAVE ? remaining : WAVE
+  const batch = []
+  for (let i = 0; i < size; i++) {
+    batch.push(graphql.graphql({ schema, source, variableValues }))
+  }
+  Promise.all(batch).then(() => runWave(remaining - size))
 }
+
+runWave(QUERIES)
