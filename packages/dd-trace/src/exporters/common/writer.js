@@ -3,6 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const log = require('../../log')
+const spanFormat = require('../../span_format')
 const request = require('./request')
 const { safeJSONStringify } = require('./util')
 
@@ -60,6 +61,15 @@ class Writer {
       log.debug('Maximum number of active requests reached. %d raw spans discarded', trace.length)
       return
     }
+
+    // The streaming encoder never builds formatted spans, so mirror `append`'s
+    // payload log lazily — only when debug logging is on — to keep the encoded
+    // chunk tags (git metadata, `_dd.p.*`) visible under DD_TRACE_DEBUG.
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => {
+      const formatted = trace.map((span, index) => spanFormat(span, index === 0, tagForFirstSpanInChunk))
+      return `Encoding payload: ${safeJSONStringify(formatted)}`
+    })
 
     this._encoder.encodeRaw(trace, tagForFirstSpanInChunk)
   }
