@@ -6,6 +6,7 @@ const assert = require('node:assert/strict')
 globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const hostname = require('os').hostname()
+const guard = require('../startup-guard')
 const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
@@ -74,6 +75,7 @@ trace.finished = finished
 sp.process(finished[0])
 assert.equal(exported, 30, 'span processor did not format and export the chunk')
 
+guard.loopStart()
 exported = 0
 for (let i = 0; i < COUNT; i++) {
   // process() erases trace.finished each pass; restore the chunk so every
@@ -84,3 +86,4 @@ for (let i = 0; i < COUNT; i++) {
 }
 
 assert.ok(exported > 0, 'export loop produced no formatted spans')
+guard.done()

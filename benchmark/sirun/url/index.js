@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('../../../packages/dd-trace/src/plugins/util/url')
 const configManifest = require('../../../packages/dd-trace/src/config/supported-configurations.json')
 
@@ -55,6 +56,7 @@ const reqs = [
   assert.equal(typeof calculateHttpEndpoint(url), 'string', 'calculateHttpEndpoint did not return a path')
 }
 
+guard.loopStart()
 let sink = 0
 for (let i = 0; i < COUNT; i++) {
   const req = reqs[i & 3]
@@ -64,3 +66,4 @@ for (let i = 0; i < COUNT; i++) {
 }
 
 assert.ok(sink > 0, 'url bench produced no output')
+guard.done()

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 const LogPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/log')
 const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const id = require('../../../packages/dd-trace/src/id')
@@ -63,6 +64,7 @@ function spliceDd (line, dd) {
   assert.ok(spliceDd(baseLine, holder.dd).includes('"dd":'), 'dd field not spliced into the log line')
 }
 
+guard.loopStart()
 let sink = 0
 for (let i = 0; i < COUNT; i++) {
   const holder = {}
@@ -71,3 +73,4 @@ for (let i = 0; i < COUNT; i++) {
 }
 
 assert.ok(sink > 0, 'pino bench produced no output')
+guard.done()

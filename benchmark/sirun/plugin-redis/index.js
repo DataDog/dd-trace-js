@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const RedisPlugin = require('../../../packages/datadog-plugin-redis/src/index')
 
@@ -69,6 +70,7 @@ function preflight (ctx) {
     'bindStart did not build the raw_command meta')
 }
 
+guard.loopStart()
 if (VARIANT === 'mixed') {
   const ctxs = MIXED.map(makeCtx)
   for (const ctx of ctxs) preflight(ctx)
@@ -89,3 +91,4 @@ if (VARIANT === 'mixed') {
 }
 
 assert.ok(lastMeta, 'startSpan stub was never reached inside the hot loop')
+guard.done()
