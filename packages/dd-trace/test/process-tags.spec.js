@@ -280,7 +280,7 @@ describe('process-tags', () => {
       assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
+      const processor = new SpanProcessor({}, undefined, config)
 
       assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
@@ -296,7 +296,7 @@ describe('process-tags', () => {
       assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, false)
 
       SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
+      const processor = new SpanProcessor({}, undefined, config)
 
       assert.strictEqual(processor._processTags, false)
     })
@@ -311,7 +311,7 @@ describe('process-tags', () => {
       assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
-      const processor = new SpanProcessor(undefined, undefined, config)
+      const processor = new SpanProcessor({}, undefined, config)
 
       assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
