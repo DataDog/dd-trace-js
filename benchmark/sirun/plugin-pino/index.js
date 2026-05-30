@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const LogPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/log')
 const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const id = require('../../../packages/dd-trace/src/id')
@@ -52,6 +53,16 @@ function spliceDd (line, dd) {
   return line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
 }
 
+// Verify the inject path produces a dd log-correlation object and that it
+// splices into the line before the timed loop, so a broken propagator fails
+// loudly instead of silently measuring a no-op.
+{
+  const holder = {}
+  propagator.inject(contexts[0], holder)
+  assert.ok(holder.dd?.trace_id, 'log propagator did not inject a trace_id')
+  assert.ok(spliceDd(baseLine, holder.dd).includes('"dd":'), 'dd field not spliced into the log line')
+}
+
 let sink = 0
 for (let i = 0; i < COUNT; i++) {
   const holder = {}
@@ -59,4 +70,4 @@ for (let i = 0; i < COUNT; i++) {
   sink += spliceDd(baseLine, holder.dd).length
 }
 
-if (sink === 0) throw new Error('unreachable')
+assert.ok(sink > 0, 'pino bench produced no output')

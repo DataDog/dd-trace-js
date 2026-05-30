@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   SCOPE_ENABLED,
   COUNT,
@@ -21,6 +23,13 @@ if (SCOPE_ENABLED === 'true') {
 } else {
   activate = (cb) => cb()
 }
+
+// Sanity-check the wiring once before the timed wave: a broken scope.activate
+// that skipped its callback would otherwise measure a near-empty loop and
+// silently "pass".
+let activated = false
+activate(() => { activated = true })
+assert.ok(activated, 'scope.activate did not invoke its callback')
 
 // Run the hops as many short independent chains rather than one `count`-deep
 // `.then()` chain. A single deep chain pins every promise + reaction object live

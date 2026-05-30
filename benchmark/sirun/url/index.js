@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('../../../packages/dd-trace/src/plugins/util/url')
 const configManifest = require('../../../packages/dd-trace/src/config/supported-configurations.json')
 
@@ -44,6 +45,16 @@ const reqs = [
   },
 ]
 
+// Verify the three transforms actually fire before the timed loop: a broken
+// helper would otherwise keep sink non-zero and silently "pass".
+{
+  const secretReq = reqs[3] // .../profile?password=hunter2
+  const url = extractURL(secretReq)
+  assert.ok(url.includes('example.com'), 'extractURL did not rebuild the request URL')
+  assert.ok(!obfuscateQs(config, url).includes('hunter2'), 'obfuscateQs did not redact the secret')
+  assert.equal(typeof calculateHttpEndpoint(url), 'string', 'calculateHttpEndpoint did not return a path')
+}
+
 let sink = 0
 for (let i = 0; i < COUNT; i++) {
   const req = reqs[i & 3]
@@ -52,4 +63,4 @@ for (let i = 0; i < COUNT; i++) {
   sink += calculateHttpEndpoint(url).length
 }
 
-if (sink === 0) throw new Error('unreachable')
+assert.ok(sink > 0, 'url bench produced no output')

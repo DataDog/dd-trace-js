@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 if (Number(process.env.USE_TRACER)) {
   require('../../..').init()
 }
@@ -11,9 +13,17 @@ const dns = require('dns')
 // lookups are serialized, so live memory stays flat regardless of COUNT.
 const COUNT = process.env.COUNT ? Number(process.env.COUNT) : 20000
 
+let checked = false
+
 function testRun (count) {
   if (++count === COUNT) return
-  dns.lookup('localhost', () => testRun(count))
+  dns.lookup('localhost', (error, address) => {
+    if (!checked) {
+      assert.ok(!error && address, 'dns.lookup did not resolve localhost')
+      checked = true
+    }
+    testRun(count)
+  })
 }
 
 testRun(0)
