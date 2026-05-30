@@ -42,38 +42,25 @@ const source = `
 
 const variableValues = { who: 'world' }
 
-// Total queries per process. A large total keeps the fixed startup a small
-// fraction of the run. CONCURRENCY queries are kept in flight at once, which is
-// how a real server runs graphql (several requests resolving in parallel)
-// rather than one strictly after another. The fixed-size pool refills on each
-// completion, so at most CONCURRENCY result graphs are live: memory stays flat
-// regardless of QUERIES, the run cannot OOM, and there is no unbounded fan-out
-// to inflate the variance.
+// Total queries per process, run sequentially. graphql here is CPU-bound
+// (in-memory resolvers, nothing to overlap) and Node runs JS on one thread, so
+// the sequential loop already saturates the core (~96% CPU, measured). Keeping
+// several in flight only adds promise scheduling, live memory and GC, which made
+// the run slower and noisier, never faster.
 const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 1500
-const CONCURRENCY = process.env.CONCURRENCY ? Number(process.env.CONCURRENCY) : 5
 
-let started = 0
-let completed = 0
 let checked = false
 
-function runOne () {
-  if (started >= QUERIES) return
-  started++
-  graphql.graphql({ schema, source, variableValues }).then((result) => {
+guard.loopStart()
+;(async () => {
+  for (let i = 0; i < QUERIES; i++) {
+    const result = await graphql.graphql({ schema, source, variableValues })
     if (!checked) {
       // Fail loudly if the schema/resolvers stop producing a result: a broken
       // bench that silently returns errors would otherwise still "pass".
       assert.ok(result.data && !result.errors, 'graphql query returned no data')
       checked = true
     }
-    if (++completed === QUERIES) {
-      guard.done()
-    }
-    runOne()
-  })
-}
-
-guard.loopStart()
-for (let i = 0; i < CONCURRENCY; i++) {
-  runOne()
-}
+  }
+  guard.done()
+})()
