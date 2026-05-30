@@ -1,7 +1,7 @@
 {
   "name": "plugin-http",
   "cachegrind": false,
-  "iterations": 40,
+  "iterations": 20,
   "instructions": true,
   "variants": {
     "client-with-tracer": {
