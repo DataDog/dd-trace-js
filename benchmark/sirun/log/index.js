@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const guard = require('../startup-guard')
 
 const { debugChannel, errorChannel } = require('../../../packages/dd-trace/src/log/channels')
 const log = require('../../../packages/dd-trace/src/log')
@@ -31,12 +30,12 @@ assert.equal(
   `errorChannel.hasSubscribers mismatch (DD_TRACE_DEBUG=${process.env.DD_TRACE_DEBUG})`
 )
 
-// The disabled/filtered path (without-log, skip-log) is ~8 ns/call, so it needs a
-// far larger count than the emitting path to outrun node boot; set per variant.
-const COUNT = Number(process.env.COUNT) || 1_000_000
-
-guard.loopStart()
-for (let i = 0; i < COUNT; i++) {
+// The disabled / filtered variants (without-log, skip-log) are node-boot-bound:
+// the disabled path is a near-free dispatch, and lengthening only trades boot
+// domination for a closure-allocation GC cliff (an inline thunk per call), while
+// hoisting the thunk lets V8 dead-code-eliminate the no-op loop. They are left
+// short; with-debug / with-error are the loop-dominant variants. No startup guard
+// for that reason.
+for (let i = 0; i < 1_000_000; i++) {
   log[WITH_LEVEL](() => 'message')
 }
-guard.done()
