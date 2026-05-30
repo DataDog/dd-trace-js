@@ -37,6 +37,22 @@
         "ENCODER_VERSION": "0.5",
         "WITH_SPAN_EVENTS": "legacy"
       }
+    },
+    "0.4-wide-tags": {
+      "env": {
+        "ENCODER_VERSION": "0.4",
+        "WITH_SPAN_EVENTS": "none",
+        "WIDE_TAGS": "40",
+        "ENCODE_COUNT": "12000"
+      }
+    },
+    "0.5-wide-tags": {
+      "env": {
+        "ENCODER_VERSION": "0.5",
+        "WITH_SPAN_EVENTS": "none",
+        "WIDE_TAGS": "40",
+        "ENCODE_COUNT": "16000"
+      }
     }
   }
 }
