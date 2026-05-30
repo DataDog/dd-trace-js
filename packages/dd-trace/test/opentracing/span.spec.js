@@ -403,6 +403,16 @@ describe('Span', () => {
       ]
       assert.deepStrictEqual(events, expectedEvents)
     })
+
+    it('leaves attributes undefined when none survive sanitization', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addEvent('all dropped', { fn: () => {}, nested: { a: 1 } }, 1714536311886)
+      span.addEvent('empty', {}, 1714536311886)
+
+      assert.strictEqual(span._events[0].attributes, undefined)
+      assert.strictEqual(span._events[1].attributes, undefined)
+    })
   })
 
   describe('empty event and link attributes (end to end)', () => {

@@ -1,9 +1,23 @@
 'use strict'
 
 const getConfig = require('../config')
+const id = require('../id')
 const { MsgpackChunk } = require('../msgpack')
 const log = require('../log')
-const { normalizeSpan, eventTimeNano } = require('./tags-processors')
+const { walkSpan } = require('../span_format')
+/** @typedef {import('../span_format').SpanSink} SpanSink */
+const {
+  normalizeSpan,
+  eventTimeNano,
+  DEFAULT_SERVICE_NAME,
+  DEFAULT_SPAN_NAME,
+  MAX_SERVICE_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_TYPE_LENGTH,
+} = require('./tags-processors')
+
+// Matches the `id('0')` fallback `formatSpan` uses for a missing parent id.
+const ZERO_ID = id('0')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 // Values longer than this byte threshold skip the `_stringMap` lookup and
@@ -12,6 +26,10 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 // strings this long (events JSON, stack traces, large query bodies) — they
 // are unique per span, so the cache hit rate stays near zero anyway.
 const STRING_CACHE_BYPASS_LIMIT = 1024
+// Initial size of each per-encoder meta / metrics scratch chunk the streaming
+// `ByteSink` serializes into. Covers a typical span's maps without a grow;
+// oversized spans (large stack traces, query bodies) grow it and keep it warm.
+const SCRATCH_MIN_SIZE = 2048
 
 // Pre-encoded static keys + value-prefix bytes; the hot encode loop emits
 // each via one Uint8Array.set instead of routing through the string cache.
@@ -238,6 +256,8 @@ class AgentEncoder {
   #config
   #debugEncoding
   #formatSpan
+  #byteSink
+  #nativeSpanEvents
 
   constructor (writer, limit = SOFT_LIMIT) {
     this.#limit = limit
@@ -247,12 +267,14 @@ class AgentEncoder {
     this._reset()
     this.#config = getConfig()
     this.#debugEncoding = this.#config.DD_TRACE_ENCODING_DEBUG
+    this.#nativeSpanEvents = this.#config.DD_TRACE_NATIVE_SPAN_EVENTS
     // Pick the per-span formatter once so the hot loop pays no per-span
     // config check. The native path keeps the raw `span_events` slot for
     // `#encodeSpanEvents`; the legacy path serializes it into meta.events.
-    this.#formatSpan = this.#config.DD_TRACE_NATIVE_SPAN_EVENTS
+    this.#formatSpan = this.#nativeSpanEvents
       ? normalizeSpan
       : formatSpanWithLegacyEvents
+    this.#byteSink = new ByteSink(this)
   }
 
   count () {
@@ -277,6 +299,207 @@ class AgentEncoder {
       log.debug('Buffer went over soft limit, flushing')
       this.#writer.flush()
     }
+  }
+
+  /**
+   * Encode a finished trace (array of raw spans) straight to msgpack without
+   * building formatted objects first. Drives `walkSpan` against a reused
+   * `ByteSink` per span, emitting each span map in the wire order `_encode`
+   * produces from a formatted span. Mirrors `encode` so the only difference
+   * from the object path is the absent per-span allocation.
+   *
+   * @param {Array<import('../opentracing/span')>} trace
+   * @param {string | false} tagForFirstSpanInChunk
+   */
+  encodeRaw (trace, tagForFirstSpanInChunk = false) {
+    const bytes = this._traceBytes
+    const start = bytes.length
+    const stringBufferAtStart = this._stringBytes.buffer
+    const sink = this.#byteSink
+
+    this._traceCount++
+    bytes.writeArrayPrefix(trace)
+
+    let isFirstSpanInChunk = true
+    for (const span of trace) {
+      sink.begin()
+      walkSpan(span, sink, isFirstSpanInChunk, tagForFirstSpanInChunk)
+      this.#emitSpan(bytes, span, sink)
+      isFirstSpanInChunk = false
+    }
+
+    /* istanbul ignore if: mirrors `_encode`'s resize handling; hitting it
+       directly needs >1 MiB of unique strings to realloc `_stringBytes`. */
+    if (this._stringBytes.buffer !== stringBufferAtStart) {
+      this.#refreshStringCache()
+    }
+
+    if (this.#debugEncoding) {
+      log.debug(lazyEncodedTraceBufferLogger, bytes, start, bytes.length)
+    }
+
+    if (this._traceBytes.length > this.#limit || this._stringBytes.length > this.#limit) {
+      log.debug('Buffer went over soft limit, flushing')
+      this.#writer.flush()
+    }
+  }
+
+  /**
+   * @param {MsgpackChunk} bytes
+   * @param {import('../opentracing/span')} span
+   * @param {ByteSink} sink
+   */
+  #emitSpan (bytes, span, sink) {
+    const spanContext = span.context()
+    const spanEvents = sink.spanEvents
+
+    // Without native span events the array is serialized into a `meta.events`
+    // entry, appended here so the key lands after the walk's own meta entries.
+    const nativeEvents = this.#nativeSpanEvents && spanEvents
+    if (!this.#nativeSpanEvents && spanEvents) {
+      sink.writeMeta('events', stringifySpanEvents(spanEvents))
+    }
+
+    // Head defaulting / clamping mirrors `normalizeSpan`: `name` and `service`
+    // default then clamp; `resource` seeds from the unclamped span name, a
+    // resource.name tag overrides it, an empty resource falls back to the
+    // clamped name. The streaming gate pins this against the object path.
+    let name = String(spanContext._name) || DEFAULT_SPAN_NAME
+    if (name.length > MAX_NAME_LENGTH) name = name.slice(0, MAX_NAME_LENGTH)
+    let service = sink.service || DEFAULT_SERVICE_NAME
+    if (service.length > MAX_SERVICE_LENGTH) service = service.slice(0, MAX_SERVICE_LENGTH)
+    let resource = sink.resource ?? String(spanContext._name)
+    if (!resource) resource = name
+    let type = sink.type
+    if (type !== undefined && type.length > MAX_TYPE_LENGTH) type = type.slice(0, MAX_TYPE_LENGTH)
+
+    let mapSize = 11
+    if (type !== undefined) mapSize++
+    if (span.meta_struct) mapSize++
+    if (nativeEvents) mapSize++
+
+    // Pre-fetch the string-cache entries and fuse the map prefix, optional
+    // `type`, three ids, `name` / `resource` / `service`, and — in the common
+    // u64-`start` case — the binary error key+value, `start`, and `duration`
+    // key into a single `reserve`. Same shape as `_encode`; `walkSpan` only
+    // flags the sink (error = 1) or leaves it 0, so the error key is binary.
+    const stringMap = this._stringMap
+    let typeEntry
+    if (type !== undefined) {
+      typeEntry = stringMap[type] ?? this._cacheString(type)
+    }
+    const nameEntry = stringMap[name] ?? this._cacheString(name)
+    const resourceEntry = stringMap[resource] ?? this._cacheString(resource)
+    const serviceEntry = stringMap[service] ?? this._cacheString(service)
+    const nameLen = nameEntry.length
+    const resourceLen = resourceEntry.length
+    const serviceLen = serviceEntry.length
+
+    const errorEntry = sink.error === 1 ? KEY_ERROR_1 : KEY_ERROR_0
+    const start = Math.round(span._startTime * 1e6)
+    const duration = Math.round(span._duration * 1e6)
+    const fuseTail = start >= 0x1_00_00_00_00
+
+    let blockSize = 1 +
+      KEY_TRACE_ID_PREFIX.length + 8 +
+      KEY_SPAN_ID_PREFIX.length + 8 +
+      KEY_PARENT_ID_PREFIX.length + 8 +
+      KEY_NAME.length + nameLen +
+      KEY_RESOURCE.length + resourceLen +
+      KEY_SERVICE.length + serviceLen
+    if (typeEntry) blockSize += KEY_TYPE.length + typeEntry.length
+    if (fuseTail) {
+      blockSize += errorEntry.length + KEY_START_PREFIX.length + 8 + KEY_DURATION.length
+    }
+
+    const blockOffset = bytes.length
+    bytes.reserve(blockSize)
+    const target = bytes.buffer
+    let cursor = blockOffset
+
+    target[cursor++] = 0x80 + mapSize
+
+    if (typeEntry) {
+      target.set(KEY_TYPE, cursor)
+      cursor += KEY_TYPE.length
+      target.set(typeEntry, cursor)
+      cursor += typeEntry.length
+    }
+
+    cursor = this.#writeIdAt(target, cursor, KEY_TRACE_ID_PREFIX, spanContext._traceId)
+    cursor = this.#writeIdAt(target, cursor, KEY_SPAN_ID_PREFIX, spanContext._spanId)
+    cursor = this.#writeIdAt(target, cursor, KEY_PARENT_ID_PREFIX, spanContext._parentId || ZERO_ID)
+
+    target.set(KEY_NAME, cursor)
+    cursor += KEY_NAME.length
+    target.set(nameEntry, cursor)
+    cursor += nameLen
+
+    target.set(KEY_RESOURCE, cursor)
+    cursor += KEY_RESOURCE.length
+    target.set(resourceEntry, cursor)
+    cursor += resourceLen
+
+    target.set(KEY_SERVICE, cursor)
+    cursor += KEY_SERVICE.length
+    target.set(serviceEntry, cursor)
+    cursor += serviceLen
+
+    if (fuseTail) {
+      target.set(errorEntry, cursor)
+      cursor += errorEntry.length
+      target.set(KEY_START_PREFIX, cursor)
+      cursor += KEY_START_PREFIX.length
+      target.writeUInt32BE((start / 0x1_00_00_00_00) >>> 0, cursor)
+      target.writeUInt32BE(start >>> 0, cursor + 4)
+      cursor += 8
+      target.set(KEY_DURATION, cursor)
+    } else {
+      bytes.set(errorEntry)
+      bytes.set(KEY_START)
+      bytes.writeIntOrFloat(start)
+      bytes.set(KEY_DURATION)
+    }
+    bytes.writeIntOrFloat(duration)
+
+    this.#appendScratchMap(bytes, KEY_META_PREFIX, sink.metaCount, sink.metaBytes)
+    this.#appendScratchMap(bytes, KEY_METRICS_PREFIX, sink.metricsCount, sink.metricsBytes)
+
+    if (nativeEvents) {
+      bytes.set(KEY_SPAN_EVENTS)
+      this.#encodeSpanEvents(bytes, spanEvents)
+    }
+    if (span.meta_struct) {
+      bytes.set(KEY_META_STRUCT)
+      this.#encodeMetaStruct(bytes, span.meta_struct)
+    }
+  }
+
+  /**
+   * Emit a meta / metrics map: the `0xDF` map32 prefix, the entry count, then
+   * the bytes the walk already serialized into `scratch`. The walk filtered,
+   * truncated, and string-cached every entry, so this is a count write plus one
+   * memcpy — no per-entry work and no key iteration.
+   *
+   * @param {MsgpackChunk} bytes
+   * @param {Buffer} keyPrefix Precomputed `[key, 0xDF]`.
+   * @param {number} count
+   * @param {MsgpackChunk} scratch
+   */
+  #appendScratchMap (bytes, keyPrefix, count, scratch) {
+    const headerOffset = bytes.length
+    bytes.reserve(keyPrefix.length + 4)
+    bytes.buffer.set(keyPrefix, headerOffset)
+    const countOffset = headerOffset + keyPrefix.length
+    const target = bytes.buffer
+    target[countOffset] = count >>> 24
+    target[countOffset + 1] = count >>> 16
+    target[countOffset + 2] = count >>> 8
+    target[countOffset + 3] = count
+
+    const offset = bytes.length
+    bytes.reserve(scratch.length)
+    scratch.buffer.copy(bytes.buffer, offset, 0, scratch.length)
   }
 
   makePayload () {
@@ -959,6 +1182,69 @@ function memoizedLogDebug (key, message, value) {
   if (!seenKeys.has(key)) {
     seenKeys.add(key)
     log.debug(message, key, typeof value)
+  }
+}
+
+/**
+ * The `walkSpan` sink for the 0.4 byte path: it serializes each reported meta /
+ * metrics entry straight into one of two scratch chunks and keeps the head
+ * fields in instance state, so `AgentEncoder.encodeRaw` emits a span without a
+ * formatted-span object. Two scratches because `walkSpan` interleaves meta and
+ * metrics writes but msgpack needs each map contiguous. Duplicate keys are
+ * emitted as-is and ride the agent's last-write-wins decode; `walkSpan` already
+ * guards the one structural duplicate (`_dd.measured`).
+ *
+ * @implements {SpanSink}
+ */
+class ByteSink {
+  #encoder
+  metaBytes
+  metricsBytes
+  metaCount = 0
+  metricsCount = 0
+  service
+  type
+  resource
+  error = 0
+  spanEvents
+
+  /**
+   * @param {AgentEncoder} encoder Owns the string cache the entry writes share.
+   */
+  constructor (encoder) {
+    this.#encoder = encoder
+    this.metaBytes = new MsgpackChunk(SCRATCH_MIN_SIZE)
+    this.metricsBytes = new MsgpackChunk(SCRATCH_MIN_SIZE)
+  }
+
+  begin () {
+    this.metaBytes.length = 0
+    this.metricsBytes.length = 0
+    this.metaCount = 0
+    this.metricsCount = 0
+    this.service = undefined
+    this.type = undefined
+    this.resource = undefined
+    this.error = 0
+    this.spanEvents = undefined
+  }
+
+  setService (value) { this.service = value }
+  setType (value) { this.type = value }
+  setResource (value) { this.resource = value }
+  setError () { this.error = 1 }
+  setSpanEvents (events) { this.spanEvents = events }
+
+  writeMeta (key, value) {
+    this.#encoder._encodeString(this.metaBytes, key)
+    this.#encoder._encodeString(this.metaBytes, value)
+    this.metaCount++
+  }
+
+  writeMetric (key, value) {
+    this.#encoder._encodeString(this.metricsBytes, key)
+    this.metricsBytes.writeIntOrFloat(value)
+    this.metricsCount++
   }
 }
 
