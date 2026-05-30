@@ -46,21 +46,14 @@ const source = `
 const variableValues = { who: 'world' }
 
 // Total queries per process. A large total keeps the fixed startup (tracer load
-// plus graphql require) a small fraction of the run. Fire them in sequential
-// waves and await each wave so the unresolved query promises and their result
-// graphs do not accumulate; otherwise a few thousand in flight at once exhausts
-// the heap. Live memory stays flat while QUERIES scales.
-const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 500
-const WAVE = 50
+// plus graphql require) a small fraction of the run. Await each query before
+// starting the next so only one result graph is live at a time: memory stays
+// flat regardless of QUERIES, so the run cannot OOM, and there is no
+// concurrency-driven GC jitter to inflate the variance.
+const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 1000
 
-function runWave (remaining) {
-  if (remaining <= 0) return
-  const size = remaining < WAVE ? remaining : WAVE
-  const batch = []
-  for (let i = 0; i < size; i++) {
-    batch.push(graphql.graphql({ schema, source, variableValues }))
+;(async () => {
+  for (let i = 0; i < QUERIES; i++) {
+    await graphql.graphql({ schema, source, variableValues })
   }
-  Promise.all(batch).then(() => runWave(remaining - size))
-}
-
-runWave(QUERIES)
+})()
