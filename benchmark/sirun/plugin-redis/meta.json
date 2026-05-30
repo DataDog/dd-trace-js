@@ -9,12 +9,6 @@
     "get": {
       "env": { "VARIANT": "get", "ITERATIONS": "20000000" }
     },
-    "set": {
-      "env": { "VARIANT": "set", "ITERATIONS": "18000000" }
-    },
-    "hset": {
-      "env": { "VARIANT": "hset", "ITERATIONS": "11000000" }
-    },
     "long-value": {
       "env": { "VARIANT": "long-value", "ITERATIONS": "13000000" }
     },
