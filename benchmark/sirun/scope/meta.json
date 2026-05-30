@@ -16,6 +16,12 @@
         "SCOPE_ENABLED": "true",
         "COUNT": "8000000"
       }
+    },
+    "bind": {
+      "env": {
+        "MODE": "bind",
+        "COUNT": "3000000"
+      }
     }
   }
 }
