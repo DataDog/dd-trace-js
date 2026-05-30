@@ -11,6 +11,17 @@ tracer._tracer._processor.process = function process (span) {
 
 const { FINISH, SHAPE = 'plain' } = process.env
 
+// Total spans created per process. The fixed tracer load (~75 ms) must be a small
+// fraction of the run so the bench measures span construction, not startup; at
+// 2M it is well under 10%. COUNT keeps it tunable per variant.
+const COUNT = Number(process.env.COUNT) || 2_000_000
+
+// finish-later defers the finish so it runs off the active-span path. Holding all
+// COUNT spans live at once would blow the heap (a 1M array of spans is ~1.6 GB);
+// instead run in fixed-size batches so the deferred-finish path is still exercised
+// while live memory stays flat.
+const BATCH = 10_000
+
 const spans = []
 
 // Span sanitizes link / event attributes inline; reusing the pre-built objects across
@@ -36,38 +47,36 @@ assert.equal(sanitySpan._links.length, 1)
 assert.equal(sanitySpan._events.length, 1)
 sanitySpan.finish()
 
-if (SHAPE === 'tags') {
-  for (let iteration = 0; iteration < 100_000; iteration++) {
-    const span = tracer.startSpan('some.span.name', FIELDS_WITH_TAGS)
-    if (FINISH === 'now') {
-      span.finish()
-    } else {
-      spans.push(span)
-    }
+// One span creation for the active shape. addEvent only applies to the otel shape.
+function startOne () {
+  if (SHAPE === 'tags') {
+    return tracer.startSpan('some.span.name', FIELDS_WITH_TAGS)
   }
-} else if (SHAPE === 'tags-and-otel') {
-  for (let iteration = 0; iteration < 100_000; iteration++) {
+  if (SHAPE === 'tags-and-otel') {
     const span = tracer.startSpan('some.span.name', FIELDS_WITH_TAGS_AND_LINKS)
     span.addEvent('event-name', EVENT_ATTRIBUTES)
-    if (FINISH === 'now') {
-      span.finish()
-    } else {
-      spans.push(span)
-    }
+    return span
   }
-} else {
-  for (let iteration = 0; iteration < 100_000; iteration++) {
-    const span = tracer.startSpan('some.span.name', {})
-    if (FINISH === 'now') {
-      span.finish()
-    } else {
-      spans.push(span)
-    }
-  }
+  return tracer.startSpan('some.span.name', {})
 }
 
-if (FINISH !== 'now') {
-  for (let index = 0; index < 100_000; index++) {
-    spans[index].finish()
+if (FINISH === 'now') {
+  for (let iteration = 0; iteration < COUNT; iteration++) {
+    startOne().finish()
+  }
+} else {
+  // Deferred finish in batches: start BATCH spans, finish them after the batch is
+  // built (so each finishes off the active path), then drop the references.
+  let remaining = COUNT
+  while (remaining > 0) {
+    const size = remaining < BATCH ? remaining : BATCH
+    for (let i = 0; i < size; i++) {
+      spans.push(startOne())
+    }
+    for (let i = 0; i < size; i++) {
+      spans[i].finish()
+    }
+    spans.length = 0
+    remaining -= size
   }
 }
