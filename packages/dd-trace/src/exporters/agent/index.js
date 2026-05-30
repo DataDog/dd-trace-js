@@ -25,6 +25,7 @@ class AgentExporter {
       protocolVersion,
       headers,
     })
+    this.encodesRaw = this._writer.encodesRaw
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
@@ -41,7 +42,19 @@ class AgentExporter {
 
   export (spans) {
     this._writer.append(spans)
+    this.#scheduleFlush()
+  }
 
+  /**
+   * @param {Array<import('../../opentracing/span')>} trace Raw finished spans.
+   * @param {string | false} tagForFirstSpanInChunk
+   */
+  exportRaw (trace, tagForFirstSpanInChunk) {
+    this._writer.appendRaw(trace, tagForFirstSpanInChunk)
+    this.#scheduleFlush()
+  }
+
+  #scheduleFlush () {
     const { flushInterval } = this._config
 
     if (flushInterval === 0) {

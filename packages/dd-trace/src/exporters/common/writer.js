@@ -51,6 +51,19 @@ class Writer {
     this._encoder.encode(payload)
   }
 
+  /**
+   * @param {Array<import('../../opentracing/span')>} trace Raw, unformatted finished spans.
+   * @param {string | false} tagForFirstSpanInChunk
+   */
+  appendRaw (trace, tagForFirstSpanInChunk) {
+    if (!request.writable) {
+      log.debug('Maximum number of active requests reached. %d raw spans discarded', trace.length)
+      return
+    }
+
+    this._encoder.encodeRaw(trace, tagForFirstSpanInChunk)
+  }
+
   setUrl (url) {
     this._url = url
   }

@@ -25,8 +25,10 @@ describe('Exporter', () => {
     span = {}
     writer = {
       append: sinon.spy(),
+      appendRaw: sinon.spy(),
       flush: sinon.spy(),
       setUrl: sinon.spy(),
+      encodesRaw: true,
     }
     prioritySampler = {}
     Writer = sinon.stub().returns(writer)
@@ -100,6 +102,21 @@ describe('Exporter', () => {
         sinon.assert.calledWith(writer.append, [span])
       })
     })
+
+    describe('exportRaw', () => {
+      it('should hand raw spans and the process tags to the writer', () => {
+        exporter.exportRaw([span], 'service:web')
+
+        sinon.assert.calledWith(writer.appendRaw, [span], 'service:web')
+        sinon.assert.notCalled(writer.append)
+      })
+    })
+  })
+
+  it('should forward the writer raw-encoding capability', () => {
+    exporter = new Exporter({ url, flushInterval }, prioritySampler)
+
+    assert.strictEqual(exporter.encodesRaw, true)
   })
 
   describe('when interval is set to 0', () => {

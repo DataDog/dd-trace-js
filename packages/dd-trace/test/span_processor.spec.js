@@ -73,6 +73,7 @@ describe('SpanProcessor', () => {
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './span_stats': { SpanStatsProcessor: sinon.stub().returns({ onSpanFinished: sinon.stub() }) },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
@@ -228,5 +229,59 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+  })
+
+  describe('streaming raw export', () => {
+    let streamingExporter
+
+    beforeEach(() => {
+      streamingExporter = {
+        encodesRaw: true,
+        export: sinon.stub(),
+        exportRaw: sinon.stub(),
+      }
+    })
+
+    it('hands raw finished spans to exportRaw when the exporter streams and stats are off', () => {
+      const processor = new SpanProcessor(streamingExporter, prioritySampler, config)
+      trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+      trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+
+      processor.process(finishedSpan)
+
+      sinon.assert.calledOnceWithExactly(
+        streamingExporter.exportRaw,
+        [finishedSpan, finishedSpan, finishedSpan],
+        processor._processTags
+      )
+      sinon.assert.notCalled(streamingExporter.export)
+      sinon.assert.notCalled(spanFormat)
+      assert.deepStrictEqual(trace.started, [activeSpan])
+      assert.deepStrictEqual(trace.finished, [])
+    })
+
+    it('falls back to the format path when stats are enabled', () => {
+      const statsConfig = { ...config, stats: { enabled: true } }
+      const processor = new SpanProcessor(streamingExporter, prioritySampler, statsConfig)
+      trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+      trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+
+      processor.process(finishedSpan)
+
+      sinon.assert.notCalled(streamingExporter.exportRaw)
+      sinon.assert.calledOnce(streamingExporter.export)
+      assert.strictEqual(spanFormat.callCount, 3)
+    })
+
+    it('falls back to the format path when the exporter cannot stream', () => {
+      // The default `exporter` has no `encodesRaw` flag (0.5 / OTLP / agentless).
+      trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+      trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+
+      processor.process(finishedSpan)
+
+      sinon.assert.calledOnce(exporter.export)
+      assert.strictEqual(spanFormat.callCount, 3)
+    })
   })
 })
