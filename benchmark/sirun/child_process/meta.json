@@ -1,0 +1,16 @@
+{
+  "name": "child_process",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "shell-string": {
+      "env": { "VARIANT": "shell-string", "ITERATIONS": "20000000" }
+    },
+    "file-args": {
+      "env": { "VARIANT": "file-args", "ITERATIONS": "11000000" }
+    }
+  }
+}
