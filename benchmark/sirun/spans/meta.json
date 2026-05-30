@@ -28,6 +28,14 @@
         "COUNT": "2000000"
       }
     },
+    "finish-immediately-with-many-tags": {
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "FINISH": "now",
+        "SHAPE": "many-tags",
+        "COUNT": "2000000"
+      }
+    },
     "finish-immediately-with-tags-and-otel": {
       "env": {
         "DD_TRACE_SCOPE": "noop",

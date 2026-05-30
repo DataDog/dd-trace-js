@@ -38,6 +38,33 @@ const FIELDS_WITH_TAGS_AND_LINKS = {
   links: [{ context: LINK_CONTEXT, attributes: LINK_ATTRIBUTES }],
 }
 
+// An enriched HTTP+DB server span: ~20 tags across http, db, peer and custom
+// keys, matching what a plugin plus user code attaches on a real request. Drives
+// the addTags path far harder than the 3-tag shape.
+const MANY_TAGS = {
+  'http.method': 'POST',
+  'http.url': 'https://api.example.com/v2/orders',
+  'http.status_code': 200,
+  'http.route': '/v2/orders',
+  'span.kind': 'server',
+  component: 'express',
+  'db.type': 'postgres',
+  'db.name': 'orders',
+  'db.user': 'app_writer',
+  'peer.service': 'orders-db',
+  'out.host': 'db-primary.internal',
+  'out.port': 5432,
+  env: 'production',
+  version: '1.42.3',
+  'service.name': 'orders-api',
+  'user.id': 'u-1234567',
+  'tenant.id': 't-7654321',
+  region: 'us-east-1',
+  'request.id': 'req-abcdef0123',
+  'feature.flag': 'checkout_v2',
+}
+const FIELDS_WITH_MANY_TAGS = { tags: MANY_TAGS }
+
 // Pre-flight: confirm tags / links / events actually attach; catches a silent
 // breakage where the construction shape stopped propagating.
 const sanitySpan = tracer.startSpan('sanity.span', FIELDS_WITH_TAGS_AND_LINKS)
@@ -51,6 +78,9 @@ sanitySpan.finish()
 function startOne () {
   if (SHAPE === 'tags') {
     return tracer.startSpan('some.span.name', FIELDS_WITH_TAGS)
+  }
+  if (SHAPE === 'many-tags') {
+    return tracer.startSpan('some.span.name', FIELDS_WITH_MANY_TAGS)
   }
   if (SHAPE === 'tags-and-otel') {
     const span = tracer.startSpan('some.span.name', FIELDS_WITH_TAGS_AND_LINKS)
