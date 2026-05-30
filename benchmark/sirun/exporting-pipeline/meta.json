@@ -1,34 +1,21 @@
 {
   "name": "exporting-pipeline",
-  "setup": "bash -c \"nohup node ../../e2e/fake-agent.js >/dev/null 2>&1 &\"",
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
-  "iterations": 100,
+  "iterations": 20,
   "instructions": true,
   "cachegrind": false,
   "variants": {
-    "0.4": {
+    "format": {
       "env": {
-        "ENCODER_VERSION": "0.4",
-        "WITH_STATS": "0"
+        "WITH_STATS": "0",
+        "COUNT": "200000"
       }
     },
-    "0.5": {
+    "format-with-stats": {
       "env": {
-        "ENCODER_VERSION": "0.5",
-        "WITH_STATS": "0"
-      }
-    },
-    "0.4_with_stats": {
-      "env": {
-        "ENCODER_VERSION": "0.4",
-        "WITH_STATS": "1"
-      }
-    },
-    "0.5_with_stats": {
-      "env": {
-        "ENCODER_VERSION": "0.5",
-        "WITH_STATS": "1"
+        "WITH_STATS": "1",
+        "COUNT": "200000"
       }
     }
   }

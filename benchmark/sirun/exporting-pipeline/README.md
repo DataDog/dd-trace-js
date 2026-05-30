@@ -1,7 +1,9 @@
-This test creates a 30 span trace (of similar format to the encoding test).
-These spans are then passed through the formatting, encoding, and writing steps
-in our pipeline, and sent to a dummy agent. Once a span (i.e. a trace) is added
-to the exporter, we then proceed to the next iteration via `setImmediate`, and
-run for many iterations.
+Measures the front of the export pipeline: `SpanProcessor.process` runs priority
+and span sampling, then `spanFormat` turns each finished span into its wire
+shape. A no-op exporter receives the formatted chunk so the loop stays CPU-bound
+with flat memory.
 
-There's a variant for each of our encodings/endpoints.
+The encoder and the agent socket are out of scope on purpose: `encoding` covers
+the encoder, and the real flush is a deferred `unref`'d timer that barely fires
+in a short run. Variants toggle the stats (DSM) path, which also runs in
+`process`.

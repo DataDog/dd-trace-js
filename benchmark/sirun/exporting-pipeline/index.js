@@ -1,7 +1,5 @@
 'use strict'
 
-// TODO: Update setup script to not leave agent process running in background.
-
 const assert = require('node:assert/strict')
 
 // Entry point normally primes this; bench imports src directly.
@@ -9,22 +7,25 @@ globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const hostname = require('os').hostname()
 const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
-const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
-const { defaults } = require('../../../packages/dd-trace/src/config/defaults')
 
-const config = {
-  url: `http://${defaults.hostname}:${defaults.port}`,
-  flushInterval: 1000,
-  flushMinSpans: 100,
-  protocolVersion: process.env.ENCODER_VERSION,
-  stats: {
-    enabled: process.env.WITH_STATS === '1',
-  },
-}
+// Measures the front of the export pipeline: SpanProcessor.process -> priority
+// and span sampling -> spanFormat (span -> wire shape). The encoder and the
+// agent socket are out of scope on purpose: encode is covered by the `encoding`
+// bench, and the real flush is a deferred unref'd timer that barely fires in a
+// short run. A no-op exporter keeps the loop CPU-bound, leaves memory flat (the
+// formatted chunk is discarded each pass) and drops the agent dependency.
+const COUNT = Number(process.env.COUNT) || 200_000
+const WITH_STATS = process.env.WITH_STATS === '1'
+
+let exported = 0
+const exporter = { export (formatted) { exported += formatted.length } }
 const prioritySampler = new PrioritySampler()
-const exporter = new Exporter(config, prioritySampler)
+const config = {
+  flushMinSpans: 100,
+  stats: { enabled: WITH_STATS },
+}
 const sp = new SpanProcessor(exporter, prioritySampler, config)
 
 const finished = []
@@ -66,18 +67,20 @@ for (let i = 0, parent = null; i < 30; i++) {
   parent = createSpan(parent)
 }
 
-const writerCountBefore = exporter._writer?._encoder?.count?.() ?? 0
+// Pre-flight: one pass must format and hand the whole 30-span chunk to the
+// exporter; a broken format path would otherwise measure a near-empty loop.
+trace.started = finished
+trace.finished = finished
 sp.process(finished[0])
-const writerCountAfter = exporter._writer?._encoder?.count?.() ?? 0
-assert.ok(writerCountAfter > writerCountBefore, 'span processor did not advance encoder count')
+assert.equal(exported, 30, 'span processor did not format and export the chunk')
 
-let iterations = 1
-function processSpans () {
-  sp.process(finished[0])
-  trace.finished = finished
+exported = 0
+for (let i = 0; i < COUNT; i++) {
+  // process() erases trace.finished each pass; restore the chunk so every
+  // iteration formats the full set.
   trace.started = finished
-  if (++iterations < 250) {
-    setImmediate(processSpans)
-  }
+  trace.finished = finished
+  sp.process(finished[0])
 }
-processSpans()
+
+assert.ok(exported > 0, 'export loop produced no formatted spans')
