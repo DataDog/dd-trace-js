@@ -2,9 +2,9 @@
 
 module.exports = {
   port: 3331 + parseInt(process.env.CPU_AFFINITY || '0'),
-  // Env-tunable like the other live benches. The with-vulnerability server runs
-  // a real child_process.exec per request, so raising this trades startup-share
-  // for subprocess-spawn noise; tune per variant on CI (see README) rather than
-  // pushing a single high default here.
+  // Env-tunable like the other live benches. Local tuning (keep-alive, higher
+  // counts) did not reduce the run-to-run jitter -- it is express/IAST scheduling
+  // noise that CI core-pinning addresses, not connection churn -- so this is left
+  // at a modest default and gated on CI.
   reqs: Number(process.env.REQS) || 100,
 }
