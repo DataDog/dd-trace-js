@@ -34,7 +34,7 @@ fi
   cd ../../ &&
   npm install --global yarn || (sleep 60 && npm install --global yarn) \
     && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
-    && PLUGINS="bluebird|q|graphql|express" yarn services
+    && PLUGINS="graphql|express" yarn services
 )
 
 (
