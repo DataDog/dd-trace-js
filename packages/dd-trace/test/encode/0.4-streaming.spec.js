@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach } = require('mocha')
+const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -18,6 +19,7 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
+  ORIGIN_KEY,
 } = constants
 
 const { MEASURED } = tags
@@ -72,14 +74,19 @@ function makeSpan (overrides = {}) {
   return span
 }
 
-function linkContext (linkId) {
+function linkContext (linkId, overrides = {}) {
   return {
     toTraceId: () => linkId,
     toSpanId: () => linkId,
-    _tracestate: undefined,
-    _sampling: {},
+    _tracestate: overrides.tracestate,
+    _sampling: overrides.sampling ?? {},
   }
 }
+
+// Shared so both encode paths see the identical stack string; a fresh
+// `new TypeError()` per build would capture different stack line numbers and
+// diverge on the `error.stack` meta value for reasons unrelated to encoding.
+const sharedError = new TypeError('kaboom')
 
 const matrix = {
   'minimal span': () => makeSpan(),
@@ -109,7 +116,7 @@ const matrix = {
     },
   }),
   'error span via Error object': () => makeSpan({
-    tags: { error: new TypeError('kaboom') },
+    tags: { error: sharedError },
   }),
   'mixed value tags': () => makeSpan({
     tags: {
@@ -128,6 +135,18 @@ const matrix = {
       { context: linkContext(spanId.toString()) },
     ],
   }),
+  'span with link flags and tracestate': () => makeSpan({
+    links: [
+      {
+        context: linkContext(spanId.toString(), {
+          sampling: { priority: 1 },
+          tracestate: { toString: () => 'dd=s:1;o:rum' },
+        }),
+        attributes: { reason: 'follows' },
+      },
+      { context: linkContext(spanId.toString(), { sampling: { priority: 0 } }) },
+    ],
+  }),
   'span with events': () => makeSpan({
     events: [
       { name: 'first', startTime: 1 },
@@ -142,15 +161,48 @@ const matrix = {
   'single-span ingestion': () => makeSpan({
     spanSampling: { sampleRate: 0.5, maxPerSecond: 100 },
   }),
+  'span with meta_struct': () => makeSpan({
+    metaStruct: { 'appsec.events': { rule: 'test', matches: [1, 2] } },
+  }),
+  // A start below 2^32 skips the fused-u64 head tail (the rare synthetic case).
+  'span with sub-2^32 start': () => makeSpan({ startTime: 1000 }),
+  // The span.kind default and an explicit _dd.measured tag both target the same
+  // metric; the walkSpan guard keeps it single-emit so the byte path stays
+  // identical to the object path here too.
+  'explicit _dd.measured override on a kind span': () => makeSpan({
+    tags: { 'span.kind': 'server', [MEASURED]: 0 },
+  }),
 }
 
-function buildEncoders (nativeSpanEvents) {
+// Pathological spans where a user tag shadows a reserved key the formatter also
+// writes. The object path collapses to one entry; the forward-only byte path
+// emits both and relies on the agent's last-write-wins decode. The wire bytes
+// differ, but the decoded span is identical — the contract the agent enforces.
+const decodeMatrix = {
+  'user tag shadowing language': () => makeSpan({
+    tags: { 'span.kind': 'server', language: 'klingon' },
+  }),
+  'user tag shadowing origin': () => makeSpan({
+    origin: 'synthetics',
+    tags: { [ORIGIN_KEY]: 'user-supplied' },
+  }),
+}
+
+function loadEncoder ({ debug = false, nativeSpanEvents = false } = {}) {
   const logger = { debug: sinon.stub() }
-  const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: nativeSpanEvents })
+  const getConfig = () => ({
+    DD_TRACE_NATIVE_SPAN_EVENTS: nativeSpanEvents,
+    DD_TRACE_ENCODING_DEBUG: debug,
+  })
   const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
     '../log': logger,
     '../config': getConfig,
   })
+  return { AgentEncoder, logger }
+}
+
+function buildEncoders (nativeSpanEvents) {
+  const { AgentEncoder } = loadEncoder({ nativeSpanEvents })
   const objectEncoder = new AgentEncoder({ flush: sinon.spy() })
   const streamingEncoder = new AgentEncoder({ flush: sinon.spy() })
   return { objectEncoder, streamingEncoder }
@@ -174,12 +226,45 @@ describe('encode 0.4 streaming byte-equality', () => {
           const objectBytes = objectEncoder.makePayload()
 
           const streamingSpan = build()
-          streamingEncoder.encodeRawSpan(streamingSpan, true, false)
+          streamingEncoder.encodeRaw([streamingSpan], false)
           const streamingBytes = streamingEncoder.makePayload()
 
           assert.deepStrictEqual(streamingBytes, objectBytes)
         })
       }
+
+      for (const [label, build] of Object.entries(decodeMatrix)) {
+        it(`produces decode-identical 0.4 output for ${label}`, () => {
+          const { objectEncoder, streamingEncoder } = buildEncoders(nativeSpanEvents)
+
+          objectEncoder.encode([format(build(), true, false)])
+          const objectDecoded = msgpack.decode(objectEncoder.makePayload(), { useBigInt64: true })
+
+          streamingEncoder.encodeRaw([build()], false)
+          const streamingDecoded = msgpack.decode(streamingEncoder.makePayload(), { useBigInt64: true })
+
+          assert.deepStrictEqual(streamingDecoded, objectDecoded)
+        })
+      }
     })
   }
+
+  it('flushes when the trace buffer passes the soft limit', () => {
+    const { AgentEncoder } = loadEncoder()
+    const flush = sinon.spy()
+    const encoder = new AgentEncoder({ flush }, 256)
+
+    encoder.encodeRaw([matrix['http server root span']()], false)
+
+    assert.ok(flush.called)
+  })
+
+  it('logs the encoded buffer when encoding debug is on', () => {
+    const { AgentEncoder, logger } = loadEncoder({ debug: true })
+    const encoder = new AgentEncoder({ flush: sinon.spy() })
+
+    encoder.encodeRaw([makeSpan()], false)
+
+    assert.ok(logger.debug.called)
+  })
 })

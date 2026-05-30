@@ -25,6 +25,8 @@ const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
 const PROCESS_ID = constants.PROCESS_ID
+// The pid is constant for the process lifetime; read it once, not per span.
+const PID = process.pid
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
@@ -185,24 +187,31 @@ function setSingleSpanIngestionTags (sink, options) {
  * @param {import('./opentracing/span')} span
  */
 function extractSpanLinks (sink, span) {
-  if (!span._links?.length) {
+  const links = span._links
+  if (!links?.length) {
     return
   }
-  const links = span._links.map(({ context, attributes }) => {
-    const formattedLink = {
-      trace_id: context.toTraceId(true),
-      span_id: context.toSpanId(true),
+  // Build the `_dd.span_links` JSON directly. The trace / span ids are decimal
+  // strings (no escaping); attributes are pre-sanitized to a string map and
+  // `undefined` when empty, so they only need a presence check. Avoids the
+  // throwaway array of formatted-link objects the previous `map` allocated.
+  let serialized = '['
+  for (let i = 0; i < links.length; i++) {
+    if (i > 0) serialized += ','
+    const { context, attributes } = links[i]
+    serialized += `{"trace_id":"${context.toTraceId(true)}","span_id":"${context.toSpanId(true)}"`
+    if (attributes !== undefined) {
+      serialized += `,"attributes":${JSON.stringify(attributes)}`
     }
-
-    if (attributes && Object.keys(attributes).length > 0) {
-      formattedLink.attributes = attributes
+    if (context?._sampling?.priority >= 0) {
+      serialized += `,"flags":${context._sampling.priority > 0 ? 1 : 0}`
     }
-    if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
-    if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-
-    return formattedLink
-  })
-  let serialized = JSON.stringify(links)
+    if (context?._tracestate) {
+      serialized += `,"tracestate":${JSON.stringify(context._tracestate.toString())}`
+    }
+    serialized += '}'
+  }
+  serialized += ']'
   if (serialized.length > MAX_META_VALUE_LENGTH) {
     serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
   }
@@ -239,7 +248,11 @@ function extractTags (sink, span) {
   const hostname = context._hostname
   const priority = context._sampling.priority
 
-  if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
+  // Emit the span.kind-derived `_dd.measured` only when no explicit
+  // `_dd.measured` tag follows in the loop below; the explicit tag is
+  // last-write-wins, so guarding here keeps the key single-emit. A
+  // forward-only byte sink then needs no per-key dedup.
+  if (tags['span.kind'] && tags['span.kind'] !== 'internal' && tags[MEASURED] === undefined) {
     sink.writeMetric(MEASURED, 1)
   }
 
@@ -348,7 +361,7 @@ function extractTags (sink, span) {
   setSingleSpanIngestionTags(sink, context._spanSampling)
 
   sink.writeMeta('language', 'javascript')
-  sink.writeMetric(PROCESS_ID, process.pid)
+  sink.writeMetric(PROCESS_ID, PID)
   if (typeof priority === 'number') {
     sink.writeMetric(SAMPLING_PRIORITY_KEY, priority)
   }

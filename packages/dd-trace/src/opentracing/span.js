@@ -42,16 +42,25 @@ const tagsUpdateCh = channel('dd-trace:span:tags:update')
  * @param {string} key
  * @param {unknown} value
  */
+/**
+ * @param {Record<string, string> | undefined} out Accumulator, created lazily
+ * on the first surviving entry so an all-dropped set stays `undefined`.
+ * @returns {Record<string, string> | undefined}
+ */
 function addArrayOrScalarAttribute (out, key, value) {
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
-      addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
+      out = addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
     }
-  } else if (ALLOWED.has(typeof value)) {
-    out[key] = typeof value === 'string' ? value : String(value)
-  } else {
-    log.warn('Dropping span link attribute. It is not of an allowed type')
+    return out
   }
+  if (ALLOWED.has(typeof value)) {
+    out ??= {}
+    out[key] = typeof value === 'string' ? value : String(value)
+    return out
+  }
+  log.warn('Dropping span link attribute. It is not of an allowed type')
+  return out
 }
 
 function getIntegrationCounter (event, integration) {
@@ -342,21 +351,24 @@ class DatadogSpan {
 
   /**
    * @param {Record<string, unknown>} [attributes]
+   * @returns {Record<string, string> | undefined} `undefined` when nothing
+   * survives, so `extractSpanLinks` omits the slot without an emptiness probe.
    */
   _sanitizeAttributes (attributes = {}) {
-    /** @type {Record<string, string>} */
-    const out = {}
+    let out
     for (const key of Object.keys(attributes)) {
-      addArrayOrScalarAttribute(out, key, attributes[key])
+      out = addArrayOrScalarAttribute(out, key, attributes[key])
     }
     return out
   }
 
   /**
    * @param {Record<string, unknown>} [attributes]
+   * @returns {Record<string, unknown> | undefined} `undefined` when nothing
+   * survives, so the encoders skip the slot without an emptiness probe.
    */
   _sanitizeEventAttributes (attributes = {}) {
-    const sanitizedAttributes = {}
+    let sanitizedAttributes
 
     for (const key of Object.keys(attributes)) {
       const value = attributes[key]
@@ -369,8 +381,10 @@ class DatadogSpan {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
         }
+        sanitizedAttributes ??= {}
         sanitizedAttributes[key] = newArray
       } else if (ALLOWED.has(typeof value)) {
+        sanitizedAttributes ??= {}
         sanitizedAttributes[key] = value
       } else {
         log.warn('Dropping span event attribute. It is not of an allowed type')
