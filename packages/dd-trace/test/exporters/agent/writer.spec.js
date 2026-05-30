@@ -36,6 +36,7 @@ function describeWriter (protocolVersion) {
 
     encoder = {
       encode: sinon.stub(),
+      encodeRaw: sinon.stub(),
       count: sinon.stub().returns(0),
       makePayload: sinon.stub().returns([]),
     }
@@ -72,6 +73,15 @@ function describeWriter (protocolVersion) {
       writer.append([span])
 
       sinon.assert.calledWith(encoder.encode, [span])
+    })
+  })
+
+  describe('appendRaw', () => {
+    it('should encode raw spans with the process tags', () => {
+      writer.appendRaw([span], 'service:web')
+
+      sinon.assert.calledWith(encoder.encodeRaw, [span], 'service:web')
+      sinon.assert.notCalled(encoder.encode)
     })
   })
 
@@ -223,4 +233,24 @@ describe('Writer', () => {
   describe('0.4', () => describeWriter(0.4))
 
   describe('0.5', () => describeWriter(0.5))
+
+  describe('encodesRaw', () => {
+    let Writer
+
+    beforeEach(() => {
+      const AgentEncoder = function () {}
+      Writer = proxyquire('../../../src/exporters/agent/writer', {
+        '../common/request': sinon.stub(),
+        '../../encode/0.4': { AgentEncoder },
+        '../../encode/0.5': { AgentEncoder },
+      })
+    })
+
+    it('streams the v0.4 wire but not v0.5', () => {
+      const url = new URL('http://localhost:8126')
+
+      assert.strictEqual(new Writer({ url, protocolVersion: '0.4' }).encodesRaw, true)
+      assert.strictEqual(new Writer({ url, protocolVersion: '0.5' }).encodesRaw, false)
+    })
+  })
 })

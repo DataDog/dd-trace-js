@@ -10,6 +10,8 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
+  #streamingEncode
+
   constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
@@ -28,6 +30,11 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
+
+    // Stream raw finished spans straight to msgpack when the exporter's encoder
+    // can (agent + v0.4). Span stats still reads the formatted object, so a
+    // stats-enabled processor keeps the format path.
+    this.#streamingEncode = exporter.encodesRaw === true && this._stats === undefined
   }
 
   sample (span) {
@@ -39,7 +46,7 @@ class SpanProcessor {
   process (span) {
     const spanContext = span.context()
     const active = []
-    const formatted = []
+    const output = []
     const trace = spanContext._trace
     const { flushMinSpans, tracing } = this._config
     const { started, finished } = trace
@@ -58,16 +65,22 @@ class SpanProcessor {
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
+        } else if (this.#streamingEncode) {
+          output.push(span)
         } else {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           isFirstSpanInChunk = false
           this._stats?.onSpanFinished(formattedSpan)
-          formatted.push(formattedSpan)
+          output.push(formattedSpan)
         }
       }
 
-      if (formatted.length !== 0 && trace.isRecording !== false) {
-        this._exporter.export(formatted)
+      if (output.length !== 0 && trace.isRecording !== false) {
+        if (this.#streamingEncode) {
+          this._exporter.exportRaw(output, this._processTags)
+        } else {
+          this._exporter.export(output)
+        }
       }
 
       this._erase(trace, active)
