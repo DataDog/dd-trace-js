@@ -1,5 +1,6 @@
 Critical-path bench. Every instrumentation in the tracer routes its wrapped
-calls through shimmer, so a regression here taxes all of them. Measures runtime
-performance of functions wrapped by `shimmer.wrap` and `shimmer.wrapFunction`,
-with variants per function kind and wrap type. The `*-baseline` variant is the
-unwrapped function; the delta is shimmer's per-call overhead.
+calls through shimmer, so a regression here taxes all of them. Measures the
+per-call cost of a shimmer-wrapped function. Two variants: `declared-wrap`
+(wrapped via `shimmer.wrap`) and `declared-wrapfn` (via `shimmer.wrapFunction`).
+Only a sync target is exercised; an async one would mostly measure promise
+allocation rather than shimmer.

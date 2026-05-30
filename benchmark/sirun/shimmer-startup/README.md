@@ -1,5 +1,6 @@
 Critical-path bench. Every instrumentation wraps its targets through shimmer at
 load time, so a regression here slows startup across all integrations. Measures
-the wrap operations themselves (`shimmer.wrap` and `shimmer.wrapFunction`), with
-variants per function kind and wrap type. The `*-baseline` variant is the
-unwrapped function; the delta is shimmer's wrap cost.
+the wrap operation itself. Two variants: `declared-wrap` (`shimmer.wrap`, which
+manipulates property descriptors) and `declared-wrapfn` (`shimmer.wrapFunction`,
+a standalone wrap). The wrapped function's shape does not affect the wrap cost,
+so a single sync target is used.
