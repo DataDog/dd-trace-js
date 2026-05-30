@@ -10,6 +10,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
+const spanFormat = require('../src/span_format')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -30,6 +31,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()
     tracer._exporter.export = sinon.stub()
+    tracer._exporter.exportRaw = sinon.stub()
     tracer._prioritySampler.configure = sinon.stub()
   })
 
@@ -80,23 +82,29 @@ describe('Tracer', () => {
     })
 
     describe('_dd.base_service', () => {
+      // The agent exporter streams raw spans (`exportRaw`), so there is no
+      // formatted span on the `export` spy; format the finished span directly
+      // to assert the formatter's base-service tagging.
       it('should be set when tracer.trace service mismatches configured service', () => {
-        tracer.trace('name', { service: 'custom' }, () => {})
-        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        let span
+        tracer.trace('name', { service: 'custom' }, s => { span = s })
+        const trace = spanFormat(span)
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'custom')
         assert.strictEqual(trace.meta[BASE_SERVICE], 'service')
       })
 
       it('should not be set when tracer.trace service is not supplied', () => {
-        tracer.trace('name', {}, () => {})
-        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        let span
+        tracer.trace('name', {}, s => { span = s })
+        const trace = spanFormat(span)
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
         assert.ok(!(BASE_SERVICE in trace.meta))
       })
 
       it('should not be set when tracer.trace service matched configured service', () => {
-        tracer.trace('name', { service: 'service' }, () => {})
-        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        let span
+        tracer.trace('name', { service: 'service' }, s => { span = s })
+        const trace = spanFormat(span)
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
         assert.ok(!(BASE_SERVICE in trace.meta))
       })
