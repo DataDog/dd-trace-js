@@ -32,8 +32,8 @@ class SpanProcessor {
       : false
 
     // Stream raw finished spans straight to msgpack when the exporter's encoder
-    // can (agent + v0.4). Span stats still reads the formatted object, so a
-    // stats-enabled processor keeps the format path.
+    // can (the agent v0.4 / v0.5 encoders). Span stats still reads the formatted
+    // object, so a stats-enabled processor keeps the format path.
     this.#streamingEncode = exporter.encodesRaw === true && this._stats === undefined
   }
 

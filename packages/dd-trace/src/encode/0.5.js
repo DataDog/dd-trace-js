@@ -1,7 +1,18 @@
 'use strict'
 
-const { normalizeSpan } = require('./tags-processors')
+const id = require('../id')
+const {
+  normalizeSpan,
+  DEFAULT_SERVICE_NAME,
+  DEFAULT_SPAN_NAME,
+  MAX_SERVICE_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_TYPE_LENGTH,
+} = require('./tags-processors')
 const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
+
+// Matches the `id('0')` fallback `formatSpan` uses for a missing parent id.
+const ZERO_ID = id('0')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
@@ -77,6 +88,86 @@ class AgentEncoder extends BaseEncoder {
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
     }
+  }
+
+  /**
+   * Streaming per-span emit for the v0.5 wire. The shared `ByteSink` already
+   * serialized each meta / metrics entry as a string-table index pair (its
+   * `_encodeString` is this encoder's index emit), so this only writes the
+   * 12-element head, appends the two index maps, and emits the type index. The
+   * string-table order differs from the object path, so the wire bytes differ
+   * but decode identically — pinned by `0.5-streaming.spec.js`.
+   *
+   * @param {import('../msgpack').MsgpackChunk} bytes
+   * @param {import('../opentracing/span')} span
+   * @param {object} sink The shared 0.4 `ByteSink`.
+   */
+  _emitRawSpan (bytes, span, sink) {
+    const spanContext = span.context()
+
+    // v0.5 has no native span-events slot; serialize them into `meta.events`.
+    if (sink.spanEvents) {
+      sink.writeMeta('events', stringifySpanEvents(sink.spanEvents))
+    }
+
+    // Head defaulting / clamping mirrors `normalizeSpan`, same as 0.4's emit.
+    let name = String(spanContext._name) || DEFAULT_SPAN_NAME
+    if (name.length > MAX_NAME_LENGTH) name = name.slice(0, MAX_NAME_LENGTH)
+    let service = sink.service || DEFAULT_SERVICE_NAME
+    if (service.length > MAX_SERVICE_LENGTH) service = service.slice(0, MAX_SERVICE_LENGTH)
+    let resource = sink.resource ?? String(spanContext._name)
+    if (!resource) resource = name
+    let type = sink.type
+    if (type !== undefined && type.length > MAX_TYPE_LENGTH) type = type.slice(0, MAX_TYPE_LENGTH)
+
+    const stringMap = this._stringMap
+    const serviceIndex = stringMap[service] ?? this._cacheString(service)
+    const nameIndex = stringMap[name] ?? this._cacheString(name)
+    const resourceIndex = stringMap[resource] ?? this._cacheString(resource)
+
+    const blockOffset = bytes.length
+    bytes.reserve(HEAD_BLOCK_SIZE)
+    const target = bytes.buffer
+    target[blockOffset] = ARRAY_OF_TWELVE
+    let cursor = this.#writeIndexAt(target, blockOffset + 1, serviceIndex)
+    cursor = this.#writeIndexAt(target, cursor, nameIndex)
+    cursor = this.#writeIndexAt(target, cursor, resourceIndex)
+    cursor = this.#writeIdAt(target, cursor, spanContext._traceId)
+    cursor = this.#writeIdAt(target, cursor, spanContext._spanId)
+    this.#writeIdAt(target, cursor, spanContext._parentId || ZERO_ID)
+
+    bytes.writeIntOrFloat(Math.round(span._startTime * 1e6))
+    bytes.writeIntOrFloat(Math.round(span._duration * 1e6))
+    bytes.writeIntOrFloat(sink.error)
+
+    this.#appendMap(bytes, sink.metaCount, sink.metaBytes)
+    this.#appendMap(bytes, sink.metricsCount, sink.metricsBytes)
+
+    this._encodeString(bytes, type)
+  }
+
+  /**
+   * Append a positional `map32` (`0xDF` + back-patched count + scratch bytes)
+   * the `ByteSink` already filled with index-encoded entries. v0.5 maps are
+   * array elements, so unlike 0.4 there is no key prefix.
+   *
+   * @param {import('../msgpack').MsgpackChunk} bytes
+   * @param {number} count
+   * @param {import('../msgpack').MsgpackChunk} scratch
+   */
+  #appendMap (bytes, count, scratch) {
+    const offset = bytes.length
+    bytes.reserve(5)
+    const target = bytes.buffer
+    target[offset] = 0xDF
+    target[offset + 1] = count >>> 24
+    target[offset + 2] = count >>> 16
+    target[offset + 3] = count >>> 8
+    target[offset + 4] = count
+
+    const dataOffset = bytes.length
+    bytes.reserve(scratch.length)
+    scratch.buffer.copy(bytes.buffer, dataOffset, 0, scratch.length)
   }
 
   // Override the inherited 0.4 `_encodeMap` so the v0.5 wire emits each numeric

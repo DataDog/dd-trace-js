@@ -324,7 +324,7 @@ class AgentEncoder {
     for (const span of trace) {
       sink.begin()
       walkSpan(span, sink, isFirstSpanInChunk, tagForFirstSpanInChunk)
-      this.#emitSpan(bytes, span, sink)
+      this._emitRawSpan(bytes, span, sink)
       isFirstSpanInChunk = false
     }
 
@@ -345,11 +345,15 @@ class AgentEncoder {
   }
 
   /**
+   * Emit one finished span from the walked `sink` into `bytes`. The v0.5
+   * encoder overrides this for its 12-element string-table array; the shared
+   * `encodeRaw` shell calls it per span.
+   *
    * @param {MsgpackChunk} bytes
    * @param {import('../opentracing/span')} span
    * @param {ByteSink} sink
    */
-  #emitSpan (bytes, span, sink) {
+  _emitRawSpan (bytes, span, sink) {
     const spanContext = span.context()
     const spanEvents = sink.spanEvents
 
