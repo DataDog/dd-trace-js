@@ -9,7 +9,7 @@ const Lambda = require('../../../packages/datadog-plugin-aws-sdk/src/services/la
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 2_000_000
+const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
 
 // Plugin reads `this.tracer` via a getter that forwards to `this._tracer`; wire the
 // stub through the underscore field so the public access path stays intact.

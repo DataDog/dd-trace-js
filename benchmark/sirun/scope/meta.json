@@ -14,7 +14,7 @@
     "scope_enabled": {
       "env": {
         "SCOPE_ENABLED": "true",
-        "COUNT": "8000000"
+        "COUNT": "4000000"
       }
     },
     "bind": {

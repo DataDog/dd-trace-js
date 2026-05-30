@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const { debugChannel, errorChannel } = require('../../../packages/dd-trace/src/log/channels')
 const log = require('../../../packages/dd-trace/src/log')
@@ -30,6 +31,12 @@ assert.equal(
   `errorChannel.hasSubscribers mismatch (DD_TRACE_DEBUG=${process.env.DD_TRACE_DEBUG})`
 )
 
-for (let i = 0; i < 1_000_000; i++) {
+// The disabled/filtered path (without-log, skip-log) is ~8 ns/call, so it needs a
+// far larger count than the emitting path to outrun node boot; set per variant.
+const COUNT = Number(process.env.COUNT) || 1_000_000
+
+guard.loopStart()
+for (let i = 0; i < COUNT; i++) {
   log[WITH_LEVEL](() => 'message')
 }
+guard.done()

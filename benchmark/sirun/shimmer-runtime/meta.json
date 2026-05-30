@@ -9,7 +9,7 @@
     "declared-wrap": {
       "env": {
         "WRAP_FUNCTION": "false",
-        "ITERATIONS": "400000000"
+        "ITERATIONS": "1000000000"
       }
     },
     "declared-wrapfn": {

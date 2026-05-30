@@ -13,7 +13,7 @@
       "env": { "VARIANT": "deep-aggregate", "ITERATIONS": "1600000" }
     },
     "bigint-id": {
-      "env": { "VARIANT": "bigint-id", "ITERATIONS": "11000000" }
+      "env": { "VARIANT": "bigint-id", "ITERATIONS": "5500000" }
     },
     "binary-hash": {
       "env": { "VARIANT": "binary-hash", "ITERATIONS": "4500000" }
