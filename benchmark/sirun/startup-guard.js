@@ -29,6 +29,18 @@ function done (maxShare = 0.10) {
   const total = Number(end - START)
   const startup = Number(loopStartedAt - START)
   const share = total === 0 ? 1 : startup / total
+
+  // Report mode (used by the overview collector): write the share to the given
+  // file and skip the assertion, so a high-startup variant still reports instead
+  // of crashing the data run. Off in normal/CI runs, where the assertion gates.
+  const reportPath = process.env.STARTUP_GUARD_REPORT
+  if (reportPath) {
+    try {
+      require('fs').writeFileSync(reportPath, share.toFixed(4))
+    } catch {}
+    return
+  }
+
   assert.ok(
     share <= maxShare,
     `startup-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
