@@ -440,7 +440,7 @@ export default [
           'packages/dd-trace/src/llmobs/span_processor.js',
           // Test specs that intentionally mock the `_tags` field shape on a
           // fake span context (their `getTag`/`getTags` mocks read `this._tags`).
-          'packages/dd-trace/test/encode/0.4-streaming.spec.js',
+          'packages/dd-trace/test/encode/streaming-fixtures.js',
           'packages/dd-trace/test/opentracing/span_context.spec.js',
           'packages/dd-trace/test/priority_sampler.spec.js',
           'packages/dd-trace/test/sampling_rule.spec.js',

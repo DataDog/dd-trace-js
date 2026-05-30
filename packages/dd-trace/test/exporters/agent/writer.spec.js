@@ -246,11 +246,11 @@ describe('Writer', () => {
       })
     })
 
-    it('streams the v0.4 wire but not v0.5', () => {
+    it('streams both the v0.4 and v0.5 wires', () => {
       const url = new URL('http://localhost:8126')
 
       assert.strictEqual(new Writer({ url, protocolVersion: '0.4' }).encodesRaw, true)
-      assert.strictEqual(new Writer({ url, protocolVersion: '0.5' }).encodesRaw, false)
+      assert.strictEqual(new Writer({ url, protocolVersion: '0.5' }).encodesRaw, true)
     })
   })
 })

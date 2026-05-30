@@ -28,9 +28,9 @@ class AgentWriter extends BaseWriter {
     this._protocolVersion = protocolVersion
     this._headers = headers
     this._encoder = new AgentEncoder(this)
-    // v0.5 inherits v0.4's `encodeRaw` but emits a string-table wire, so only
-    // v0.4 can stream raw spans straight to bytes; v0.5 keeps the format path.
-    this.encodesRaw = protocolVersion !== '0.5'
+    // Both agent encoders stream raw spans straight to msgpack via `encodeRaw`
+    // (v0.4 inline strings, v0.5 string-table indices).
+    this.encodesRaw = true
   }
 
   _sendPayload (data, count, done) {
