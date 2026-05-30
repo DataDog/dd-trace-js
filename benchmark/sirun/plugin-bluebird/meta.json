@@ -3,13 +3,13 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 100,
+  "iterations": 20,
   "instructions": true,
   "variants": {
     "with-tracer": {
       "env": {
         "USE_TRACER": "1",
-        "COUNT": "50000"
+        "COUNT": "30000000"
       }
     }
   }
