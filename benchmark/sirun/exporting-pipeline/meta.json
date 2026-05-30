@@ -17,6 +17,13 @@
         "WITH_STATS": "1",
         "COUNT": "200000"
       }
+    },
+    "format-with-links-events": {
+      "env": {
+        "WITH_STATS": "0",
+        "WITH_LINKS": "1",
+        "COUNT": "85000"
+      }
     }
   }
 }

@@ -5,5 +5,5 @@ with flat memory.
 
 The encoder and the agent socket are out of scope on purpose: `encoding` covers
 the encoder, and the real flush is a deferred `unref`'d timer that barely fires
-in a short run. Variants toggle the stats (DSM) path, which also runs in
-`process`.
+in a short run. Variants toggle the stats (DSM) path and the span-links/events
+formatting path, both of which run in `process`.

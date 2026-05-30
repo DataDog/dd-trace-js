@@ -19,9 +19,25 @@ const id = require('../../../packages/dd-trace/src/id')
 // formatted chunk is discarded each pass) and drops the agent dependency.
 const COUNT = Number(process.env.COUNT) || 200_000
 const WITH_STATS = process.env.WITH_STATS === '1'
+const WITH_LINKS = process.env.WITH_LINKS === '1'
+
+// Span link + events fixture for the links-and-events variant. spanFormat
+// serializes links into meta['_dd.span_links'] and maps events onto span_events
+// for every formatted span -- otel-era paths the plain shape never hits.
+const LINK_CONTEXT = {
+  toTraceId: () => '1234567890abcdef1234567890abcdef',
+  toSpanId: () => 'abcdef1234567890',
+  _sampling: { priority: 1 },
+}
+const LINK_ATTRIBUTES = { 'link.kind': 'fork', priority: 1, ok: true }
+const SPAN_EVENTS = [
+  { name: 'http.attempt', startTime: 1_415_926.5, attributes: { attempt: 1, ok: true, code: 200 } },
+  { name: 'db.query', startTime: 1_415_927, attributes: { rows: 17 } },
+]
 
 let exported = 0
-const exporter = { export (formatted) { exported += formatted.length } }
+let lastFormatted
+const exporter = { export (formatted) { exported += formatted.length; lastFormatted = formatted } }
 const prioritySampler = new PrioritySampler()
 const config = {
   flushMinSpans: 100,
@@ -60,6 +76,10 @@ function createSpan (parent) {
     _startTime: 1415926,
     _duration: 100,
   }
+  if (WITH_LINKS) {
+    span._links = [{ context: LINK_CONTEXT, attributes: LINK_ATTRIBUTES }]
+    span._events = SPAN_EVENTS
+  }
   finished.push(span)
   return span
 }
@@ -74,6 +94,10 @@ trace.started = finished
 trace.finished = finished
 sp.process(finished[0])
 assert.equal(exported, 30, 'span processor did not format and export the chunk')
+if (WITH_LINKS) {
+  assert.ok(lastFormatted[0].meta['_dd.span_links'], 'span links were not formatted')
+  assert.ok(lastFormatted[0].span_events?.length, 'span events were not formatted')
+}
 
 guard.loopStart()
 exported = 0
