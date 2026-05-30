@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 const shimmer = require('../../../packages/datadog-shimmer')
 
 // Measures the per-call cost of a shimmer-wrapped function. shimmer.wrap (object
@@ -31,9 +32,11 @@ if (useWrapFunction) {
   wrapped = obj.target
 }
 
+guard.loopStart()
 for (let i = 0; i < ITERATIONS; i++) {
   wrapped()
 }
+guard.done()
 
 // Fail loudly if the wrapper stops delegating to the original function.
 assert.equal(counter, ITERATIONS, 'wrapped function did not run ITERATIONS times')

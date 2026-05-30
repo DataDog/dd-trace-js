@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const {
   ENCODER_VERSION,
@@ -40,6 +41,7 @@ assert.equal(encoder.count(), 1)
 assert.ok(encoder._traceBytes.length > 0)
 encoder._reset()
 
+guard.loopStart()
 if (WITH_SPAN_EVENTS === 'none') {
   for (let iteration = 0; iteration < ENCODE_COUNT; iteration++) {
     tickTrace(trace, iteration)
@@ -52,3 +54,4 @@ if (WITH_SPAN_EVENTS === 'none') {
     encoder.encode(trace)
   }
 }
+guard.done()

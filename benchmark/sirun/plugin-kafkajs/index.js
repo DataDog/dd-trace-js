@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const { DsmPathwayCodec, getMessageSize } = require('../../../packages/dd-trace/src/datastreams')
 
@@ -54,10 +55,12 @@ const probe = {}
 DsmPathwayCodec.encode(dataStreamsContext, probe)
 assert.ok(Object.keys(probe).length === 1, 'DsmPathwayCodec.encode did not write the carrier')
 
+guard.loopStart()
 let sink = 0
 const len = messages.length
 for (let i = 0; i < ITERATIONS; i++) {
   sink += encodeOnce(messages[i % len])
 }
+guard.done()
 
 if (sink === 0) throw new Error('unreachable')

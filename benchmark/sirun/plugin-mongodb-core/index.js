@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const MongodbCorePlugin = require('../../../packages/datadog-plugin-mongodb-core/src/index')
 
@@ -125,6 +126,7 @@ const FIXTURES = {
   'binary-hash': BINARY_HASH,
 }
 
+guard.loopStart()
 if (VARIANT === 'mixed-ops') {
   const ctxs = MIXED_OPS.map(makeCtx)
   for (const ctx of ctxs) preflight(ctx)
@@ -148,3 +150,4 @@ if (VARIANT === 'mixed-ops') {
 // per-iter `startSpan` stub side effect, which is the only thing pinning
 // the meta-literal construction inside the loop.
 assert.ok(lastMeta, 'startSpan stub was never reached inside the hot loop')
+guard.done()

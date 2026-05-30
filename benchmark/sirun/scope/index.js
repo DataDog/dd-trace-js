@@ -74,10 +74,14 @@ if (MODE === 'bind') {
   }
 
   const runWave = (remaining) => {
-    if (remaining <= 0) return
+    if (remaining <= 0) {
+      guard.done()
+      return
+    }
     const hops = remaining < CHAIN_DEPTH ? remaining : CHAIN_DEPTH
     runChain(hops).then(() => runWave(remaining - hops))
   }
 
+  guard.loopStart()
   runWave(count)
 }

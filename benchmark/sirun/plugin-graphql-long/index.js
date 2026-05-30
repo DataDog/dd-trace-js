@@ -5,6 +5,7 @@
 // fraction of the run.
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 if (process.env.WITH_TRACER) {
   const tracer = require('../../..').init()
@@ -52,6 +53,7 @@ const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 1500
 const CONCURRENCY = process.env.CONCURRENCY ? Number(process.env.CONCURRENCY) : 5
 
 let started = 0
+let completed = 0
 let checked = false
 
 function runOne () {
@@ -64,10 +66,14 @@ function runOne () {
       assert.ok(result.data && !result.errors, 'graphql query returned no data')
       checked = true
     }
+    if (++completed === QUERIES) {
+      guard.done()
+    }
     runOne()
   })
 }
 
+guard.loopStart()
 for (let i = 0; i < CONCURRENCY; i++) {
   runOne()
 }

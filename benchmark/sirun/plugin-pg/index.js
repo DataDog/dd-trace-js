@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const PGPlugin = require('../../../packages/datadog-plugin-pg/src/index')
 const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
@@ -70,9 +71,11 @@ if (VARIANT === 'disabled') {
     'injectDbmQuery did not splice the dbm comment')
 }
 
+guard.loopStart()
 let sink = 0
 for (let i = 0; i < ITERATIONS; i++) {
   sink += injectOnce().length
 }
+guard.done()
 
 if (sink === 0) throw new Error('unreachable')

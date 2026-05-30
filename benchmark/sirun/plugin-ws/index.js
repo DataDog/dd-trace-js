@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const {
   incrementWebSocketCounter,
@@ -48,9 +49,11 @@ const run = VARIANT === 'pointer-and-link' ? pointerAndLink : pointerOnly
 const sample = buildWebSocketSpanPointerHash(traceIdBig, spanIdBig, 1, true, false)
 assert.equal(sample.length, 1 + 32 + 16 + 8, 'span pointer hash has unexpected width')
 
+guard.loopStart()
 let sink = 0
 for (let i = 0; i < ITERATIONS; i++) {
   sink += run()
 }
+guard.done()
 
 if (sink === 0) throw new Error('unreachable')

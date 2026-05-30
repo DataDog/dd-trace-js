@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const ASYNC_HOOKS = process.env.ASYNC_HOOKS && process.env.ASYNC_HOOKS.split(',')
 const PROMISES_PER_INTERVAL = Number(process.env.PROMISES_PER_INTERVAL) || 100000
@@ -39,6 +40,8 @@ async function run () {
   }
 
   assert.equal(intervalsRun, INTERVALS, 'async_hooks bench did not run all intervals')
+  guard.done()
 }
 
+guard.loopStart()
 run()

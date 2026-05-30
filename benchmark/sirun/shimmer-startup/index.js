@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 const shimmer = require('../../../packages/datadog-shimmer')
 
 // Measures the cost of the wrap operation itself (what every instrumentation
@@ -22,6 +23,7 @@ const passthrough = (original) => function (...args) {
   return original.apply(this, args)
 }
 
+guard.loopStart()
 let lastWrapped
 for (let i = 0; i < ITERATIONS; i++) {
   if (useWrapFunction) {
@@ -32,6 +34,7 @@ for (let i = 0; i < ITERATIONS; i++) {
     lastWrapped = obj.target
   }
 }
+guard.done()
 
 // Fail loudly if the wrap operation stops producing a delegating wrapper.
 assert.equal(typeof lastWrapped, 'function')

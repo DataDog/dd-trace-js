@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 // Require the real fs instrumentation so its diagnostic channels exist and fs is
 // wrapped exactly as in production. We then drive the per-call wrapper overhead
@@ -51,10 +52,12 @@ if (VARIANT === 'subscribed') {
 assert.equal(VARIANT === 'subscribed', startChannel.hasSubscribers,
   'subscriber state does not match variant')
 
+guard.loopStart()
 let sink = 0
 for (let i = 0; i < ITERATIONS; i++) {
   sink += instrumentedCall()
 }
+guard.done()
 
 // orphan-guard variant returns 0 each call; subscribed returns 1.
 assert.equal(sink, VARIANT === 'subscribed' ? ITERATIONS : 0, 'unexpected sink')

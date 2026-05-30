@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const tracer = require('../../..').init()
 
@@ -90,6 +91,7 @@ function startOne () {
   return tracer.startSpan('some.span.name', {})
 }
 
+guard.loopStart()
 if (FINISH === 'now') {
   for (let iteration = 0; iteration < COUNT; iteration++) {
     startOne().finish()
@@ -110,3 +112,6 @@ if (FINISH === 'now') {
     remaining -= size
   }
 }
+// Full-tracer load is a fixed ~90 ms here and the lightest variant can't grow its
+// loop past it without risking the span-allocation GC cliff, so use the relaxed ceiling.
+guard.done(0.15)

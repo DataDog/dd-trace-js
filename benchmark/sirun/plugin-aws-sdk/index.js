@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const BaseAwsSdkPlugin = require('../../../packages/datadog-plugin-aws-sdk/src/base')
 const EventBridge = require('../../../packages/datadog-plugin-aws-sdk/src/services/eventbridge')
@@ -42,6 +43,7 @@ const EVENTBRIDGE_DETAIL_JSON = JSON.stringify({
   region: 'us-east-1',
 })
 
+guard.loopStart()
 if (VARIANT === 'extract-response-body') {
   const plugin = Object.create(BaseAwsSdkPlugin.prototype)
   // Pre-flight: confirm extractResponseBody strips the SDK envelope keys; catches
@@ -80,3 +82,4 @@ if (VARIANT === 'extract-response-body') {
     plugin.requestInject(fakeSpan, request)
   }
 }
+guard.done()
