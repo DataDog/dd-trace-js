@@ -1,8 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const ASYNC_HOOKS = process.env.ASYNC_HOOKS && process.env.ASYNC_HOOKS.split(',')
-const PROMISES_PER_INTERVAL = process.env.PROMISES_PER_INTERVAL || 100000
-const INTERVALS = process.env.INTERVALS || 10
+const PROMISES_PER_INTERVAL = Number(process.env.PROMISES_PER_INTERVAL) || 100000
+const INTERVALS = Number(process.env.INTERVALS) || 10
 
 if (ASYNC_HOOKS) {
   const { createHook } = require('async_hooks')
@@ -16,20 +18,27 @@ if (ASYNC_HOOKS) {
   createHook(hooks).enable()
 }
 
-async function run (count = 0) {
-  if (count >= INTERVALS) return
+// Each interval allocates and resolves a burst of promises so the enabled hooks
+// fire across the full promise lifecycle. Bursts run back-to-back: awaiting each
+// batch drains the microtask queue and lets the previous array be collected, so
+// live memory stays flat without an idle timer between bursts (idle time would
+// add scheduler variance while measuring nothing).
+async function run () {
+  let intervalsRun = 0
 
-  const promises = []
+  while (intervalsRun < INTERVALS) {
+    const promises = []
 
-  for (let i = 0; i < PROMISES_PER_INTERVAL; i++) {
-    promises.push(new Promise((resolve, reject) => resolve()))
+    for (let i = 0; i < PROMISES_PER_INTERVAL; i++) {
+      promises.push(new Promise((resolve) => resolve()))
+    }
+
+    await Promise.all(promises)
+
+    intervalsRun++
   }
 
-  await Promise.all(promises)
-
-  count++
-
-  setTimeout(() => run(count + 1), 100)
+  assert.equal(intervalsRun, INTERVALS, 'async_hooks bench did not run all intervals')
 }
 
 run()
