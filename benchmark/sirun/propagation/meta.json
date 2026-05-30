@@ -16,16 +16,6 @@
         "VARIANT": "inject"
       }
     },
-    "extract-inject": {
-      "env": {
-        "VARIANT": "extract-inject"
-      }
-    },
-    "extract-baggage-ascii": {
-      "env": {
-        "VARIANT": "extract-baggage-ascii"
-      }
-    },
     "extract-baggage-percent": {
       "env": {
         "VARIANT": "extract-baggage-percent"
