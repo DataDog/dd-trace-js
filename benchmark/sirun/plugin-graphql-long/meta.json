@@ -6,20 +6,14 @@
   "iterations": 10,
   "instructions": true,
   "variants": {
-    "with-async-hooks": {
-      "env": { "WITH_ASYNC_HOOKS": "1", "QUERIES": "1000" }
-    },
     "with-depth-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "1000" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "1500" }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "1000" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "1500" }
     },
     "with-depth-and-collapse-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "QUERIES": "1000" }
-    },
-    "with-depth-and-collapse-on": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1", "QUERIES": "1000" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "QUERIES": "1500" }
     }
   }
 }

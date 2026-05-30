@@ -1,8 +1,10 @@
 'use strict'
 
-// Long-workload graphql bench. Runs QUERIES sequential queries per process
-// (default 100) so the fixed startup cost doesn't dominate the measurement.
-// See ./README.md.
+// Long-workload graphql bench. Runs QUERIES queries per process (default 1500)
+// so the fixed startup cost (tracer load plus graphql require) stays a small
+// fraction of the run.
+
+const assert = require('node:assert/strict')
 
 if (process.env.WITH_TRACER) {
   const tracer = require('../../..').init()
@@ -13,12 +15,6 @@ if (process.env.WITH_TRACER) {
     const [depth, collapse] = process.env.WITH_DEPTH_AND_COLLAPSE.split(',')
     tracer.use('graphql', { depth: Number(depth), collapse: Number(collapse) > 0 })
   }
-}
-
-if (process.env.WITH_ASYNC_HOOKS) {
-  const hook = { init () {} }
-
-  require('async_hooks').createHook(hook).enable()
 }
 
 const graphql = require('../../../versions/graphql').get()
@@ -45,15 +41,33 @@ const source = `
 
 const variableValues = { who: 'world' }
 
-// Total queries per process. A large total keeps the fixed startup (tracer load
-// plus graphql require) a small fraction of the run. Await each query before
-// starting the next so only one result graph is live at a time: memory stays
-// flat regardless of QUERIES, so the run cannot OOM, and there is no
-// concurrency-driven GC jitter to inflate the variance.
-const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 1000
+// Total queries per process. A large total keeps the fixed startup a small
+// fraction of the run. CONCURRENCY queries are kept in flight at once, which is
+// how a real server runs graphql (several requests resolving in parallel)
+// rather than one strictly after another. The fixed-size pool refills on each
+// completion, so at most CONCURRENCY result graphs are live: memory stays flat
+// regardless of QUERIES, the run cannot OOM, and there is no unbounded fan-out
+// to inflate the variance.
+const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 1500
+const CONCURRENCY = process.env.CONCURRENCY ? Number(process.env.CONCURRENCY) : 5
 
-;(async () => {
-  for (let i = 0; i < QUERIES; i++) {
-    await graphql.graphql({ schema, source, variableValues })
-  }
-})()
+let started = 0
+let checked = false
+
+function runOne () {
+  if (started >= QUERIES) return
+  started++
+  graphql.graphql({ schema, source, variableValues }).then((result) => {
+    if (!checked) {
+      // Fail loudly if the schema/resolvers stop producing a result: a broken
+      // bench that silently returns errors would otherwise still "pass".
+      assert.ok(result.data && !result.errors, 'graphql query returned no data')
+      checked = true
+    }
+    runOne()
+  })
+}
+
+for (let i = 0; i < CONCURRENCY; i++) {
+  runOne()
+}
