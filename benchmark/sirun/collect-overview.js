@@ -18,7 +18,12 @@ const { spawnSync } = require('child_process')
 const DIR = __dirname
 const SAMPLES = 6 // sirun iterations per variant for the overview (not the configured count)
 const TIMEOUT_MS = 90_000
-const OUT = path.join(DIR, 'benchmark-overview.md')
+// Optional comma-separated dir filter (argv[2]); when set, write to a scratch
+// file so a partial run does not clobber the committed overview.
+const only = process.argv[2] ? new Set(process.argv[2].split(',')) : null
+const OUT = only
+  ? path.join(require('os').tmpdir(), 'overview-test.md')
+  : path.join(DIR, 'benchmark-overview.md')
 const SG_FILE = path.join(require('os').tmpdir(), 'sg-overview.txt')
 
 // Curated per-bench judgment the run cannot measure.
@@ -70,10 +75,14 @@ fs.writeFileSync(OUT,
   `Local macOS, ${SAMPLES} samples/variant (overview-grade, not the CI gate). ` +
   'wall.time is microseconds in sirun; reported per-iteration in ms. ' +
   '"total" = mean x configured iterations. "startup%" = load+setup share from the guard.\n\n' +
+  'Live client/server benches (appsec, appsec-iast, http, net, debugger) are network/scheduler ' +
+  'noisy locally, so their stddev here is not meaningful -- CI with core pinning is authoritative. ' +
+  'startup-time variants need /opt/insecure-bank-js (a CI-only clone) and show "error" locally.\n\n' +
   '| bench | variant | category | meaning | inner loop | iters | per-iter ms | stddev% | total s | startup% |\n' +
   '|---|---|---|---|---|---|---|---|---|---|\n')
 
 for (const name of benches) {
+  if (only && !only.has(name)) continue
   const benchDir = path.join(DIR, name)
   const meta = JSON.parse(fs.readFileSync(path.join(benchDir, 'meta.json'), 'utf8'))
   const configIters = meta.iterations || SAMPLES
@@ -93,37 +102,32 @@ for (const name of benches) {
 
     const variantCfg = meta.variants?.[variant] || {}
     const inner = innerCount(variantCfg.env)
-    // Client/server and service-backed benches need a live server / external deps
-    // that are flaky or absent locally; their numbers are CI-only.
-    const isLive = !!(variantCfg.setup || variantCfg.service || meta.setup || meta.service)
     let perIterMs = '-'
     let stddevPct = '-'
     let totalS = '-'
     let startupPct = '-'
 
-    if (isLive) {
-      perIterMs = 'live (CI only)'
+    // sirun runs the variant's setup (client/server, service) when present, so
+    // live benches measure too as long as the deps and ports are available.
+    const res = spawnSync('sirun', ['meta-overview.json'],
+      { cwd: benchDir, env, timeout: TIMEOUT_MS, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+
+    if (res.status === 0 && res.stdout) {
+      try {
+        const json = JSON.parse(res.stdout.trim().split('\n').pop())
+        const times = (json.iterations || []).map((it) => it['wall.time']).filter((t) => typeof t === 'number')
+        if (times.length) {
+          const { mean, stddevPct: sd } = stats(times)
+          perIterMs = (mean / 1000).toFixed(1)
+          stddevPct = sd.toFixed(1)
+          totalS = ((mean / 1e6) * configIters).toFixed(0)
+        }
+      } catch { perIterMs = 'parse-err' }
     } else {
-      const res = spawnSync('sirun', ['meta-overview.json'],
-        { cwd: benchDir, env, timeout: TIMEOUT_MS, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
-
-      if (res.status === 0 && res.stdout) {
-        try {
-          const json = JSON.parse(res.stdout.trim().split('\n').pop())
-          const times = (json.iterations || []).map((it) => it['wall.time']).filter((t) => typeof t === 'number')
-          if (times.length) {
-            const { mean, stddevPct: sd } = stats(times)
-            perIterMs = (mean / 1000).toFixed(1)
-            stddevPct = sd.toFixed(1)
-            totalS = ((mean / 1e6) * configIters).toFixed(0)
-          }
-        } catch { perIterMs = 'parse-err' }
-      } else {
-        perIterMs = res.signal === 'SIGTERM' ? 'timeout' : 'error'
-      }
-
-      try { startupPct = (Number(fs.readFileSync(SG_FILE, 'utf8')) * 100).toFixed(1) } catch {}
+      perIterMs = res.signal === 'SIGTERM' ? 'timeout' : 'error'
     }
+
+    try { startupPct = (Number(fs.readFileSync(SG_FILE, 'utf8')) * 100).toFixed(1) } catch {}
 
     fs.appendFileSync(OUT,
       `| ${name} | ${variant} | ${categoryOf(name)} | ${meaningOf(name)} | ${inner} | ` +
