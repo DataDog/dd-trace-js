@@ -3,7 +3,7 @@
   "run": "node startup-test.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node startup-test.js\"",
   "cachegrind": false,
-  "iterations": 30,
+  "iterations": 40,
   "instructions": true,
   "variants": {
     "with-tracer": {
