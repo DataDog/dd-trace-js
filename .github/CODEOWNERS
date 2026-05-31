@@ -3,6 +3,7 @@
 # AppSec
 /benchmark/sirun/appsec/ @DataDog/asm-js
 /benchmark/sirun/appsec-iast/ @DataDog/asm-js
+/benchmark/sirun/iast/ @DataDog/asm-js
 /integration-tests/appsec/ @DataDog/asm-js
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js

@@ -3,6 +3,11 @@
 const http = require('http')
 const { port, reqs } = require('./common')
 
+// Reuse a single keep-alive connection so a high request count does not churn
+// ephemeral ports on localhost (which collapses throughput). 127.0.0.1 avoids
+// per-connection localhost -> ::1 lookups.
+const agent = new http.Agent({ keepAlive: true, maxSockets: 1 })
+
 let connectionsMade = 0
 
 function request (opts) {
@@ -21,9 +26,11 @@ function request (opts) {
 }
 
 const opts = {
+  host: '127.0.0.1',
   headers: {},
   port,
   path: '/',
+  agent,
 }
 
 if (Number(process.env.ATTACK_UA)) {
