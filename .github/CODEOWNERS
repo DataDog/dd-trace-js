@@ -36,6 +36,8 @@
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
+/benchmark/sirun/child_process/ @DataDog/apm-idm-js
+/benchmark/sirun/fs/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-bluebird/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-dns/ @DataDog/apm-idm-js
