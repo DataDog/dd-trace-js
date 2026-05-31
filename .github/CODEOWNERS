@@ -43,6 +43,7 @@
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-q/ @DataDog/apm-idm-js
+/benchmark/sirun/url/ @DataDog/apm-idm-js
 
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
@@ -286,12 +287,14 @@
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
 /benchmark/sirun/encoding/ @DataDog/lang-platform-js
 /benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
+/benchmark/sirun/id/ @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/lang-platform-js
 /benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-startup/ @DataDog/lang-platform-js
 /benchmark/sirun/startup/ @DataDog/lang-platform-js
+/benchmark/sirun/tracing-channel/ @DataDog/lang-platform-js
 
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/coverage/ @DataDog/lang-platform-js
