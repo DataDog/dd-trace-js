@@ -229,4 +229,6 @@ for (const hook of getHooks('ai')) {
   })
 }
 
+addHook({ name: 'ai', versions: ['>=7.0.0-0'] }, exports => exports)
+
 module.exports = { wrapModelWithAIGuard }

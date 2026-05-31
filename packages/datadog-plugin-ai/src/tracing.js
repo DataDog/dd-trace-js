@@ -1,9 +1,10 @@
 'use strict'
 
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { getModelProvider } = require('./utils')
 
-class VercelAITracingPlugin extends TracingPlugin {
+class VercelAITracingCustomPlugin extends TracingPlugin {
   static id = 'ai'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
@@ -27,6 +28,27 @@ class VercelAITracingPlugin extends TracingPlugin {
   asyncEnd (ctx) {
     const span = ctx.currentStore?.span
     span?.finish()
+  }
+}
+
+class VercelAITracingChannelPlugin extends TracingPlugin {
+  static id = 'ai'
+  static prefix = 'tracing:aisdk:telemetry'
+
+  bindStart (ctx) {
+    console.log('bindStart', ctx.type)
+  }
+
+  asyncEnd (ctx) {
+    console.log('asyncEnd', ctx.type)
+  }
+}
+
+class VercelAITracingPlugin extends CompositePlugin {
+  static id = 'ai'
+  static plugins = {
+    custom: VercelAITracingCustomPlugin,
+    tracingChannel: VercelAITracingChannelPlugin,
   }
 }
 
