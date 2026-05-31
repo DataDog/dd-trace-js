@@ -46,6 +46,7 @@
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-mongodb-core/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-pg/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pino/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-q/ @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/apm-idm-js
