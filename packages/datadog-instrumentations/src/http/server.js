@@ -37,13 +37,13 @@ addHook({ name: 'https' }, http => {
   return http
 })
 
-function wrapResponseEmit (emit) {
-  // Rest params instead of named formals + `arguments`: a closure that both
-  // names parameters and reads `arguments` makes V8 materialise the mapped
-  // arguments object on every response event.
-  return function (...args) {
+function wrapResponseEmit (originalEmit) {
+  // Named `emit` mirrors the response method so the one-time prototype wrap
+  // skips its name rewrite; rest params keep the per-event forwarding
+  // allocation-free.
+  return function emit (...args) {
     if (!finishServerCh.hasSubscribers) {
-      return Reflect.apply(emit, this, args)
+      return Reflect.apply(originalEmit, this, args)
     }
 
     const eventName = args[0]
@@ -52,14 +52,14 @@ function wrapResponseEmit (emit) {
       requestFinishedSet.add(this)
     }
 
-    return Reflect.apply(emit, this, args)
+    return Reflect.apply(originalEmit, this, args)
   }
 }
 
-function wrapEmit (emit) {
-  return function (...args) {
+function wrapEmit (originalEmit) {
+  return function emit (...args) {
     if (!startServerCh.hasSubscribers) {
-      return Reflect.apply(emit, this, args)
+      return Reflect.apply(originalEmit, this, args)
     }
 
     const eventName = args[0]
@@ -82,7 +82,7 @@ function wrapEmit (emit) {
           return this.listenerCount(eventName) > 0
         }
 
-        return Reflect.apply(emit, this, args)
+        return Reflect.apply(originalEmit, this, args)
       } catch (err) {
         errorServerCh.publish(err)
 
@@ -91,7 +91,7 @@ function wrapEmit (emit) {
         exitServerCh.publish(ctx)
       }
     }
-    return Reflect.apply(emit, this, args)
+    return Reflect.apply(originalEmit, this, args)
   }
 }
 

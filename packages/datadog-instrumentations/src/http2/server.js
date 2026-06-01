@@ -26,21 +26,22 @@ function wrapCreateServer (createServer) {
   }
 }
 
-function wrapResponseEmit (emit, ctx) {
-  return function (...args) {
+function wrapResponseEmit (originalEmit, ctx) {
+  // Named `emit`/arity-1 mirrors the response method so the per-response wrap
+  // skips its name/length rewrite.
+  return function emit (eventName) {
     ctx.req = this.req
-    ctx.eventName = args[0]
-    return emitCh.runStores(ctx, emit, this, ...args)
+    ctx.eventName = eventName
+    return emitCh.runStores(ctx, originalEmit, this, ...arguments)
   }
 }
 
-function wrapEmit (emit) {
-  // Rest params + Reflect.apply instead of named formals + `arguments`: naming
-  // params while reading `arguments` materialises the mapped arguments object
-  // on every emitted event, including the no-subscriber fast path.
-  return function (...args) {
+function wrapEmit (originalEmit) {
+  // Named `emit` mirrors the server method so the one-time wrap skips its name
+  // rewrite; rest params keep the per-event forwarding allocation-free.
+  return function emit (...args) {
     if (!startServerCh.hasSubscribers) {
-      return Reflect.apply(emit, this, args)
+      return Reflect.apply(originalEmit, this, args)
     }
 
     const eventName = args[0]
@@ -54,7 +55,7 @@ function wrapEmit (emit) {
         shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
 
         try {
-          return Reflect.apply(emit, this, args)
+          return Reflect.apply(originalEmit, this, args)
         } catch (error) {
           ctx.error = error
           errorServerCh.publish(ctx)
@@ -63,6 +64,6 @@ function wrapEmit (emit) {
         }
       })
     }
-    return Reflect.apply(emit, this, args)
+    return Reflect.apply(originalEmit, this, args)
   }
 }

@@ -49,20 +49,22 @@ addHook({ name: 'net' }, (net) => {
 
       const emit = this.emit
       let pendingReadyEvents = 2
-      this.emit = shimmer.wrapFunction(emit, emit => function (...args) {
-        switch (args[0]) {
+      // Named `emit`/arity-1 mirrors the socket method so the per-socket wrap
+      // skips its name/length rewrite.
+      this.emit = shimmer.wrapFunction(emit, originalEmit => function emit (eventName) {
+        switch (eventName) {
           case 'ready':
           case 'connect':
-            if (--pendingReadyEvents === 0) this.emit = emit
+            if (--pendingReadyEvents === 0) this.emit = originalEmit
             return readyCh.runStores(ctx, () => {
-              return Reflect.apply(emit, this, args)
+              return Reflect.apply(originalEmit, this, arguments)
             })
           case 'error':
           case 'close':
-            this.emit = emit
-            return Reflect.apply(emit, this, args)
+            this.emit = originalEmit
+            return Reflect.apply(originalEmit, this, arguments)
           default:
-            return Reflect.apply(emit, this, args)
+            return Reflect.apply(originalEmit, this, arguments)
         }
       })
 

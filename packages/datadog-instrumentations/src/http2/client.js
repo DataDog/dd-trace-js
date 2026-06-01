@@ -11,14 +11,16 @@ const asyncEndChannel = channel('apm:http2:client:request:asyncEnd')
 const errorChannel = channel('apm:http2:client:request:error')
 
 function createWrapEmit (ctx) {
-  return function wrapEmit (emit) {
-    return function (...args) {
-      ctx.eventName = args[0]
-      ctx.eventData = args[1]
+  return function wrapEmit (originalEmit) {
+    // Named `emit`/arity-1 mirrors the request method so the per-request wrap
+    // skips its name/length rewrite.
+    return function emit (eventName) {
+      ctx.eventName = eventName
+      ctx.eventData = arguments[1]
 
       return asyncStartChannel.runStores(ctx, () => {
         try {
-          return Reflect.apply(emit, this, args)
+          return Reflect.apply(originalEmit, this, arguments)
         } finally {
           asyncEndChannel.publish(ctx)
         }
