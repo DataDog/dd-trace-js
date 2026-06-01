@@ -390,5 +390,66 @@ describe('Plugin', () => {
         })
       })
     })
+
+    // Covers the @redis/client >=5.12.0 shimmer fallback branches that only run on Node 18,
+    // where diagnostics_channel.tracingChannel is absent. We simulate that here by temporarily
+    // removing tracingChannel so the conditional shimmer-wrap paths execute on all Node versions.
+    describe('@redis/client >=5.12.0 Node 18 shimmer fallback', () => {
+      let dc, origTracingChannel
+
+      before(() => {
+        // Load the instrumentation to register hooks in the global instrumentations map.
+        require('../../datadog-instrumentations/src/redis')
+        dc = require('node:diagnostics_channel')
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        origTracingChannel = dc.tracingChannel
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        delete dc.tracingChannel
+      })
+
+      after(() => {
+        if (origTracingChannel !== undefined) {
+          // eslint-disable-next-line n/no-unsupported-features/node-builtins
+          dc.tracingChannel = origTracingChannel
+        }
+      })
+
+      it('shimmer-wraps create on dist/lib/client/index.js', () => {
+        const instrumentations = globalThis[Symbol.for('_ddtrace_instrumentations')]
+        const hooks = instrumentations['@redis/client']
+        const indexHook = hooks.find(h =>
+          h.versions && h.versions.includes('>=5.12.0') &&
+          h.file === 'dist/lib/client/index.js')
+
+        assert(indexHook, 'should find hook for @redis/client >=5.12.0 index.js')
+
+        const mockCreate = function create () {}
+        const mockRedis = { default: { create: mockCreate } }
+        const result = indexHook.hook(mockRedis)
+
+        assert.strictEqual(result, mockRedis)
+        assert.notStrictEqual(mockRedis.default.create, mockCreate)
+      })
+
+      it('shimmer-wraps addCommand on dist/lib/client/commands-queue.js', () => {
+        const instrumentations = globalThis[Symbol.for('_ddtrace_instrumentations')]
+        const hooks = instrumentations['@redis/client']
+        const queueHook = hooks.find(h =>
+          h.versions && h.versions.includes('>=5.12.0') &&
+          h.file === 'dist/lib/client/commands-queue.js')
+
+        assert(queueHook, 'should find hook for @redis/client >=5.12.0 commands-queue.js')
+
+        class MockQueue {
+          addCommand (cmd) { return cmd }
+        }
+        const mockRedis = { default: MockQueue }
+        const result = queueHook.hook(mockRedis)
+
+        assert.strictEqual(result, mockRedis)
+        assert.notStrictEqual(mockRedis.default, MockQueue)
+        assert(Object.hasOwn(mockRedis.default.prototype, 'addCommand'))
+      })
+    })
   })
 })

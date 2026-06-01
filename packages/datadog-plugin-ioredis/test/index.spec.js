@@ -213,5 +213,46 @@ describe('Plugin', () => {
         })
       })
     })
+
+    // Covers the ioredis >=5.11.0 shimmer fallback branch that only runs on Node 18,
+    // where diagnostics_channel.tracingChannel is absent. We simulate that here by temporarily
+    // removing tracingChannel so the conditional shimmer-wrap path executes on all Node versions.
+    describe('ioredis >=5.11.0 Node 18 shimmer fallback', () => {
+      let dc, origTracingChannel
+
+      before(() => {
+        // Load the instrumentation to register hooks in the global instrumentations map.
+        require('../../datadog-instrumentations/src/ioredis')
+        dc = require('node:diagnostics_channel')
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        origTracingChannel = dc.tracingChannel
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        delete dc.tracingChannel
+      })
+
+      after(() => {
+        if (origTracingChannel !== undefined) {
+          // eslint-disable-next-line n/no-unsupported-features/node-builtins
+          dc.tracingChannel = origTracingChannel
+        }
+      })
+
+      it('shimmer-wraps sendCommand when tracingChannel is absent', () => {
+        const instrumentations = globalThis[Symbol.for('_ddtrace_instrumentations')]
+        const hooks = instrumentations.ioredis
+        const ioredisHook = hooks.find(h => h.versions && h.versions.includes('>=5.11.0') && !h.file)
+
+        assert(ioredisHook, 'should find hook for ioredis >=5.11.0')
+
+        class MockRedis {
+          sendCommand (command, stream) { return command }
+        }
+        const origSendCommand = MockRedis.prototype.sendCommand
+        const result = ioredisHook.hook(MockRedis)
+
+        assert.strictEqual(result, MockRedis)
+        assert.notStrictEqual(MockRedis.prototype.sendCommand, origSendCommand)
+      })
+    })
   })
 })
