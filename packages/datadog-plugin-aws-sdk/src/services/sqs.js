@@ -5,6 +5,38 @@ const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const { extractQueueMetadata, isEmpty } = require('../util')
 
+/**
+ * Resolve the EventBridge `_datadog` text map from a parsed SQS message body.
+ *
+ * Handles two delivery shapes, both recognised by the `detail-type` marker
+ * that is always present on EventBridge `PutEvents` deliveries:
+ *   - EventBridge -> SQS: the envelope is the message body itself, so the
+ *     context is at `body.detail._datadog`.
+ *   - EventBridge -> SNS -> SQS: the envelope is a JSON string in the SNS
+ *     `Notification` body's `Message` field, so the context is at
+ *     `JSON.parse(body.Message).detail._datadog`.
+ *
+ * @param {object} [parsedBody] - The JSON-parsed SQS message body.
+ * @returns {object | undefined} The EventBridge `_datadog` text map, if any.
+ */
+function getEventBridgeContext (parsedBody) {
+  if (parsedBody?.['detail-type'] !== undefined) {
+    return parsedBody.detail?._datadog
+  }
+  if (parsedBody?.Type === 'Notification' && typeof parsedBody.Message === 'string') {
+    let innerEnvelope
+    try {
+      innerEnvelope = JSON.parse(parsedBody.Message)
+    } catch {
+      // SNS `Message` is not JSON — not an EventBridge envelope.
+      return
+    }
+    if (innerEnvelope?.['detail-type'] !== undefined) {
+      return innerEnvelope.detail?._datadog
+    }
+  }
+}
+
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
   static peerServicePrecursors = ['queuename']
@@ -149,6 +181,21 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
+    // EventBridge to SQS (optionally via SNS): `_datadog` is embedded in the
+    // EventBridge envelope's `detail`, not in MessageAttributes. The producer
+    // plugin injects via `Entries[i].Detail`, which AWS delivers to SQS at
+    // `body.detail._datadog`, or — when fanned out through SNS — inside the
+    // SNS `Notification` body's stringified `Message`.
+    const eventBridgeContext = getEventBridgeContext(parsedBody)
+    if (eventBridgeContext) {
+      return {
+        datadogContext: this.tracer.extract('text_map', eventBridgeContext),
+        parsedAttributes: eventBridgeContext,
+        parsedBody,
+        bodyChecked: true,
+      }
+    }
+
     if (!message.MessageAttributes || !message.MessageAttributes._datadog) {
       return { parsedBody, bodyChecked: true }
     }
@@ -213,9 +260,11 @@ class Sqs extends BaseAwsSdkPlugin {
         if (body?.Type === 'Notification') {
           message = body
         }
-        if (message.MessageAttributes && message.MessageAttributes._datadog) {
-          parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
-        }
+        // MessageAttributes carry the context for direct SQS and SNS; the
+        // EventBridge envelope (optionally via SNS) carries it inside `detail`.
+        parsedAttributes = message.MessageAttributes?._datadog
+          ? this.parseDatadogAttributes(message.MessageAttributes._datadog)
+          : getEventBridgeContext(body)
       }
       const payloadSize = getHeadersSize({
         Body: message.Body,

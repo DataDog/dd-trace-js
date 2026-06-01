@@ -8,6 +8,8 @@ const { describe, it } = require('mocha')
 
 const Sqs = require('../src/services/sqs')
 
+const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/test-queue'
+
 /**
  * `Object.create(Sqs.prototype)` skips the heavy plugin/diagnostic-channel
  * wiring in `BaseAwsSdkPlugin`'s constructor. The methods under test only
@@ -19,14 +21,29 @@ const Sqs = require('../src/services/sqs')
  * @param {(span: unknown, format: string, info: object) => void} [options.inject]
  *        Stand-in for `tracer.inject` that may populate the trace context
  *        in `info`.
+ * @param {(format: string, attrs: object) => unknown} [options.extract]
+ *        Stand-in for `tracer.extract` used by `responseExtract`.
+ * @param {(carrier: object) => void} [options.decodeDataStreamsContext]
+ *        Stand-in for `tracer.decodeDataStreamsContext`, called by
+ *        `responseExtractDSMContext` when a context carrier is found.
+ * @param {(tags: string[], span: unknown, payloadSize: number) => unknown} [options.setCheckpoint]
+ *        Stand-in for `tracer.setCheckpoint`, called once per message in
+ *        `responseExtractDSMContext`.
  * @param {unknown} [options.dataStreamsContext]
  *        Value returned by the stubbed `setDSMCheckpoint`.
  * @returns {Sqs & { dsmCalls: Array<{ datadog: object | undefined }> }}
  */
-function buildPlugin ({ dsmEnabled = false, inject = () => {}, dataStreamsContext = null } = {}) {
+function buildPlugin ({
+  dsmEnabled = false,
+  inject = () => {},
+  extract = () => undefined,
+  decodeDataStreamsContext = () => {},
+  setCheckpoint = () => null,
+  dataStreamsContext = null,
+} = {}) {
   const plugin = Object.create(Sqs.prototype)
   // `tracer` is a getter on the base Plugin class that reads `_tracer`.
-  plugin._tracer = { inject }
+  plugin._tracer = { inject, extract, decodeDataStreamsContext, setCheckpoint }
   plugin.config = { dsmEnabled }
   plugin.dsmCalls = []
   plugin.setDSMCheckpoint = (span, params) => {
@@ -198,5 +215,345 @@ describe('Sqs plugin injectToMessage', () => {
       DataType: 'String',
       StringValue: '{"x-datadog-trace-id":"123"}',
     })
+  })
+})
+
+describe('Sqs plugin responseExtract', () => {
+  it('extracts trace context from MessageAttributes._datadog (direct SQS to SQS)', () => {
+    let receivedAttributes
+    const plugin = buildPlugin({
+      extract: (format, attrs) => {
+        receivedAttributes = attrs
+        return 'sqs-native-context'
+      },
+    })
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      {
+        Messages: [{
+          Body: 'opaque payload — body is not JSON',
+          MessageAttributes: {
+            _datadog: {
+              DataType: 'String',
+              StringValue: JSON.stringify({
+                'x-datadog-trace-id': '111',
+                'x-datadog-parent-id': '222',
+                'x-datadog-sampling-priority': '1',
+              }),
+            },
+          },
+        }],
+      }
+    )
+
+    assert.deepStrictEqual(receivedAttributes, {
+      'x-datadog-trace-id': '111',
+      'x-datadog-parent-id': '222',
+      'x-datadog-sampling-priority': '1',
+    })
+    assert.strictEqual(result.datadogContext, 'sqs-native-context')
+  })
+
+  it('extracts trace context from the SNS Notification body wrapper (SNS to SQS)', () => {
+    let receivedAttributes
+    const plugin = buildPlugin({
+      extract: (format, attrs) => {
+        receivedAttributes = attrs
+        return 'sns-context'
+      },
+    })
+
+    const snsBody = {
+      Type: 'Notification',
+      MessageId: 'msg-1',
+      TopicArn: 'arn:aws:sns:us-east-1:000000000000:topic',
+      Message: 'inner sns payload',
+      MessageAttributes: {
+        _datadog: {
+          Type: 'Binary',
+          Value: Buffer.from(JSON.stringify({
+            'x-datadog-trace-id': '333',
+            'x-datadog-parent-id': '444',
+          })).toString('base64'),
+        },
+      },
+    }
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      { Messages: [{ Body: JSON.stringify(snsBody) }] }
+    )
+
+    assert.deepStrictEqual(receivedAttributes, {
+      'x-datadog-trace-id': '333',
+      'x-datadog-parent-id': '444',
+    })
+    assert.strictEqual(result.datadogContext, 'sns-context')
+  })
+
+  it('returns no datadogContext when neither MessageAttributes nor SNS body carry _datadog', () => {
+    let extractCalled = false
+    const plugin = buildPlugin({ extract: () => { extractCalled = true } })
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      { Messages: [{ Body: 'plain text', MessageAttributes: {} }] }
+    )
+
+    assert.strictEqual(extractCalled, false)
+    assert.strictEqual(result.datadogContext, undefined)
+    assert.strictEqual(result.bodyChecked, true)
+  })
+
+  // EventBridge -> SQS:
+  // When EventBridge's `PutEvents` is targeted at an SQS queue, the EventBridge
+  // producer plugin (packages/datadog-plugin-aws-sdk/src/services/eventbridge.js)
+  // injects `_datadog` into `Entries[i].Detail`. EventBridge delivers the event
+  // to SQS with the full envelope as the message body and `detail` parsed as an
+  // object — so the trace context lands at `body.detail._datadog`. The
+  // consumer recognises this via the EventBridge `detail-type` marker.
+  it('extracts trace context from EventBridge body.detail._datadog (EventBridge to SQS)', () => {
+    let receivedAttributes
+    const plugin = buildPlugin({
+      extract: (format, attrs) => {
+        receivedAttributes = attrs
+        return 'eventbridge-context'
+      },
+    })
+
+    const eventBridgeEnvelope = {
+      version: '0',
+      id: '00000000-0000-0000-0000-000000000000',
+      'detail-type': 'orderPlaced',
+      source: 'my.app',
+      account: '123456789012',
+      time: '2026-05-28T00:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {
+        orderId: 'o-1',
+        _datadog: {
+          'x-datadog-trace-id': '999',
+          'x-datadog-parent-id': '888',
+          'x-datadog-sampling-priority': '1',
+        },
+      },
+    }
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      { Messages: [{ Body: JSON.stringify(eventBridgeEnvelope) }] }
+    )
+
+    assert.deepStrictEqual(receivedAttributes, {
+      'x-datadog-trace-id': '999',
+      'x-datadog-parent-id': '888',
+      'x-datadog-sampling-priority': '1',
+    })
+    assert.strictEqual(result.datadogContext, 'eventbridge-context')
+  })
+
+  it('falls through cleanly when an EventBridge envelope has no `_datadog` in detail', () => {
+    let extractCalled = false
+    const plugin = buildPlugin({
+      extract: () => {
+        extractCalled = true
+        return 'should-not-happen'
+      },
+    })
+
+    const envelope = {
+      version: '0',
+      'detail-type': 'orderPlaced',
+      source: 'my.app',
+      detail: { orderId: 'o-1' },
+    }
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      { Messages: [{ Body: JSON.stringify(envelope) }] }
+    )
+
+    assert.strictEqual(extractCalled, false)
+    assert.strictEqual(result.datadogContext, undefined)
+    assert.strictEqual(result.bodyChecked, true)
+  })
+
+  // EventBridge -> SNS -> SQS: when EventBridge fans out via an SNS topic, the
+  // SQS body is an SNS `Notification` whose `Message` field is the EventBridge
+  // envelope as a JSON string. The trace context is one level deeper, at
+  // `JSON.parse(body.Message).detail._datadog`.
+  it('extracts trace context from an EventBridge envelope wrapped in an SNS Notification', () => {
+    let receivedAttributes
+    const plugin = buildPlugin({
+      extract: (format, attrs) => {
+        receivedAttributes = attrs
+        return 'eventbridge-sns-context'
+      },
+    })
+
+    const eventBridgeEnvelope = {
+      version: '0',
+      'detail-type': 'orderPlaced',
+      source: 'my.app',
+      detail: {
+        orderId: 'o-1',
+        _datadog: {
+          'x-datadog-trace-id': '555',
+          'x-datadog-parent-id': '444',
+        },
+      },
+    }
+    const snsBody = {
+      Type: 'Notification',
+      MessageId: 'msg-1',
+      TopicArn: 'arn:aws:sns:us-east-1:000000000000:topic',
+      Message: JSON.stringify(eventBridgeEnvelope),
+    }
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      { Messages: [{ Body: JSON.stringify(snsBody) }] }
+    )
+
+    assert.deepStrictEqual(receivedAttributes, {
+      'x-datadog-trace-id': '555',
+      'x-datadog-parent-id': '444',
+    })
+    assert.strictEqual(result.datadogContext, 'eventbridge-sns-context')
+  })
+
+  it('falls through when an SNS Notification Message is not an EventBridge envelope', () => {
+    let extractCalled = false
+    const plugin = buildPlugin({
+      extract: () => {
+        extractCalled = true
+        return 'should-not-happen'
+      },
+    })
+
+    const snsBody = {
+      Type: 'Notification',
+      Message: 'a plain string payload, not JSON',
+    }
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      { Messages: [{ Body: JSON.stringify(snsBody) }] }
+    )
+
+    assert.strictEqual(extractCalled, false)
+    assert.strictEqual(result.datadogContext, undefined)
+    assert.strictEqual(result.bodyChecked, true)
+  })
+})
+
+describe('Sqs plugin responseExtractDSMContext', () => {
+  it('decodes DSM context from EventBridge body.detail._datadog when dsmEnabled', () => {
+    let decodedCarrier
+    const setCheckpointCalls = []
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      decodeDataStreamsContext: (carrier) => { decodedCarrier = carrier },
+      setCheckpoint: (tags, span, payloadSize) => {
+        setCheckpointCalls.push({ tags, span, payloadSize })
+        return null
+      },
+    })
+
+    const envelope = {
+      version: '0',
+      'detail-type': 'orderPlaced',
+      source: 'my.app',
+      detail: {
+        orderId: 'o-1',
+        _datadog: {
+          'x-datadog-trace-id': '777',
+          'x-datadog-parent-id': '666',
+        },
+      },
+    }
+
+    plugin.responseExtractDSMContext(
+      'receiveMessage',
+      { QueueUrl },
+      { Messages: [{ Body: JSON.stringify(envelope) }] },
+      null
+    )
+
+    assert.deepStrictEqual(decodedCarrier, {
+      'x-datadog-trace-id': '777',
+      'x-datadog-parent-id': '666',
+    })
+    assert.strictEqual(setCheckpointCalls.length, 1)
+    assert.deepStrictEqual(setCheckpointCalls[0].tags, [
+      'direction:in',
+      'topic:test-queue',
+      'type:sqs',
+    ])
+  })
+
+  it('decodes DSM context from an EventBridge envelope wrapped in an SNS Notification', () => {
+    let decodedCarrier
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      decodeDataStreamsContext: (carrier) => { decodedCarrier = carrier },
+    })
+
+    const eventBridgeEnvelope = {
+      'detail-type': 'orderPlaced',
+      detail: {
+        _datadog: {
+          'x-datadog-trace-id': '555',
+          'x-datadog-parent-id': '444',
+        },
+      },
+    }
+    const snsBody = {
+      Type: 'Notification',
+      Message: JSON.stringify(eventBridgeEnvelope),
+    }
+
+    plugin.responseExtractDSMContext(
+      'receiveMessage',
+      { QueueUrl },
+      { Messages: [{ Body: JSON.stringify(snsBody) }] },
+      null
+    )
+
+    assert.deepStrictEqual(decodedCarrier, {
+      'x-datadog-trace-id': '555',
+      'x-datadog-parent-id': '444',
+    })
+  })
+
+  it('does not decode anything when dsmEnabled is false', () => {
+    let decodeCalled = false
+    const plugin = buildPlugin({
+      dsmEnabled: false,
+      decodeDataStreamsContext: () => { decodeCalled = true },
+    })
+
+    const envelope = {
+      'detail-type': 'orderPlaced',
+      detail: { _datadog: { 'x-datadog-trace-id': '777' } },
+    }
+
+    plugin.responseExtractDSMContext(
+      'receiveMessage',
+      { QueueUrl },
+      { Messages: [{ Body: JSON.stringify(envelope) }] },
+      null
+    )
+
+    assert.strictEqual(decodeCalled, false)
   })
 })
