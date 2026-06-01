@@ -6,23 +6,23 @@ A debugging tool for dd-trace-js tests that logs diagnostic channel events, span
 
 ```bash
 # Enable debug logging for all tests
-TEST_CHANNEL_DEBUG=true PLUGINS=express yarn test:plugins
+DD_TEST_CHANNEL_DEBUG=true PLUGINS=express yarn test:plugins
 
 # Filter to specific patterns (supports wildcards)
-TEST_CHANNEL_DEBUG=true TEST_CHANNEL_FILTER="*bullmq*" PLUGINS=bullmq yarn test:plugins
+DD_TEST_CHANNEL_DEBUG=true DD_TEST_CHANNEL_FILTER="*bullmq*" PLUGINS=bullmq yarn test:plugins
 
 # Show channel message data
-TEST_CHANNEL_DEBUG=true TEST_CHANNEL_SHOW_DATA=true PLUGINS=http yarn test:plugins
+DD_TEST_CHANNEL_DEBUG=true DD_TEST_CHANNEL_SHOW_DATA=true PLUGINS=http yarn test:plugins
 ```
 
 ## Environment Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TEST_CHANNEL_DEBUG` | Enable debug logging | `true` |
-| `TEST_CHANNEL_FILTER` | Filter pattern (supports `*` wildcards) | `*bullmq*`, `apm:express*`, `*:start` |
-| `TEST_CHANNEL_SHOW_DATA` | Show channel message payloads | `true` |
-| `TEST_CHANNEL_VERBOSE` | Show span tags in lifecycle logs | `true` |
+| `DD_TEST_CHANNEL_DEBUG` | Enable debug logging | `true` |
+| `DD_TEST_CHANNEL_FILTER` | Filter pattern (supports `*` wildcards) | `*bullmq*`, `apm:express*`, `*:start` |
+| `DD_TEST_CHANNEL_SHOW_DATA` | Show channel message payloads | `true` |
+| `DD_TEST_CHANNEL_VERBOSE` | Show span tags in lifecycle logs | `true` |
 | `NO_COLOR` | Disable colored output | `1` |
 | `FORCE_COLOR` | Force colored output (for non-TTY) | `1` |
 
@@ -91,13 +91,13 @@ When stderr is redirected to a file, colors are automatically disabled:
 
 ```bash
 # Both stdout and stderr to file
-TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins &>/tmp/debug.txt
+DD_TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins &>/tmp/debug.txt
 
 # See output live AND save to file
-TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins 2>&1 | tee /tmp/debug.txt
+DD_TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins 2>&1 | tee /tmp/debug.txt
 
 # Force no colors even in terminal
-NO_COLOR=1 TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
+NO_COLOR=1 DD_TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
 ```
 
 ## Example Output
@@ -124,7 +124,7 @@ NO_COLOR=1 TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
 ## Files
 
 - `packages/dd-trace/test/debug/channel-patch.js` - Main debug patch
-- `packages/dd-trace/test/setup/core.js` - Loads patch when `TEST_CHANNEL_DEBUG` is set
+- `packages/dd-trace/test/setup/core.js` - Loads patch when `DD_TEST_CHANNEL_DEBUG` is set
 - `integration-tests/helpers/index.js` - Loads patch for subprocess tests via `--require`
 
 ## How It Works

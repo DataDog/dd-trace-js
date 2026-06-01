@@ -3,17 +3,20 @@
 // Loaded for side effects only (via --require or require()).
 // Patches diagnostic channels, shimmer, rewriter, and span lifecycle for debug logging.
 
-const dc = require('node:diagnostics_channel')
 const { performance } = require('node:perf_hooks')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
+
 // Config
-const filter = process.env.TEST_CHANNEL_FILTER || ''
-const showData = process.env.TEST_CHANNEL_SHOW_DATA === 'true'
-const verbose = process.env.TEST_CHANNEL_VERBOSE === 'true'
-const useColor = process.env.NO_COLOR
-  ? false
-  : (process.stderr.hasColors?.() || process.env.FORCE_COLOR === '1')
+const filter = process.env.DD_TEST_CHANNEL_FILTER || ''
+const showData = process.env.DD_TEST_CHANNEL_SHOW_DATA === 'true'
+const verbose = process.env.DD_TEST_CHANNEL_VERBOSE === 'true'
+// `hasColors()` already accounts for NO_COLOR and FORCE_COLOR; the fallback
+// only matters on Node versions where the method is unavailable.
+const useColor = process.stderr.hasColors
+  ? process.stderr.hasColors()
+  : !(process.env.NO_COLOR || process.env.FORCE_COLOR === '0')
 const startTime = performance.now()
 
 // Colors via util.inspect.colors (disabled when not TTY or NO_COLOR is set)
@@ -39,74 +42,67 @@ function ts () {
 const filterRe = filter && new RegExp('^' + filter.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
 const match = name => !filterRe || filterRe.test(name)
 
-// Channel patching
-// Node.js uses a native fast path when channels have subscribers, bypassing JS publish().
-// We wrap subscribers to log publishes since the prototype patch only catches no-subscriber cases.
-const { subscribe, unsubscribe, publish } = dc.Channel.prototype
-const wrappers = new WeakMap()
+// Channel patching.
+// Node.js swaps a channel's prototype from `Channel` to `ActiveChannel` once it has
+// subscribers, so a patch on `Channel.prototype` alone never sees publishes/subscribes
+// on active channels. We therefore log-and-passthrough on BOTH prototypes. Crucially we
+// never wrap subscriber functions: the prototype swap makes wrapper identity unrecoverable
+// on unsubscribe, which silently leaks subscribers and corrupts behaviour. Passthrough
+// preserves subscriber identity exactly, so instrumentation semantics are untouched.
 
-function wrapSub (fn, name) {
-  const wrapped = function (msg) {
-    if (match(name)) {
-      let out = `${ts()} ${c.yellow('[PUB]')} ${c.cyan(name)}`
-      if (showData && msg) out += ` ${c.gray(JSON.stringify(msg).slice(0, 80))}`
+function safeStringify (msg) {
+  try {
+    return JSON.stringify(msg)
+  } catch {
+    return String(msg)
+  }
+}
+
+function patchChannelProto (proto, active) {
+  const { subscribe, unsubscribe, publish } = proto
+
+  proto.subscribe = function (fn) {
+    if (match(this.name)) {
+      log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    }
+    return subscribe.apply(this, arguments)
+  }
+
+  proto.unsubscribe = function (fn) {
+    if (match(this.name)) {
+      log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    }
+    return unsubscribe.apply(this, arguments)
+  }
+
+  proto.publish = function (msg) {
+    if (match(this.name)) {
+      let out = `${ts()} ${c.yellow('[PUB]')} ${c.cyan(this.name)}${active ? '' : c.red(' (no subscribers)')}`
+      if (showData && msg) out += ` ${c.gray(safeStringify(msg).slice(0, 80))}`
       log(out)
     }
-    return fn.apply(this, arguments)
+    return publish.apply(this, arguments)
   }
-  wrappers.set(fn, wrapped)
-  return wrapped
 }
 
-dc.Channel.prototype.subscribe = function (fn) {
-  if (match(this.name)) {
-    log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
-  }
-  return subscribe.call(this, wrapSub(fn, this.name))
+// Capture the `ActiveChannel` prototype (only reachable via an activated channel) before
+// patching, so the probe's own subscribe/unsubscribe stay unlogged.
+const probe = dc.channel('dd-trace:debug:active-channel-probe')
+const probeFn = () => {}
+probe.subscribe(probeFn)
+const activeChannelProto = Object.getPrototypeOf(probe)
+probe.unsubscribe(probeFn)
+
+patchChannelProto(dc.Channel.prototype, false)
+// Guard: if a runtime ever stops swapping prototypes on activation, the probe's prototype
+// is just `Channel.prototype` and patching it again would double-deliver every publish.
+if (activeChannelProto !== dc.Channel.prototype) {
+  patchChannelProto(activeChannelProto, true)
 }
 
-dc.Channel.prototype.unsubscribe = function (fn) {
-  if (match(this.name)) {
-    log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
-  }
-  return unsubscribe.call(this, wrappers.get(fn) || fn)
-}
-
-dc.Channel.prototype.publish = function (msg) {
-  if (match(this.name)) {
-    let out = `${ts()} ${c.yellow('[PUB]')} ${c.cyan(this.name)}${c.red(' (no subscribers)')}`
-    if (showData && msg) out += ` ${c.gray(JSON.stringify(msg).slice(0, 80))}`
-    log(out)
-  }
-  return publish.call(this, msg)
-}
-
-// Module-level dc.subscribe/unsubscribe (Node 18.7+)
-/* eslint-disable n/no-unsupported-features/node-builtins */
-if (dc.subscribe) {
-  const orig = dc.subscribe
-  dc.subscribe = function (name, fn) {
-    if (match(name)) {
-      log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
-    }
-    return orig.call(this, name, wrapSub(fn, name))
-  }
-}
-if (dc.unsubscribe) {
-  const orig = dc.unsubscribe
-  dc.unsubscribe = function (name, fn) {
-    if (match(name)) {
-      log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
-    }
-    return orig.call(this, name, wrappers.get(fn) || fn)
-  }
-}
-/* eslint-enable n/no-unsupported-features/node-builtins */
-
-// TracingChannel patching (dc-polyfill provides TracingChannel for Node <20)
-const dcPolyfill = require('dc-polyfill')
-const origTracingChannel = dcPolyfill.tracingChannel
-dcPolyfill.tracingChannel = function (name) {
+// TracingChannel patching
+const origTracingChannel = dc.tracingChannel
+dc.tracingChannel = function (name) {
   const tc = origTracingChannel.call(this, name)
   for (const m of ['traceSync', 'tracePromise', 'traceCallback']) {
     const fn = tc[m]
@@ -130,17 +126,15 @@ const origWrap = shimmer.wrap
 shimmer.wrap = function (obj, method, wrapper) {
   const name = inspect(obj, { depth: -1 })
   if (match(method) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(method)}`)
-  return origWrap.call(this, obj, method, wrapper)
+  return origWrap.apply(this, arguments)
 }
-if (shimmer.massWrap) {
-  const origMass = shimmer.massWrap
-  shimmer.massWrap = function (obj, methods, wrapper) {
-    const name = inspect(obj, { depth: -1 })
-    for (const m of methods) {
-      if (match(m) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(m)}`)
-    }
-    return origMass.call(this, obj, methods, wrapper)
+const origMass = shimmer.massWrap
+shimmer.massWrap = function (obj, methods, wrapper) {
+  const name = inspect(obj, { depth: -1 })
+  for (const m of methods) {
+    if (match(m) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(m)}`)
   }
+  return origMass.apply(this, arguments)
 }
 
 // Rewriter patching - log when code gets rewritten by orchestrion
@@ -223,4 +217,6 @@ process.stdout.write = function (chunk, enc, cb) {
   return origWrite(str.split('\n').map(l => l.trim() ? marker + l : l).join('\n'), enc, cb)
 }
 
+// This module is loaded purely for its patching side effects (via --require or
+// require()) and intentionally exports nothing.
 module.exports = {}
