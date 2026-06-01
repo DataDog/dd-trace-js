@@ -171,7 +171,7 @@ function spanMeta (tags) {
   const items = []
   for (const [k, v] of Object.entries(tags)) {
     if (SKIP_TAGS.has(k) || k.startsWith('_dd') || v == null) continue
-    let val = typeof v === 'object' ? JSON.stringify(v) : v
+    let val = v !== null && typeof v === 'object' ? JSON.stringify(v) : v
     if (typeof val === 'string' && val.length > 50) val = val.slice(0, 47) + '...'
     items.push(`${k}=${val}`)
   }
@@ -184,7 +184,7 @@ function spanMeta (tags) {
 dc.channel('dd-trace:span:start').subscribe(({ span, fields }) => {
   const name = fields.operationName
   if (!match(name)) return
-  const tags = span?._spanContext?._tags || fields.tags || {}
+  const tags = span?._spanContext?.getTags() || fields.tags || {}
   const svc = tags['service.name'] || ''
   const res = tags['resource.name']
   const kind = tags['span.kind']
@@ -195,7 +195,7 @@ dc.channel('dd-trace:span:start').subscribe(({ span, fields }) => {
 dc.channel('dd-trace:span:finish').subscribe(span => {
   const name = span._name
   if (!match(name)) return
-  const tags = span._spanContext?._tags || {}
+  const tags = span._spanContext?.getTags() || {}
   let err = ''
   if (tags.error) {
     let msg = tags.error.message || tags.error.name || 'error'
