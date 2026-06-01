@@ -275,7 +275,7 @@ class TextMapPropagator {
       (DD_MAJOR < 6 && this._hasPropagationStyle('inject', 'b3'))
     if (!hasB3multi) return
 
-    carrier[b3TraceKey] = this._getB3TraceId(spanContext)
+    carrier[b3TraceKey] = spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
     carrier[b3SpanKey] = spanContext._spanId.toString(16)
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
@@ -294,7 +294,7 @@ class TextMapPropagator {
       (DD_MAJOR >= 6 && this._hasPropagationStyle('inject', 'b3'))
     if (!hasB3SingleHeader) return null
 
-    const traceId = this._getB3TraceId(spanContext)
+    const traceId = spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
     const spanId = spanContext._spanId.toString(16)
     const sampled = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
@@ -862,10 +862,6 @@ class TextMapPropagator {
     } else if (sampled === '0') {
       return AUTO_REJECT
     }
-  }
-
-  _getB3TraceId (spanContext) {
-    return spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
   }
 
   /**
