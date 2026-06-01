@@ -21,7 +21,6 @@ const ZERO_ID = id('0')
 // transformer scans the batch to find it and applies it to every span's traceId.
 const TRACE_ID_128 = '_dd.p.tid'
 
-
 /**
  * @typedef {import('../../id').Identifier} Identifier
  *
