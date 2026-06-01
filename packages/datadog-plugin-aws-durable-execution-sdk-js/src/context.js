@@ -11,12 +11,6 @@ const HIGH_CARDINALITY_PARENT_SPAN_NAMES = new Set([
   'aws.durable.parallel',
 ])
 
-// Span names whose underlying ops use the SDK's retry mechanism (StepDetails.Attempt).
-const RETRYABLE_SPAN_NAMES = new Set([
-  'aws.durable.step',
-  'aws.durable.wait_for_condition',
-])
-
 // The SDK emits these subTypes as internal scaffolding around map/parallel iterations
 // and waitForCallback; not user-visible operations.
 const SUPPRESSED_CHILD_CONTEXT_SUBTYPES = new Set([
@@ -52,7 +46,7 @@ class BaseContextPlugin extends TracingPlugin {
       meta['aws.durable.operation_id'] = operationId
     }
 
-    const metrics = RETRYABLE_SPAN_NAMES.has(spanName)
+    const metrics = this.constructor.retryable
       ? { 'aws.durable.operation_attempt': getOperationAttempt(ctx.self) }
       : undefined
 
@@ -86,11 +80,12 @@ class BaseContextPlugin extends TracingPlugin {
   }
 }
 
-function makeContextPlugin (method, spanName) {
+function makeContextPlugin (method, spanName, { retryable = false } = {}) {
   return class extends BaseContextPlugin {
     static prefix = `tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_${method}`
     static settleChannel = `apm:aws-durable-execution-sdk-js:${method}:settle`
     static spanName = spanName
+    static retryable = retryable
   }
 }
 
@@ -118,9 +113,9 @@ function getRunInChildContextSubType (ctx) {
 }
 
 module.exports = {
-  step: makeContextPlugin('step', 'aws.durable.step'),
+  step: makeContextPlugin('step', 'aws.durable.step', { retryable: true }),
   wait: makeContextPlugin('wait', 'aws.durable.wait'),
-  waitForCondition: makeContextPlugin('waitForCondition', 'aws.durable.wait_for_condition'),
+  waitForCondition: makeContextPlugin('waitForCondition', 'aws.durable.wait_for_condition', { retryable: true }),
   waitForCallback: makeContextPlugin('waitForCallback', 'aws.durable.wait_for_callback'),
   createCallback: makeContextPlugin('createCallback', 'aws.durable.create_callback'),
   map: makeContextPlugin('map', 'aws.durable.map'),
