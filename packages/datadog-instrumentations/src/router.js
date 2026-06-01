@@ -157,10 +157,9 @@ function createWrapRouterMethod (name, compile) {
   }
 
   function wrapNext (req, originalNext) {
-    // Per layer dispatch, N per request. `shimmer.wrapCallback` preserves
-    // only `name` + `length`; see its JSDoc for the full contract.
-    return shimmer.wrapCallback(originalNext, next => function (...args) {
-      const error = args[0]
+    // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
+    // router continuation so wrapCallback skips its name/length rewrite.
+    return shimmer.wrapCallback(originalNext, original => function next (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -168,7 +167,7 @@ function createWrapRouterMethod (name, compile) {
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
-      Reflect.apply(next, this, args)
+      original.apply(this, arguments)
     })
   }
 

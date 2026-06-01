@@ -173,7 +173,8 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function (...args) {
+  // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
+  return shimmer.wrapCallback(next, original => function next (_error) {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -183,7 +184,7 @@ function publishQueryParsedAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, args)
+    return original.apply(this, arguments)
   })
 }
 

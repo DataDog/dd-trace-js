@@ -31,13 +31,14 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
       }
 
       const req = args[0]
-      const wrappedNext = shimmer.wrapFunction(args[2], next => function (...nextArgs) {
+      // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
+      const wrappedNext = shimmer.wrapCallback(args[2], original => function next (_error) {
         sanitizeMiddlewareFinished.publish({
           sanitizedProperties: propertiesToSanitize,
           req,
         })
 
-        return Reflect.apply(next, this, nextArgs)
+        return original.apply(this, arguments)
       })
 
       return middleware.call(this, req, args[1], wrappedNext)
