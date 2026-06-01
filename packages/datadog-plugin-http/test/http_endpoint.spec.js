@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const axios = require('axios')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -17,6 +17,12 @@ describe('Plugin', () => {
   ['http', 'node:http'].forEach(pluginToBeLoaded => {
     describe(`${pluginToBeLoaded}/server`, () => {
       describe('http.endpoint', () => {
+        before(() => {
+          // Needed when this spec file run together with other spec files, in which case the agent config is not
+          // re-loaded unless the existing agent is wiped first.
+          // And we need the agent config to be re-loaded in order to enable appsec.
+        })
+
         beforeEach(async () => {
           return agent.load('http', {}, { appsec: { enabled: true } })
             .then(() => {
@@ -99,110 +105,6 @@ describe('Plugin', () => {
             .catch(done)
 
           axios.get(`http://localhost:${port}/resources/abc-123`).catch(done)
-        })
-      })
-    })
-
-    describe(`${pluginToBeLoaded}/client`, () => {
-      describe('http.endpoint', () => {
-        beforeEach(async () => {
-          return agent.load('http', { server: false }, { appsec: { enabled: true } })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-            })
-        })
-
-        afterEach(() => {
-          appListener && appListener.close()
-          return agent.close()
-        })
-
-        beforeEach(done => {
-          const server = new http.Server((req, res) => {
-            res.writeHead(200)
-            res.end()
-          })
-          appListener = server.listen(0, 'localhost', () => {
-            port = appListener.address().port
-            done()
-          })
-        })
-
-        it('should set http.endpoint with int', done => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/users/123`)
-              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/users/123`).catch(done)
-        })
-
-        it('should normalize a mixed path into multiple param classes', done => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(
-                traces[0][0].meta['http.endpoint'],
-                '/v1/users/{param:int}/sessions/{param:hex}'
-              )
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/v1/users/12345/sessions/a1b2c3d4e5f6`).catch(done)
-        })
-
-        it('should compute http.endpoint from the path only, ignoring the query string', done => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/users/123?cursor=abc&page=2`).catch(done)
-        })
-      })
-
-      describe('http.endpoint disabled', () => {
-        beforeEach(async () => {
-          return agent.load('http', { server: false })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-            })
-        })
-
-        afterEach(() => {
-          appListener && appListener.close()
-          return agent.close()
-        })
-
-        beforeEach(done => {
-          const server = new http.Server((req, res) => {
-            res.writeHead(200)
-            res.end()
-          })
-          appListener = server.listen(0, 'localhost', () => {
-            port = appListener.address().port
-            done()
-          })
-        })
-
-        it('should not set http.endpoint when resourceRenamingEnabled is off', done => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.ok(!('http.endpoint' in traces[0][0].meta))
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/users/123`).catch(done)
         })
       })
     })

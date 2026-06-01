@@ -47,6 +47,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -64,12 +65,21 @@ const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const isJestCoverageBackfillSupported = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
   const test = events.find(event => event.type === 'test').content
   assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
+function getLinesBitmapBase64 (startLine, endLine) {
+  const lineCoverage = {}
+  for (let line = startLine; line <= endLine; line++) {
+    lineCoverage[line] = 1
+  }
+  return getLineCoverageBitmap(lineCoverage, true).toString('base64')
 }
 
 // TODO: add ESM tests
@@ -154,6 +164,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('can report code coverage', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: true,
+        tests_skipping: true,
+      })
+
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
@@ -180,12 +197,26 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             },
           }],
         })
-        const allCoverageFiles = codeCovRequest.payload
-          .flatMap(coverage => coverage.content.coverages)
+        const coverages = codeCovRequest.payload.flatMap(coverage => coverage.content.coverages)
+        const allCoverageFiles = coverages
           .flatMap(file => file.files)
           .map(file => file.filename)
+        const coveredSourceFile = coverages
+          .flatMap(coverage => coverage.files)
+          .find(file => file.filename === 'ci-visibility/test/sum.js')
+        const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
 
         assertObjectContains(allCoverageFiles.sort(), expectedCoverageFiles.sort())
+        assert.ok(coveredSourceFile.bitmap, 'covered source files should report line coverage bitmaps')
+        if (isJestCoverageBackfillSupported) {
+          assert.ok(sessionCoverage, 'session executable line coverage should be reported')
+          assert.ok(
+            sessionCoverage.files.every(file => file.bitmap),
+            'session executable line coverage files should report bitmaps'
+          )
+        } else {
+          assert.strictEqual(sessionCoverage, undefined)
+        }
 
         const [coveragePayload] = codeCovRequest.payload
         assert.ok(coveragePayload.content.coverages[0].test_session_id)
@@ -265,6 +296,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           suite: 'ci-visibility/test/ci-visibility-test.js',
         },
       }])
+      receiver.setSkippableCoverage({
+        'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
+      })
 
       const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
       const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
@@ -317,12 +351,20 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runTestsCommand,
         {
           cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
+          },
         }
       )
     })
 
     it('marks the test session as skipped if every suite is skipped', (done) => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
       receiver.setSuitesToSkip(
         [
           {
@@ -444,6 +486,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('does not skip suites if suite is marked as unskippable', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
@@ -458,6 +501,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        'ci-visibility/unskippable-test/test-to-skip.js': coveredSkippedLines,
+        'ci-visibility/unskippable-test/test-unskippable.js': coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -515,6 +562,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSuitesToSkip([
         {
           type: 'suite',
@@ -523,6 +571,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         },
       ])
+      receiver.setSkippableCoverage({
+        'ci-visibility/unskippable-test/test-to-skip.js': coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -643,6 +694,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -652,6 +704,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           suite: 'ci-visibility/test/ci-visibility-test.js',
         },
       }])
+      receiver.setSkippableCoverage({
+        'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -686,46 +741,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('keeps user coverage reporters when DD_TEST_TIA_KEEP_COV_CONFIG is true', async () => {
+    it('does not run coverage reporters when TIA forces coverage collection', async () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
-        tests_skipping: true,
-      })
-
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js',
-        },
-      }])
-
-      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
-      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
-
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            COVERAGE_REPORTERS: 'lcov',
-            DD_TEST_TIA_KEEP_COV_CONFIG: 'true',
-          },
-        }
-      )
-      try {
-        await once(childProcess, 'exit')
-        assert.strictEqual(fs.existsSync(lcovPath), true)
-      } finally {
-        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
-      }
-    })
-
-    it('overrides user coverage reporters when code coverage is enabled because of us', async () => {
-      receiver.setSettings({
-        itr_enabled: true,
-        code_coverage: true,
+        coverage_report_upload_enabled: false,
         tests_skipping: true,
       })
 
@@ -750,7 +770,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
       try {
-        await once(childProcess, 'exit')
+        const [exitCode] = await once(childProcess, 'exit')
+        assert.strictEqual(exitCode, 0)
         assert.strictEqual(fs.existsSync(lcovPath), false)
       } finally {
         fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
@@ -761,6 +782,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -793,10 +815,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       }
     })
 
-    it('calculates executable lines even if there have been skipped suites', (done) => {
+    it('calculates total code coverage using skippable suite coverage', async () => {
+      const coveredSkippedLines = getLinesBitmapBase64(1, 20)
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
+        coverage_report_upload_enabled: true,
         tests_skipping: true,
       })
 
@@ -806,17 +830,25 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           suite: 'ci-visibility/test-total-code-coverage/test-skipped.js',
         },
       }])
+      receiver.setSkippableCoverage({
+        'ci-visibility/test-total-code-coverage/test-skipped.js': coveredSkippedLines,
+        'ci-visibility/test-total-code-coverage/unused-dependency.js': coveredSkippedLines,
+      })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
 
-          // Before https://github.com/DataDog/dd-trace-js/pull/4336, this would've been 100%
-          // The reason is that skipping jest's `addUntestedFiles`, we would not see unexecuted lines.
-          // In this cause, these would be from the `unused-dependency.js` file.
-          // It is 50% now because we only cover 1 out of 2 files (`used-dependency.js`).
-          assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 50)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          // Jest still adds untested files to total coverage, including unused-dependency.js from the skipped
+          // suite. The result stays at 100% because backend meta.coverage backfills those skipped lines before the
+          // test session total is published.
+          if (isJestCoverageBackfillSupported) {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+          } else {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+          }
         })
 
       childProcess = exec(
@@ -832,9 +864,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(done).catch(done)
-      })
+      const [exitCode] = await once(childProcess, 'exit')
+      assert.strictEqual(exitCode, 0)
+      await eventsPromise
     })
 
     it('reports code coverage relative to the repository root, not working directory', (done) => {
@@ -864,6 +896,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
             PROJECTS: JSON.stringify([{
               testMatch: ['**/subproject-test*'],
               testEnvironment: 'node',
@@ -878,6 +911,72 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('skips repository-relative suites when jest rootDir is a subproject', async () => {
+      const suite = 'ci-visibility/subproject/subproject-test.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: true,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([
+        {
+          type: 'suite',
+          attributes: {
+            suite,
+          },
+        },
+      ])
+      receiver.setSkippableCoverage({
+        [suite]: getLinesBitmapBase64(1, 11),
+        'ci-visibility/subproject/dependency.js': getLinesBitmapBase64(1, 5),
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const skippedSuites = events
+            .filter(event => event.type === 'test_suite_end')
+            .filter(event => event.content.meta[TEST_SKIPPED_BY_ITR] === 'true')
+          const skippedSuite = events.find(event => {
+            return event.type === 'test_suite_end' && event.content.resource === `test_suite.${suite}`
+          }).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(skippedSuites.length, 1)
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          if (isJestCoverageBackfillSupported) {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], 100)
+          } else {
+            assert.strictEqual(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+          }
+        })
+
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject --coverage',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COLLECT_COVERAGE_FROM: 'subproject-test.js,subproject-test-2.js,dependency.js',
+            PROJECTS: JSON.stringify([{
+              testMatch: ['**/subproject-test*'],
+              testEnvironment: 'node',
+              testRunner: 'jest-circus/runner',
+            }]),
+          },
+        }
+      )
+
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('report code coverage with all mocked files', async () => {
@@ -902,6 +1001,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
             TESTS_TO_RUN: 'jest/mocked-test.js',
           },
         }

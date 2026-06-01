@@ -2,7 +2,7 @@ name: Pull Request Title
 
 on:
   pull_request_target:
-    types: [opened, edited, reopened, labeled, unlabeled]
+    types: [opened, edited, reopened]
     branches:
       - "master"
 
@@ -20,13 +20,10 @@ jobs:
       # regex (no lookarounds, named groups, or other JS-only features).
       # Revert PRs nest the reverted commit's type, e.g. `revert: feat(api): undo X`,
       # so the semver label can track the magnitude of the original change.
-      PR_TITLE_PATTERN: '^(revert(!)?: )?(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(([^)]+)\))?(!)?: .+'
+      PR_TITLE_PATTERN: '^(revert(!)?: )?(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+'
     steps:
       - name: Validate PR title against Conventional Commits
-        if: >-
-          github.event.action == 'opened' ||
-          github.event.action == 'reopened' ||
-          (github.event.action == 'edited' && github.event.changes.title != null)
+        if: github.event.action != 'edited' || github.event.changes.title != null
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -35,7 +32,7 @@ jobs:
             echo "Got:      $PR_TITLE"
             echo "Expected: <type>(<scope>)?(!)?: <subject>"
             echo "          revert(!)?: <type>(<scope>)?(!)?: <subject>  (for reverts)"
-            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore"
+            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore"
             echo "Revert PRs must embed the original commit's type so the semver impact can"
             echo "be determined (e.g. 'revert: feat(scope): original title')."
             echo "Reverts of reverts re-apply the original change, so use the original"

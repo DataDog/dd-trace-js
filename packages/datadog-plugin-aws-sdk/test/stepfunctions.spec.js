@@ -115,7 +115,7 @@ describe('Sfn', () => {
             assert.ok(span, 'expected startExecution span')
             assert.strictEqual(span.resource, 'startExecution')
             assert.strictEqual(span.meta.statemachinearn, stateMachineArn)
-          })
+          }, { spanResourceMatch: /startExecution/ })
 
           const resp = await client.startExecution(startExecInput)
 

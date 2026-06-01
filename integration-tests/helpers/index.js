@@ -899,7 +899,7 @@ function warmCypressBinary (cwd) {
   return new Promise(resolve => {
     childProcess.exec('./node_modules/.bin/cypress run --spec __ddwarmup_no_match__.cy.js', {
       cwd,
-      timeout: 80_000,
+      timeout: 180_000,
       env: { ...process.env, NODE_OPTIONS: '' },
     }, () => resolve())
   })

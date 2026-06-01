@@ -107,7 +107,7 @@ function publishFormatted (ch, formatter, ...args) {
 
 function getErrorLog (err) {
   if (typeof err?.delegate === 'function') {
-    const result = err.delegate()
+    const result = err.delegate(...err.args)
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
   }
   return err
