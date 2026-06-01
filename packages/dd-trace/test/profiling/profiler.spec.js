@@ -336,13 +336,43 @@ describe('profiler', function () {
         submit,
       ] = consoleLogger.debug.getCalls()
 
-      sinon.assert.calledWithMatch(startWall, 'Started wall profiler')
-      sinon.assert.calledWithMatch(startSpace, 'Started space profiler')
+      sinon.assert.calledWithExactly(startWall, 'Started %s profiler in %s thread', 'wall', 'Main')
+      sinon.assert.calledWithExactly(startSpace, 'Started %s profiler in %s thread', 'space', 'Main')
 
       assert.match(collectWall.args[0](), /^Collected wall profile: /)
       assert.match(collectSpace.args[0](), /^Collected space profile: /)
 
-      sinon.assert.calledWithMatch(submit, 'Submitted profiles')
+      sinon.assert.calledWithExactly(submit, 'Submitted profiles')
+    })
+
+    it('should publish lifecycle debug messages to the central log debug channel', async () => {
+      // Re-proxyquire without stubbing ../log so log.debug actually publishes
+      // to the real debugChannel.
+      const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
+        './config': { Config: ConfigStub },
+        '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
+      }).Profiler
+      const realProfiler = new RealLogProfiler()
+      const { debugChannel } = require('../../src/log/channels')
+      const messages = []
+      const subscriber = msg => messages.push(msg)
+      debugChannel.subscribe(subscriber)
+
+      try {
+        await realProfiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+        await clock.tickAsync(1)
+
+        assert.ok(
+          messages.includes('Started wall profiler in Main thread'),
+          `Expected 'Started wall profiler in Main thread' in: ${inspect(messages)}`
+        )
+        assert.ok(messages.includes('Submitted profiles'))
+      } finally {
+        debugChannel.unsubscribe(subscriber)
+        realProfiler.stop()
+      }
     })
 
     it('should have a new start time for each capture', async () => {

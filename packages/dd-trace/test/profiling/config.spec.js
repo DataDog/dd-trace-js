@@ -17,7 +17,6 @@ const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const EventsProfiler = require('../../src/profiling/profilers/events')
-const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const samplingContextsAvailable = process.platform !== 'win32'
@@ -82,7 +81,6 @@ describe('config', () => {
       version: config.version,
     })
     assert.strictEqual(config.tags.host, undefined)
-    assert.ok(config.logger instanceof ConsoleLogger)
     assert.deepStrictEqual(
       config.profilers.slice(0, 2).map(profiler => profiler.constructor),
       [SpaceProfiler, WallProfiler]
@@ -164,22 +162,20 @@ describe('config', () => {
 
     /** @type {string[]} */
     const errors = []
-    const logger = {
-      debug () {},
-      info () {},
-      warn () {},
-      error (message) {
-        errors.push(String(message))
-      },
+    const { errorChannel } = require('../../src/log/channels')
+    const subscriber = err => errors.push(err.message)
+    errorChannel.subscribe(subscriber)
+
+    try {
+      const { config } = getProfilerConfig()
+      assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
+      assert.deepStrictEqual(errors, [
+        'Unknown profiler "nope"',
+        'Unknown profiler "also_nope"',
+      ])
+    } finally {
+      errorChannel.unsubscribe(subscriber)
     }
-
-    const { config } = getProfilerConfig({ logger })
-
-    assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
-    assert.deepStrictEqual(errors, [
-      'Unknown profiler "nope"',
-      'Unknown profiler "also_nope"',
-    ])
   })
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {
@@ -190,6 +186,26 @@ describe('config', () => {
     const { config } = getProfilerConfig()
 
     assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
+  })
+
+  it('should publish invalid-compression warning to the central log warn channel', () => {
+    process.env = {
+      DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip-99',
+    }
+    const warnings = []
+    const { warnChannel } = require('../../src/log/channels')
+    const subscriber = msg => warnings.push(msg)
+    warnChannel.subscribe(subscriber)
+
+    try {
+      getProfilerConfig()
+      assert.ok(
+        warnings.some(m => m.includes('Invalid compression level 99')),
+        `Expected compression warning in: ${inspect(warnings)}`
+      )
+    } finally {
+      warnChannel.unsubscribe(subscriber)
+    }
   })
 
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
