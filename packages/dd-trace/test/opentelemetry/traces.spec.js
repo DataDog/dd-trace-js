@@ -500,29 +500,6 @@ describe('OpenTelemetry Traces', () => {
         }
       })
 
-      it('finds _dd.p.tid on a non-first span and applies it to every span', () => {
-        const transformer = new OtlpTraceTransformer({})
-        const lowHex = 'abcdef0123456789'
-        const tidHigh = '1234567890abcdef'
-        const traceIdLow = id(lowHex)
-
-        const spans = [
-          createMockSpan({ trace_id: traceIdLow, meta: { 'span.kind': 'internal' } }),
-          createMockSpan({
-            trace_id: traceIdLow,
-            span_id: id('bbbbbbbbbbbbbbbb'),
-            meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
-          }),
-        ]
-
-        const decoded = decodePayload(transformer.transformSpans(spans))
-        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
-
-        const expectedTraceId = tidHigh + lowHex
-        assert.strictEqual(otlpSpans[0].traceId, expectedTraceId)
-        assert.strictEqual(otlpSpans[1].traceId, expectedTraceId)
-      })
-
       it('drops _dd.p.tid from OTLP attributes once consumed into traceId', () => {
         const transformer = new OtlpTraceTransformer({})
         const span = createMockSpan({
@@ -547,32 +524,6 @@ describe('OpenTelemetry Traces', () => {
         const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
 
         assert.strictEqual(otlpSpan.traceId, '0000000000000000abcdef0123456789')
-      })
-
-      it('skips a non-hex _dd.p.tid and uses a valid one from a later span', () => {
-        const transformer = new OtlpTraceTransformer({})
-        const lowHex = 'abcdef0123456789'
-        const tidHigh = '1234567890abcdef'
-        const traceIdLow = id(lowHex)
-
-        const spans = [
-          createMockSpan({
-            trace_id: traceIdLow,
-            meta: { 'span.kind': 'internal', '_dd.p.tid': 'not-a-hex-value!!' },
-          }),
-          createMockSpan({
-            trace_id: traceIdLow,
-            span_id: id('bbbbbbbbbbbbbbbb'),
-            meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
-          }),
-        ]
-
-        const decoded = decodePayload(transformer.transformSpans(spans))
-        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
-
-        const expectedTraceId = tidHigh + lowHex
-        assert.strictEqual(otlpSpans[0].traceId, expectedTraceId)
-        assert.strictEqual(otlpSpans[1].traceId, expectedTraceId)
       })
 
       it('lowercases an uppercase _dd.p.tid so the OTLP traceId is canonical lowercase hex', () => {

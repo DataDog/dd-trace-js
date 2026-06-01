@@ -21,8 +21,6 @@ const ZERO_ID = id('0')
 // transformer scans the batch to find it and applies it to every span's traceId.
 const TRACE_ID_128 = '_dd.p.tid'
 
-// Matches the propagation layer's `hex16` check: exactly 16 lower- or upper-case hex chars.
-const TRACE_ID_128_HEX = /^[0-9A-Fa-f]{16}$/
 
 /**
  * @typedef {import('../../id').Identifier} Identifier
@@ -122,7 +120,18 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @returns {object[]} Array of scope span objects
    */
   #transformScopeSpans (spans) {
-    const traceIdHigh = this.#findTraceIdHigh(spans)
+    let traceKey
+    let traceIdHigh
+    const otlpSpans = spans.map((span) => {
+      // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
+      // Reset at each trace boundary for batching of multiple traces.
+      const key = span.trace_id.toString(16)
+      if (key !== traceKey) {
+        traceKey = key
+        traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
+      }
+      return this.#transformSpan(span, traceIdHigh)
+    })
     return [{
       scope: {
         name: 'dd-trace-js',
@@ -131,24 +140,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         droppedAttributesCount: 0,
       },
       schemaUrl: '',
-      spans: spans.map(span => this.#transformSpan(span, traceIdHigh)),
+      spans: otlpSpans,
     }]
-  }
-
-  /**
-   * Finds the upper 64 bits of a 128-bit DD trace ID within the batch. The tag only lives on
-   * the first-in-chunk span, but a single batch is a single trace, so the value applies to
-   * every span. Scans the batch instead of trusting an ordering contract from span_processor.
-   * Skips non-hex values so a malformed tag on one span doesn't poison the whole batch.
-   *
-   * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans
-   * @returns {string | undefined} 16-char lowercase hex of the upper 64 bits, or undefined when absent
-   */
-  #findTraceIdHigh (spans) {
-    for (const span of spans) {
-      const tidHigh = span.meta?.[TRACE_ID_128]
-      if (tidHigh && TRACE_ID_128_HEX.test(tidHigh)) return tidHigh.toLowerCase()
-    }
   }
 
   /**
