@@ -46,7 +46,7 @@ class DatadogSpanContext {
 
   toTraceId (get128bitId = false) {
     if (get128bitId) {
-      return this._traceId.toTraceIdHex(this._trace.tags[TRACE_ID_128])
+      return this._traceId.toTraceIdHex(this._trace.tags[TRACE_ID_128]).padStart(32, '0')
     }
     return this._traceId.toString(10)
   }
