@@ -46,7 +46,7 @@ jobs:
     needs:
       - build-artifacts
       - get-credentials
-    uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@rochdev/mssql-ghcr-mirror
     secrets:
       TEST_OPTIMIZATION_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
       DD_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
