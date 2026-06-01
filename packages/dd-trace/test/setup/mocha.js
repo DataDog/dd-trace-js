@@ -1,23 +1,30 @@
 'use strict'
 
 const assert = require('assert')
+const dc = require('node:diagnostics_channel')
+const events = require('node:events')
 const fs = require('fs')
 const { platform } = require('os')
 const path = require('path')
 const util = require('util')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it, Runner } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
-const externals = require('../plugins/externals.json')
+const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
-const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
+
+// dd-trace's mocha CI Visibility hook adds extra Runner listeners.
+if (dc.channel('ci:mocha:test:finish').hasSubscribers) {
+  Runner.prototype.setMaxListeners(events.defaultMaxListeners + 2)
+}
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
@@ -27,7 +34,11 @@ exports.withNamingSchema = withNamingSchema
 exports.withPeerService = withPeerService
 exports.insertVersionDep = insertVersionDep
 
-const testedPlugins = agent.testedPlugins
+// Lazily load the fake agent. It pre-warms the tracer module graph on require,
+// which would leak global state (instrumentation hooks, URL shims, etc.) into
+// specs that never use it (e.g. packages/dd-trace/test/ritm.spec.js).
+let _agent
+const getAgent = () => (_agent ??= require('../plugins/agent'))
 
 function withNamingSchema (
   spanProducerFn,
@@ -46,7 +57,11 @@ function withNamingSchema (
   describe(testTitle, () => {
     ['v0', 'v1'].forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        before(() => {
+        // `beforeEach` / `afterEach`: every outer `agent.load` runs
+        // `tracer.init` → `pluginManager.configure` → resets
+        // `Nomenclature.config` back to defaults. The override has
+        // to land after that, per test.
+        beforeEach(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
@@ -55,20 +70,21 @@ function withNamingSchema (
           })
         })
 
-        after(() => {
+        afterEach(() => {
           Nomenclature.configure(fullConfig)
         })
 
         hooks(versionName, false)
 
-        const { opName, serviceName } = expected[versionName]
+        const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
+          // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
           this.retries(3)
           this.timeout(25000)
 
           return new Promise((resolve, reject) => {
-            const agentPromise = agent
+            const agentPromise = getAgent()
               .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
@@ -80,6 +96,22 @@ function withNamingSchema (
 
                 assert.strictEqual(span.name, expectedOpName)
                 assert.strictEqual(span.service, expectedServiceName)
+
+                const tracerService = defaultTracerService || Nomenclature.config.service
+
+                if (span.service !== tracerService) {
+                  assert.notStrictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be present when a service override is active`
+                  )
+                } else {
+                  assert.strictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be absent when the service matches the default`
+                  )
+                }
               }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
@@ -91,7 +123,7 @@ function withNamingSchema (
     })
 
     describe('service naming short-circuit in v0', () => {
-      before(() => {
+      beforeEach(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
@@ -100,26 +132,42 @@ function withNamingSchema (
         })
       })
 
-      after(() => {
+      afterEach(() => {
         Nomenclature.configure(fullConfig)
       })
 
       hooks('v0', true)
 
-      const { serviceName } = expected.v1
+      const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
+        // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
         this.retries(3)
         this.timeout(15000)
 
         return new Promise((resolve, reject) => {
-          const agentPromise = agent
+          const agentPromise = getAgent()
             .assertSomeTraces(traces => {
               const span = traces[0][0]
               const expectedServiceName = typeof serviceName === 'function'
                 ? serviceName()
                 : serviceName
               assert.strictEqual(span.service, expectedServiceName)
+
+              const tracerService = defaultTracerService || Nomenclature.config.service
+              if (span.service !== tracerService) {
+                assert.notStrictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be present when a service override is active`
+                )
+              } else {
+                assert.strictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be absent when the service matches the default`
+                )
+              }
             }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
@@ -137,7 +185,9 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     let computePeerServiceSpy
 
     beforeEach(() => {
-      const plugin = tracer()._pluginManager._pluginsByName[pluginName]
+      // Read the plugin off the live `TracerProxy`; a closure-captured
+      // `tracer()` may point at a torn-down proxy after a gate-fired rebuild.
+      const plugin = global._ddtrace._pluginManager._pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
 
@@ -158,14 +208,14 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
         })
         : spanGenerationFn()
 
-      assert.ok(
-        typeof spanGenerationPromise?.then === 'function',
+      assert.strictEqual(
+        typeof spanGenerationPromise?.then, 'function',
         'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-        util.inspect(spanGenerationPromise, { depth: 1 })
+          util.inspect(spanGenerationPromise, { depth: 1 }),
       )
 
       await Promise.all([
-        agent.assertSomeTraces(traces => {
+        getAgent().assertSomeTraces(traces => {
           const span = traces[0][0]
           assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
           assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
@@ -231,7 +281,7 @@ function withVersions (plugin, modules, range, cb) {
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
 
-      // Some entries coming from `externals.json` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
       // Treat those as "not a test target" instead of crashing.
       const versions = process.env.PACKAGE_VERSION_RANGE
         ? [process.env.PACKAGE_VERSION_RANGE]
@@ -264,6 +314,7 @@ function withVersions (plugin, modules, range, cb) {
         before(() => {
           // set plugin name and version to later report to test agent regarding tested integrations and their tested
           // range of versions
+          const testedPlugins = getAgent().testedPlugins
           const lastPlugin = testedPlugins.at(-1)
           if (
             !lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== testCase.resolvedVersion
@@ -374,7 +425,7 @@ exports.mochaHooks = {
     process.exit = ORIGINAL_PROCESS_EXIT
   },
   afterEach () {
-    agent.reset()
+    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)

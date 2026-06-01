@@ -3,6 +3,7 @@
 const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
@@ -10,10 +11,12 @@ const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
 } = require('../../../plugins/util/test')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../../config/helper')
+const getConfig = require('../../../config')
+const { getEnvironmentVariable } = require('../../../config/helper')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
+  const { DD_PLAYWRIGHT_WORKER, DD_VITEST_WORKER } = getConfig()
   if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_TRACE_PAYLOAD_CODE
   }
@@ -23,13 +26,13 @@ function getInterprocessTraceCode () {
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) {
     return MOCHA_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
+  if (DD_PLAYWRIGHT_WORKER) {
     return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
+  if (DD_VITEST_WORKER) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
@@ -50,8 +53,15 @@ function getInterprocessLogsCode () {
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
-  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
+  if (getConfig().DD_VITEST_WORKER) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
+  }
+  return null
+}
+
+function getInterprocessTelemetryCode () {
+  if (getEnvironmentVariable('JEST_WORKER_ID')) {
+    return JEST_WORKER_TELEMETRY_PAYLOAD_CODE
   }
   return null
 }
@@ -66,10 +76,18 @@ class TestWorkerCiVisibilityExporter {
     const interprocessTraceCode = getInterprocessTraceCode()
     const interprocessCoverageCode = getInterprocessCoverageCode()
     const interprocessLogsCode = getInterprocessLogsCode()
+    const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
     this._writer = new Writer(interprocessTraceCode)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
+    // TODO: add support for test workers other than Jest
+    if (interprocessTelemetryCode) {
+      this._telemetryWriter = new Writer(interprocessTelemetryCode)
+      this.exportTelemetry = function (telemetryEvent) {
+        this._telemetryWriter.append(telemetryEvent)
+      }
+    }
   }
 
   export (payload) {
@@ -89,6 +107,9 @@ class TestWorkerCiVisibilityExporter {
     this._writer.flush(onDone)
     this._coverageWriter.flush()
     this._logsWriter.flush()
+    if (this._telemetryWriter) {
+      this._telemetryWriter.flush()
+    }
   }
 }
 

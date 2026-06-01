@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../dd-trace/src/log')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 
@@ -11,17 +12,24 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     ctx.currentStore?.span?.finish()
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { span } = ctx.currentStore
+    this.setConsumerCheckpoint(span, ctx)
+  }
+
   bindStart (ctx) {
     const job = ctx.arguments?.[0]
     const queueName = job?.queueName || job?.queue?.name || 'bullmq'
 
     let childOf
-    const datadogContext = job?.data?._datadog
-    if (datadogContext) {
-      childOf = this.tracer.extract('text_map', datadogContext)
+    const ddCarrier = this._extractDatadog(job)
+    if (ddCarrier) {
+      ctx._ddCarrier = ddCarrier
+      childOf = this.tracer.extract('text_map', ddCarrier)
     }
 
-    const span = this.startSpan({
+    this.startSpan({
       childOf,
       resource: queueName,
       meta: {
@@ -33,10 +41,6 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
       },
     }, ctx)
 
-    if (this.config.dsmEnabled) {
-      this.setConsumerCheckpoint(span, ctx)
-    }
-
     return ctx.currentStore
   }
 
@@ -47,13 +51,32 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job.queueName || job.queue?.name || 'bullmq'
     const payloadSize = job.data ? getMessageSize(job.data) : 0
 
-    const datadogContext = job.data?._datadog
-    if (datadogContext) {
-      this.tracer.decodeDataStreamsContext(datadogContext)
+    const ddCarrier = ctx._ddCarrier
+    if (ddCarrier) {
+      this.tracer.decodeDataStreamsContext(ddCarrier)
     }
 
     const edgeTags = ['direction:in', `topic:${queueName}`, 'type:bullmq']
     this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+  }
+
+  _extractDatadog (job) {
+    const metadataStr = job?.opts?.telemetry?.metadata
+    if (!metadataStr) return
+
+    try {
+      const metadata = JSON.parse(metadataStr)
+      const ddCarrier = metadata._datadog
+      if (!ddCarrier) return
+
+      // Avoid `delete`'s hidden-class transition; JSON.stringify also omits undefined values.
+      metadata._datadog = undefined
+      job.opts.telemetry.metadata = JSON.stringify(metadata)
+
+      return ddCarrier
+    } catch (error) {
+      log.warn('bullmq: skipping _datadog extract on malformed telemetry.metadata: %s', error.message)
+    }
   }
 }
 

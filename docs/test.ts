@@ -25,7 +25,7 @@ import {
   SPAN_TYPE,
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
-import * as opentracing from '../vendor/dist/opentracing';
+import * as opentracing from 'opentracing';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -46,21 +46,16 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
-  ingestion: {
-    sampleRate: 0.5,
-    rateLimit: 500
-  },
   experimental: {
-    iast: true,
-    b3: true,
     exporter: 'log'
   },
+  iast: true,
   hostname: 'agent',
   logger: {
-    error (message: string | Error) {},
-    warn (message: string) {},
-    info (message: string) {},
-    debug (message: string) {}
+    error(message: string | Error) { },
+    warn(message: string) { },
+    info(message: string) { },
+    debug(message: string) { }
   },
   plugins: false,
   port: 7777,
@@ -70,7 +65,7 @@ tracer.init({
   },
   flushInterval: 1000,
   flushMinSpans: 500,
-  lookup: () => {},
+  lookup: () => { },
   sampleRate: 0.1,
   rateLimit: 1000,
   samplingRules: [
@@ -124,23 +119,16 @@ tracer.init({
       endpointCollectionMessageLimit: 300
     },
     rasp: {
-      enabled: true,
-      bodyCollection: true
+      enabled: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
-    },
-    extendedHeadersCollection: {
-      enabled: true,
-      redaction: false,
-      maxHeaders: 42
     }
   },
   iast: {
     enabled: true,
-    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
@@ -157,51 +145,43 @@ tracer.init({
 });
 
 tracer.init({
-  experimental: {
-    iast: {
-      enabled: true,
-      cookieFilterPattern: '.*',
-      requestSampling: 50,
-      maxConcurrentRequests: 4,
-      maxContextOperations: 30,
-      dbRowsToTaint: 6,
-      deduplicationEnabled: true,
-      redactionEnabled: true,
-      redactionNamePattern: 'password',
-      redactionValuePattern: 'bearer',
-      telemetryVerbosity: 'OFF'
-    },
-    appsec: {
-      standalone: {
-        enabled: true
-      }
-    }
+  iast: {
+    enabled: true,
+    requestSampling: 50,
+    maxConcurrentRequests: 4,
+    maxContextOperations: 30,
+    dbRowsToTaint: 6,
+    deduplicationEnabled: true,
+    redactionEnabled: true,
+    redactionNamePattern: 'password',
+    redactionValuePattern: 'bearer',
+    telemetryVerbosity: 'OFF'
   }
 })
 
 tracer.dogstatsd.increment('foo')
 tracer.dogstatsd.increment('foo', 2)
-tracer.dogstatsd.increment('foo', 2, {a: 'b'})
+tracer.dogstatsd.increment('foo', 2, { a: 'b' })
 tracer.dogstatsd.increment('foo', 2, ['a:b'])
 tracer.dogstatsd.decrement('foo')
 tracer.dogstatsd.decrement('foo', 2)
-tracer.dogstatsd.decrement('foo', 2, {a: 'b'})
+tracer.dogstatsd.decrement('foo', 2, { a: 'b' })
 tracer.dogstatsd.decrement('foo', 2, ['a:b'])
 tracer.dogstatsd.distribution('foo')
 tracer.dogstatsd.distribution('foo', 2)
-tracer.dogstatsd.distribution('foo', 2, {a: 'b'})
+tracer.dogstatsd.distribution('foo', 2, { a: 'b' })
 tracer.dogstatsd.distribution('foo', 2, ['a:b'])
 tracer.dogstatsd.gauge('foo')
 tracer.dogstatsd.gauge('foo', 2)
-tracer.dogstatsd.gauge('foo', 2, {a: 'b'})
+tracer.dogstatsd.gauge('foo', 2, { a: 'b' })
 tracer.dogstatsd.gauge('foo', 2, ['a:b'])
 tracer.dogstatsd.flush()
 
 const httpOptions = {
   service: 'test',
-  allowlist: ['url', /url/, url => true],
-  blocklist: ['url', /url/, url => true],
-  validateStatus: code => code < 400,
+  allowlist: ['url', /url/, (url: string) => true],
+  blocklist: ['url', /url/, (url: string) => true],
+  validateStatus: (code: number) => code < 400,
   headers: ['host'],
   middleware: true
 };
@@ -209,7 +189,7 @@ const httpOptions = {
 const httpServerOptions: plugins.HttpServer = {
   ...httpOptions,
   hooks: {
-    request: (span?: Span, req?, res?) => {}
+    request: (span?: Span, req?, res?) => { }
   }
 };
 
@@ -246,16 +226,16 @@ const graphqlOptions: plugins.graphql = {
   collapse: false,
   signature: false,
   hooks: {
-    execute: (span?: Span, args?, res?) => {},
-    validate: (span?: Span, document?, errors?) => {},
-    parse: (span?: Span, source?, document?) => {}
+    execute: (span?: Span, args?, res?) => { },
+    validate: (span?: Span, document?, errors?) => { },
+    parse: (span?: Span, source?, document?) => { }
   }
 };
 
 const elasticsearchOptions: plugins.elasticsearch = {
   service: 'test',
   hooks: {
-    query: (span?: Span, params?) => {},
+    query: (span?: Span, params?) => { },
   },
 };
 
@@ -263,7 +243,7 @@ const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
   batchPropagationEnabled: false,
   hooks: {
-    request: (span?: Span, response?) => {},
+    request: (span?: Span, response?) => { },
   },
   s3: false,
   sqs: {
@@ -281,8 +261,8 @@ const redisOptions: plugins.redis = {
 const sharedbOptions: plugins.sharedb = {
   service: 'test',
   hooks: {
-    receive: (span?: Span, request?) => {},
-    reply: (span?: Span, request?, reply?) => {},
+    receive: (span?: Span, request?) => { },
+    reply: (span?: Span, request?, reply?) => { },
   },
 };
 
@@ -297,7 +277,7 @@ const moleculerOptions: plugins.moleculer = {
 const openSearchOptions: plugins.opensearch = {
   service: 'test',
   hooks: {
-    query: (span?: Span, params?) => {},
+    query: (span?: Span, params?) => { },
   },
 };
 
@@ -308,6 +288,7 @@ tracer.use('anthropic');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bullmq');
@@ -324,6 +305,8 @@ tracer.use('cucumber', { service: 'cucumber-service' });
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
+tracer.use('electron');
+tracer.use('electron', { net: false, ipc: false });
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
@@ -377,18 +360,21 @@ tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
+tracer.use('langgraph');
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
+tracer.use('modelcontextprotocol-sdk');
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
+tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
@@ -400,6 +386,8 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pg', { appendComment: true });
+tracer.use('pg', { truncate: true });
+tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
@@ -434,18 +422,20 @@ span = tracer.startSpan('test', {
     foo: 'bar'
   }
 });
+span = tracer.startSpan('test', { childOf: null })
+span = tracer.startSpan('test', { integrationName: 'testIntegration' })
 
-tracer.trace('test', () => {})
-tracer.trace('test', { tags: { foo: 'bar' } }, () => {})
-tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
-tracer.trace('test', { measured: true }, () => {})
-tracer.trace('test', (span: Span) => {})
-tracer.trace('test', (span: Span, fn: () => void) => {})
-tracer.trace('test', (span: Span, fn: (err: Error) => void) => {})
+tracer.trace('test', () => { })
+tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
+tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => { })
+tracer.trace('test', { measured: true }, () => { })
+tracer.trace('test', (span: Span) => { })
+tracer.trace('test', (span: Span, fn: () => void) => { })
+tracer.trace('test', (span: Span, fn: (err: Error) => void) => { })
 
 promise = tracer.trace('test', () => Promise.resolve())
 
-tracer.wrap('test', () => {})
+tracer.wrap('test', () => { })
 tracer.wrap('test', (foo: string) => 'test')
 
 promise = tracer.wrap('test', () => Promise.resolve())()
@@ -465,10 +455,10 @@ const scope = tracer.scope()
 span = scope.active()!;
 
 const activateStringType: string = scope.activate(span, () => 'test');
-const activateVoidType: void = scope.activate(span, () => {});
+const activateVoidType: void = scope.activate(span, () => { });
 
 const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bind((arg1: string, arg2: number): string => 'test');
-const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
+const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => { });
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
 
 tracer.wrap('x', () => {
@@ -520,6 +510,14 @@ const req = {} as IncomingMessage
 const res = {} as OutgoingMessage
 resBlockRequest = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)
+
+// Profiling custom labels
+tracer.profiling.setCustomLabelKeys(['customer', 'region'])
+tracer.profiling.setCustomLabelKeys(new Set(['customer', 'region']))
+const labelResult: number = tracer.profiling.runWithLabels({ customer: 'acme', region: 'us-east' }, () => 42)
+tracer.profiling.runWithLabels({ tier: 'premium' }, () => {
+  tracer.profiling.runWithLabels({ region: 'eu-west' }, () => { })
+})
 
 // OTel TracerProvider registers and provides a tracer
 const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
@@ -589,8 +587,6 @@ const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 otelSpan.addLink({ context: spanContext })
 otelSpan.addLink({ context: spanContext, attributes: { foo: 'bar' } })
 otelSpan.addLinks([{ context: spanContext }, { context: spanContext, attributes: { foo: 'bar' } }])
-otelSpan.addLink(spanContext)
-otelSpan.addLink(spanContext, { foo: 'bar' })
 
 // -- LLM Observability --
 const llmobsEnableOptions = {
@@ -634,8 +630,8 @@ llmobs.registerProcessor((llmobsSpan) => {
 llmobs.deregisterProcessor()
 
 // trace block of code
-llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
-llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace({ name: 'name', kind: 'llm' }, () => { })
+llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => { })
 llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
   llmobs.annotate(span, {})
   span.setTag('foo', 'bar')
@@ -643,8 +639,8 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
 })
 
 // wrap a function
-llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
-llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
+llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
 
 // export a span
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
@@ -681,7 +677,8 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {},
+  tags: { team: 'ml' },
+  costTags: ['team'],
   prompt: {
     id: '123',
     version: '1.0.0',
@@ -693,7 +690,8 @@ llmobs.annotate(span, {
   outputData: 'output',
   metadata: {},
   metrics: {},
-  tags: {}
+  tags: { team: 'ml' },
+  costTags: ['team']
 })
 
 
@@ -708,6 +706,7 @@ tracer.init({
   experimental: {
     aiguard: {
       enabled: true,
+      block: true,
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
@@ -735,11 +734,11 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
-  result.action && result.reason && result.tags
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
 })

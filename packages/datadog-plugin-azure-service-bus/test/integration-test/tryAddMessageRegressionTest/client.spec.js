@@ -1,11 +1,13 @@
 'use strict'
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
+  stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -25,13 +27,13 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     it('tryAddMessage returns a boolean, not a Promise', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 3)
         // Verify we got the expected spans from the test
         assert.strictEqual(payload[0][0].name, 'azure.servicebus.create')

@@ -46,8 +46,8 @@ if (ENABLED !== 'true') {
 } else {
   if (WRAP_FUNCTION === 'true') {
     const wrapped = shimmer.wrapFunction(testedFn, (original) => {
-      return function () {
-        return original.apply(this, arguments)
+      return function (...args) {
+        return original.apply(this, args)
       }
     })
     for (let i = 0; i < ITERATIONS; i++) {
@@ -58,8 +58,8 @@ if (ENABLED !== 'true') {
       testedFn,
     }
     shimmer.wrap(obj, 'testedFn', (original) => {
-      return function () {
-        return original.apply(this, arguments)
+      return function (...args) {
+        return original.apply(this, args)
       }
     })
     const wrapped = obj.testedFn

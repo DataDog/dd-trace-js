@@ -11,6 +11,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
+const { waitForTopicReady } = require('./helpers')
 
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
@@ -20,7 +21,7 @@ describe('Plugin', () => {
     this.timeout(30000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('confluentinc-kafka-javascript', module, (version) => {
@@ -38,8 +39,7 @@ describe('Plugin', () => {
           messages = [{ key: 'key1', value: 'test2' }]
 
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../dd-trace')
-          await agent.load('confluentinc-kafka-javascript')
+          tracer = await agent.load('confluentinc-kafka-javascript')
           const lib = require(`../../../versions/${module}@${version}`).get()
 
           // Store the module for later use
@@ -65,6 +65,10 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
+
+          // `createTopics()` returns before leaders are guaranteed to be elected in this client.
+          // If we race ahead immediately, consumers/producers can stall on metadata/leader availability.
+          await waitForTopicReady(admin, testTopic)
         })
 
         afterEach(() => admin.disconnect())
@@ -115,7 +119,8 @@ describe('Plugin', () => {
               }, { timeoutMs: 10000 })
 
               try {
-                await sendMessages(kafka, testTopic, messages = [{ key: 'key1' }])
+                messages = [{ key: 'key1' }]
+                await sendMessages(kafka, testTopic, messages)
               } catch (e) {
                 error = e
                 return expectedSpanPromise
@@ -153,17 +158,19 @@ describe('Plugin', () => {
                 type: 'worker',
               })
 
-              const consumerReceiveMessagePromise = new Promise(resolve => {
+              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 consumer.run({
                   eachMessage: () => {
                     resolve()
                   },
                 })
-              })
-              await sendMessages(kafka, testTopic, messages).then(
-                async () => await consumerReceiveMessagePromise
-              )
-              return expectedSpanPromise
+              }))
+
+              await Promise.all([
+                sendMessages(kafka, testTopic, messages),
+                consumerReceiveMessagePromise,
+                expectedSpanPromise,
+              ])
             })
 
             it('should run the consumer in the context of the consumer span', done => {
@@ -175,11 +182,11 @@ describe('Plugin', () => {
                 try {
                   assert.notStrictEqual(currentSpan, firstSpan)
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  eachMessage = async () => {} // avoid being called for each message
                   done()
                 } catch (e) {
+                  eachMessage = async () => {}
                   done(e)
-                } finally {
-                  eachMessage = () => {} // avoid being called for each message
                 }
               }
 
@@ -191,7 +198,8 @@ describe('Plugin', () => {
 
             it('should propagate context', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.name === 'kafka.consume')
+                assert.ok(span)
 
                 assertObjectContains(span, {
                   name: 'kafka.consume',
@@ -199,7 +207,8 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                assert.ok(parseInt(span.parent_id.toString()) > 0)
+                const parentId = parseInt(span.parent_id.toString())
+                assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
 
               let consumerReceiveMessagePromise
@@ -246,6 +255,85 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
           })
+
+          describe('consumer (eachBatch)', () => {
+            let consumer
+            let batchMessages
+
+            beforeEach(async () => {
+              batchMessages = [{ key: 'key1', value: 'test2' }, { key: 'key2', value: 'test3' }]
+              consumer = kafka.consumer({
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
+              })
+              await consumer.connect()
+              await consumer.subscribe({ topic: testTopic })
+            })
+
+            afterEach(async () => {
+              await consumer.disconnect()
+            })
+
+            it('should be instrumented', async () => {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                meta: {
+                  'span.kind': 'consumer',
+                  component: 'confluentinc-kafka-javascript',
+                  'kafka.topic': testTopic,
+                  'messaging.destination.name': testTopic,
+                  'messaging.system': 'kafka',
+                },
+                resource: testTopic,
+                error: 0,
+                type: 'worker',
+              })
+
+              await consumer.run({ eachBatch: () => {} })
+              return Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
+            })
+
+            it('should run the consumer in the context of the consumer span', done => {
+              const firstSpan = tracer.scope().active()
+              let eachBatch = async ({ batch }) => {
+                const currentSpan = tracer.scope().active()
+
+                try {
+                  assert.notEqual(currentSpan, firstSpan)
+                  assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  eachBatch = () => {} // avoid being called for each message
+                  done()
+                } catch (e) {
+                  eachBatch = () => {}
+                  done(e)
+                }
+              }
+
+              consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+                .then(() => sendMessages(kafka, testTopic, batchMessages))
+                .catch(done)
+            })
+
+            it('should propagate context via span links', async () => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
+
+                assertObjectContains(span, {
+                  name: expectedSchema.receive.opName,
+                  service: expectedSchema.receive.serviceName,
+                  resource: testTopic,
+                })
+
+                // librdkafka may deliver messages across multiple batches,
+                // so each batch span will have links for the messages it received.
+                assert.ok(links.length >= 1, `expected at least 1 span link, got ${links.length}`)
+              })
+
+              await consumer.run({ eachBatch: () => {} })
+              await Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
+            })
+          })
         })
 
         // Adding tests for the native API
@@ -256,11 +344,10 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
-            await agent.load('confluentinc-kafka-javascript')
+            tracer = await agent.load('confluentinc-kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -271,25 +358,25 @@ describe('Plugin', () => {
               dr_cb: true,
             })
 
-            await new Promise((resolve, reject) => {
+            await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
               nativeProducer.connect({}, (err) => {
                 if (err) {
                   return reject(err)
                 }
                 resolve()
               })
-            })
+            }))
           })
 
           afterEach(async () => {
-            await new Promise((resolve, reject) => {
+            await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
               nativeProducer.disconnect((err) => {
                 if (err) {
                   return reject(err)
                 }
                 resolve()
               })
-            })
+            }))
           })
 
           describe('producer', () => {
@@ -354,30 +441,30 @@ describe('Plugin', () => {
                 'auto.offset.reset': 'earliest',
               })
 
-              await new Promise((resolve, reject) => {
+              await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 nativeConsumer.connect({}, (err) => {
                   if (err) {
                     return reject(err)
                   }
                   resolve()
                 })
-              })
+              }))
             })
 
             afterEach(async () => {
               await nativeConsumer.unsubscribe()
-              await new Promise((resolve, reject) => {
+              await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 nativeConsumer.disconnect((err) => {
                   if (err) {
                     return reject(err)
                   }
                   resolve()
                 })
-              })
+              }))
             })
 
             function consume (consumer, producer, topic, message, timeoutMs = 9500) {
-              return new Promise((resolve, reject) => {
+              return /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 const timeoutId = setTimeout(() => {
                   reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
                 }, timeoutMs)
@@ -408,7 +495,7 @@ describe('Plugin', () => {
                 }
                 doConsume()
                 producer.produce(topic, null, message, 'native-consumer-key')
-              })
+              }))
             }
 
             it('should be instrumented', async () => {
@@ -438,7 +525,8 @@ describe('Plugin', () => {
 
             it('should propagate context', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.name === 'kafka.consume')
+                assert.ok(span)
 
                 assertObjectContains(span, {
                   name: 'kafka.consume',
@@ -446,7 +534,8 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                assert.ok(parseInt(span.parent_id.toString()) > 0)
+                const parentId = parseInt(span.parent_id.toString())
+                assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])
@@ -458,33 +547,6 @@ describe('Plugin', () => {
 
               return expectedSpanPromise
             })
-
-            // TODO: Fix this test case, fails with 'done() called multiple times'
-            // it('should be instrumented with error', async () => {
-            //   const fakeError = new Error('Oh No!')
-
-            //   const expectedSpanPromise = agent.assertSomeTraces(traces => {
-            //     const errorSpans = traces[0].filter(span => span.error === 1)
-            //     expect(errorSpans.length).to.be.at.least(1)
-
-            //     const errorSpan = errorSpans[0]
-            //     expect(errorSpan).to.exist
-            //     expect(errorSpan.name).to.equal(expectedSchema.receive.opName)
-            //     expect(errorSpan.meta).to.include({
-            //       component: 'confluentinc-kafka-javascript'
-            //     })
-
-            //     expect(errorSpan.meta[ERROR_TYPE]).to.equal(fakeError.name)
-            //     expect(errorSpan.meta[ERROR_MESSAGE]).to.equal(fakeError.message)
-            //   })
-
-            //   nativeConsumer.consume(1, (err, messages) => {
-            //     // Ensure we resolve before throwing
-            //     throw fakeError
-            //   })
-
-            //   return expectedSpanPromise
-            // })
           })
         })
       })

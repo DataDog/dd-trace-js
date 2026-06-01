@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -29,7 +30,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -48,7 +49,7 @@ describe('Plugin', () => {
           agent
             .assertFirstTraceSpan({
               resource: 'POST /logstash-?.?.?/_search',
-            })
+            }, { spanResourceMatch: /^POST \/logstash-\?\.\?\.\?\/_search$/ })
             .then(done)
             .catch(done)
 
@@ -157,7 +158,10 @@ describe('Plugin', () => {
         it('should propagate context', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.ok(Object.hasOwn(traces[0][0], 'parent_id'))
+              assert.ok(
+                Object.hasOwn(traces[0][0], 'parent_id'),
+                `Available keys: ${inspect(Object.keys(traces[0][0]))}`
+              )
               assert.notStrictEqual(traces[0][0].parent_id, null)
             })
             .then(done)
@@ -191,13 +195,10 @@ describe('Plugin', () => {
         })
 
         it('should support aborting the query', () => {
-          assert.doesNotThrow(() => {
-            const promise = client.ping()
-
-            if (promise.abort) {
-              promise.abort()
-            }
-          })
+          const promise = client.ping()
+          if (promise.abort) {
+            promise.abort()
+          }
         })
 
         it('should work with userland promises', done => {
@@ -239,7 +240,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

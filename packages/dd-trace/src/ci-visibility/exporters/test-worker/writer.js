@@ -2,10 +2,6 @@
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
-const {
-  VITEST_WORKER_TRACE_PAYLOAD_CODE,
-  VITEST_WORKER_LOGS_PAYLOAD_CODE,
-} = require('../../../plugins/util/test')
 
 class Writer {
   constructor (interprocessCode) {
@@ -29,12 +25,6 @@ class Writer {
   }
 
   _sendPayload (data, onDone = () => {}) {
-    // ## Jest
-    // Only available when `child_process` is used for the jest worker.
-    // If worker_threads is used, this will not work
-    // TODO: make `jest` instrumentation compatible with worker_threads
-    // https://github.com/facebook/jest/blob/bb39cb2c617a3334bf18daeca66bd87b7ccab28b/packages/jest-worker/README.md#experimental-worker
-
     // ## Cucumber
     // This reports to the test's main process the same way test data is reported by Cucumber
     // See cucumber code:
@@ -47,19 +37,17 @@ class Writer {
       ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
       : [this._interprocessCode, data]
 
-    const isVitestTestWorker =
-      this._interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE ||
-      this._interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE
-
+    // child_process workers (jest default, cucumber)
     if (process.send) {
       process.send(payload, () => {
         onDone()
       })
-    } else if (isVitestTestWorker) { // TODO: worker_threads are only supported in vitest right now
-      const { isMainThread, parentPort } = require('worker_threads')
-      if (isMainThread) {
-        return onDone()
-      }
+      return
+    }
+
+    // worker_threads (jest --workerThreads, vitest)
+    const { isMainThread, parentPort } = require('node:worker_threads')
+    if (!isMainThread && parentPort) {
       try {
         parentPort.postMessage(payload)
       } catch (error) {
@@ -67,9 +55,10 @@ class Writer {
       } finally {
         onDone()
       }
-    } else {
-      onDone()
+      return
     }
+
+    onDone()
   }
 }
 

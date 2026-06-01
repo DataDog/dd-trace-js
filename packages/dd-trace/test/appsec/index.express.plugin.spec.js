@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -11,10 +12,11 @@ const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
+
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -68,7 +70,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -78,12 +80,11 @@ withVersions('express', 'express', version => {
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
       appsec.disable()
-      // TODO: Remove the workaround once https://github.com/sinonjs/sinon/issues/2671 is resolved
-      paramCallbackSpy.resetHistory()
       sinon.reset()
     })
 
@@ -219,7 +220,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -230,6 +231,7 @@ withVersions('express', 'express', version => {
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -296,7 +298,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -332,7 +334,10 @@ withVersions('express', 'express', version => {
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+          assert.ok(
+            Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+            `Available keys: ${inspect(Object.keys(span.meta))}`
+          )
           assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
@@ -390,8 +395,8 @@ withVersions('express', 'express', version => {
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'), `Available keys: ${inspect(Object.keys(span.meta))}`)
       })
 
       assert.equal(res.status, 200)

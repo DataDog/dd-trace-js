@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, before, beforeEach, describe, it } = require('mocha')
 const semifies = require('semifies')
@@ -23,6 +24,8 @@ describe('Plugin', () => {
   let langchainRunnables
   let langchainTools
   let MemoryVectorStore
+
+  let langchainAnthropicVersion
 
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
@@ -93,7 +96,7 @@ describe('Plugin', () => {
       after(() => {
         iastFilter.isDdTrace = isDdTrace
         // wiping in order to read new env vars for the config each time
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach(() => {
@@ -105,6 +108,8 @@ describe('Plugin', () => {
           // can probably scaffold `withVersions` better to make this a bit cleaner
           langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
         }
+
+        langchainAnthropicVersion = require(`../../../versions/@langchain/anthropic@${version}`).version()
 
         // need to specify specific import in `get(...)`
         langchainMessages = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/messages')
@@ -140,9 +145,9 @@ describe('Plugin', () => {
 
               assert.strictEqual(hasMatching, false)
 
-              assert.ok(Object.hasOwn(span.meta, 'error.message'))
-              assert.ok(Object.hasOwn(span.meta, 'error.type'))
-              assert.ok(Object.hasOwn(span.meta, 'error.stack'))
+              assert.ok(Object.hasOwn(span.meta, 'error.message'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+              assert.ok(Object.hasOwn(span.meta, 'error.type'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+              assert.ok(Object.hasOwn(span.meta, 'error.stack'), `Available keys: ${inspect(Object.keys(span.meta))}`)
             })
 
           try {
@@ -234,9 +239,9 @@ describe('Plugin', () => {
               const hasMatching = Object.keys(span.meta).some(key => langchainResponseRegex.test(key))
               assert.strictEqual(hasMatching, false)
 
-              assert.ok(Object.hasOwn(span.meta, 'error.message'))
-              assert.ok(Object.hasOwn(span.meta, 'error.type'))
-              assert.ok(Object.hasOwn(span.meta, 'error.stack'))
+              assert.ok(Object.hasOwn(span.meta, 'error.message'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+              assert.ok(Object.hasOwn(span.meta, 'error.type'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+              assert.ok(Object.hasOwn(span.meta, 'error.stack'), `Available keys: ${inspect(Object.keys(span.meta))}`)
             })
 
           try {
@@ -375,10 +380,16 @@ describe('Plugin', () => {
                 },
               })
 
-              assert.ok(Object.hasOwn(span.meta, 'langchain.request.model'))
+              assert.ok(
+                Object.hasOwn(span.meta, 'langchain.request.model'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
             })
 
-          const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
+          const modelName =
+            semifies(langchainAnthropicVersion, '>=1.3.22') ? 'claude-haiku-4-5-20251001' : 'claude-3-5-sonnet-20241022'
+
+          const chatModel = getLangChainAnthropicClient('chat', { modelName })
 
           const result = await chatModel.invoke('Hello!')
           assert.ok(result.content)
@@ -400,9 +411,18 @@ describe('Plugin', () => {
               const hasMatching = Object.keys(chainSpan.meta).some(key => langchainResponseRegex.test(key))
               assert.strictEqual(hasMatching, false)
 
-              assert.ok(Object.hasOwn(chainSpan.meta, 'error.message'))
-              assert.ok(Object.hasOwn(chainSpan.meta, 'error.type'))
-              assert.ok(Object.hasOwn(chainSpan.meta, 'error.stack'))
+              assert.ok(
+                Object.hasOwn(chainSpan.meta, 'error.message'),
+                `Available keys: ${inspect(Object.keys(chainSpan.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(chainSpan.meta, 'error.type'),
+                `Available keys: ${inspect(Object.keys(chainSpan.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(chainSpan.meta, 'error.stack'),
+                `Available keys: ${inspect(Object.keys(chainSpan.meta))}`
+              )
             })
 
           try {
@@ -550,7 +570,10 @@ describe('Plugin', () => {
           const chain = model.pipe(parser)
 
           const response = await chain.invoke('Generate a JSON object with name and age.')
-          assert.ok(response != null && typeof response === 'object')
+          assert.ok(
+            response != null && typeof response === 'object',
+            `Expected a non-null object, got: ${inspect(response)}`
+          )
 
           await checkTraces
         })
@@ -567,9 +590,12 @@ describe('Plugin', () => {
 
                 assert.ok(!('langchain.response.outputs.embedding_length' in span.meta))
 
-                assert.ok(Object.hasOwn(span.meta, 'error.message'))
-                assert.ok(Object.hasOwn(span.meta, 'error.type'))
-                assert.ok(Object.hasOwn(span.meta, 'error.stack'))
+                assert.ok(
+                  Object.hasOwn(span.meta, 'error.message'),
+                  `Available keys: ${inspect(Object.keys(span.meta))}`
+                )
+                assert.ok(Object.hasOwn(span.meta, 'error.type'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+                assert.ok(Object.hasOwn(span.meta, 'error.stack'), `Available keys: ${inspect(Object.keys(span.meta))}`)
               })
 
             try {
@@ -710,9 +736,9 @@ describe('Plugin', () => {
             assert.strictEqual(span.name, 'langchain.request')
             assert.match(span.resource, /^langchain\.tools\.[^.]+\.myTool$/)
 
-            assert.ok(Object.hasOwn(span.meta, 'error.message'))
-            assert.ok(Object.hasOwn(span.meta, 'error.type'))
-            assert.ok(Object.hasOwn(span.meta, 'error.stack'))
+            assert.ok(Object.hasOwn(span.meta, 'error.message'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+            assert.ok(Object.hasOwn(span.meta, 'error.type'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+            assert.ok(Object.hasOwn(span.meta, 'error.stack'), `Available keys: ${inspect(Object.keys(span.meta))}`)
           })
 
           try {

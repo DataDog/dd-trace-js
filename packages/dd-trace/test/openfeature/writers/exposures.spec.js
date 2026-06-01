@@ -1,13 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { format } = require('node:util')
+const { format, inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('OpenFeature Exposures Writer', () => {
   let ExposuresWriter
@@ -55,6 +56,7 @@ describe('OpenFeature Exposures Writer', () => {
     clock = sinon.useFakeTimers()
 
     ExposuresWriter = proxyquire('../../../src/openfeature/writers/exposures', {
+      '../../log': log,
       './base': proxyquire('../../../src/openfeature/writers/base', {
         '../../exporters/common/request': request,
         '../../log': log,
@@ -101,7 +103,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.append(exposureEvent)
 
-      assert.ok(writer._bufferSize > initialSize)
+      assert.ok(writer._bufferSize > initialSize, `Expected ${writer._bufferSize} > ${initialSize}`)
     })
 
     it('should drop events when buffer is full', () => {
@@ -158,14 +160,68 @@ describe('OpenFeature Exposures Writer', () => {
         'Buffer should contain 1 event after flush was triggered by 6th event')
     })
 
-    it('should buffer events when disabled', () => {
-      writer.setEnabled(false) // Disable writer
-
+    it('should buffer events while disabled and drain on enable', () => {
+      writer.setEnabled(false)
       writer.append(exposureEvent)
 
-      assert.strictEqual(writer._buffer?.length, 0) // Event should not be in main buffer
-      assert.strictEqual(writer._pendingEvents?.length, 1) // Should be in pending events
-      assert.strictEqual(writer._pendingEvents[0], exposureEvent)
+      // Pending events stay out of the main buffer until enable.
+      assert.strictEqual(writer._buffer.length, 0)
+
+      writer.setEnabled(true)
+
+      assert.strictEqual(writer._buffer.length, 1)
+      assert.strictEqual(writer._buffer[0], exposureEvent)
+    })
+
+    it('should keep every pending event when count equals the cap', () => {
+      writer.setEnabled(false)
+
+      const cap = 1000
+      const events = []
+      for (let i = 0; i < cap; i++) {
+        events.push({ ...exposureEvent, seq: i })
+      }
+      writer.append(events)
+      writer.setEnabled(true)
+
+      assert.strictEqual(writer._buffer.length, cap)
+      assert.strictEqual(writer.droppedEventCount, 0)
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should drop oldest pending events one past the cap', () => {
+      writer.setEnabled(false)
+
+      const cap = 1000
+      const events = []
+      for (let i = 0; i < cap + 1; i++) {
+        events.push({ ...exposureEvent, seq: i })
+      }
+      writer.append(events)
+      writer.setEnabled(true)
+
+      assert.strictEqual(writer._buffer.length, cap)
+      assert.strictEqual(writer._buffer[0].seq, 1)
+      assert.strictEqual(writer._buffer.at(-1).seq, cap)
+      assert.strictEqual(writer.droppedEventCount, 1)
+      sinon.assert.calledOnce(log.warn)
+      assert.match(format(...log.warn.firstCall.args), /dropped exposure event\(s\) at cap 1000/)
+    })
+
+    it('should throttle the drop warning while still counting every dropped event', () => {
+      writer.setEnabled(false)
+
+      const cap = 1000
+      const events = []
+      for (let i = 0; i < cap + 1; i++) {
+        events.push({ ...exposureEvent, seq: i })
+      }
+      writer.append(events)
+      writer.append({ ...exposureEvent, seq: cap + 1 })
+      writer.append({ ...exposureEvent, seq: cap + 2 })
+
+      assert.strictEqual(writer.droppedEventCount, 3)
+      sinon.assert.calledOnce(log.warn)
     })
   })
 
@@ -174,9 +230,12 @@ describe('OpenFeature Exposures Writer', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
 
-      assert.ok(payload !== null && typeof payload === 'object' && !Array.isArray(payload))
-      assert.ok(Object.hasOwn(payload, 'context'))
-      assert.ok(Object.hasOwn(payload, 'exposures'))
+      assert.ok(
+        payload !== null && typeof payload === 'object' && !Array.isArray(payload),
+        `Expected a non-null non-array object, got: ${inspect(payload)}`
+      )
+      assert.ok(Object.hasOwn(payload, 'context'), `Available keys: ${inspect(Object.keys(payload))}`)
+      assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
       assert.strictEqual(payload.exposures?.length, 1)
     })
 
@@ -222,8 +281,11 @@ describe('OpenFeature Exposures Writer', () => {
       assert.deepStrictEqual(payload.context, {
         service: 'test-service',
       })
-      assert.ok(!(Object.hasOwn(payload.context, 'version')))
-      assert.ok(!(Object.hasOwn(payload.context, 'env')))
+      assert.ok(
+        !(Object.hasOwn(payload.context, 'version')),
+        `Available keys: ${inspect(Object.keys(payload.context))}`
+      )
+      assert.ok(!(Object.hasOwn(payload.context, 'env')), `Available keys: ${inspect(Object.keys(payload.context))}`)
     })
 
     it('should handle flat format with dot notation', () => {
@@ -238,10 +300,20 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writer.makePayload([flatEvent])
       const formattedEvent = payload.exposures[0]
 
-      assert.strictEqual(formattedEvent.allocation.key, 'allocation_123')
-      assert.strictEqual(formattedEvent.flag.key, 'test_flag')
-      assert.strictEqual(formattedEvent.variant.key, 'A')
-      assert.strictEqual(formattedEvent.subject.id, 'user_123')
+      assertObjectContains(formattedEvent, {
+        allocation: {
+          key: 'allocation_123',
+        },
+        flag: {
+          key: 'test_flag',
+        },
+        variant: {
+          key: 'A',
+        },
+        subject: {
+          id: 'user_123',
+        },
+      })
       assert.strictEqual(formattedEvent.subject.type, undefined)
       assert.strictEqual(formattedEvent.subject.attributes, undefined)
     })
@@ -281,9 +353,12 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
 
       const parsedPayload = JSON.parse(payload)
-      assert.ok(parsedPayload !== null && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload))
-      assert.ok(Object.hasOwn(parsedPayload, 'context'))
-      assert.ok(Object.hasOwn(parsedPayload, 'exposures'))
+      assert.ok(
+        parsedPayload !== null && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload),
+        `Expected non-null non-array object, got ${inspect(parsedPayload)}`
+      )
+      assert.ok(Object.hasOwn(parsedPayload, 'context'), `Available keys: ${inspect(Object.keys(parsedPayload))}`)
+      assert.ok(Object.hasOwn(parsedPayload, 'exposures'), `Available keys: ${inspect(Object.keys(parsedPayload))}`)
       assert.strictEqual(parsedPayload.exposures?.length, 1)
       assert.ok(parsedPayload.exposures[0].timestamp)
       assert.strictEqual(parsedPayload.context.service, 'test-service')
@@ -376,7 +451,11 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
-      assert(log.warn.getCalls().some(call => /dropped 5 events/.test(format(...call.args))))
+      const warnCalls = log.warn.getCalls()
+      assert(
+        warnCalls.some(call => /dropped 5 events/.test(format(...call.args))),
+        `Got warn calls: ${inspect(warnCalls.map(c => c.args))}`
+      )
     })
 
     it('should prevent multiple destruction', () => {

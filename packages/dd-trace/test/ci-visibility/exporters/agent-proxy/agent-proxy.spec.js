@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const context = describe
@@ -15,16 +16,17 @@ const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
+const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
 
 describe('AgentProxyCiVisibilityExporter', () => {
   beforeEach(() => {
-    clearCache()
+    nock.abortPendingRequests()
     nock.cleanAll()
+    clearCache()
   })
 
   const flushInterval = 50
-  const port = 8126
-  const url = `http://127.0.0.1:${port}`
+  const url = `http://${hostname}:${port}`
   const queryDelay = 50
   const tags = {}
 
@@ -68,8 +70,12 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
     await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
 
-    assert.ok(!(agentProxyCiVisibilityExporter.getUncodedTraces()).includes(trace))
-    assert.ok(!(agentProxyCiVisibilityExporter._coverageBuffer).includes(coverage))
+    const uncodedTraces = agentProxyCiVisibilityExporter.getUncodedTraces()
+    assert.ok(!uncodedTraces.includes(trace), `Got: ${inspect(uncodedTraces)}`)
+    assert.ok(
+      !(agentProxyCiVisibilityExporter._coverageBuffer).includes(coverage),
+      `Got: ${inspect(agentProxyCiVisibilityExporter._coverageBuffer)}`
+    )
     // old traces and coverages are exported at once
     sinon.assert.calledWith(agentProxyCiVisibilityExporter.export, trace)
     sinon.assert.calledWith(agentProxyCiVisibilityExporter.exportCoverage, coverage)
@@ -300,7 +306,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   })
 
   describe('setUrl', () => {
-    it('should set the URL on self and writers', () => {
+    it('should set the URL on self and writers', async () => {
       const mockWriter = {
         setUrl: sinon.spy(),
       }
@@ -313,6 +319,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2/'],
         }))
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockCoverageWriter
 

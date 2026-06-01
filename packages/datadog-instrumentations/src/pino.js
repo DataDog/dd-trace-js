@@ -6,9 +6,18 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+/**
+ * @param {string} symbol
+ * @param {(original: Function) => Function} wrapper
+ * @param {Function} pino
+ */
 function wrapPino (symbol, wrapper, pino) {
-  return function pinoWithTrace () {
-    const instance = pino.apply(this, arguments)
+  /**
+   * @param {unknown[]} args
+   * @returns {unknown}
+   */
+  return function pinoWithTrace (...args) {
+    const instance = pino.apply(this, args)
 
     Object.defineProperty(instance, symbol, {
       configurable: true,
@@ -22,31 +31,18 @@ function wrapPino (symbol, wrapper, pino) {
 }
 
 function wrapAsJson (asJson) {
-  const ch = channel('apm:pino:log')
+  const jsonCh = channel('apm:pino:log:json')
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
 
-    const payload = { message: obj }
-    ch.publish(payload)
-    arguments[0] = payload.message
-
-    return asJson.apply(this, arguments)
-  }
-}
-
-function wrapMixin (mixin) {
-  const ch = channel('apm:pino:log')
-  return function mixinWithTrace () {
-    let obj = {}
-
-    if (mixin) {
-      obj = mixin.apply(this, arguments)
+    // Caller-provided `dd` wins -- skip the splice so a bespoke `dd` survives.
+    if (!jsonCh.hasSubscribers || Object.hasOwn(obj, 'dd')) {
+      return asJson.apply(this, arguments)
     }
 
-    const payload = { message: obj }
-    ch.publish(payload)
-
-    return payload.message
+    const payload = { line: asJson.apply(this, arguments) }
+    jsonCh.publish(payload)
+    return payload.line
   }
 }
 
@@ -62,8 +58,8 @@ function wrapPrettifyObject (prettifyObject) {
 
 function wrapPrettyFactory (prettyFactory) {
   const ch = channel('apm:pino:log')
-  return function prettyFactoryWithTrace () {
-    const pretty = prettyFactory.apply(this, arguments)
+  return function prettyFactoryWithTrace (...args) {
+    const pretty = prettyFactory.apply(this, args)
     return function prettyWithTrace (obj) {
       const payload = { message: obj }
       ch.publish(payload)
@@ -76,31 +72,19 @@ function wrapPrettyFactory (prettyFactory) {
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
-
-  return wrapped
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
 })
 
-addHook({ name: 'pino', versions: ['>=5 <5.14.0'], patchDefault: true }, (pino) => {
+addHook({ name: 'pino', versions: ['>=5 <6.8.0'], patchDefault: true }, (pino) => {
   const asJsonSym = ((pino.default || pino)?.symbols.asJsonSym) || 'asJson'
 
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
+})
+
+addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino) => {
+  const asJsonSym = pino.symbols.asJsonSym
+
   const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
-
-  return wrapped
-})
-
-addHook({ name: 'pino', versions: ['>=5.14.0 <6.8.0'] }, (pino) => {
-  const mixinSym = (pino.default || pino).symbols.mixinSym
-
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino.default || pino))
-
-  return wrapped
-})
-
-addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino, _1, _2, isIitm) => {
-  const mixinSym = pino.symbols.mixinSym
-
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino))
   wrapped.pino = wrapped
   wrapped.default = wrapped
 

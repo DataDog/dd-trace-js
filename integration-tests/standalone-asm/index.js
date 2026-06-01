@@ -4,11 +4,9 @@ const options = {
   appsec: {
     enabled: true,
   },
-  experimental: {
-    iast: {
-      enabled: true,
-      requestSampling: 100,
-    },
+  iast: {
+    enabled: true,
+    requestSampling: 100,
   },
 }
 

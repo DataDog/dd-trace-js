@@ -122,17 +122,15 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     const topicName = topic?.slice(topic.lastIndexOf('/') + 1) ??
       subscription.name.slice(subscription.name.lastIndexOf('/') + 1)
-    const baseService = this.tracer._service || 'unknown'
-    const serviceName = this.config.service || `${baseService}-pubsub`
+
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
+      'pubsub.message_id': message.messageId,
       'span.kind': 'consumer',
+      'pubsub.subscription': subscription.name,
       'pubsub.subscription_type': 'pull',
-      'pubsub.span_type': 'message_processing',
       'messaging.operation': 'receive',
-      base_service: baseService,
-      service_override_type: 'custom',
     }
 
     if (batchRequestTraceId && batchRequestSpanId) {
@@ -166,14 +164,11 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       childOf,
       resource: `Message from ${topicName}`,
       type: 'worker',
-      service: serviceName,
+      service: this.config.service || this.serviceName(),
       meta,
       metrics,
     }, ctx)
 
-    if (message.id) {
-      span.setTag('pubsub.message_id', message.id)
-    }
     if (message.publishTime) {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())
     }

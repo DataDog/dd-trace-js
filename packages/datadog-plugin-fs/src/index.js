@@ -11,7 +11,7 @@ class FsPlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    if (!this.activeSpan) return this.skip()
+    if (!this.activeSpan) return { noop: true }
 
     const { operation, ...params } = ctx
     const lowerOp = operation.toLowerCase()

@@ -39,11 +39,11 @@ class HttpClientPlugin extends ClientPlugin {
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
-      integrationName: this.constructor.id,
+      integrationName: this.component,
+      service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
       meta: {
-        [COMPONENT]: this.constructor.id,
+        [COMPONENT]: this.component,
         'span.kind': 'client',
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
@@ -79,11 +79,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   shouldInjectTraceHeaders (options, uri) {
-    if (!this.config.propagationFilter(uri)) {
-      return false
-    }
-
-    return true
+    return Boolean(this.config.propagationFilter(uri))
   }
 
   bindAsyncStart ({ parentStore }) {
@@ -211,7 +207,7 @@ function getHeaders (config) {
     if (typeof header === 'string') {
       const separatorIndex = header.indexOf(':')
       result.push(separatorIndex === -1
-        ? [header, undefined]
+        ? [header.toLowerCase(), undefined]
         : [
             header.slice(0, separatorIndex).toLowerCase(),
             header.slice(separatorIndex + 1),

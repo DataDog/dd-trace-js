@@ -51,8 +51,7 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
 }
 
 function getMaxSamples (options) {
-  const flushInterval = options.flushInterval || 65 * 1e3 // 65 seconds
-  const maxCpuSamples = flushInterval / options.samplingInterval
+  const maxCpuSamples = options.flushInterval / options.samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -175,7 +174,7 @@ class NetDecorator {
   }
 }
 
-class FilesystemDecorator {
+class KeyValueDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
   }
@@ -195,13 +194,26 @@ class FilesystemDecorator {
   }
 }
 
+class ZlibDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+    this.operationNameLabelKey = stringTable.dedup('operation')
+  }
+
+  decorateSample (sampleInput, item) {
+    sampleInput.label.push(labelFromStr(this.stringTable, this.operationNameLabelKey, item.detail.operation))
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  fs: FilesystemDecorator,
+  crypto: KeyValueDecorator,
+  fs: KeyValueDecorator,
   dns: DNSDecorator,
   gc: GCDecorator,
   net: NetDecorator,
+  zlib: ZlibDecorator,
 }
 
 // Translates performance entries into pprof samples.
@@ -349,12 +361,14 @@ class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
     // List all entries explicitly for bundlers to pick up the require calls correctly.
     const plugins = [
+      require('./event_plugins/crypto'),
       require('./event_plugins/dns_lookup'),
       require('./event_plugins/dns_lookupservice'),
       require('./event_plugins/dns_resolve'),
       require('./event_plugins/dns_reverse'),
       require('./event_plugins/fs'),
       require('./event_plugins/net'),
+      require('./event_plugins/zlib'),
     ]
     this.plugins = plugins.map((Plugin) => {
       return new Plugin(eventHandler, eventFilter)
@@ -403,7 +417,7 @@ class EventsProfiler {
 
   get type () { return 'events' }
 
-  constructor (options = {}) {
+  constructor (options) {
     this.#maxSamples = getMaxSamples(options)
     this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
     this.#eventSerializer = new EventSerializer(this.#maxSamples)

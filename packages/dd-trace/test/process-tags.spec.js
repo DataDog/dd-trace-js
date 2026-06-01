@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
@@ -9,8 +10,12 @@ const { getConfigFresh } = require('./helpers/config')
 require('./setup/core')
 
 describe('process-tags', () => {
-  const processTags = require('../src/process-tags')
+  let processTags = require('../src/process-tags')
   const { sanitize } = require('../src/process-tags')
+
+  before(() => {
+    processTags.initialize()
+  })
 
   describe('field name constants', () => {
     it('should define field names for different subsystems', () => {
@@ -28,10 +33,10 @@ describe('process-tags', () => {
 
   describe('processTags', () => {
     it('should return an object with tags, serialized, and tagsObject properties', () => {
-      assert.ok(Object.hasOwn(processTags, 'tags'))
-      assert.ok(Object.hasOwn(processTags, 'serialized'))
-      assert.ok(Object.hasOwn(processTags, 'tagsObject'))
-      assert.ok(Array.isArray(processTags.tags))
+      assert.ok(Object.hasOwn(processTags, 'tags'), `Available keys: ${inspect(Object.keys(processTags))}`)
+      assert.ok(Object.hasOwn(processTags, 'serialized'), `Available keys: ${inspect(Object.keys(processTags))}`)
+      assert.ok(Object.hasOwn(processTags, 'tagsObject'), `Available keys: ${inspect(Object.keys(processTags))}`)
+      assert.ok(Array.isArray(processTags.tags), `Expected array, got ${inspect(processTags.tags)}`)
       assert.strictEqual(typeof processTags.serialized, 'string')
       assert.strictEqual(typeof processTags.tagsObject, 'object')
     })
@@ -67,14 +72,14 @@ describe('process-tags', () => {
     it('should have entrypoint.type set to "script"', () => {
       const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
 
-      assert.ok(Array.isArray(typeTag))
+      assert.ok(Array.isArray(typeTag), `Expected array, got ${inspect(typeTag)}`)
       assert.strictEqual(typeTag[1], 'script')
     })
 
     it('should set entrypoint.workdir to the basename of cwd', () => {
       const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
 
-      assert.ok(Array.isArray(workdirTag))
+      assert.ok(Array.isArray(workdirTag), `Expected array, got ${inspect(workdirTag)}`)
       assert.strictEqual(typeof workdirTag[1], 'string')
       assert.doesNotMatch(workdirTag[1], /\//)
     })
@@ -117,12 +122,33 @@ describe('process-tags', () => {
       // serialized should be comma-separated and not include undefined values
       if (processTags.serialized) {
         const parts = processTags.serialized.split(',')
-        assert.ok(parts.length > 0)
+        assert.ok(parts.length > 0, `Expected ${parts.length} > 0`)
         parts.forEach(part => {
           assert.match(part, /:/)
           assert.doesNotMatch(part, /undefined/)
         })
       }
+    })
+
+    describe('config processTags', () => {
+      beforeEach(() => {
+        delete require.cache[require.resolve('../src/process-tags')]
+        processTags = require('../src/process-tags')
+      })
+
+      it('should set svc.user tag to true based on config', () => {
+        processTags.initialize({ isServiceNameInferred: false, service: 'test' })
+        const [serviceNameTag, value] = processTags.tags[5]
+        assert.strictEqual(serviceNameTag, 'svc.user')
+        assert.strictEqual(value, true)
+      })
+
+      it('should set svc.auto based on config', () => {
+        processTags.initialize({ isServiceNameInferred: true, service: 'test' })
+        const [serviceNameTag, value] = processTags.tags[5]
+        assert.strictEqual(serviceNameTag, 'svc.auto')
+        assert.strictEqual(value, 'test')
+      })
     })
   })
 
@@ -247,18 +273,16 @@ describe('process-tags', () => {
     it('should enable process tags propagation when set to true', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
 
-      // Need to reload config first, then process-tags (which reads from config)
-      delete require.cache[require.resolve('../src/process-tags')]
-
       const config = getConfigFresh()
+      const processTagsModule = require('../src/process-tags')
+      processTagsModule.initialize()
 
-      assert.ok(config.propagateProcessTags)
-      assert.strictEqual(config.propagateProcessTags.enabled, true)
+      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof processor._processTags === 'string')
+      assert.strictEqual(typeof processor._processTags, 'string')
       assert.match(processor._processTags, /entrypoint/)
     })
 
@@ -266,9 +290,10 @@ describe('process-tags', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'false'
 
       const config = getConfigFresh()
+      const processTagsModule = require('../src/process-tags')
+      processTagsModule.initialize()
 
-      assert.ok(config.propagateProcessTags)
-      assert.strictEqual(config.propagateProcessTags.enabled, false)
+      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, false)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
@@ -276,17 +301,20 @@ describe('process-tags', () => {
       assert.strictEqual(processor._processTags, false)
     })
 
-    it('should disable process tags propagation when not set', () => {
-      // Don't set the environment variable
+    it('should enable process tags propagation when not set', () => {
+      // Don't set the environment variable — default is enabled
 
       const config = getConfigFresh()
+      const processTagsModule = require('../src/process-tags')
+      processTagsModule.initialize()
 
-      assert.notStrictEqual(config.propagateProcessTags?.enabled, true)
+      assert.strictEqual(config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.strictEqual(processor._processTags, false)
+      assert.strictEqual(typeof processor._processTags, 'string')
+      assert.match(processor._processTags, /entrypoint/)
     })
   })
 })

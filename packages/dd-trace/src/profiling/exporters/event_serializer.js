@@ -14,7 +14,7 @@ class EventSerializer {
     this._host = host
     this._service = service
     this._appVersion = version
-    this._libraryInjected = !!libraryInjected
+    this._libraryInjected = libraryInjected
     this._activation = activation || 'unknown'
   }
 
@@ -22,7 +22,7 @@ class EventSerializer {
     return `${type}.pprof`
   }
 
-  getEventJSON ({ profiles, infos, start, end, tags = {}, endpointCounts }) {
+  getEventJSON ({ profiles, infos, start, end, tags = {}, endpointCounts, customAttributes }) {
     const event = {
       attachments: Object.keys(profiles).map(t => this.typeToFile(t)),
       start: start.toISOString(),
@@ -78,6 +78,10 @@ class EventSerializer {
           version: process.version.slice(1),
         },
       },
+    }
+
+    if (customAttributes) {
+      event.custom_attributes = customAttributes
     }
 
     if (processTags.serialized) {

@@ -5,7 +5,7 @@ const assert = require('assert')
 const { By, Builder } = require('selenium-webdriver')
 const chrome = require('selenium-webdriver/chrome')
 const options = new chrome.Options()
-options.addArguments('--headless')
+options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage')
 
 describe('selenium', function () {
   let driver

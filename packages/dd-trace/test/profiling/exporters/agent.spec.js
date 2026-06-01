@@ -1,11 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { format } = require('node:util')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const express = require('express')
@@ -53,6 +54,13 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
+async function createProfiles () {
+  return {
+    wall: await createProfile(['wall', 'microseconds']),
+    space: await createProfile(['space', 'bytes']),
+  }
+}
+
 describe('exporters/agent', function () {
   let AgentExporter
   let sockets
@@ -63,6 +71,17 @@ describe('exporters/agent', function () {
   let http
   let computeRetries
   let startSpan
+
+  before(function () {
+    try {
+      require('@datadog/pprof')
+    } catch (err) {
+      if (err.message?.includes('No native build was found')) {
+        this.skip()
+      }
+      throw err
+    }
+  })
 
   function verifyRequest (req, profiles, start, end) {
     assert.strictEqual(req.headers.test, 'injected')
@@ -204,15 +223,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -247,15 +258,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let attempt = 0
       app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -277,13 +280,13 @@ describe('exporters/agent', function () {
         failed = true
       }
       assert.strictEqual(failed, true)
-      assert.ok(attempt > 0)
+      assert.ok(attempt > 0, `Expected ${attempt} > 0`)
 
       // Verify computeRetries produces correct starting values
       for (let i = 1; i <= 100; i++) {
         const [retries, timeout] = computeRetries(i * 1000)
-        assert.ok(retries >= 2)
-        assert.ok(timeout <= 1000)
+        assert.ok(retries >= 2, `Expected ${retries} >= 2`)
+        assert.ok(timeout <= 1000, `Expected ${timeout} <= 1000`)
         assert.strictEqual(Number.isInteger(timeout), true)
       }
 
@@ -296,7 +299,7 @@ describe('exporters/agent', function () {
         assert.strictEqual(Number.isInteger(call.args[0].timeout), true)
 
         // Retry is 1-indexed so add 1 to i
-        assert.strictEqual(call.args[0].timeout, initialTimeout * Math.pow(2, i + 1))
+        assert.strictEqual(call.args[0].timeout, initialTimeout * 2 ** (i + 1))
       }
     })
 
@@ -316,27 +319,27 @@ describe('exporters/agent', function () {
         doneLogs = resolve
       })
 
-      function onMessage (message) {
+      let index = 0
+      function onMessage (...args) {
         const expected = expectedLogs[index++]
-        assert.match(typeof message === 'function' ? message() : message, expected)
+        const message = typeof args[0] === 'function' ? args[0]() : format(...args)
+        assert.match(message, expected)
         if (index >= expectedLogs.length) doneLogs()
       }
 
-      let index = 0
-      const exporter = newAgentExporter({ url, logger: { debug: onMessage, warn: onMessage } })
+      const logStub = { debug: onMessage, warn: onMessage, error: () => {}, info: () => {} }
+      const { AgentExporter: AgentExporterStubbed } = proxyquire(
+        '../../../src/profiling/exporters/agent',
+        { '../../exporters/common/docker': docker, http, '../../log': logStub }
+      )
+      const exporter = new AgentExporterStubbed({
+        url, uploadTimeout: 100, env: ENV, service: SERVICE, version: APP_VERSION, host: HOST,
+      })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let tries = 0
       const json = JSON.stringify({ error: 'some error' })
@@ -360,20 +363,12 @@ describe('exporters/agent', function () {
     })
 
     it('should not retry on 4xx errors', async function () {
-      const exporter = newAgentExporter({ url, logger: { debug: () => {}, warn: () => {} } })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let tries = 0
       const json = JSON.stringify({ error: 'some error' })
@@ -422,15 +417,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -453,7 +440,8 @@ describe('exporters/agent', function () {
     let listener
 
     beforeEach(done => {
-      url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
+      const tmpDir = `dd-trace-profiler-test-${Date.now()}`
+      url = `${path.join(os.tmpdir(), tmpDir)}.sock`
 
       listener = app.listen(url, done)
       listener.on('connection', socket => sockets.push(socket))
@@ -472,15 +460,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {

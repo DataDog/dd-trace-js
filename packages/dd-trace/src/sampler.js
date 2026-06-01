@@ -42,7 +42,7 @@ class Sampler {
   /**
    * Determines whether a trace/span should be sampled based on the configured sampling rate.
    *
-   * @param {Span|SpanContext} span - The span or span context to evaluate.
+   * @param {import("../../..").Span|import("../../..").SpanContext} span - The span or span context to evaluate.
    * @returns {boolean} `true` if the trace/span should be sampled, otherwise `false`.
    */
   isSampled (span) {

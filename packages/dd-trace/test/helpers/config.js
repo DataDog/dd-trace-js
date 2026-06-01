@@ -2,11 +2,13 @@
 
 const proxyquire = require('proxyquire')
 
-// Resolve the config module from within the test package
-const CONFIG_PATH = require.resolve('../../src/config')
-
 function getConfigFresh (options) {
-  return proxyquire.noPreserveCache()(CONFIG_PATH, {})(options)
+  const helper = proxyquire.noPreserveCache()('../../src/config/helper.js', {})
+  const defaults = proxyquire.noPreserveCache()('../../src/config/defaults.js', {})
+  return proxyquire.noPreserveCache()('../../src/config', {
+    './defaults': defaults,
+    './helper': helper,
+  })(options)
 }
 
 module.exports = {

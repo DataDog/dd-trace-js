@@ -28,7 +28,7 @@ class TediousPlugin extends DatabasePlugin {
 
     // SQL Server includes comments when caching queries
     // For that reason we allow service mode but not full mode
-    ctx.sql = this.injectDbmQuery(span, ctx.queryOrProcedure, service, true)
+    ctx.sql = this.injectDbmQuery(span, ctx.queryOrProcedure, service.name, true)
     return ctx.currentStore
   }
 }

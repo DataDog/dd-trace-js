@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { execSync } = require('child_process')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -11,6 +12,7 @@ const {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -47,7 +49,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -58,7 +60,7 @@ describe('esm', () => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         }, undefined, undefined, true)
       }).timeout(300 * 1000)

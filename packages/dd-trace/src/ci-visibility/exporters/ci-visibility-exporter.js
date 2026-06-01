@@ -48,11 +48,13 @@ class CiVisibilityExporter extends BufferingExporter {
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
-    }, GIT_UPLOAD_TIMEOUT).unref()
+    }, GIT_UPLOAD_TIMEOUT)
+    gitUploadTimeoutId.unref?.()
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
-    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
+    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT)
+    canUseCiVisProtocolTimeoutId.unref?.()
 
     this._gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {
@@ -206,6 +208,7 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled,
       isDiEnabled,
@@ -222,6 +225,7 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,

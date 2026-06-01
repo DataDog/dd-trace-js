@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -9,6 +10,7 @@ const {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent
@@ -27,7 +29,7 @@ describe('esm', () => {
   })
 
   afterEach(async () => {
-    proc && proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -36,7 +38,7 @@ describe('esm', () => {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
           const metaContainsNet = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'net'))
           assert.strictEqual(metaContainsNet, true)

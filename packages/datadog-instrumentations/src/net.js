@@ -16,27 +16,21 @@ const errorTCPCh = channel('apm:net:tcp:error')
 const readyCh = channel('apm:net:tcp:ready')
 const connectionCh = channel('apm:net:tcp:connection')
 
-const names = ['net', 'node:net']
-
-addHook({ name: names }, (net, version, name) => {
+addHook({ name: 'net' }, (net) => {
   // explicitly require dns so that net gets an instrumented instance
   // so that we don't miss the dns calls
-  if (name === 'net') {
-    require('dns')
-  } else {
-    require('node:dns')
-  }
+  require('node:dns')
 
-  shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
+  shimmer.wrap(net.Socket.prototype, 'connect', connect => function (...args) {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
-      return connect.apply(this, arguments)
+      return connect.apply(this, args)
     }
 
-    const options = getOptions(arguments)
-    const lastIndex = arguments.length - 1
-    const callback = arguments[lastIndex]
+    const options = getOptions(args)
+    const lastIndex = args.length - 1
+    const callback = args[lastIndex]
 
-    if (!options) return connect.apply(this, arguments)
+    if (!options) return connect.apply(this, args)
 
     const protocol = options.path ? 'ipc' : 'tcp'
     const startCh = protocol === 'ipc' ? startICPCh : startTCPCh
@@ -45,7 +39,7 @@ addHook({ name: names }, (net, version, name) => {
     const ctx = { options }
 
     if (typeof callback === 'function') {
-      arguments[lastIndex] = function (...args) {
+      args[lastIndex] = function (...args) {
         return finishCh.runStores(ctx, callback, this, ...args)
       }
     }
@@ -54,20 +48,26 @@ addHook({ name: names }, (net, version, name) => {
       setupListeners(this, protocol, ctx, finishCh, errorCh)
 
       const emit = this.emit
+      let pendingReadyEvents = 2
       this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
+            if (--pendingReadyEvents === 0) this.emit = emit
             return readyCh.runStores(ctx, () => {
               return emit.apply(this, arguments)
             })
+          case 'error':
+          case 'close':
+            this.emit = emit
+            return emit.apply(this, arguments)
           default:
             return emit.apply(this, arguments)
         }
       })
 
       try {
-        return connect.apply(this, arguments)
+        return connect.apply(this, args)
       } catch (err) {
         errorCh.publish(err)
 

@@ -9,26 +9,35 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 class RouterPlugin extends WebPlugin {
   static id = 'router'
 
+  #contexts = new WeakMap()
+
   constructor (...args) {
     super(...args)
 
-    this._storeStack = []
-    this._contexts = new WeakMap()
-
     this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
-      const childOf = this._getActive(req) || this._getStoreSpan()
-
+      // One ALS hop covers both the parent-span fallback (when no
+      // per-request context exists yet) and the `storeStack` push below.
+      // The previous shape paid an ALS read inside `#getStoreSpan` and a
+      // second one here for the saved-store push.
+      const store = storage('legacy').getStore()
+      let context = this.#contexts.get(req)
+      let childOf
+      if (context !== undefined) {
+        const middleware = context.middleware
+        childOf = middleware.length === 0 ? context.span : middleware[middleware.length - 1]
+      } else if (store) {
+        childOf = store.span
+      }
       if (!childOf) return
 
-      const span = this._getMiddlewareSpan(name, childOf)
-      const context = this._createContext(req, route, childOf)
+      const span = this.#getMiddlewareSpan(name, childOf)
+      context = this.#updateContext(req, context, route, childOf)
 
       if (childOf !== span) {
         context.middleware.push(span)
       }
 
-      const store = storage('legacy').getStore()
-      this._storeStack.push(store)
+      context.storeStack.push(store)
       this.enter(span, store)
 
       web.patch(req)
@@ -36,7 +45,7 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
-      const context = this._contexts.get(req)
+      const context = this.#contexts.get(req)
 
       if (!context) return
 
@@ -44,7 +53,7 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:finish`, ({ req }) => {
-      const context = this._contexts.get(req)
+      const context = this.#contexts.get(req)
 
       if (!context || context.middleware.length === 0) return
 
@@ -52,7 +61,8 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
-      const savedStore = this._storeStack.pop()
+      const context = this.#contexts.get(req)
+      const savedStore = context && context.storeStack.pop()
       const span = savedStore && savedStore.span
       this.enter(span, savedStore)
     })
@@ -62,15 +72,17 @@ class RouterPlugin extends WebPlugin {
 
       if (!this.config.middleware) return
 
-      const span = this._getActive(req)
-
+      const context = this.#contexts.get(req)
+      if (!context) return
+      const middleware = context.middleware
+      const span = middleware.length === 0 ? context.span : middleware[middleware.length - 1]
       if (!span) return
 
       span.setTag('error', error)
     })
 
     this.addSub('apm:http:server:request:finish', ({ req }) => {
-      const context = this._contexts.get(req)
+      const context = this.#contexts.get(req)
 
       if (!context) return
 
@@ -82,22 +94,7 @@ class RouterPlugin extends WebPlugin {
     })
   }
 
-  _getActive (req) {
-    const context = this._contexts.get(req)
-
-    if (!context) return
-    if (context.middleware.length === 0) return context.span
-
-    return context.middleware.at(-1)
-  }
-
-  _getStoreSpan () {
-    const store = storage('legacy').getStore()
-
-    return store && store.span
-  }
-
-  _getMiddlewareSpan (name, childOf) {
+  #getMiddlewareSpan (name, childOf) {
     if (this.config.middleware === false) {
       return childOf
     }
@@ -116,9 +113,7 @@ class RouterPlugin extends WebPlugin {
     return span
   }
 
-  _createContext (req, route, span) {
-    let context = this._contexts.get(req)
-
+  #updateContext (req, context, route, span) {
     if (!route || route === '/' || route === '*') {
       route = ''
     }
@@ -132,22 +127,32 @@ class RouterPlugin extends WebPlugin {
       if (isMoreSpecificThan(route, context.route)) {
         context.route = route
       }
-    } else {
-      context = {
-        span,
-        stack: [route],
-        route,
-        middleware: [],
-      }
-
-      this._contexts.set(req, context)
+      return context
     }
 
+    // Five-property shape pinned at allocation so every request shares the
+    // same hidden class — no per-field transitions after construction.
+    context = {
+      span,
+      stack: [route],
+      route,
+      middleware: [],
+      storeStack: [],
+    }
+
+    this.#contexts.set(req, context)
     return context
   }
 }
 
 function isMoreSpecificThan (routeA, routeB) {
+  // Concrete paths beat catch-all wildcards (`/*splat`, `/api/*`) on the same
+  // request so that `/foo/bar` wins over `/foo/*splat` regardless of length.
+  if (routeA && routeB) {
+    const aWild = hasWildcard(routeA)
+    const bWild = hasWildcard(routeB)
+    if (aWild !== bWild) return !aWild
+  }
   if (!routeIsRegex(routeA) && routeIsRegex(routeB)) {
     return true
   }
@@ -156,6 +161,12 @@ function isMoreSpecificThan (routeA, routeB) {
 
 function routeIsRegex (route) {
   return route.includes('(/')
+}
+
+function hasWildcard (route) {
+  // RegExp routes are encoded as `(/.../)` and may legitimately contain `*`,
+  // so only treat plain string patterns as wildcards.
+  return !routeIsRegex(route) && route.includes('*')
 }
 
 module.exports = RouterPlugin

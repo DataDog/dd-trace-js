@@ -99,29 +99,27 @@ describe('Plugin', () => {
 
   describe('winston', () => {
     withVersions('winston', 'winston', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
-
       afterEach(() => {
         if (!winston.configure) {
           winston.remove('dd')
           winston.remove('http')
           winston.add(winston.transports.Console)
         }
-      })
-
-      afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('winston')
-        })
-
-        beforeEach(() => {
-          return setupTest(version)
+        // Bind `tracer` from `agent.load`'s return value rather than
+        // capturing `require('../../dd-trace')` in an outer hook: the
+        // gate-fired rebuild path inside `agent.load` evicts dd-trace
+        // from `require.cache` and rebinds `global._ddtrace`, so a
+        // pre-`agent.load` capture would point at a torn-down proxy
+        // whose plugin manager and exporter are gone — `scope` would
+        // still appear functional but the new winston plugin only
+        // subscribes against the rebuilt tracer's storage.
+        beforeEach(async () => {
+          tracer = await agent.load('winston')
+          await setupTest(version)
         })
 
         afterEach(() => logServer.close())
@@ -143,8 +141,8 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
-          return agent.load('winston', { logInjection: true })
+        beforeEach(async () => {
+          tracer = await agent.load('winston', { logInjection: true })
         })
 
         describe('without formatting', () => {
@@ -295,7 +293,7 @@ describe('Plugin', () => {
           }
 
           it('should skip injection without a store', async () => {
-            assert.doesNotThrow(() => winston.info('message'))
+            winston.info('message')
           })
         })
 
@@ -348,11 +346,8 @@ describe('Plugin', () => {
           describe('with error formatting matching temp.js example', () => {
             let logger
 
-            beforeEach(() => {
-              return agent.load('winston', { logInjection: true })
-            })
-
-            beforeEach(() => {
+            beforeEach(async () => {
+              tracer = await agent.load('winston', { logInjection: true })
               logger = winston.createLogger({
                 level: 'info',
                 transports: [new winston.transports.Console()],

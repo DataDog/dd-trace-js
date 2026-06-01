@@ -95,6 +95,13 @@ yarn services && npm run test:plugins
 
 **ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
 
+**OTEL env vars from instrumented shells:** Plugin tests use a local mock agent for span assertions. If your shell sets `OTEL_TRACES_EXPORTER=otlp` (Claude Code, Cursor, and other Datadog-telemetry-instrumented terminals do), the tracer routes spans through the OTLP exporter and bypasses the test agent — every span-asserting test silently times out. Unset before running:
+
+```bash
+unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
+PLUGINS="<name>" npm run test:plugins
+```
+
 ### Test Coverage
 
 ```bash
@@ -114,8 +121,6 @@ yarn services && npm run test:plugins
 Use `node:assert/strict` for standard assertions. For partial deep object checks, use `assertObjectContains` from `integration-tests/helpers/index.js`.
 
 Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine existing calls, when touching test files.
-
-Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 
 ### Time-Based Testing
 
@@ -255,6 +260,15 @@ Avoid try/catch in hot paths - validate inputs early
 - Keep breaking changes to a minimum
 - Don't use language/runtime features that are too new
 - **Guard breaking changes with version checks** using [`version.js`](./version.js) (e.g., `DD_MAJOR`)
+
+### Public TypeScript Types
+
+The repo carries two public TypeScript surfaces:
+
+- `index.d.ts` — current major (master = v6).
+- `index.d.v5.ts` — frozen v5 surface. Swapped over `index.d.ts` by `scripts/release/swap-v5-types.js` during a v5 release.
+
+When adding a new public type, add it to both files unless the API is v6-only. v6-only changes — drops, renames, or APIs that don't exist in v5 — go in `index.d.ts` alone. The two files diverge by exactly the v6 cleanups; everything else mirrors.
 
 ## Adding New Configuration Options
 

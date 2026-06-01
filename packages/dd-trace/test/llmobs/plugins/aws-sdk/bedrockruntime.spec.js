@@ -1,10 +1,11 @@
 'use strict'
 
+const assert = require('node:assert')
+
 const { describe, it, before } = require('mocha')
 
-const { withVersions } = require('../../../setup/mocha')
-
 const { assertLlmObsSpanEvent, useLlmObs } = require('../../util')
+const { withAwsSdkVersions } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
 const {
   models,
   modelConfig,
@@ -24,7 +25,7 @@ describe('Plugin', () => {
 
     const { getEvents } = useLlmObs({ plugin: 'aws-sdk' })
 
-    withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
+    withAwsSdkVersions('>=3', (version, moduleName) => {
       let AWS
       let bedrockRuntimeClient
 
@@ -85,8 +86,8 @@ describe('Plugin', () => {
                 cache_read_input_tokens: model.response.cacheReadTokens,
                 cache_write_input_tokens: model.response.cacheWriteTokens,
               },
-              modelName: model.modelId.split('.')[1].toLowerCase(),
-              modelProvider: model.provider.toLowerCase(),
+              modelName: model.modelId.toLowerCase(),
+              modelProvider: 'amazon_bedrock',
               metadata: {
                 temperature: modelConfig.temperature,
                 max_tokens: modelConfig.maxTokens,
@@ -134,8 +135,8 @@ describe('Plugin', () => {
                 cache_read_input_tokens: model.response.cacheReadTokens,
                 cache_write_input_tokens: model.response.cacheWriteTokens,
               },
-              modelName: model.modelId.split('.')[1].toLowerCase(),
-              modelProvider: model.provider.toLowerCase(),
+              modelName: model.modelId.toLowerCase(),
+              modelProvider: 'amazon_bedrock',
               metadata: {
                 temperature: modelConfig.temperature,
                 max_tokens: modelConfig.maxTokens,
@@ -181,8 +182,8 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens,
             },
-            modelName: cacheWriteRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheWriteRequest.provider.toLowerCase(),
+            modelName: cacheWriteRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheWriteRequest.requestBody.temperature,
               max_tokens: cacheWriteRequest.requestBody.max_tokens,
@@ -226,8 +227,8 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens,
             },
-            modelName: cacheWriteRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheWriteRequest.provider.toLowerCase(),
+            modelName: cacheWriteRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheWriteRequest.requestBody.temperature,
               max_tokens: cacheWriteRequest.requestBody.max_tokens,
@@ -274,8 +275,8 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens,
             },
-            modelName: cacheReadRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheReadRequest.provider.toLowerCase(),
+            modelName: cacheReadRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheReadRequest.requestBody.temperature,
               max_tokens: cacheReadRequest.requestBody.max_tokens,
@@ -319,14 +320,38 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens,
             },
-            modelName: cacheReadRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheReadRequest.provider.toLowerCase(),
+            modelName: cacheReadRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheReadRequest.requestBody.temperature,
               max_tokens: cacheReadRequest.requestBody.max_tokens,
             },
             tags: { ml_app: 'test', integration: 'bedrock' },
           })
+        })
+
+        // MLOS-591 regression: `bedrockruntime` registers its LLMObs span from
+        // `setLLMObsTags` rather than the inherited `LLMObsPlugin.start`. The
+        // dd-go LLMObs trace-indexer needs `llmobs_trace_id` /
+        // `llmobs_parent_id` on the local trace tags so OTel `gen_ai.*` spans
+        // share an LLMObs trace with this bedrock span. The first model is
+        // enough — bridge-tag plumbing is not per-model.
+        it('writes otel bridge tags onto the apm span meta', async () => {
+          const model = models[0]
+          const command = new AWS.InvokeModelCommand({
+            body: JSON.stringify(model.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: model.modelId,
+          })
+
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans } = await getEvents()
+          const apmMeta = apmSpans[0].meta
+          assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+          assert.ok(apmMeta.llmobs_parent_id)
+          assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
         })
       })
     })

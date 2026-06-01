@@ -1,6 +1,19 @@
 'use strict'
 
+require('./mocha-hooks')
+
 if (process.env.DD_TEST_CHANNEL_DEBUG) require('../debug/channel-patch')
+
+if (process.env.CI) {
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+  const reportDir = path.join(os.tmpdir(), 'node-reports')
+  fs.mkdirSync(reportDir, { recursive: true })
+  process.report.reportOnFatalError = true
+  process.report.reportOnUncaughtException = true
+  process.report.directory = reportDir
+}
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
@@ -38,11 +51,25 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 // Override per-test, if absolutely necessary.
 require('events').defaultMaxListeners = 6
 
+// Patch timer unref() to always return null, simulating Electron behavior
+// where unref() does not return the timer. Ensures code uses unref?.() not unref().
+const _t = setTimeout(() => {}, 0)
+const _TimeoutProto = Object.getPrototypeOf(_t)
+clearTimeout(_t)
+const _origUnref = _TimeoutProto.unref
+_TimeoutProto.unref = function () {
+  _origUnref.call(this)
+  return null
+}
+
 // Warnings that should not be thrown
 const warningExceptions = new Set([
   // Node.js core warnings. Ignore them.
   'OutgoingMessage.prototype._headers is deprecated',
   "Access to process.binding('http_parser') is deprecated.",
+  '`url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG ' +
+    'URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.',
+  'The `punycode` module is deprecated. Please use a userland alternative instead.',
   // TODO: We should not be throwing warnings in the first place. Fix the following warnings instead.
   "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html",
   'collection.count is deprecated, and will be removed in a future version. ' +
@@ -63,8 +90,22 @@ temporaryWarningExceptions.add = (warning) => {
   return originalAdd(warning)
 }
 
+// Suppress Node's HTTP keep-alive `socketErrorListener` leak (introduced by
+// https://github.com/nodejs/node/pull/61770; fix at
+// https://github.com/nodejs/node/pull/62872 not yet released in v24.x). Bump
+// the leaking socket's limit and drop the warning before stderr or the
+// `'warning'` event sees it, so real leaks still throw below.
+const originalEmitWarning = process.emitWarning
+process.emitWarning = function patchedEmitWarning (warning, ...args) {
+  if (warning?.name === 'MaxListenersExceededWarning' && isNodeHttpSocketLeak(warning)) {
+    warning.emitter.setMaxListeners(0)
+    return
+  }
+  return originalEmitWarning.call(this, warning, ...args)
+}
+
 process.on('warning', (warning) => {
-  if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
+  if (warning.name === 'MaxListenersExceededWarning') {
     throw warning
   }
   if (temporaryWarningExceptions.has(warning.message)) {
@@ -80,6 +121,28 @@ process.on('warning', (warning) => {
     throw warning
   }
 })
+
+/**
+ * Detect the Node.js HTTP keep-alive socket error listener leak by its only
+ * stable signature: two or more listeners named `socketErrorListener` on the
+ * same emitter for event `error`. Once the upstream fix ships the duplicates
+ * disappear and this returns false again, so real leaks resume throwing.
+ *
+ * @param {Error & { emitter?: NodeJS.EventEmitter, type?: string }} warning
+ * @returns {boolean}
+ */
+function isNodeHttpSocketLeak (warning) {
+  if (warning.type !== 'error' || typeof warning.emitter?.listeners !== 'function') {
+    return false
+  }
+  let count = 0
+  for (const listener of warning.emitter.listeners('error')) {
+    if (listener.name === 'socketErrorListener' && ++count > 1) {
+      return true
+    }
+  }
+  return false
+}
 
 // Make this file a module for type-aware tooling. It is intentionally imported
 // for side effects only.

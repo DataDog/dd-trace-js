@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 
@@ -100,7 +101,7 @@ describe('NoopFlaggingProvider', () => {
   describe('configuration methods', () => {
     it('should handle setConfiguration', () => {
       const config = { flags: { 'test-flag': {} } }
-      assert.doesNotThrow(() => noopProvider.setConfiguration(config))
+      noopProvider.setConfiguration(config)
 
       const result = noopProvider.getConfiguration()
       assert.deepStrictEqual(result, config)
@@ -108,17 +109,17 @@ describe('NoopFlaggingProvider', () => {
 
     it('should handle _setConfiguration wrapper', () => {
       const config = { flags: { 'test-flag': {} } }
-      assert.doesNotThrow(() => noopProvider._setConfiguration(config))
+      noopProvider._setConfiguration(config)
 
       const result = noopProvider.getConfiguration()
       assert.deepStrictEqual(result, config)
     })
 
     it('should handle empty or null configuration', () => {
-      assert.doesNotThrow(() => noopProvider.setConfiguration(null))
-      assert.doesNotThrow(() => noopProvider.setConfiguration(undefined))
-      assert.doesNotThrow(() => noopProvider._setConfiguration())
-      assert.doesNotThrow(() => noopProvider._setConfiguration(null))
+      noopProvider.setConfiguration(null)
+      noopProvider.setConfiguration(undefined)
+      noopProvider._setConfiguration()
+      noopProvider._setConfiguration(null)
     })
 
     it('should return stored configuration', () => {
@@ -136,10 +137,22 @@ describe('NoopFlaggingProvider', () => {
       const numberResult = noopProvider.resolveNumberEvaluation('test', 42, {}, {})
       const objectResult = noopProvider.resolveObjectEvaluation('test', {}, {}, {})
 
-      assert.ok(booleanResult && typeof booleanResult.then === 'function')
-      assert.ok(stringResult && typeof stringResult.then === 'function')
-      assert.ok(numberResult && typeof numberResult.then === 'function')
-      assert.ok(objectResult && typeof objectResult.then === 'function')
+      assert.ok(
+        booleanResult && typeof booleanResult.then === 'function',
+        `Expected a thenable, got: ${inspect(booleanResult)}`
+      )
+      assert.ok(
+        stringResult && typeof stringResult.then === 'function',
+        `Expected a thenable, got: ${inspect(stringResult)}`
+      )
+      assert.ok(
+        numberResult && typeof numberResult.then === 'function',
+        `Expected a thenable, got: ${inspect(numberResult)}`
+      )
+      assert.ok(
+        objectResult && typeof objectResult.then === 'function',
+        `Expected a thenable, got: ${inspect(objectResult)}`
+      )
     })
 
     it('should resolve promises immediately', async () => {
@@ -153,7 +166,7 @@ describe('NoopFlaggingProvider', () => {
       ])
 
       const duration = Date.now() - start
-      assert.ok(duration < 10)
+      assert.ok(duration < 10, `Expected ${duration} < 10`)
     })
   })
 })

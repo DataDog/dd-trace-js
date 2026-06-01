@@ -1,17 +1,23 @@
-name: 'Stale PR Bot'
+name: "Stale PR Bot"
 on:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: "0 4 * * *"
 
 permissions:
-  pull-requests: write
+  id-token: write
 
 jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@997185467fa4f803885201cee163a9f38240193d # v10.1.1
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
         with:
+          scope: DataDog/dd-trace-js
+          policy: stale
+      - uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899 # v10.3.0
+        with:
+          repo-token: ${{ steps.octo-sts.outputs.token }}
           days-before-issue-stale: -1 # disabled for issues
 
           days-before-pr-stale: 90 # 3 months

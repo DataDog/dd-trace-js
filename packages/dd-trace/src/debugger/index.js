@@ -132,13 +132,13 @@ function start (config, rcInstance) {
       cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     })
 
-    worker.unref()
-    probeChannel.port1.unref()
-    probeChannel.port2.unref()
-    logChannel.port1.unref()
-    logChannel.port2.unref()
-    configChannel.port1.unref()
-    configChannel.port2.unref()
+    worker.unref?.()
+    probeChannel.port1.unref?.()
+    probeChannel.port2.unref?.()
+    logChannel.port1.unref?.()
+    logChannel.port2.unref?.()
+    configChannel.port1.unref?.()
+    configChannel.port2.unref?.()
   })
 }
 
@@ -147,7 +147,7 @@ function start (config, rcInstance) {
  * Sends the new configuration to the worker thread via the config channel.
  * Does nothing if the worker is not started.
  *
- * @param {Config} config - The updated tracer configuration object
+ * @param {import('../config/config-base')} config - The updated tracer configuration object
  */
 function configure (config) {
   if (configChannel === null) return

@@ -123,8 +123,8 @@ function getCompileMethodFn (compileMethod) {
     return compileMethod.apply(this, [content, filename])
   }
 
-  const shim = function () {
-    return delegate.apply(this, arguments)
+  const shim = function (...args) {
+    return delegate.apply(this, args)
   }
 
   unwrapCompile = function () {
@@ -208,8 +208,8 @@ let enableEsmRewriter = function (telemetryVerbosity) {
       }
     })
 
-    port1.unref()
-    port2.unref()
+    port1.unref?.()
+    port2.unref?.()
 
     try {
       Module.register('./rewriter-esm.mjs', {

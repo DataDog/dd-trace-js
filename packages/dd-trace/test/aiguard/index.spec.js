@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -14,7 +15,17 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 
 const tracerVersion = require('../../../../package.json').version
 const telemetryMetrics = require('../../src/telemetry/metrics')
-const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+const aiguardMetrics = telemetryMetrics.manager.namespace('ai_guard')
+const { USER_KEEP } = require('../../../../ext/priority')
+const { SAMPLING_MECHANISM_AI_GUARD, DECISION_MAKER_KEY } = require('../../src/constants')
+const {
+  EVENT_TAG_KEY,
+  SOURCE_SDK,
+  INTEGRATION_NONE,
+  ERROR_TYPE_CLIENT,
+  ERROR_TYPE_STATUS,
+  ERROR_TYPE_RESPONSE,
+} = require('../../src/aiguard/tags')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -22,7 +33,7 @@ describe('AIGuard SDK', () => {
     service: 'ai_guard_demo',
     env: 'test',
     apiKey: 'API_KEY',
-    appKey: 'APP_KEY',
+    DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
     experimental: {
       aiguard: {
@@ -68,28 +79,25 @@ describe('AIGuard SDK', () => {
 
   let originalFetch
 
-  beforeEach(() => {
-    tracer = require('../../../dd-trace')
-    tracer.init(config)
+  beforeEach(async () => {
+    tracer = await agent.load(null, [], config)
 
     originalFetch = global.fetch
     global.fetch = sinon.stub()
 
     inc = sinon.spy()
-    count = sinon.stub(appsecNamespace, 'count').returns({
+    count = sinon.stub(aiguardMetrics, 'count').returns({
       inc,
     })
-    appsecNamespace.metrics.clear()
+    aiguardMetrics.metrics.clear()
 
     aiguard = new AIGuard(tracer, config)
-
-    return agent.load(null, [])
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     global.fetch = originalFetch
     sinon.restore()
-    agent.close()
+    return agent.close()
   })
 
   const mockFetch = (options) => {
@@ -115,7 +123,7 @@ describe('AIGuard SDK', () => {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.apiKey,
-          'DD-APPLICATION-KEY': config.appKey,
+          'DD-APPLICATION-KEY': config.DD_APP_KEY,
           'DD-AI-GUARD-VERSION': tracerVersion,
           'DD-AI-GUARD-SOURCE': 'SDK',
           'DD-AI-GUARD-LANGUAGE': 'nodejs',
@@ -137,14 +145,16 @@ describe('AIGuard SDK', () => {
     }, { rejectFirst: true })
   }
 
+  const sdkTags = { source: SOURCE_SDK, integration: INTEGRATION_NONE }
+
   const assertTelemetry = (metric, tags) => {
     sinon.assert.calledWith(count, metric, tags)
   }
 
   const testSuite = [
-    { action: 'ALLOW', reason: 'Go ahead', tags: [] },
-    { action: 'DENY', reason: 'Nope', tags: ['deny_everything', 'test_deny'] },
-    { action: 'ABORT', reason: 'Kill it with fire', tags: ['alarm_tag', 'abort_everything'] },
+    { action: 'ALLOW', reason: 'Go ahead' },
+    { action: 'DENY', reason: 'Nope', tagProbs: { deny_everything: 0.8, test_deny: 0.2 } },
+    { action: 'ABORT', reason: 'Kill it with fire', tagProbs: { alarm_tag: 0.3, abort_everything: 0.7 } },
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },
@@ -154,26 +164,34 @@ describe('AIGuard SDK', () => {
     { ...r, suite: 'prompt', target: 'prompt', messages: prompt },
   ])
 
-  for (const { action, reason, tags, blocking, suite, target, messages } of testSuite) {
+  for (const { action, reason, tagProbs, blocking, suite, target, messages } of testSuite) {
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockFetch({ body: { data: { attributes: { action, reason, tags, is_blocking_enabled: blocking } } } })
+      const attributes = { action, reason, is_blocking_enabled: blocking }
+      if (tagProbs) {
+        attributes.tags = Object.keys(tagProbs)
+        attributes.tag_probs = tagProbs
+      }
+      mockFetch({ body: { data: { attributes } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags
+          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === attributes.tags &&
+            err.tagProbabilities === attributes.tag_probs && JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
         assert.strictEqual(evaluation.action, action)
         assert.strictEqual(evaluation.reason, reason)
-        if (tags) {
-          assert.strictEqual(evaluation.tags, tags)
+        if (tagProbs) {
+          assert.strictEqual(evaluation.tags, attributes.tags)
+          assert.strictEqual(evaluation.tagProbabilities, attributes.tag_probs)
         }
+        assert.deepStrictEqual(evaluation.sds, [])
       }
 
-      assertTelemetry('ai_guard.requests', { error: false, action, block: shouldBlock })
+      assertTelemetry('requests', { action, error: false, block: shouldBlock, ...sdkTags })
       assertFetch(messages)
       await assertAIGuardSpan({
         'ai_guard.target': target,
@@ -184,10 +202,131 @@ describe('AIGuard SDK', () => {
       },
       {
         messages,
-        ...(tags.length > 0 ? { attack_categories: tags } : {}),
+        ...(attributes.tags ? { attack_categories: attributes.tags } : {}),
+        ...(attributes.tag_probs ? { tag_probs: attributes.tag_probs } : {}),
       })
     })
   }
+
+  const blockDefaultsSuite = [
+    { description: 'no options', opts: undefined, shouldBlock: true },
+    { description: 'empty options', opts: {}, shouldBlock: true },
+    { description: 'explicit block: false', opts: { block: false }, shouldBlock: false },
+  ]
+  for (const { description, opts, shouldBlock } of blockDefaultsSuite) {
+    it(`test evaluate block defaults to remote is_blocking_enabled (${description})`, async () => {
+      mockFetch({
+        body: {
+          data: {
+            attributes: { action: 'DENY', reason: 'Nope', tags: ['deny'], is_blocking_enabled: true },
+          },
+        },
+      })
+
+      if (shouldBlock) {
+        await rejects(
+          () => aiguard.evaluate(prompt, opts),
+          err => err.name === 'AIGuardAbortError' && err.reason === 'Nope'
+        )
+      } else {
+        const evaluation = await aiguard.evaluate(prompt, opts)
+        assert.strictEqual(evaluation.action, 'DENY')
+      }
+
+      assertTelemetry('requests', { error: false, action: 'DENY', block: shouldBlock, ...sdkTags })
+    })
+  }
+
+  it('test evaluate with sds_findings', async () => {
+    const sdsFindings = [
+      {
+        rule_display_name: 'Email Address',
+        rule_tag: 'email_address',
+        category: 'pii',
+        matched_text: 'john.smith@acmebank.com',
+        location: { start_index: 35, end_index_exclusive: 58, path: 'messages[0].content' },
+      },
+      {
+        rule_display_name: 'Social Security Number',
+        rule_tag: 'social_security_number',
+        category: 'pii',
+        matched_text: '456-78-9012',
+        location: { start_index: 73, end_index_exclusive: 84, path: 'messages[0].content' },
+      },
+    ]
+    const messages = [{ role: 'user', content: 'My SSN is 456-78-9012 and email john.smith@acmebank.com' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            reason: 'No rule match.',
+            tags: [],
+            sds_findings: sdsFindings,
+            is_blocking_enabled: true,
+          },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.sds, sdsFindings)
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      { messages, sds: sdsFindings }
+    )
+  })
+
+  it('test evaluate with empty sds_findings', async () => {
+    const messages = [{ role: 'user', content: 'Hello' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: { action: 'ALLOW', reason: 'OK', tags: [], sds_findings: [], is_blocking_enabled: false },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.sds, [])
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      { messages }
+    )
+  })
+
+  it('test evaluate with sds_findings in abort error', async () => {
+    const sdsFindings = [
+      {
+        rule_display_name: 'Credit Card Number',
+        rule_tag: 'credit_card',
+        category: 'pii',
+        matched_text: '4111111111111111',
+        location: { start_index: 10, end_index_exclusive: 26, path: 'messages[0].content[0].text' },
+      },
+    ]
+    const messages = [{ role: 'user', content: 'My card is 4111111111111111' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ABORT',
+            reason: 'PII detected',
+            tags: ['pii'],
+            sds_findings: sdsFindings,
+            is_blocking_enabled: true,
+          },
+        },
+      },
+    })
+
+    await rejects(
+      () => aiguard.evaluate(messages, { block: true }),
+      err => err.name === 'AIGuardAbortError' && JSON.stringify(err.sds) === JSON.stringify(sdsFindings)
+    )
+  })
 
   it('test evaluate with API error', async () => {
     const errors = [{ status: 400, title: 'Internal server error' }]
@@ -202,7 +341,8 @@ describe('AIGuard SDK', () => {
         err.name === 'AIGuardClientError' && JSON.stringify(err.errors) === JSON.stringify(errors)
     )
 
-    assertTelemetry('ai_guard.requests', { error: true })
+    assertTelemetry('requests', { error: true, ...sdkTags })
+    assertTelemetry('error', { type: ERROR_TYPE_STATUS, ...sdkTags })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -221,7 +361,8 @@ describe('AIGuard SDK', () => {
         err.name === 'AIGuardClientError' && err.message === 'Unexpected error calling AI Guard service: Boom!!!',
     )
 
-    assertTelemetry('ai_guard.requests', { error: true })
+    assertTelemetry('requests', { error: true, ...sdkTags })
+    assertTelemetry('error', { type: ERROR_TYPE_CLIENT, ...sdkTags })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -237,7 +378,8 @@ describe('AIGuard SDK', () => {
       err => err.name === 'AIGuardClientError'
     )
 
-    assertTelemetry('ai_guard.requests', { error: true })
+    assertTelemetry('requests', { error: true, ...sdkTags })
+    assertTelemetry('error', { type: ERROR_TYPE_RESPONSE, ...sdkTags })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -253,7 +395,8 @@ describe('AIGuard SDK', () => {
       err => err.name === 'AIGuardClientError'
     )
 
-    assertTelemetry('ai_guard.requests', { error: true })
+    assertTelemetry('requests', { error: true, ...sdkTags })
+    assertTelemetry('error', { type: ERROR_TYPE_RESPONSE, ...sdkTags })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -280,7 +423,7 @@ describe('AIGuard SDK', () => {
 
     await aiguard.evaluate(messages)
 
-    assertTelemetry('ai_guard.truncated', { type: 'messages' })
+    assertTelemetry('truncated', { type: 'messages', ...sdkTags })
     assertFetch(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
@@ -298,7 +441,7 @@ describe('AIGuard SDK', () => {
 
     await aiguard.evaluate(messages)
 
-    assertTelemetry('ai_guard.truncated', { type: 'content' })
+    assertTelemetry('truncated', { type: 'content', ...sdkTags })
     assertFetch(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
@@ -337,13 +480,32 @@ describe('AIGuard SDK', () => {
     assert.strictEqual(result.reason, 'AI Guard is not enabled')
   })
 
+  it('test ai_guard.event tag on root span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+    await tracer.trace('root', async () => {
+      await aiguard.evaluate(prompt, { block: false })
+    })
+    await agent.assertSomeTraces(traces => {
+      assert.strictEqual(traces[0].length, 2, 'Trace should contain two spans root + ai_guard')
+      for (const span of traces[0]) {
+        if (span.name === 'root') {
+          assert.strictEqual(span.meta[EVENT_TAG_KEY], 'true')
+        } else {
+          assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY), `Available keys: ${inspect(Object.keys(span.meta))}`)
+        }
+      }
+    })
+  })
+
   const sites = [
     { site: 'datad0g.com', endpoint: 'https://app.datad0g.com/api/v2/ai-guard' },
     { site: 'datadoghq.com', endpoint: 'https://app.datadoghq.com/api/v2/ai-guard' },
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const newConfig = Object.assign({ site }, config)
+      const newConfig = { site, ...config }
       delete newConfig.experimental.aiguard.endpoint
       const client = new AIGuard(tracer, newConfig)
       mockFetch({
@@ -355,4 +517,77 @@ describe('AIGuard SDK', () => {
       assertFetch(toolCall, `${endpoint}/evaluate`)
     })
   }
+
+  describe('manual keep on root span', () => {
+    const assertRootSpanKept = async () => {
+      await agent.assertSomeTraces(traces => {
+        const rootSpan = traces[0][0]
+        assert.strictEqual(rootSpan.metrics._sampling_priority_v1, USER_KEEP)
+        assert.strictEqual(rootSpan.meta[DECISION_MAKER_KEY], `-${SAMPLING_MECHANISM_AI_GUARD}`)
+      })
+    }
+
+    it('sets USER_KEEP on root span after ALLOW evaluation', async () => {
+      mockFetch({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', tags: [], is_blocking_enabled: false } } },
+      })
+
+      await tracer.trace('root', async () => {
+        await aiguard.evaluate(prompt)
+      })
+
+      await assertRootSpanKept()
+    })
+
+    it('sets USER_KEEP on root span after DENY evaluation (non-blocking)', async () => {
+      mockFetch({
+        body: {
+          data: { attributes: { action: 'DENY', reason: 'denied', tags: ['deny_tag'], is_blocking_enabled: false } },
+        },
+      })
+
+      await tracer.trace('root', async () => {
+        await aiguard.evaluate(prompt, { block: false })
+      })
+
+      await assertRootSpanKept()
+    })
+
+    it('keeps trace even when auto-sampling would drop it', async () => {
+      // Configure sampler to drop all traces (0% sample rate)
+      tracer._tracer._prioritySampler.configure('test', { sampleRate: 0 })
+
+      try {
+        mockFetch({
+          body: { data: { attributes: { action: 'ALLOW', reason: 'OK', tags: [], is_blocking_enabled: false } } },
+        })
+
+        await tracer.trace('root', async () => {
+          await aiguard.evaluate(prompt)
+        })
+
+        await assertRootSpanKept()
+      } finally {
+        tracer._tracer._prioritySampler.configure('test', {})
+      }
+    })
+
+    it('sets USER_KEEP on root span after ABORT evaluation (blocking)', async () => {
+      mockFetch({
+        body: {
+          data: { attributes: { action: 'ABORT', reason: 'blocked', tags: ['tag'], is_blocking_enabled: true } },
+        },
+      })
+
+      await tracer.trace('root', async () => {
+        try {
+          await aiguard.evaluate(prompt, { block: true })
+        } catch {
+          // expected AIGuardAbortError
+        }
+      })
+
+      await assertRootSpanKept()
+    })
+  })
 })

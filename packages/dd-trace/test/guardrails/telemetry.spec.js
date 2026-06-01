@@ -6,7 +6,12 @@ const assert = require('node:assert/strict')
 const { before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 
-const { telemetryForwarder, assertTelemetryPoints } = require('../../../../integration-tests/helpers')
+const {
+  assertObjectContains,
+  telemetryForwarder,
+  assertTelemetryPoints,
+} = require('../../../../integration-tests/helpers')
+
 process.env.DD_INJECTION_ENABLED = 'true'
 
 describe('sendTelemetry', () => {
@@ -95,9 +100,13 @@ describe('sendTelemetry', () => {
     function assertStdinMetadata (expected) {
       assert.ok(capturedStdinData)
       const parsed = JSON.parse(capturedStdinData)
-      assert.strictEqual(parsed.metadata.result, expected.result)
-      assert.strictEqual(parsed.metadata.result_class, expected.result_class)
-      assert.strictEqual(parsed.metadata.result_reason, expected.result_reason)
+      assertObjectContains(parsed, {
+        metadata: {
+          result: expected.result,
+          result_class: expected.result_class,
+          result_reason: expected.result_reason,
+        },
+      })
     }
 
     beforeEach(() => {

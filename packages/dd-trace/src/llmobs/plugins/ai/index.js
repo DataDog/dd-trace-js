@@ -4,7 +4,7 @@ const { channel } = require('dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 
-const toolCreationCh = channel('dd-trace:vercel-ai:tool')
+const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
 
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../../constants/tags')
@@ -18,6 +18,7 @@ const {
   getToolNameFromTags,
   getToolCallResultContent,
   getLlmObsSpanName,
+  getTelemetryMetadata,
 } = require('./util')
 
 /**
@@ -94,8 +95,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this.#toolCallIdsToName = {}
     this.#availableTools = new Set()
-    toolCreationCh.subscribe(toolArgs => {
-      this.#availableTools.add(toolArgs)
+    toolCreationCh.subscribe(ctx => {
+      const toolArgs = ctx.arguments
+      const tool = toolArgs[0] ?? {}
+      this.#availableTools.add(tool)
     })
 
     setAttributesCh.subscribe(({ ctx, attributes }) => {
@@ -214,6 +217,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagEmbeddingIO(span, parsedInputs, output)
 
+    const metadata = getTelemetryMetadata(tags)
+    this._tagger.tagMetadata(span, metadata)
+
     const usage = tags['ai.usage.tokens']
     this._tagger.tagMetrics(span, {
       inputTokens: usage,
@@ -232,7 +238,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagTextIO(span, prompt, output)
 
-    const metadata = getGenerationMetadata(tags) ?? {}
+    const metadata = getGenerationMetadata(tags)
     metadata.schema = getJsonStringValue(tags['ai.schema'], {})
     this._tagger.tagMetadata(span, metadata)
   }

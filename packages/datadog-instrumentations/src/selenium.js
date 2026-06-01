@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const shimmer = require('../../datadog-shimmer')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { addHook, channel } = require('./helpers/instrument')
@@ -66,7 +69,7 @@ addHook({
     if (isRumActive) {
       // We'll have time for RUM to flush the events (there's no callback to know when it's done)
       await new Promise(resolve => {
-        setTimeout(() => {
+        realSetTimeout(() => {
           resolve()
         }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
       })

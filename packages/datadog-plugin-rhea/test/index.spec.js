@@ -6,6 +6,9 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -16,10 +19,10 @@ describe('Plugin', () => {
 
   describe('rhea', function () {
     before(() => {
-      agent.load('rhea')
+      return agent.load('rhea')
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {
@@ -55,8 +58,25 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
-          const expectedProducerHash = '11950901911938809288'
-          const expectedConsumerHash = '13394183765782976023'
+          let expectedProducerHash
+          let expectedConsumerHash
+
+          beforeEach(() => {
+            const phash = propagationHash.getHash()
+            const producerHash = computePathwayHash(
+              'test', 'tester',
+              ['direction:out', 'exchange:amq.topic', 'type:rabbitmq'],
+              ENTRY_PARENT_HASH,
+              phash
+            )
+            expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
+            expectedConsumerHash = computePathwayHash(
+              'test', 'tester',
+              ['direction:in', 'topic:amq.topic', 'type:rabbitmq'],
+              producerHash,
+              phash
+            ).readBigUInt64LE(0).toString()
+          })
 
           it('Should set pathway hash tag on a span when producing', (done) => {
             let produceSpanMeta = {}
@@ -105,7 +125,7 @@ describe('Plugin', () => {
                   })
                 }
               }, { timeoutMs: 2000 })
-              assert.ok(((statsPointsReceived) >= (1)))
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
             }).then(done, done)
 
@@ -123,7 +143,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(((statsPointsReceived) >= (2)))
+              assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
             }, { timeoutMs: 2000 }).then(done, done)
 
@@ -223,7 +243,7 @@ describe('Plugin', () => {
             it('should extract the span context', done => {
               container.once('message', msg => {
                 const span = tracer.scope().active()
-                assert.notStrictEqual(span._spanContext._parentId, null)
+                assert.notStrictEqual(span.context()._parentId, null)
                 done()
               })
               context.sender.send({ body: 'Hello World!' })
@@ -435,9 +455,9 @@ describe('Plugin', () => {
                 const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
                 const onTransfer = Session.prototype.on_transfer
                 const error = new Error('this is an error')
-                Session.prototype.on_transfer = function onTransferWrapped () {
+                Session.prototype.on_transfer = function onTransferWrapped (...args) {
                   try {
-                    return onTransfer.apply(this, arguments)
+                    return onTransfer.apply(this, args)
                   } catch (e) {
                     // this is just to prevent mocha from crashing
                   }
@@ -641,7 +661,7 @@ describe('Plugin', () => {
             })
             const listener = server.listen({ port: 0 })
             listener.on('listening', () => {
-              connection = client.connect(Object.assign({ reconnect: false }, listener.address()))
+              connection = client.connect({ reconnect: false, ...listener.address() })
               connection.open_receiver({ autoaccept: false })
               connection.open_sender()
               expectedServerPort = listener.address().port

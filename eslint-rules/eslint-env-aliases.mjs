@@ -8,12 +8,24 @@ const supportedConfigsPath = path.resolve(
   path.dirname(__filename),
   '../packages/dd-trace/src/config/supported-configurations.json'
 )
-const { aliases } = JSON.parse(fs.readFileSync(supportedConfigsPath, 'utf8'))
+const { supportedConfigurations } = JSON.parse(fs.readFileSync(supportedConfigsPath, 'utf8'))
 
 const aliasToCanonical = {}
-for (const canonical of Object.keys(aliases)) {
-  for (const alias of aliases[canonical]) {
-    aliasToCanonical[alias] = canonical
+const fallbackAliases = new Set()
+for (const [canonical, entries] of Object.entries(supportedConfigurations)) {
+  for (const entry of entries) {
+    if (entry.aliases && !entry.deprecated) {
+      for (const alias of entry.aliases) {
+        aliasToCanonical[alias] ??= []
+        aliasToCanonical[alias].push(canonical)
+      }
+    }
+  }
+}
+
+for (const [alias, canonicals] of Object.entries(aliasToCanonical)) {
+  if (canonicals.length > 1 && Object.hasOwn(supportedConfigurations, alias)) {
+    fallbackAliases.add(alias)
   }
 }
 
@@ -41,7 +53,9 @@ export default {
     return {
       Literal (node) {
         // Check if the string literal is an alias
-        if (typeof node.value === 'string' && Object.hasOwn(aliasToCanonical, node.value)) {
+        if (typeof node.value === 'string' &&
+          Object.hasOwn(aliasToCanonical, node.value) &&
+          !fallbackAliases.has(node.value)) {
           report(context, node, node.value)
         }
       },
@@ -50,7 +64,7 @@ export default {
       TemplateLiteral (node) {
         if (node.expressions.length === 0 && node.quasis.length === 1) {
           const value = node.quasis[0].value.cooked
-          if (Object.hasOwn(aliasToCanonical, value)) {
+          if (Object.hasOwn(aliasToCanonical, value) && !fallbackAliases.has(value)) {
             report(context, node, value)
           }
         }

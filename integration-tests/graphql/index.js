@@ -4,7 +4,6 @@ const tracer = require('dd-trace')
 const path = require('path')
 
 tracer.init({
-  debug: true,
   port: process.env.AGENT_PORT,
   appsec: {
     enabled: true,

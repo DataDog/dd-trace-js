@@ -9,15 +9,13 @@ let server
 let port = 0
 
 function buildClient (service, callback) {
-  service = Object.assign(
-    {
-      getBidi: () => {},
-      getServerStream: () => {},
-      getClientStream: () => {},
-      getUnary: () => {},
-    },
-    service
-  )
+  service = {
+    getBidi: () => {},
+    getServerStream: () => {},
+    getClientStream: () => {},
+    getUnary: () => {},
+    ...service,
+  }
 
   const definition = protoLoader.loadSync(`${currentDirectoryPath}/test.proto`)
   const TestService = grpc.loadPackageDefinition(definition).test.TestService

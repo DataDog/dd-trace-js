@@ -8,15 +8,16 @@ const { join } = require('path')
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
 
-const externals = require('../packages/dd-trace/test/plugins/externals.json')
+const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
-// Can remove couchbase after removing support for couchbase <= 3.2.0
+// Can remove couchbase after removing support for couchbase < 3.2.2
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
@@ -66,7 +67,7 @@ async function assertPrerequisites () {
   for (const name of externalNames) {
     for (const inst of externals[name]) {
       // eslint-disable-next-line no-await-in-loop
-      await assertInstrumentation(inst, true)
+      await assertInstrumentation(inst, true, name)
     }
   }
 
@@ -76,9 +77,13 @@ async function assertPrerequisites () {
 /**
  * @param {object} instrumentation
  * @param {boolean} external
+ * @param {string} [pluginName] The plugin key the external entry belongs to. Same-name externals (e.g. the aerospike
+ *   externals entry that mirrors the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not
+ *   force every major to install on every job.
  */
-async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE && !external
+async function assertInstrumentation (instrumentation, external, pluginName) {
+  const honourEnvRange = !external || instrumentation.name === pluginName
+  const versions = process.env.PACKAGE_VERSION_RANGE && honourEnvRange
     ? [process.env.PACKAGE_VERSION_RANGE]
     : (instrumentation.versions || [])
 
@@ -139,15 +144,13 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     dependencies,
   }
 
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces',
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**'],
-      }
+  if (name === 'aerospike') {
+    pkg.installConfig = {
+      hoistingLimits: 'workspaces',
+    }
+  } else if (!external) {
+    pkg.workspaces = {
+      nohoist: ['**/**'],
     }
   }
 
@@ -173,9 +176,10 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const folderStat = await lstat(folder)
     if (!folderStat.isDirectory()) continue
     if (entry === 'node_modules') continue
+    if (!isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
-      await assertPeerDependencies(folder, entry)
+      await assertPeerDependencies(folder, parent ? join(parent, entry) : entry)
       continue
     }
 
@@ -186,10 +190,17 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    for (const { dep, name, node } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) continue
-      const pkgJsonPath = require(folder).pkgJsonPath()
-      const pkgJson = require(pkgJsonPath)
+    let pkgJsonPath
+    let pkgJson
+
+    for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+      if (node && !semver.satisfies(process.versions.node, node)) {
+        continue
+      }
+      if (!pkgJsonPath) {
+        pkgJsonPath = require(folder).pkgJsonPath()
+        pkgJson = require(pkgJsonPath)
+      }
 
       for (const section of ['devDependencies', 'peerDependencies']) {
         if (pkgJson[section]?.[name]) {
@@ -202,15 +213,41 @@ async function assertPeerDependencies (rootFolder, parent = '') {
               // Only one version available so use that.
               : pkgJson[section][name]
           }
-
-          // eslint-disable-next-line no-await-in-loop
-          await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
-
           break
         }
       }
+
+      if (!versionPkgJson.dependencies[name] && forced) {
+        versionPkgJson.dependencies[name] = latests[name]
+      }
     }
+
+    // eslint-disable-next-line no-await-in-loop
+    await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
   }
+}
+
+/**
+ * Only inspect workspaces generated for the current install run.
+ * This avoids stale folders in `versions/` from breaking targeted installs.
+ *
+ * @param {string} entry
+ * @param {string} [parent]
+ * @returns {boolean}
+ */
+function isGeneratedWorkspace (entry, parent = '') {
+  const workspaceName = parent ? join(parent, entry) : entry
+
+  if (entry.startsWith('@')) {
+    for (const workspace of workspaces) {
+      if (workspace.startsWith(`${workspaceName}/`)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  return workspaces.has(workspaceName)
 }
 
 /**
@@ -269,7 +306,7 @@ async function assertWorkspaces () {
 }
 
 /**
- * @param {boolean} [retry=true]
+ * @param {boolean} [retry]
  */
 function install (retry = true) {
   try {

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 
 const {
@@ -9,6 +10,7 @@ const {
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('ASM Trace Tagging rules', () => {
@@ -29,7 +31,7 @@ describe('ASM Trace Tagging rules', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
   }
@@ -48,9 +50,15 @@ describe('ASM Trace Tagging rules', () => {
       await axios.get('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
 
       await agent.assertMessageReceived(({ _, payload }) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.trace.agent'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.trace.agent'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
         assert.strictEqual(payload[0][0].meta['_dd.appsec.trace.agent'], 'TraceTaggingTest/v1')
-        assert.ok(Object.hasOwn(payload[0][0].metrics, '_dd.appsec.trace.integer'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].metrics, '_dd.appsec.trace.integer'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].metrics))}`
+        )
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.trace.integer'], 1234)
       })
     })
@@ -81,9 +89,15 @@ describe('ASM Trace Tagging rules', () => {
 
         fastifyRequestReceived = true
 
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.trace.agent'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.trace.agent'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
         assert.strictEqual(payload[0][0].meta['_dd.appsec.trace.agent'], 'TraceTaggingTest/v1')
-        assert.ok(Object.hasOwn(payload[0][0].metrics, '_dd.appsec.trace.integer'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].metrics, '_dd.appsec.trace.integer'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].metrics))}`
+        )
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.trace.integer'], 1234)
       }, 30000, 10, true)
 

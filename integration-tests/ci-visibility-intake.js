@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
+const DEFAULT_SKIPPABLE_COVERAGE = {}
 const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_KNOWN_TESTS_RESPONSE_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
@@ -43,16 +44,29 @@ const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-n
 const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
+function getSkippableResponse () {
+  const meta = { correlation_id: correlationId }
+  if (Object.keys(skippableCoverage).length) {
+    meta.coverage = skippableCoverage
+  }
+
+  return { data: suitesToSkip, meta }
+}
+
 let settings = DEFAULT_SETTINGS
+let settingsResponseStatusCode = 200
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
+let skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
 let knownTests = DEFAULT_KNOWN_TESTS
 let knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
 let waitingTime = 0
+let knownTestsPageIndex = 0
 let testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
 let testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
+let skippableSuitesResponseStatusCode = 200
 
 class FakeCiVisIntake extends FakeAgent {
   setKnownTestsResponseCode (statusCode) {
@@ -75,12 +89,20 @@ class FakeCiVisIntake extends FakeAgent {
     suitesToSkip = newSuitesToSkip
   }
 
+  setSkippableCoverage (newSkippableCoverage) {
+    skippableCoverage = newSkippableCoverage
+  }
+
   setItrCorrelationId (newCorrelationId) {
     correlationId = newCorrelationId
   }
 
   setSettings (newSettings) {
     settings = newSettings
+  }
+
+  setSettingsResponseCode (statusCode) {
+    settingsResponseStatusCode = statusCode
   }
 
   setWaitingTime (newWaitingTime) {
@@ -93,6 +115,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setTestManagementTestsResponseCode (newStatusCode) {
     testManagementResponseStatusCode = newStatusCode
+  }
+
+  setSkippableSuitesResponseCode (statusCode) {
+    skippableSuitesResponseStatusCode = statusCode
   }
 
   async start () {
@@ -204,11 +230,16 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      res.status(200).send(JSON.stringify({
-        data: {
-          attributes: settings,
-        },
-      }))
+      res.status(settingsResponseStatusCode)
+      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
+        res.send(JSON.stringify({
+          data: {
+            attributes: settings,
+          },
+        }))
+      } else {
+        res.send(JSON.stringify({ errors: ['error'] }))
+      }
       this.emit('message', {
         headers: req.headers,
         url: req.url,
@@ -218,15 +249,15 @@ class FakeCiVisIntake extends FakeAgent {
     app.post([
       '/api/v2/ci/tests/skippable',
       '/evp_proxy/:version/api/v2/ci/tests/skippable',
-    ], (req, res) => {
-      res.status(200).send(JSON.stringify({
-        data: suitesToSkip,
-        meta: {
-          correlation_id: correlationId,
-        },
-      }))
+    ], express.json(), (req, res) => {
+      if (skippableSuitesResponseStatusCode < 200 || skippableSuitesResponseStatusCode >= 300) {
+        res.status(skippableSuitesResponseStatusCode).send(JSON.stringify({ errors: ['error'] }))
+        return
+      }
+      res.status(skippableSuitesResponseStatusCode).send(JSON.stringify(getSkippableResponse()))
       this.emit('message', {
         headers: req.headers,
+        payload: req.body,
         url: req.url,
       })
     })
@@ -237,18 +268,34 @@ class FakeCiVisIntake extends FakeAgent {
     ], (req, res) => {
       // The endpoint returns compressed data if 'accept-encoding' is set to 'gzip'
       const isGzip = req.headers['accept-encoding'] === 'gzip'
-      const data = JSON.stringify({
-        data: {
-          attributes: {
-            tests: knownTests,
+
+      let responseData
+      if (Array.isArray(knownTests)) {
+        // Paginated mode: knownTests is an array of page responses
+        const page = knownTestsPageIndex < knownTests.length ? knownTests[knownTestsPageIndex] : null
+        knownTestsPageIndex++
+        if (page) {
+          responseData = JSON.stringify(page)
+        } else {
+          res.status(404).send('')
+          return
+        }
+      } else {
+        // Legacy single-response mode
+        responseData = JSON.stringify({
+          data: {
+            attributes: {
+              tests: knownTests,
+            },
           },
-        },
-      })
+        })
+      }
+
       res.setHeader('content-type', 'application/json')
       if (isGzip) {
         res.setHeader('content-encoding', 'gzip')
       }
-      res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(data) : data)
+      res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(responseData) : responseData)
       this.emit('message', {
         headers: req.headers,
         url: req.url,
@@ -310,20 +357,114 @@ class FakeCiVisIntake extends FakeAgent {
     })
   }
 
+  resetKnownTestsPageIndex () {
+    knownTestsPageIndex = 0
+  }
+
   stop () {
     settings = DEFAULT_SETTINGS
+    settingsResponseStatusCode = 200
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
+    skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
+    knownTestsPageIndex = 0
     infoResponse = DEFAULT_INFO_RESPONSE
     testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+    skippableSuitesResponseStatusCode = 200
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
       clearTimeout(this.waitingTimeoutId)
     }
     waitingTime = 0
     return super.stop()
+  }
+
+  // Gather payloads while childProcess runs, then run onPayload once on the
+  // accumulated buffer after the child emits `'exit'` plus `gracePeriod` ms of HTTP
+  // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
+  // only when a workload's child runtime is provably above the default.
+  /**
+   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
+   *   so a child that has already exited is handled correctly.
+   * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy
+   *   accepts everything.
+   * @param {(payloads: object[]) => void} onPayload Assertion callback, invoked once
+   *   on the post-exit buffer. Callers can read `childProcess.exitCode` immediately
+   *   after the returned promise resolves.
+   * @param {{ gracePeriod?: number, hardTimeout?: number }} [options]
+   */
+  gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
+    const { gracePeriod = 1000, hardTimeout = 30_000 } = options
+    const payloads = []
+
+    return new Promise((resolve, reject) => {
+      let settled = false
+      let graceTimer = null
+
+      const cleanup = () => {
+        settled = true
+        this.off('message', messageHandler)
+        childProcess.off('exit', exitHandler)
+        clearTimeout(hardTimer)
+        clearTimeout(graceTimer)
+      }
+
+      const messageHandler = (message) => {
+        if (settled) return
+        if (!payloadMatch || payloadMatch(message)) {
+          payloads.push(message)
+        }
+      }
+
+      const exitHandler = () => {
+        if (settled) return
+        // Hung-child backstop is moot once the child has exited; only the
+        // grace period applies from here. Without this, a child exiting
+        // close to `hardTimeout` races the grace timer and rejects with a
+        // wrong "child still running" message instead of running the
+        // assertion.
+        clearTimeout(hardTimer)
+        graceTimer = setTimeout(() => {
+          if (settled) return
+          if (payloads.length === 0) {
+            cleanup()
+            reject(new Error(
+              'gatherPayloadsUntilChildExit: child exited with no matching payloads ' +
+              `(after ${gracePeriod}ms grace period)`
+            ))
+            return
+          }
+          try {
+            onPayload(payloads)
+            cleanup()
+            resolve()
+          } catch (error) {
+            cleanup()
+            reject(error)
+          }
+        }, gracePeriod)
+      }
+
+      const hardTimer = setTimeout(() => {
+        if (settled) return
+        cleanup()
+        reject(new Error(
+          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)`
+        ))
+      }, hardTimeout)
+
+      this.on('message', messageHandler)
+
+      // Child may already have exited (very fast spawn-and-die).
+      if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+        queueMicrotask(exitHandler)
+      } else {
+        childProcess.once('exit', exitHandler)
+      }
+    })
   }
 
   // Similar to gatherPayloads but resolves if enough payloads have been gathered
@@ -351,7 +492,8 @@ class FakeCiVisIntake extends FakeAgent {
             this.off('message', messageHandler)
             resolve()
           } catch (e) {
-            // we'll try again when a new payload arrives
+            // Assertion not yet satisfied — we'll try again when a new payload arrives.
+            // The timeout handler will re-run onPayload and reject with the actual error.
           }
         }
       }

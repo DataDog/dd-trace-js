@@ -13,11 +13,23 @@ const log = require('../../log')
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
+const {
+  getMaxAttempts,
+  getRetryDelay,
+  isRetriableNetworkError,
+  markEndpointReached,
+} = require('./retry')
 
-const maxActiveRequests = 8
+const legacyStorage = storage('legacy')
 
-let activeRequests = 0
+const maxActiveBufferSize = 1024 * 1024 * 64
 
+let activeBufferSize = 0
+
+/**
+ * @param {string|URL|object} urlObjOrString
+ * @returns {object}
+ */
 function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
@@ -33,6 +45,11 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
+/**
+ * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {object} options
+ * @param {(error: Error|null, result: string, statusCode: number) => void} callback
+ */
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
@@ -50,7 +67,22 @@ function request (data, options, callback) {
     }
   }
 
-  const isReadable = data instanceof Readable
+  if (data instanceof Readable) {
+    const chunks = []
+
+    data
+      .on('data', (data) => {
+        chunks.push(data)
+      })
+      .on('end', () => {
+        request(Buffer.concat(chunks), options, callback)
+      })
+      .on('error', (err) => {
+        callback(err)
+      })
+
+    return
+  }
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -58,18 +90,18 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
   let dataArray = data
 
-  if (!isReadable) {
-    if (!Array.isArray(data)) {
-      dataArray = [data]
-    }
-    options.headers['Content-Length'] = byteLength(dataArray)
+  if (!Array.isArray(data)) {
+    dataArray = [data]
   }
+  options.headers['Content-Length'] = byteLength(dataArray)
 
   docker.inject(options.headers)
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = (res, finalize) => {
+    markEndpointReached(options)
+
     const chunks = []
 
     res.setTimeout(timeout)
@@ -88,13 +120,13 @@ function request (data, options, callback) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               log.error('Could not gunzip response: %s', err.message)
-              callback(null, '', res.statusCode)
+              callback(null, '', res.statusCode, res.headers)
             } else {
-              callback(null, result.toString(), res.statusCode)
+              callback(null, result.toString(), res.statusCode, res.headers)
             }
           })
         } else {
-          callback(null, buffer.toString(), res.statusCode)
+          callback(null, buffer.toString(), res.statusCode, res.headers)
         }
       } else {
         let errorMessage = ''
@@ -115,66 +147,65 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        callback(error, null, res.statusCode)
+        callback(error, null, res.statusCode, res.headers)
       }
     })
   }
 
-  const makeRequest = onError => {
+  // Retries always run via setTimeout so the AsyncLocalStorage store survives
+  // the gap before socket.connect(); ALS.run() does not call ALS.enterWith()
+  // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
+  const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
       return callback(null)
     }
 
-    activeRequests++
+    activeBufferSize += options.headers['Content-Length'] ?? 0
 
-    const store = storage('legacy').getStore()
-    storage('legacy').enterWith({ noop: true })
-
-    let finished = false
-    const finalize = () => {
-      if (finished) return
-      finished = true
-      activeRequests--
-    }
-
-    const req = client.request(options, (res) => onResponse(res, finalize))
-
-    req.once('close', finalize)
-    req.once('timeout', finalize)
-
-    req.once('error', err => {
-      finalize()
-      onError(err)
-    })
-
-    req.setTimeout(timeout, () => {
-      try {
-        if (typeof req.abort === 'function') {
-          req.abort()
-        } else {
-          req.destroy()
-        }
-      } catch {
-        // ignore
+    legacyStorage.run({ noop: true }, () => {
+      let finished = false
+      const finalize = () => {
+        if (finished) return
+        finished = true
+        activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
-    })
 
-    if (isReadable) {
-      data.pipe(req) // TODO: Validate whether this is actually retriable.
-    } else {
+      const req = client.request(options, (res) => onResponse(res, finalize))
+
+      req.once('close', finalize)
+      req.once('timeout', finalize)
+
+      req.once('error', error => {
+        finalize()
+        if (attemptIndex < getMaxAttempts(options) && isRetriableNetworkError(error)) {
+          // Unref so a pending retry never keeps the host process alive past
+          // its natural exit point; long-running apps still retry because the
+          // event loop is held open by their own work.
+          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+        } else {
+          callback(error)
+        }
+      })
+
+      req.setTimeout(timeout, () => {
+        try {
+          if (typeof req.abort === 'function') {
+            req.abort()
+          } else {
+            req.destroy()
+          }
+        } catch {
+          // ignore
+        }
+      })
+
       for (const buffer of dataArray) req.write(buffer)
       req.end()
-    }
-
-    storage('legacy').enterWith(store)
+    })
   }
 
-  // TODO: Figure out why setTimeout is needed to avoid losing the async context
-  // in the retry request before socket.connect() is called.
-  // TODO: Test that this doesn't trace itself on retry when the diagnostics
-  // channel events are available in the agent exporter.
-  makeRequest(() => setTimeout(() => makeRequest(callback)))
+  attempt(1)
 }
 
 function byteLength (data) {
@@ -183,7 +214,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeRequests < maxActiveRequests
+    return activeBufferSize < maxActiveBufferSize
   },
 })
 

@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const { before, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 describe('Endpoints collection', () => {
   let cwd
@@ -138,21 +138,26 @@ describe('Endpoints collection', () => {
 
       const expectedMessageCount = framework === 'express' ? 7 : 4
 
-      const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
-        isFirstFlags.push(Boolean(payload.payload.is_first))
+      const telemetryPromise = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          isFirstFlags.push(Boolean(payload.payload.is_first))
 
-        if (payload.payload.endpoints) {
-          payload.payload.endpoints.forEach(endpoint => {
-            endpointsFound.push({
-              method: endpoint.method,
-              path: endpoint.path,
-              type: endpoint.type,
-              operation_name: endpoint.operation_name,
-              resource_name: endpoint.resource_name,
+          if (payload.payload.endpoints) {
+            payload.payload.endpoints.forEach(endpoint => {
+              endpointsFound.push({
+                method: endpoint.method,
+                path: endpoint.path,
+                type: endpoint.type,
+                operation_name: endpoint.operation_name,
+                resource_name: endpoint.resource_name,
+              })
             })
-          })
-        }
-      }, 'app-endpoints', 5_000, expectedMessageCount)
+          }
+        },
+        requestType: 'app-endpoints',
+        timeout: 5_000,
+        expectedMessageCount,
+      })
 
       proc = await spawnProc(appFile, {
         cwd,
@@ -175,10 +180,11 @@ describe('Endpoints collection', () => {
           e.method === expected.method && e.path === expected.path
         )
 
-        assert.ok(found)
-        assert.strictEqual(found.type, 'REST')
-        assert.strictEqual(found.operation_name, expectedOperationName)
-        assert.strictEqual(found.resource_name, `${expected.method} ${expected.path}`)
+        assertObjectContains(found, {
+          type: 'REST',
+          operation_name: expectedOperationName,
+          resource_name: `${expected.method} ${expected.path}`,
+        })
       })
 
       // check that no additional endpoints were found
@@ -193,7 +199,7 @@ describe('Endpoints collection', () => {
         assert.strictEqual(invalidEndpoints.length, 0, 'Invalid router paths should not be collected')
       }
     } finally {
-      proc?.kill()
+      await stopProc(proc)
       await agent?.stop()
     }
   }

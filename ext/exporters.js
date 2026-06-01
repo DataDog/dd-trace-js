@@ -2,6 +2,7 @@
 module.exports = {
   LOG: 'log',
   AGENT: 'agent',
+  AGENTLESS: 'agentless',
   DATADOG: 'datadog',
   AGENT_PROXY: 'agent_proxy',
   JEST_WORKER: 'jest_worker',
@@ -9,4 +10,5 @@ module.exports = {
   MOCHA_WORKER: 'mocha_worker',
   PLAYWRIGHT_WORKER: 'playwright_worker',
   VITEST_WORKER: 'vitest_worker',
+  ELECTRON: 'electron',
 }

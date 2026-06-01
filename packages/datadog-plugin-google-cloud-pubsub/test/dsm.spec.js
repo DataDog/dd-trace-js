@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -30,7 +32,7 @@ describe('Plugin', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
@@ -45,10 +47,7 @@ describe('Plugin', () => {
         let consume
 
         before(async () => {
-          tracer = require('../../dd-trace')
-          await agent.load('google-cloud-pubsub', {
-            dsmEnabled: true,
-          })
+          tracer = await agent.load('google-cloud-pubsub', { dsmEnabled: true })
           tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -65,17 +64,20 @@ describe('Plugin', () => {
 
           const dsmFullTopic = `projects/${project}/topics/${dsmTopicName}`
 
+          const phash = propagationHash.getHash()
           expectedProducerHash = computePathwayHash(
             'test',
             'tester',
             ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            ENTRY_PARENT_HASH
+            ENTRY_PARENT_HASH,
+            phash
           )
           expectedConsumerHash = computePathwayHash(
             'test',
             'tester',
             ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            expectedProducerHash
+            expectedProducerHash,
+            phash
           )
         })
 
@@ -99,7 +101,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(statsPointsReceived >= 1)
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
           })
@@ -117,7 +119,7 @@ describe('Plugin', () => {
                     })
                   }
                 })
-                assert.ok(statsPointsReceived >= 2)
+                assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
                 assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
               }, { timeoutMs: TIMEOUT })
             })
@@ -137,14 +139,20 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(
+              recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(
+                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+              )
             })
           })
         })

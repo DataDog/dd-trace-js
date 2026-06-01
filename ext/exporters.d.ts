@@ -1,6 +1,7 @@
 declare const exporters: {
   LOG: 'log',
   AGENT: 'agent',
+  AGENTLESS: 'agentless',
   DATADOG: 'datadog',
   AGENT_PROXY: 'agent_proxy',
   JEST_WORKER: 'jest_worker',

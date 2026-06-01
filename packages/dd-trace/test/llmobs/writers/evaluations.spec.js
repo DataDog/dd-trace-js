@@ -29,7 +29,7 @@ describe('LLMObsEvalMetricsWriter', () => {
 
     writer.flush = flush // just to stop the beforeExit flush call
 
-    assert.strictEqual(writer.url, 'https://api.datadoghq.com/api/intake/llm-obs/v1/eval-metric')
+    assert.strictEqual(writer.url, 'https://api.datadoghq.com/api/intake/llm-obs/v2/eval-metric')
     assert.strictEqual(writer._eventType, 'evaluation_metric')
   })
 
@@ -39,7 +39,7 @@ describe('LLMObsEvalMetricsWriter', () => {
       hostname: 'localhost',
     })
     writer.setAgentless(false)
-    assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
+    assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric')
     assert.strictEqual(writer._eventType, 'evaluation_metric')
   })
 

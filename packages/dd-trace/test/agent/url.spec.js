@@ -2,12 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('url')
+const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
 
 require('../setup/core')
 const { getAgentUrl } = require('../../src/agent/url')
-const defaults = require('../../src/config/defaults')
+const { defaults: { hostname, port } } = require('../../src/config/defaults')
 
 describe('agent/url', () => {
   describe('getAgentUrl', () => {
@@ -41,7 +42,7 @@ describe('agent/url', () => {
 
       const result = getAgentUrl(config)
 
-      assert.strictEqual(result.hostname, defaults.hostname)
+      assert.strictEqual(result.hostname, hostname)
       assert.strictEqual(result.port, '9999')
     })
 
@@ -53,7 +54,7 @@ describe('agent/url', () => {
       const result = getAgentUrl(config)
 
       assert.strictEqual(result.hostname, 'custom-host')
-      assert.strictEqual(result.port, defaults.port)
+      assert.strictEqual(result.port, String(port))
       assert.strictEqual(result.protocol, 'http:')
     })
 
@@ -62,8 +63,8 @@ describe('agent/url', () => {
 
       const result = getAgentUrl(config)
 
-      assert.strictEqual(result.hostname, defaults.hostname)
-      assert.strictEqual(result.port, defaults.port)
+      assert.strictEqual(result.hostname, hostname)
+      assert.strictEqual(result.port, String(port))
       assert.strictEqual(result.protocol, 'http:')
     })
 
@@ -93,7 +94,7 @@ describe('agent/url', () => {
       // IPv6 addresses get wrapped in brackets by URL constructor
       assert.strictEqual(result.hostname, '[::1]')
       assert.strictEqual(result.port, '8126')
-      assert.ok(result.href.includes('[::1]:8126'))
+      assert.ok(result.href.includes('[::1]:8126'), `Got: ${inspect(result.href)}`)
     })
   })
 })

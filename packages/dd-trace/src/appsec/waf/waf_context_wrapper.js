@@ -20,9 +20,23 @@ class WAFContextWrapper {
     this.knownAddresses = knownAddresses
     this.addressesToSkip = new Set()
     this.cachedUserIdResults = new Map()
+    // Reused across run() calls; Reporter.reportMetrics consumes it synchronously.
+    this.metrics = {
+      rulesVersion,
+      wafVersion,
+      wafTimeout: false,
+      duration: 0,
+      durationExt: 0,
+      blockTriggered: false,
+      ruleTriggered: false,
+      errorCode: null,
+      maxTruncatedString: null,
+      maxTruncatedContainerSize: null,
+      maxTruncatedContainerDepth: null,
+    }
   }
 
-  run ({ persistent, ephemeral }, raspRule) {
+  run ({ persistent, ephemeral }, raspRule, req) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
       if (raspRule) {
@@ -44,7 +58,8 @@ class WAFContextWrapper {
 
     const payload = {}
     let payloadHasData = false
-    const newAddressesToSkip = new Set(this.addressesToSkip)
+    // Cloned lazily; only the preventDuplicateAddresses branch below adds to it.
+    let newAddressesToSkip
 
     if (persistent !== null && typeof persistent === 'object') {
       const persistentInputs = {}
@@ -55,6 +70,7 @@ class WAFContextWrapper {
           hasPersistentInputs = true
           persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
+            newAddressesToSkip ??= new Set(this.addressesToSkip)
             newAddressesToSkip.add(key)
           }
         }
@@ -85,19 +101,16 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
-    const metrics = {
-      rulesVersion: this.rulesVersion,
-      wafVersion: this.wafVersion,
-      wafTimeout: false,
-      duration: 0,
-      durationExt: 0,
-      blockTriggered: false,
-      ruleTriggered: false,
-      errorCode: null,
-      maxTruncatedString: null,
-      maxTruncatedContainerSize: null,
-      maxTruncatedContainerDepth: null,
-    }
+    const metrics = this.metrics
+    metrics.wafTimeout = false
+    metrics.duration = 0
+    metrics.durationExt = 0
+    metrics.blockTriggered = false
+    metrics.ruleTriggered = false
+    metrics.errorCode = null
+    metrics.maxTruncatedString = null
+    metrics.maxTruncatedContainerSize = null
+    metrics.maxTruncatedContainerDepth = null
 
     try {
       const start = process.hrtime.bigint()
@@ -106,7 +119,7 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
-      metrics.durationExt = Number.parseInt(end - start) / 1e3
+      metrics.durationExt = Number(end - start) / 1e3
 
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         const error = new Error('WAF code error')
@@ -123,7 +136,9 @@ class WAFContextWrapper {
         if (maxTruncatedContainerDepth) metrics.maxTruncatedContainerDepth = maxTruncatedContainerDepth
       }
 
-      this.addressesToSkip = newAddressesToSkip
+      if (newAddressesToSkip !== undefined) {
+        this.addressesToSkip = newAddressesToSkip
+      }
 
       const ruleTriggered = !!result.events?.length
 
@@ -141,10 +156,10 @@ class WAFContextWrapper {
       metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(result)
+        Reporter.reportAttack(result, req)
       }
 
-      Reporter.reportAttributes(result.attributes)
+      Reporter.reportAttributes(result.attributes, req)
 
       return result
     } catch (err) {
@@ -156,7 +171,7 @@ class WAFContextWrapper {
         wafRunFinished.publish({ payload })
       }
 
-      Reporter.reportMetrics(metrics, raspRule)
+      Reporter.reportMetrics(metrics, raspRule, req)
     }
   }
 

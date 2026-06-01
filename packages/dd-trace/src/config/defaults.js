@@ -1,221 +1,335 @@
 'use strict'
 
-const pkg = require('../pkg')
-const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../constants')
-const { getEnvironmentVariable: getEnv } = require('./helper')
+const dns = require('dns')
+const util = require('util')
 
-// eslint-disable-next-line @stylistic/max-len
-const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
-// eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt`
-// eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
+const { DD_MAJOR } = require('../../../../version')
+const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const applyMajorOverrides = require('./major-overrides')
+const {
+  supportedConfigurations,
+} = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
-const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
-  getEnv('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
-  getEnv('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
-  getEnv('WEBSITE_SITE_NAME') || // set by Azure Functions
-  pkg.name ||
-  'node'
+applyMajorOverrides(supportedConfigurations, DD_MAJOR)
+
+let log
+let seqId = 0
+const configWithOrigin = new Map()
+const parseErrors = new Map()
+
+/**
+ * Warns about an invalid value for an option and adds the error to the last telemetry entry if it is not already set.
+ * Logging happens only if the error is not already set or the option name is different from the last telemetry entry.
+ *
+ * @param {unknown} value - The value that is invalid.
+ * @param {string} optionName - The name of the option.
+ * @param {string} source - The source of the value.
+ * @param {string} baseMessage - The base message to use for the warning.
+ * @param {Error} [error] - An error that was thrown while parsing the value.
+ */
+function warnInvalidValue (value, optionName, source, baseMessage, error) {
+  const canonicalName = (optionsTable[optionName]?.canonicalName ?? optionName) + source
+  // Lazy load log module to avoid circular dependency
+  if (!parseErrors.has(canonicalName)) {
+    // TODO: Rephrase: It will fallback to former source (or default if not set)
+    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source}), picked default`
+    if (error) {
+      error.stack = error.toString()
+      message += `\n\n${util.inspect(error)}`
+    }
+    parseErrors.set(canonicalName, { message })
+    log ??= require('../log')
+    const logLevel = error ? 'error' : 'warn'
+    log[logLevel](message)
+  }
+}
+setWarnInvalidValue(warnInvalidValue)
+
+/** @type {import('./config-types').ConfigDefaults} */
+const defaults = {
+  instrumentationSource: 'manual',
+  isServiceUserProvided: false,
+  plugins: true,
+  isCiVisibility: false,
+  lookup: dns.lookup,
+  logger: undefined,
+}
+
+for (const [name, value] of Object.entries(defaults)) {
+  configWithOrigin.set(`${name}default`, {
+    name,
+    value: value ?? null,
+    origin: 'default',
+    seq_id: seqId++,
+  })
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} origin
+ * @param {string} optionName
+ */
+function generateTelemetry (value = null, origin, optionName) {
+  const tableEntry = configurationsTable[optionName]
+  const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  // TODO: Should we not send defaults to telemetry to reduce size?
+  // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
+  // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
+  // TODO: How to handle telemetry reporting for aliases?
+  if (value !== null) {
+    if (telemetryTransformers[type]) {
+      value = telemetryTransformers[type](value)
+    } else if (typeof value === 'object' && value !== null) {
+      // Custom optionsTable entries (no `configurationsTable` row, e.g. `logger`)
+      // hold opaque user-supplied references that may carry cycles, so avoid
+      // traversing them via JSON.stringify.
+      value = tableEntry === undefined
+        ? util.inspect(value, { depth: -1 })
+        : value instanceof URL ? String(value) : JSON.stringify(value)
+    } else if (typeof value === 'function') {
+      value = value.name || 'function'
+    }
+  }
+  const telemetryEntry = {
+    name: canonicalName,
+    value,
+    origin,
+    seq_id: seqId++,
+  }
+  const error = parseErrors.get(`${canonicalName}${origin}`)
+  if (error) {
+    parseErrors.delete(`${canonicalName}${origin}`)
+    telemetryEntry.error = error
+  }
+  configWithOrigin.set(`${canonicalName}${origin}`, telemetryEntry)
+}
+
+// Iterate over the object and always handle the leaf properties as lookup.
+// Example entries:
+//
+// cloudPayloadTagging: {
+//   nestedProperties: [
+//     'rules',
+//     'requestsEnabled',
+//     'responses',
+//   ],
+//   option: {
+//     property: 'rules',
+//     parser: parsers.JSON,
+//     canonicalName: 'DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING',
+//     transformer: transformers.toCamelCase,
+//   },
+// },
+// 'cloudPayloadTagging.responses': {
+//   nestedProperties: [
+//     'enabled',
+//   ],
+// },
+// 'cloudPayloadTagging.rules': {},
+// 'cloudPayloadTagging.requestsEnabled': {},
+// 'cloudPayloadTagging.responses.enabled': {}
+const optionsTable = {
+  // Additional properties that are not supported by the supported-configurations.json file.
+  lookup: {
+    transformer (value) {
+      if (typeof value === 'function') {
+        return value
+      }
+    },
+    property: 'lookup',
+  },
+  logger: {
+    transformer (object) {
+      // Create lazily to avoid the overhead when not used.
+      // Match at least one log level.
+      const knownLogLevels = new Set(supportedConfigurations.DD_TRACE_LOG_LEVEL[0].allowed?.split('|'))
+      if (typeof object !== 'object' || object === null) {
+        return object
+      }
+      let matched = false
+      for (const logLevel of knownLogLevels) {
+        if (object[logLevel] !== undefined) {
+          if (typeof object[logLevel] !== 'function') {
+            warnInvalidValue(object[logLevel], 'logger', 'default', `Invalid log level ${logLevel}`)
+            return
+          }
+          matched = true
+        }
+      }
+      if (matched) {
+        return object
+      }
+    },
+    property: 'logger',
+  },
+  isCiVisibility: {
+    property: 'isCiVisibility',
+  },
+  plugins: {
+    property: 'plugins',
+  },
+}
+
+const parser = (value, optionName, source) => {
+  const { type, canonicalName = optionName } = configurationsTable[optionName]
+  const parsed = parsers[type](value, canonicalName)
+  if (parsed === undefined) {
+    warnInvalidValue(value, optionName, source, `Invalid ${type} input`)
+  }
+  return parsed
+}
+
+/**
+ * @template {import('./config-types').ConfigPath} TPath
+ * @type {Partial<Record<TPath, {
+ *   property?: string,
+ *   parser: (value: unknown, optionName: string, source: string) => unknown,
+ *   canonicalName?: string,
+ *   transformer?: (value: unknown, optionName: string, source: string) => unknown,
+ *   telemetryTransformer?: (value: unknown) => unknown
+ * }>>} ConfigurationsTable
+ */
+const configurationsTable = {}
+
+// One way aliases. Must be applied in apply calculated entries.
+const fallbackConfigurations = new Map()
+
+const regExps = {}
+
+for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
+  if (entries.length !== 1) {
+    // TODO: Determine if we really want to support multiple entries for a canonical name.
+    // This would be needed to show official support for multiple diverging implementations
+    // at a time with by checking for another configuration that is not the canonical name.
+    throw new Error(
+      `Multiple entries found for canonical name: ${canonicalName}. ` +
+      'This is currently not supported and must be implemented, if needed.'
+    )
+  }
+  for (const entry of entries) {
+    const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
+    const fullPropertyName = configurationNames?.[0] ?? canonicalName
+    const type = entry.type.toUpperCase()
+
+    let transformer = transformers[entry.transform]
+    if (entry.allowed) {
+      regExps[entry.allowed] ??= new RegExp(`^(${entry.allowed})$`, 'i')
+      const allowed = regExps[entry.allowed]
+      const originalTransform = transformer
+      transformer = (value, optionName, source) => {
+        if (!allowed.test(value)) {
+          warnInvalidValue(value, optionName, source, 'Invalid value')
+          return
+        }
+        if (originalTransform) {
+          value = originalTransform(value)
+        }
+        return value
+      }
+    }
+
+    const option = { parser, type }
+
+    if (fullPropertyName !== canonicalName) {
+      option.property = fullPropertyName
+      option.canonicalName = canonicalName
+      configurationsTable[fullPropertyName] = option
+    }
+    if (transformer) {
+      option.transformer = transformer
+    }
+    if (entry.configurationNames) {
+      addOption(option, entry.configurationNames)
+    }
+    configurationsTable[canonicalName] = option
+
+    if (entry.default === null) {
+      defaults[fullPropertyName] = undefined
+    } else {
+      let parsedDefault = parser(entry.default, fullPropertyName, 'default')
+      if (entry.transform) {
+        parsedDefault = transformer(parsedDefault, fullPropertyName, 'default')
+      }
+      defaults[fullPropertyName] = parsedDefault
+    }
+    generateTelemetry(defaults[fullPropertyName], 'default', fullPropertyName)
+
+    if (entry.aliases) {
+      for (const alias of entry.aliases) {
+        if (!supportedConfigurations[alias]) {
+          // An actual alias has no matching entry
+          continue
+        }
+        if (!supportedConfigurations[alias].aliases?.includes(canonicalName)) {
+          // Alias will be replaced with the full property name of the alias, if it exists.
+          fallbackConfigurations.set(fullPropertyName, alias)
+        }
+      }
+    }
+  }
+}
+
+// Replace the alias with the canonical property name.
+for (const [fullPropertyName, alias] of fallbackConfigurations) {
+  if (configurationsTable[alias].property) {
+    fallbackConfigurations.set(fullPropertyName, configurationsTable[alias].property)
+  }
+}
+
+function addOption (option, configurationNames) {
+  for (const name of configurationNames) {
+    let index = -1
+    let lastNestedProperties
+    while (true) {
+      const nextIndex = name.indexOf('.', index + 1)
+      const intermediateName = nextIndex === -1 ? name : name.slice(0, nextIndex)
+      if (lastNestedProperties) {
+        lastNestedProperties.add(intermediateName.slice(index + 1))
+      }
+
+      if (nextIndex === -1) {
+        if (optionsTable[name]) {
+          if (optionsTable[name].nestedProperties && !optionsTable[name].option) {
+            optionsTable[name].option = option
+            break
+          }
+          throw new Error(`Duplicate configuration name: ${name}`)
+        }
+        optionsTable[name] = option
+        break
+      }
+
+      lastNestedProperties = new Set()
+      index = nextIndex
+
+      if (!optionsTable[intermediateName]) {
+        optionsTable[intermediateName] = {
+          nestedProperties: lastNestedProperties,
+        }
+      } else if (optionsTable[intermediateName].nestedProperties) {
+        lastNestedProperties = optionsTable[intermediateName].nestedProperties
+      } else {
+        optionsTable[intermediateName] = {
+          nestedProperties: lastNestedProperties,
+          option: optionsTable[intermediateName],
+        }
+      }
+    }
+  }
+}
 
 module.exports = {
-  apiKey: undefined,
-  appKey: undefined,
-  apmTracingEnabled: true,
-  'appsec.apiSecurity.enabled': true,
-  'appsec.apiSecurity.sampleDelay': 30,
-  'appsec.apiSecurity.endpointCollectionEnabled': true,
-  'appsec.apiSecurity.endpointCollectionMessageLimit': 300,
-  'appsec.blockedTemplateGraphql': undefined,
-  'appsec.blockedTemplateHtml': undefined,
-  'appsec.blockedTemplateJson': undefined,
-  'appsec.enabled': undefined,
-  'appsec.eventTracking.mode': 'identification',
-  // TODO appsec.extendedHeadersCollection is deprecated, to delete in a major
-  'appsec.extendedHeadersCollection.enabled': false,
-  'appsec.extendedHeadersCollection.redaction': true,
-  'appsec.extendedHeadersCollection.maxHeaders': 50,
-  'appsec.obfuscatorKeyRegex': defaultWafObfuscatorKeyRegex,
-  'appsec.obfuscatorValueRegex': defaultWafObfuscatorValueRegex,
-  'appsec.rasp.enabled': true,
-  // TODO Deprecated, to delete in a major
-  'appsec.rasp.bodyCollection': false,
-  'appsec.rateLimit': 100,
-  'appsec.rules': undefined,
-  'appsec.sca.enabled': null,
-  'appsec.stackTrace.enabled': true,
-  'appsec.stackTrace.maxDepth': 32,
-  'appsec.stackTrace.maxStackTraces': 2,
-  'appsec.wafTimeout': 5e3, // µs
-  baggageMaxBytes: 8192,
-  baggageMaxItems: 64,
-  baggageTagKeys: 'user.id,session.id,account.id',
-  clientIpEnabled: false,
-  clientIpHeader: null,
-  'cloudPayloadTagging.requestsEnabled': false,
-  'cloudPayloadTagging.responsesEnabled': false,
-  'cloudPayloadTagging.maxDepth': 10,
-  'cloudPayloadTagging.rules': [],
-  'crashtracking.enabled': true,
-  'codeOriginForSpans.enabled': true,
-  'codeOriginForSpans.experimental.exit_spans.enabled': false,
-  dbmPropagationMode: 'disabled',
-  'dogstatsd.hostname': '127.0.0.1',
-  'dogstatsd.port': '8125',
-  dsmEnabled: false,
-  'dynamicInstrumentation.captureTimeoutMs': 15,
-  'dynamicInstrumentation.enabled': false,
-  'dynamicInstrumentation.probeFile': undefined,
-  'dynamicInstrumentation.redactedIdentifiers': [],
-  'dynamicInstrumentation.redactionExcludedIdentifiers': [],
-  'dynamicInstrumentation.uploadIntervalSeconds': 1,
-  env: undefined,
-  'experimental.aiguard.enabled': false,
-  'experimental.aiguard.endpoint': undefined,
-  'experimental.aiguard.maxMessagesLength': 16,
-  'experimental.aiguard.maxContentSize': 512 * 1024,
-  'experimental.aiguard.timeout': 10_000, // ms
-  'experimental.enableGetRumData': false,
-  'experimental.exporter': undefined,
-  'experimental.flaggingProvider.enabled': false,
-  'experimental.flaggingProvider.initializationTimeoutMs': 30_000,
-  flushInterval: 2000,
-  flushMinSpans: 1000,
-  gitMetadataEnabled: true,
-  graphqlErrorExtensions: [],
-  'grpc.client.error.statuses': GRPC_CLIENT_ERROR_STATUSES,
-  'grpc.server.error.statuses': GRPC_SERVER_ERROR_STATUSES,
-  headerTags: [],
-  'heapSnapshot.count': 0,
-  'heapSnapshot.destination': '',
-  'heapSnapshot.interval': 3600,
-  hostname: '127.0.0.1',
-  'iast.dbRowsToTaint': 1,
-  'iast.deduplicationEnabled': true,
-  'iast.enabled': false,
-  'iast.maxConcurrentRequests': 2,
-  'iast.maxContextOperations': 2,
-  'iast.redactionEnabled': true,
-  'iast.redactionNamePattern': null,
-  'iast.redactionValuePattern': null,
-  'iast.requestSampling': 30,
-  'iast.securityControlsConfiguration': null,
-  'iast.telemetryVerbosity': 'INFORMATION',
-  'iast.stackTrace.enabled': true,
-  injectionEnabled: [],
-  'installSignature.id': null,
-  'installSignature.time': null,
-  'installSignature.type': null,
-  instrumentationSource: 'manual',
-  injectForce: null,
-  isAzureFunction: false,
-  isCiVisibility: false,
-  isEarlyFlakeDetectionEnabled: false,
-  isFlakyTestRetriesEnabled: false,
-  flakyTestRetriesCount: 5,
-  isGCPFunction: false,
-  isGCPPubSubPushSubscriptionEnabled: true,
-  isGitUploadEnabled: false,
-  isIntelligentTestRunnerEnabled: false,
-  isManualApiEnabled: false,
-  'langchain.spanCharLimit': 128,
-  'langchain.spanPromptCompletionSampleRate': 1,
-  'llmobs.agentlessEnabled': undefined,
-  'llmobs.enabled': false,
-  'llmobs.mlApp': undefined,
-  ciVisibilityTestSessionName: '',
-  ciVisAgentlessLogSubmissionEnabled: false,
-  legacyBaggageEnabled: true,
-  isTestDynamicInstrumentationEnabled: false,
-  isServiceUserProvided: false,
-  testManagementAttemptToFixRetries: 20,
-  isTestManagementEnabled: false,
-  isImpactedTestsEnabled: false,
-  logInjection: true,
-  otelLogsEnabled: false,
-  otelUrl: undefined,
-  otelLogsUrl: undefined, // Will be computed using agent host
-  otelHeaders: undefined,
-  otelLogsHeaders: '',
-  otelProtocol: 'http/protobuf',
-  otelLogsProtocol: 'http/protobuf',
-  otelLogsTimeout: 10_000,
-  otelTimeout: 10_000,
-  otelBatchTimeout: 5000,
-  otelMaxExportBatchSize: 512,
-  otelMaxQueueSize: 2048,
-  otelMetricsEnabled: false,
-  otelMetricsUrl: undefined, // Will be computed using agent host
-  otelMetricsHeaders: '',
-  otelMetricsProtocol: 'http/protobuf',
-  otelMetricsTimeout: 10_000,
-  otelMetricsExportTimeout: 7500,
-  otelMetricsExportInterval: 10_000,
-  otelMetricsTemporalityPreference: 'DELTA', // DELTA, CUMULATIVE, or LOWMEMORY
-  lookup: undefined,
-  inferredProxyServicesEnabled: false,
-  memcachedCommandEnabled: false,
-  middlewareTracingEnabled: true,
-  openAiLogsEnabled: false,
-  'openai.spanCharLimit': 128,
-  peerServiceMapping: {},
-  plugins: true,
-  port: '8126',
-  'profiling.enabled': undefined,
-  'propagateProcessTags.enabled': undefined,
-  'profiling.exporters': 'agent',
-  'profiling.sourceMap': true,
-  'profiling.longLivedThreshold': undefined,
-  protocolVersion: '0.4',
-  queryStringObfuscation: qsRegex,
-  'remoteConfig.enabled': true,
-  'remoteConfig.pollInterval': 5, // seconds
-  reportHostname: false,
-  resourceRenamingEnabled: false,
-  'runtimeMetrics.enabled': false,
-  'runtimeMetrics.eventLoop': true,
-  'runtimeMetrics.gc': true,
-  runtimeMetricsRuntimeId: false,
-  sampleRate: undefined,
-  'sampler.rateLimit': 100,
-  'sampler.rules': [],
-  'sampler.spanSamplingRules': [],
-  scope: undefined,
-  service,
-  serviceMapping: {},
-  site: 'datadoghq.com',
-  spanAttributeSchema: 'v0',
-  spanComputePeerService: false,
-  spanLeakDebug: 0,
-  spanRemoveIntegrationFromService: false,
-  startupLogs: false,
-  'stats.enabled': false,
-  tags: {},
-  tagsHeaderMaxLength: 512,
-  'telemetry.debug': false,
-  'telemetry.dependencyCollection': true,
-  'telemetry.enabled': true,
-  'telemetry.heartbeatInterval': 60_000,
-  'telemetry.logCollection': true,
-  'telemetry.metrics': true,
-  traceEnabled: true,
-  traceId128BitGenerationEnabled: true,
-  traceId128BitLoggingEnabled: true,
-  tracePropagationExtractFirst: false,
-  tracePropagationBehaviorExtract: 'continue',
-  'tracePropagationStyle.inject': ['datadog', 'tracecontext', 'baggage'],
-  'tracePropagationStyle.extract': ['datadog', 'tracecontext', 'baggage'],
-  'tracePropagationStyle.otelPropagators': false,
-  traceWebsocketMessagesEnabled: true,
-  traceWebsocketMessagesInheritSampling: true,
-  traceWebsocketMessagesSeparateTraces: true,
-  tracing: true,
-  url: undefined,
-  version: pkg.version,
-  instrumentation_config_id: undefined,
-  'vertexai.spanCharLimit': 128,
-  'vertexai.spanPromptCompletionSampleRate': 1,
-  'trace.aws.addSpanPointers': true,
-  'trace.dynamoDb.tablePrimaryKeys': undefined,
-  'trace.nativeSpanEvents': false,
+  configurationsTable,
+
+  defaults,
+
+  fallbackConfigurations,
+
+  optionsTable,
+
+  configWithOrigin,
+
+  parseErrors,
+
+  generateTelemetry,
 }

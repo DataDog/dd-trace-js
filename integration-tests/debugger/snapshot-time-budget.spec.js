@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const {
   DEFAULT_MAX_COLLECTION_SIZE,
   LARGE_OBJECT_SKIP_THRESHOLD,
@@ -14,6 +15,7 @@ describe('Dynamic Instrumentation', function () {
         // Force a very small time budget in ms to trigger partial snapshots
         const budget = 1
         const t = setup({
+          testApp: 'target-app/time-budget.js',
           dependencies: ['fastify'],
           env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
@@ -35,7 +37,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       context('default time budget', function () {
-        const t = setup({ dependencies: ['fastify'] })
+        const t = setup({ testApp: 'target-app/time-budget.js', dependencies: ['fastify'] })
 
         it(
           'should timeout first, then disable subsequent snapshots and emit error diagnostics',
@@ -81,7 +83,7 @@ describe('Dynamic Instrumentation', function () {
             // Prepare to assert that no snapshot is produced on a subsequent trigger
             const secondPayloadReceived = new Promise(/** @type {() => void} */ (resolve) => {
               t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
-                assert.ok(!Object.hasOwn(snapshot, 'captures'))
+                assert.ok(!Object.hasOwn(snapshot, 'captures'), `Available keys: ${inspect(Object.keys(snapshot))}`)
                 assert.deepStrictEqual(snapshot.evaluationErrors, expectedEvaluationErrors)
                 resolve()
               })
@@ -105,6 +107,7 @@ describe('Dynamic Instrumentation', function () {
         // that the tests should not be flaky, but still fail if the thresholds are not applied.
         const budget = 100
         const t = setup({
+          testApp: 'target-app/time-budget.js',
           dependencies: ['fastify'],
           env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
@@ -157,6 +160,7 @@ describe('Dynamic Instrumentation', function () {
             this.timeout(2000)
 
             const t = setup({
+              testApp: 'target-app/time-budget.js',
               dependencies: ['fastify'],
               env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
             })

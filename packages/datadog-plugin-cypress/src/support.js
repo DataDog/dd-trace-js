@@ -1,5 +1,8 @@
 'use strict'
 
+const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
+let rumFlushWaitMillis = 500
+
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
@@ -12,13 +15,48 @@ let isModifiedTest = false
 let isTestIsolationEnabled = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
-// Track quarantined test errors - we catch them in Cypress.on('fail') but need to report to Datadog
-const quarantinedTestErrors = new Map()
+// Track test errors suppressed by test management so we can still report them to Datadog.
+const suppressedTestFailures = new Map()
 
-// We need to grab the original window as soon as possible,
-// in case the test changes the origin. If the test does change the origin,
-// any call to `cy.window()` will result in a cross origin error.
+// Track the most recently loaded window in the AUT. Updated via the 'window:load'
+// event so we always get the real app window (after cy.visit()), not the
+// about:blank window that exists when beforeEach runs. If the test later navigates
+// to a cross-origin URL, safeGetRum() handles the access error.
 let originalWindow
+
+let currentTestCommands = []
+const commandStartTimes = new Map()
+const INTERNAL_CYPRESS_COMMANDS = new Set(['wrap', 'then', 'noop'])
+
+Cypress.on('command:start', (command) => {
+  commandStartTimes.set(command.get('id'), { startTime: Date.now(), name: command.get('name') })
+})
+
+Cypress.on('command:end', (command) => {
+  const id = command.get('id')
+  const entry = commandStartTimes.get(id)
+  commandStartTimes.delete(id)
+
+  const name = command.get('name')
+  const args = command.get('args')
+  if (name === 'task' && args && typeof args[0] === 'string' && args[0].startsWith('dd:')) {
+    return
+  }
+  if (INTERNAL_CYPRESS_COMMANDS.has(name)) {
+    return
+  }
+  if (entry == null) {
+    return
+  }
+  const err = command.get('err')
+  currentTestCommands.push({
+    name,
+    startTime: entry.startTime,
+    endTime: Date.now(),
+    // Serialize the error to a plain object so it survives cy.task JSON transport.
+    error: err ? { message: err.message, stack: err.stack, name: err.name } : null,
+  })
+})
 
 // If the test is using multi domain with cy.origin, trying to access
 // window properties will result in a cross origin error.
@@ -52,23 +90,43 @@ function getTestProperties (testName) {
 // By not re-throwing the error, Cypress marks the test as passed
 // This allows quarantined tests to run but not affect the exit code
 Cypress.on('fail', (err, runnable) => {
+  // For commands that time out, command:end may never fire.
+  // Finalize any in-flight commands so their step spans carry the error.
+  const hadInFlightCommands = commandStartTimes.size > 0
+  for (const [, { startTime, name }] of commandStartTimes) {
+    if (INTERNAL_CYPRESS_COMMANDS.has(name)) continue
+    currentTestCommands.push({
+      name,
+      startTime,
+      endTime: Date.now(),
+      error: { message: err.message, stack: err.stack, name: err.name },
+    })
+  }
+  commandStartTimes.clear()
+
+  // If command:end fired for all commands (none in-flight) but the last command
+  // has no error, it means command:end fired before the error was attached to it.
+  if (!hadInFlightCommands && currentTestCommands.length > 0) {
+    const lastCommand = currentTestCommands[currentTestCommands.length - 1]
+    if (!lastCommand.error) {
+      lastCommand.error = { message: err.message, stack: err.stack, name: err.name }
+    }
+  }
+
   if (!isTestManagementEnabled) {
     throw err
   }
 
   const testName = runnable.fullTitle()
-  const { isQuarantined, isAttemptToFix } = getTestProperties(testName)
+  const { isAttemptToFix, isQuarantined, isDisabled } = getTestProperties(testName)
 
-  // For pure quarantined tests (not attemptToFix), suppress the failure
-  // This makes the test "pass" from Cypress's perspective while we still track the error
-  if (isQuarantined && !isAttemptToFix) {
-    // Store the error so we can report it to Datadog in afterEach
-    quarantinedTestErrors.set(testName, err)
-    // Don't re-throw - this prevents Cypress from marking the test as failed
+  // Suppress failures for quarantined or disabled tests so they don't affect the exit code.
+  // Attempt-to-fix ignores quarantine/disabled suppression and keeps the normal framework result.
+  if (!isAttemptToFix && (isQuarantined || isDisabled)) {
+    suppressedTestFailures.set(testName, { error: err, isQuarantined, isDisabled })
     return
   }
 
-  // For all other tests (including attemptToFix), let the error propagate normally
   throw err
 })
 
@@ -78,6 +136,9 @@ function getRetriedTests (test, numRetries, tags) {
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     const clonedTest = test.clone()
+    if (tags.includes('_ddIsEfdRetry')) {
+      clonedTest._ddEfdRetryIndex = retryIndex + 1
+    }
     for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
@@ -165,17 +226,57 @@ beforeEach(function () {
     retryReasonsByTestName.delete(testName)
   }
 
+  currentTestCommands = []
+  commandStartTimes.clear()
+
+  cy.on('window:load', (win) => {
+    originalWindow = win
+  })
+
   cy.task('dd:beforeEach', {
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
-  }).then(({ traceId, shouldSkip }) => {
-    Cypress.env('traceId', traceId)
+    isEfdRetry: Cypress.mocha.getRunner().suite.ctx.currentTest._ddIsEfdRetry,
+    efdRetryIndex: Cypress.mocha.getRunner().suite.ctx.currentTest._ddEfdRetryIndex,
+  }).then(({ traceId, shouldSkip, shouldDiscard }) => {
+    if (shouldDiscard) {
+      this.currentTest._ddShouldDiscard = true
+    }
+    if (traceId) {
+      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId).then(() => {
+        // When testIsolation:false, the page is not reset between tests, so the RUM session
+        // stopped in afterEach must be explicitly restarted so events in this test are
+        // associated with the new testExecutionId.
+        //
+        // After stopSession(), the RUM SDK creates a new session upon a user interaction
+        // (click, scroll, keydown, or touchstart). We dispatch a synthetic click on the window
+        // to trigger session renewal, then call startView() to establish a view boundary.
+        if (!isTestIsolationEnabled && originalWindow) {
+          const rum = safeGetRum(originalWindow)
+          if (rum) {
+            try {
+              const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
+              // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
+              // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
+              // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
+              Object.defineProperty(evt, '__ddIsTrusted', { value: true })
+              originalWindow.dispatchEvent(evt)
+            } catch {}
+            if (rum.startView) {
+              rum.startView()
+            }
+          }
+        }
+      })
+    }
     if (shouldSkip) {
       this.skip()
     }
-  })
-  cy.window().then(win => {
-    originalWindow = win
+  }).then(() => {
+    // Clear any commands accumulated during DD-owned setup (e.g. setCookie, RUM restart)
+    // so they are not reported as user test steps.
+    currentTestCommands = []
+    commandStartTimes.clear()
   })
 })
 
@@ -195,6 +296,9 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
+        rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
+      }
     }
   })
 })
@@ -211,38 +315,56 @@ after(() => {
 
 afterEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  if (currentTest._ddShouldDiscard) {
+    return
+  }
   const testName = currentTest.fullTitle()
 
-  // Check if this was a quarantined test that we suppressed the failure for
-  const quarantinedError = quarantinedTestErrors.get(testName)
-  const isQuarantinedTestThatFailed = !!quarantinedError
+  // Check if this was a test management test that we suppressed the failure for.
+  const suppressedTestFailure = suppressedTestFailures.get(testName)
+  const suppressedError = suppressedTestFailure && suppressedTestFailure.error
+  const isTestManagementTestThatFailed = !!suppressedError
 
-  // For quarantined tests, convert Error to a serializable format for cy.task
-  const errorToReport = isQuarantinedTestThatFailed
-    ? { message: quarantinedError.message, stack: quarantinedError.stack }
+  // For suppressed test management tests, convert Error to a serializable format for cy.task.
+  const errorToReport = isTestManagementTestThatFailed
+    ? { message: suppressedError.message, stack: suppressedError.stack }
     : currentTest.err
 
   const testInfo = {
     testName,
+    testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
-    // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
-    state: isQuarantinedTestThatFailed ? 'failed' : currentTest.state,
-    // For quarantined tests, include the actual error that was suppressed
+    // Report the actual failed state to Datadog, not the pass state Cypress sees after suppression.
+    state: isTestManagementTestThatFailed ? 'failed' : currentTest.state,
+    // Include the actual error that was suppressed.
     error: errorToReport,
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
     isModified: currentTest._ddIsModified,
-    // Mark quarantined tests that failed so the plugin knows to tag them appropriately
-    isQuarantined: isQuarantinedTestThatFailed,
+    duration: currentTest.duration,
+    // Mark suppressed tests so the plugin can tag them with the correct test management reason.
+    isQuarantined: isTestManagementTestThatFailed && suppressedTestFailure.isQuarantined,
+    isDisabled: isTestManagementTestThatFailed && suppressedTestFailure.isDisabled,
   }
   try {
-    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    const invocationDetails = Cypress.mocha.getRunner().currentRunnable.invocationDetails
+    testInfo.testSourceLine = invocationDetails.line
+    testInfo.testSourceStack = invocationDetails.stack
   } catch {}
 
-  if (safeGetRum(originalWindow)) {
+  // Snapshot before any DD-owned Cypress commands so they are not reported as test steps.
+  const commandsToReport = [...currentTestCommands]
+
+  const rum = safeGetRum(originalWindow)
+  if (rum) {
     testInfo.isRUMActive = true
+    if (rum.stopSession) {
+      rum.stopSession()
+      // eslint-disable-next-line cypress/no-unnecessary-waiting
+      cy.wait(rumFlushWaitMillis)
+    }
   }
   let coverage
   try {
@@ -251,10 +373,10 @@ afterEach(function () {
     // ignore error and continue
   }
 
-  // Clean up the quarantined error tracking
-  if (isQuarantinedTestThatFailed) {
-    quarantinedTestErrors.delete(testName)
+  // Clean up the suppressed error tracking.
+  if (isTestManagementTestThatFailed) {
+    suppressedTestFailures.delete(testName)
   }
 
-  cy.task('dd:afterEach', { test: testInfo, coverage })
+  cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport })
 })

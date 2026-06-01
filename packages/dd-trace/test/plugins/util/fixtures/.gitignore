@@ -1,0 +1,2 @@
+# Some fixtures are log files and logs are ignored in the global `.gitignore`
+!*.log

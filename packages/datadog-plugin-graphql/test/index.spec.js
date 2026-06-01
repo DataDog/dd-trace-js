@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const { performance } = require('perf_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const dc = require('dc-polyfill')
@@ -275,7 +276,7 @@ describe('Plugin', () => {
 
           after(() => {
             server.close()
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should instrument graphql-yoga execution', done => {
@@ -320,7 +321,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withNamingSchema(
@@ -343,17 +344,17 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.service, 'test')
-              assert.strictEqual(span.name, 'graphql.parse')
-              assert.strictEqual(span.resource, 'graphql.parse')
-              assert.strictEqual(span.type, 'graphql')
-              assert.strictEqual(span.error, 0)
+            .assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                service: 'test',
+                name: 'graphql.parse',
+                resource: 'graphql.parse',
+                type: 'graphql',
+                error: 0,
+                meta: { component: 'graphql' },
+              })
               assert.ok(!('graphql.source' in span.meta))
-              assert.strictEqual(span.meta.component, 'graphql')
-            })
+            }, { spanResourceMatch: /^graphql\.parse$/ })
             .then(done)
             .catch(done)
 
@@ -365,17 +366,17 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.service, 'test')
-              assert.strictEqual(span.name, 'graphql.validate')
-              assert.strictEqual(span.resource, 'graphql.validate')
-              assert.strictEqual(span.type, 'graphql')
-              assert.strictEqual(span.error, 0)
+            .assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                service: 'test',
+                name: 'graphql.validate',
+                resource: 'graphql.validate',
+                type: 'graphql',
+                error: 0,
+                meta: { component: 'graphql' },
+              })
               assert.ok(!('graphql.source' in span.meta))
-              assert.strictEqual(span.meta.component, 'graphql')
-            })
+            }, { spanResourceMatch: /^graphql\.validate$/ })
             .then(done)
             .catch(done)
 
@@ -403,6 +404,130 @@ describe('Plugin', () => {
             .then(done)
 
           graphql.graphql({ schema, source, variableValues }).catch(done)
+        })
+
+        it('should instrument every execute even when the args object is reused', async () => {
+          const startChannel = dc.channel('apm:graphql:execute:start')
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const args = { schema, document, contextValue: {} }
+
+          let starts = 0
+          const handler = () => { starts++ }
+          startChannel.subscribe(handler)
+
+          try {
+            await graphql.execute(args)
+            await graphql.execute(args)
+            assert.strictEqual(starts, 2)
+          } finally {
+            startChannel.unsubscribe(handler)
+          }
+        })
+
+        it('should not add fieldResolver to a frozen caller-owned execute args object', async () => {
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const args = Object.freeze({ schema, document, contextValue: {} })
+
+          assert.ok(await graphql.execute(args), 'execute returned a result')
+          assert.ok(!Object.hasOwn(args, 'fieldResolver'),
+            'instrumentation must not add fieldResolver to caller args')
+        })
+
+        it('should not overwrite the caller-supplied fieldResolver on the execute args object', async () => {
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+
+          assert.ok(await graphql.execute(args), 'execute returned a result')
+          assert.strictEqual(args.fieldResolver, callerFieldResolver,
+            'instrumentation must not overwrite the caller-supplied fieldResolver')
+        })
+
+        describe('preserves the caller-supplied contextValue', () => {
+          let recordingSchema
+          let recordedContext
+
+          beforeEach(() => {
+            recordedContext = []
+            recordingSchema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({
+                name: 'Query',
+                fields: {
+                  ctx: {
+                    type: graphql.GraphQLString,
+                    resolve: (_source, _args, contextValue) => {
+                      recordedContext.push(contextValue)
+                      return 'ok'
+                    },
+                  },
+                },
+              }),
+            })
+          })
+
+          for (const contextValue of [false, 0, '', null, undefined, 42, 'request-1', Symbol('ctx')]) {
+            const label = String(contextValue) || typeof contextValue
+
+            it(`forwards ${label} to resolvers (object form)`, async () => {
+              const document = graphql.parse('{ ctx }')
+
+              const result = await graphql.execute({ schema: recordingSchema, document, contextValue })
+
+              assert.strictEqual(result.data?.ctx, 'ok')
+              assert.strictEqual(recordedContext.length, 1)
+              assert.strictEqual(recordedContext[0], contextValue,
+                'resolver must receive the caller-supplied contextValue unchanged')
+            })
+
+            // graphql >=16 dropped positional execute(); see PR 2904 below.
+            if (!semver.intersects(version, '>=16')) {
+              it(`forwards ${label} to resolvers (positional form)`, async () => {
+                const document = graphql.parse('{ ctx }')
+
+                const result = await graphql.execute(recordingSchema, document, undefined, contextValue)
+
+                assert.strictEqual(result.data?.ctx, 'ok')
+                assert.strictEqual(recordedContext.length, 1)
+                assert.strictEqual(recordedContext[0], contextValue,
+                  'resolver must receive the caller-supplied contextValue unchanged')
+              })
+            }
+          }
+
+          it('emits the execute span for a primitive contextValue', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].error, 0)
+              })
+              .then(done)
+              .catch(done)
+
+            Promise.resolve(graphql.execute({
+              schema: recordingSchema,
+              document: graphql.parse('{ ctx }'),
+              contextValue: 'request-1',
+            })).catch(done)
+          })
+
+          it('emits resolver spans for a primitive contextValue', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const resolveSpan = spans.find(span => span.name === 'graphql.resolve')
+                assert.ok(resolveSpan, 'graphql.resolve span should be emitted')
+                assert.strictEqual(resolveSpan.meta['graphql.field.name'], 'ctx')
+              })
+              .then(done)
+              .catch(done)
+
+            Promise.resolve(graphql.execute({
+              schema: recordingSchema,
+              document: graphql.parse('{ ctx }'),
+              contextValue: 42,
+            })).catch(done)
+          })
         })
 
         it('should not include variables by default', done => {
@@ -433,7 +558,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].resource, 'hello:String')
               assert.strictEqual(spans[1].type, 'graphql')
               assert.strictEqual(spans[1].error, 0)
-              assert.ok(Number(spans[1].duration) > 0)
+              assert.ok(Number(spans[1].duration) > 0, `Expected ${Number(spans[1].duration)} > 0`)
               assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
@@ -444,6 +569,39 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should trace aliased __proto__ fields with default collapsing', async () => {
+          const source = '{ hello(name: "world") __proto__: hello(name: "alias") }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+
+              assert.strictEqual(resolveSpans.length, 2)
+
+              const paths = resolveSpans
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
+
+              assert.deepStrictEqual(paths, ['__proto__', 'hello'])
+
+              for (const span of resolveSpans) {
+                assert.strictEqual(span.error, 0)
+                assert.strictEqual(span.resource, 'hello:String')
+              }
+            }),
+            graphql.graphql({ schema, source }),
+          ])
+
+          assert.ok(
+            !result.errors || result.errors.length === 0,
+            `Got errors: ${inspect(result.errors)}`
+          )
+          assert.strictEqual(result.data.hello, 'world')
+          // eslint-disable-next-line no-proto
+          assert.strictEqual(result.data.__proto__, 'alias')
         })
 
         it('should instrument each field resolver duration independently', done => {
@@ -474,13 +632,13 @@ describe('Plugin', () => {
                   }
 
                   if (span.resource === 'fastAsyncField:String') {
-                    assert.ok(fastAsyncTime < slowAsyncTime)
+                    assert.ok(fastAsyncTime < slowAsyncTime, `Expected ${fastAsyncTime} < ${slowAsyncTime}`)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    assert.ok(slowAsyncTime < syncTime)
+                    assert.ok(slowAsyncTime < syncTime, `Expected ${slowAsyncTime} < ${syncTime}`)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    assert.ok(syncTime > slowAsyncTime)
+                    assert.ok(syncTime > slowAsyncTime, `Expected ${syncTime} > ${slowAsyncTime}`)
                     foundSyncFieldSpan = true
                   }
 
@@ -541,40 +699,134 @@ describe('Plugin', () => {
               assert.strictEqual(execute.name, expectedSchema.server.opName)
               assert.strictEqual(execute.error, 0)
 
-              assert.strictEqual(human.name, 'graphql.resolve')
-              assert.strictEqual(human.resource, 'human:Human')
-              assert.strictEqual(human.error, 0)
-              assert.strictEqual(human.meta['graphql.field.path'], 'human')
+              assertObjectContains(human, {
+                name: 'graphql.resolve',
+                resource: 'human:Human',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human',
+                },
+              })
               assert.strictEqual(human.parent_id.toString(), execute.span_id.toString())
 
-              assert.strictEqual(humanName.name, 'graphql.resolve')
-              assert.strictEqual(humanName.resource, 'name:String')
-              assert.strictEqual(humanName.error, 0)
-              assert.strictEqual(humanName.meta['graphql.field.path'], 'human.name')
+              assertObjectContains(humanName, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.name',
+                },
+              })
               assert.strictEqual(humanName.parent_id.toString(), human.span_id.toString())
 
-              assert.strictEqual(address.name, 'graphql.resolve')
-              assert.strictEqual(address.resource, 'address:Address')
-              assert.strictEqual(address.error, 0)
-              assert.strictEqual(address.meta['graphql.field.path'], 'human.address')
+              assertObjectContains(address, {
+                name: 'graphql.resolve',
+                resource: 'address:Address',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.address',
+                },
+              })
               assert.strictEqual(address.parent_id.toString(), human.span_id.toString())
 
-              assert.strictEqual(addressCivicNumber.name, 'graphql.resolve')
-              assert.strictEqual(addressCivicNumber.resource, 'civicNumber:String')
-              assert.strictEqual(addressCivicNumber.error, 0)
-              assert.strictEqual(addressCivicNumber.meta['graphql.field.path'], 'human.address.civicNumber')
+              assertObjectContains(addressCivicNumber, {
+                name: 'graphql.resolve',
+                resource: 'civicNumber:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.address.civicNumber',
+                },
+              })
               assert.strictEqual(addressCivicNumber.parent_id.toString(), address.span_id.toString())
 
-              assert.strictEqual(addressStreet.name, 'graphql.resolve')
-              assert.strictEqual(addressStreet.resource, 'street:String')
-              assert.strictEqual(addressStreet.error, 0)
-              assert.strictEqual(addressStreet.meta['graphql.field.path'], 'human.address.street')
+              assertObjectContains(addressStreet, {
+                name: 'graphql.resolve',
+                resource: 'street:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.address.street',
+                },
+              })
               assert.strictEqual(addressStreet.parent_id.toString(), address.span_id.toString())
             })
             .then(done)
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('publishes resolver finish for every sibling of a collapsed list', async () => {
+          // Regression for first-wins finishTime: when a list collapses to one span,
+          // every sibling resolver must still publish on apm:graphql:resolve:updateField
+          // so the span's finishTime reflects the last sibling, not the first.
+          const updateCh = dc.channel('apm:graphql:resolve:updateField')
+          const counts = new Map()
+          const handler = (ctx) => {
+            counts.set(ctx.pathString, (counts.get(ctx.pathString) ?? 0) + 1)
+          }
+          updateCh.subscribe(handler)
+
+          try {
+            const source = '{ friends { name } }'
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const friendsName = spans.find(span => span.meta['graphql.field.path'] === 'friends.*.name')
+                assert.ok(friendsName, 'expected one collapsed friends.*.name span')
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.strictEqual(
+              counts.get('friends.*.name'),
+              2,
+              'expected one updateField publish per sibling of the 2-element friends list',
+            )
+          } finally {
+            updateCh.unsubscribe(handler)
+          }
+        })
+
+        it('publishes apm:graphql:resolve:start for every sibling of a collapsed list', async () => {
+          // The collapse knob dedupes span creation, not channel publishes. IAST
+          // taint-tracking mutates each call's own args object; if siblings 2..N
+          // skip the publish, those args objects never get tainted and a sink
+          // reached through sibling N misses the vulnerability.
+          const startCh = dc.channel('apm:graphql:resolve:start')
+          const argsByPath = new Map()
+          const handler = (ctx) => {
+            const list = argsByPath.get(ctx.pathString) ?? []
+            list.push(ctx.args)
+            argsByPath.set(ctx.pathString, list)
+          }
+          startCh.subscribe(handler)
+
+          try {
+            const source = '{ friends { name } }'
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const friendsName = spans.find(span => span.meta['graphql.field.path'] === 'friends.*.name')
+                assert.ok(friendsName, 'expected one collapsed friends.*.name span')
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            const nameArgs = argsByPath.get('friends.*.name') ?? []
+            assert.strictEqual(
+              nameArgs.length,
+              2,
+              'expected one startResolveCh publish per sibling of the 2-element friends list',
+            )
+            // graphql-js builds a fresh args object per resolver call; siblings
+            // share content but not identity. IAST mutates the passed object, so
+            // each call needs its own publish.
+            assert.notStrictEqual(nameArgs[0], nameArgs[1])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
         })
 
         it('should instrument list field resolvers', done => {
@@ -601,30 +853,75 @@ describe('Plugin', () => {
 
               assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              assert.strictEqual(friends.name, 'graphql.resolve')
-              assert.strictEqual(friends.resource, 'friends:[Human]')
-              assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assertObjectContains(friends, {
+                name: 'graphql.resolve',
+                resource: 'friends:[Human]',
+                meta: {
+                  'graphql.field.path': 'friends',
+                  'graphql.field.type': 'Human',
+                },
+              })
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-              assert.strictEqual(friendsName.name, 'graphql.resolve')
-              assert.strictEqual(friendsName.resource, 'name:String')
-              assert.strictEqual(friendsName.meta['graphql.field.path'], 'friends.*.name')
+              assertObjectContains(friendsName, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.*.name',
+                  'graphql.field.type': 'String',
+                },
+              })
               assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
 
-              assert.strictEqual(pets.name, 'graphql.resolve')
-              assert.strictEqual(pets.resource, 'pets:[Pet!]')
-              assert.strictEqual(pets.meta['graphql.field.path'], 'friends.*.pets')
+              assertObjectContains(pets, {
+                name: 'graphql.resolve',
+                resource: 'pets:[Pet!]',
+                meta: {
+                  'graphql.field.path': 'friends.*.pets',
+                  'graphql.field.type': 'Pet',
+                },
+              })
               assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
 
-              assert.strictEqual(petsName.name, 'graphql.resolve')
-              assert.strictEqual(petsName.resource, 'name:String')
-              assert.strictEqual(petsName.meta['graphql.field.path'], 'friends.*.pets.*.name')
+              assertObjectContains(petsName, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.*.pets.*.name',
+                  'graphql.field.type': 'String',
+                },
+              })
               assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
             })
             .then(done)
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('caches path strings across nested list-of-lists items', async () => {
+          // `[[Cell]]` puts two synthetic array-index nodes back-to-back; the
+          // `friends { pets { name } }` sibling has a `pets` field between.
+          const matrixSchema = graphql.buildSchema(`
+            type Cell { value: Int }
+            type Query { matrix: [[Cell]] }
+          `)
+          const rootValue = { matrix: () => [[{ value: 42 }]] }
+          const source = '{ matrix { value } }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const paths = sort(traces[0])
+                .filter(span => span.name === 'graphql.resolve')
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
+              assert.deepStrictEqual(paths, ['matrix', 'matrix.*.*.value'])
+            }),
+            graphql.graphql({ schema: matrixSchema, source, rootValue }),
+          ])
+
+          assert.ok(!result.errors || result.errors.length === 0)
+          assert.strictEqual(result.data?.matrix?.[0]?.[0]?.value, 42)
         })
 
         it('should instrument mutations', done => {
@@ -969,7 +1266,10 @@ describe('Plugin', () => {
               assert.ok(('startTime' in spanEvents[0]))
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(('stacktrace' in spanEvents[0].attributes))
+              assert.ok(
+                !Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+              )
               assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
@@ -1044,10 +1344,16 @@ describe('Plugin', () => {
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
               assert.strictEqual(spanEvents.length, 1)
-              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.ok(
+                Object.hasOwn(spanEvents[0], 'startTime'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0]))}`
+              )
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.ok(
+                Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+              )
               assert.strictEqual(spanEvents[0].attributes.message, 'test')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
               assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
@@ -1131,6 +1437,75 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
 
+        it('throws AbortError when the execute abortController is aborted before execute runs', async () => {
+          // AppSec's WAF blocks a malicious request by aborting the execute ctx
+          // on apm:graphql:execute:start. callInAsyncScope sees the signal and
+          // throws AbortError before exe runs; the field-resolver path never
+          // fires for this query.
+          const startCh = dc.channel('apm:graphql:execute:start')
+          const handler = (ctx) => {
+            ctx.abortController.abort()
+          }
+          startCh.subscribe(handler)
+
+          const source = '{ hello(name: "world") }'
+          const document = graphql.parse(source)
+
+          try {
+            const [, error] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+                assert.strictEqual(resolveSpans.length, 0, 'no resolver should run after abort')
+                const opSpan = spans.find(span => span.name === expectedSchema.server.opName)
+                assert.ok(opSpan, 'execute span still finishes')
+                assert.strictEqual(opSpan.error, 0)
+              }),
+              assert.throws(
+                () => graphql.execute({ schema, document }),
+                { name: 'AbortError', message: 'Aborted' },
+              ),
+            ])
+            assert.strictEqual(error, undefined)
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
+
+        it('throws AbortError from the next resolver when the controller aborts mid-execution', async () => {
+          // Same WAF hook as above, but the abort lands after the first
+          // resolver finished its work (apm:graphql:resolve:updateField) so
+          // callInAsyncScope's signal check is already past. resolveAsync's
+          // own signal check is the only guard that stops the second
+          // resolver from running, and assertField has already published its
+          // startResolveCh / built its TrackedField for it.
+          const updateCh = dc.channel('apm:graphql:resolve:updateField')
+          const finished = []
+          const handler = (ctx) => {
+            finished.push(ctx.pathString)
+            if (finished.length === 1) {
+              ctx.rootCtx.abortController.abort()
+            }
+          }
+          updateCh.subscribe(handler)
+
+          try {
+            const source = '{ first: hello(name: "first") second: hello(name: "second") }'
+            const result = await graphql.graphql({ schema, source })
+
+            // graphql captures the resolver throw into result.errors; the
+            // first resolver runs to completion, the second hits the abort
+            // branch.
+            assert.ok(result.errors, 'expected an AbortError surfaced through result.errors')
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+            assert.strictEqual(result.errors[0].originalError?.message, 'Aborted')
+            assert.deepStrictEqual(finished.sort(), ['first', 'second'])
+          } finally {
+            updateCh.unsubscribe(handler)
+          }
+        })
+
         it('should support multiple executions with the same contextValue', done => {
           const schema = graphql.buildSchema(`
             type Query {
@@ -1155,10 +1530,8 @@ describe('Plugin', () => {
         it('should support multiple executions on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
-          assert.doesNotThrow(() => {
-            graphql.execute({ schema, document })
-            graphql.execute({ schema, document })
-          })
+          graphql.execute({ schema, document })
+          graphql.execute({ schema, document })
         })
 
         it('should not fail without directives in the document ' +
@@ -1172,9 +1545,7 @@ describe('Plugin', () => {
           dc.channel('datadog:graphql:resolver:start').subscribe(noop)
 
           try {
-            assert.doesNotThrow(() => {
-              graphql.execute({ schema, document })
-            })
+            graphql.execute({ schema, document })
           } finally {
             dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
           }
@@ -1184,10 +1555,8 @@ describe('Plugin', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
 
-          assert.doesNotThrow(() => {
-            graphql.validate(schema, document)
-            graphql.validate(schema, document)
-          })
+          graphql.validate(schema, document)
+          graphql.validate(schema, document)
         })
 
         it('should support multi-operations documents', done => {
@@ -1352,13 +1721,13 @@ describe('Plugin', () => {
 
           return agent.load('graphql', {
             service: 'custom',
-            variables: variables => Object.assign({}, variables, { who: 'REDACTED' }),
+            variables: variables => ({ ...variables, who: 'REDACTED' }),
             source: true,
           })
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1421,7 +1790,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1459,7 +1828,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1529,7 +1898,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1571,6 +1940,51 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source }).catch(done)
         })
+
+        it('publishes apm:graphql:resolve:start for every resolver, including depth-gated ones', async () => {
+          // The depth knob caps span creation, not channel publishes.
+          // IAST taint-tracking and AppSec WAF subscribers run on every resolver
+          // call so user-controlled args at any depth still flow through.
+          const startCh = dc.channel('apm:graphql:resolve:start')
+          const paths = []
+          const handler = (ctx) => {
+            paths.push(ctx.pathString)
+          }
+          startCh.subscribe(handler)
+
+          try {
+            const source = `
+              {
+                human {
+                  name
+                  address {
+                    civicNumber
+                    street
+                  }
+                }
+              }
+            `
+            const [, result] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                const tracedPaths = spans.map(span => span.meta['graphql.field.path']).sort()
+                assert.deepStrictEqual(tracedPaths, ['human', 'human.address', 'human.name'])
+              }),
+              graphql.graphql({ schema, source }),
+            ])
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.deepStrictEqual(paths.sort(), [
+              'human',
+              'human.address',
+              'human.address.civicNumber',
+              'human.address.street',
+              'human.name',
+            ])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
       })
 
       describe('with collapsing disabled', () => {
@@ -1581,7 +1995,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1605,20 +2019,107 @@ describe('Plugin', () => {
 
               assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              assert.strictEqual(friends.name, 'graphql.resolve')
-              assert.strictEqual(friends.resource, 'friends:[Human]')
-              assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assertObjectContains(friends, {
+                name: 'graphql.resolve',
+                resource: 'friends:[Human]',
+                meta: {
+                  'graphql.field.path': 'friends',
+                },
+              })
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-              assert.strictEqual(friend0Name.name, 'graphql.resolve')
-              assert.strictEqual(friend0Name.resource, 'name:String')
-              assert.strictEqual(friend0Name.meta['graphql.field.path'], 'friends.0.name')
+              assertObjectContains(friend0Name, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.0.name',
+                },
+              })
               assert.strictEqual(friend0Name.parent_id.toString(), friends.span_id.toString())
 
-              assert.strictEqual(friend1Name.name, 'graphql.resolve')
-              assert.strictEqual(friend1Name.resource, 'name:String')
-              assert.strictEqual(friend1Name.meta['graphql.field.path'], 'friends.1.name')
+              assertObjectContains(friend1Name, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.1.name',
+                },
+              })
               assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should trace aliased __proto__ fields when collapsing is disabled', async () => {
+          const source = '{ __proto__: hello(name: "alias") }'
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+
+              assert.strictEqual(resolveSpans.length, 1)
+              assertObjectContains(resolveSpans[0], {
+                resource: 'hello:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': '__proto__',
+                },
+              })
+            }),
+            graphql.graphql({ schema, source }),
+          ])
+
+          assert.ok(
+            !result.errors || result.errors.length === 0,
+            `Got errors: ${inspect(result.errors)}`
+          )
+          // eslint-disable-next-line no-proto
+          assert.strictEqual(result.data.__proto__, 'alias')
+        })
+      })
+
+      describe('with collapsing disabled and a depth >=1', () => {
+        before(async () => {
+          tracer = await agent.load('graphql', { collapse: false, depth: 2 })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should count only string segments when collapsing is disabled', done => {
+          const source = `
+            {
+              friends {
+                name
+                pets {
+                  name
+                }
+              }
+            }
+          `
+
+          agent
+            .assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
+
+              assert.deepStrictEqual(paths, [
+                'friends',
+                'friends.0.name',
+                'friends.0.pets',
+                'friends.1.name',
+                'friends.1.pets',
+              ])
             })
             .then(done)
             .catch(done)
@@ -1635,7 +2136,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1657,6 +2158,20 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should fallback to the operation type', async () => {
+          const source = '{ friends { name } }'
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query')
+            }),
+            graphql.graphql({ schema, source }),
+          ])
         })
       })
 
@@ -1691,7 +2206,7 @@ describe('Plugin', () => {
           key => config.hooks[key].resetHistory()
         ))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should run the execute hook before graphql.execute span is finished', done => {
           const document = graphql.parse(source)
@@ -1737,9 +2252,10 @@ describe('Plugin', () => {
                 contextValue: params.contextValue,
                 variableValues: params.variableValues,
                 operationName: params.operationName,
-                fieldResolver: params.fieldResolver,
                 typeResolver: params.typeResolver,
               })
+              assert.strictEqual(typeof args.fieldResolver, 'function')
+              assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
               assert.strictEqual(res, result)
             })
             .then(done)
@@ -1835,7 +2351,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should support apollo-server schema stitching', done => {

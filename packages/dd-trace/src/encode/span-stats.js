@@ -31,7 +31,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encodeStat (bytes, stat) {
-    this._encodeMapPrefix(bytes, 14)
+    bytes.writeMapPrefix(15)
 
     this._encodeString(bytes, 'Service')
     const service = stat.Service || DEFAULT_SERVICE_NAME
@@ -45,57 +45,60 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, truncate(stat.Resource, MAX_RESOURCE_NAME_LENGTH, '...'))
 
     this._encodeString(bytes, 'HTTPStatusCode')
-    this._encodeInteger(bytes, stat.HTTPStatusCode)
+    bytes.writeInteger(stat.HTTPStatusCode)
 
     this._encodeString(bytes, 'Type')
     this._encodeString(bytes, truncate(stat.Type, MAX_TYPE_LENGTH))
 
     this._encodeString(bytes, 'Hits')
-    this._encodeLong(bytes, stat.Hits)
+    bytes.writeLong(stat.Hits)
 
     this._encodeString(bytes, 'Errors')
-    this._encodeLong(bytes, stat.Errors)
+    bytes.writeLong(stat.Errors)
 
     this._encodeString(bytes, 'Duration')
-    this._encodeLong(bytes, stat.Duration)
+    bytes.writeLong(stat.Duration)
 
     this._encodeString(bytes, 'OkSummary')
-    this._encodeBuffer(bytes, stat.OkSummary)
+    bytes.writeBin(stat.OkSummary)
 
     this._encodeString(bytes, 'ErrorSummary')
-    this._encodeBuffer(bytes, stat.ErrorSummary)
+    bytes.writeBin(stat.ErrorSummary)
 
     this._encodeString(bytes, 'Synthetics')
-    this._encodeBool(bytes, stat.Synthetics)
+    bytes.writeBoolean(stat.Synthetics)
 
     this._encodeString(bytes, 'TopLevelHits')
-    this._encodeLong(bytes, stat.TopLevelHits)
+    bytes.writeLong(stat.TopLevelHits)
 
     this._encodeString(bytes, 'HTTPMethod')
     this._encodeString(bytes, stat.HTTPMethod)
 
     this._encodeString(bytes, 'HTTPEndpoint')
     this._encodeString(bytes, stat.HTTPEndpoint)
+
+    this._encodeString(bytes, 'srv_src')
+    this._encodeString(bytes, stat.srv_src || '')
   }
 
   _encodeBucket (bytes, bucket) {
-    this._encodeMapPrefix(bytes, 3)
+    bytes.writeMapPrefix(3)
 
     this._encodeString(bytes, 'Start')
-    this._encodeLong(bytes, bucket.Start)
+    bytes.writeLong(bucket.Start)
 
     this._encodeString(bytes, 'Duration')
-    this._encodeLong(bytes, bucket.Duration)
+    bytes.writeLong(bucket.Duration)
 
     this._encodeString(bytes, 'Stats')
-    this._encodeArrayPrefix(bytes, bucket.Stats)
+    bytes.writeArrayPrefix(bucket.Stats)
     for (const stat of bucket.Stats) {
       this._encodeStat(bytes, stat)
     }
   }
 
   _encode (bytes, stats) {
-    this._encodeMapPrefix(bytes, stats.ProcessTags ? 9 : 8)
+    bytes.writeMapPrefix(stats.ProcessTags ? 9 : 8)
 
     this._encodeString(bytes, 'Hostname')
     this._encodeString(bytes, stats.Hostname)
@@ -107,7 +110,7 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, stats.Version)
 
     this._encodeString(bytes, 'Stats')
-    this._encodeArrayPrefix(bytes, stats.Stats)
+    bytes.writeArrayPrefix(stats.Stats)
     for (const bucket of stats.Stats) {
       this._encodeBucket(bytes, bucket)
     }
@@ -122,7 +125,7 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, stats.RuntimeID)
 
     this._encodeString(bytes, 'Sequence')
-    this._encodeLong(bytes, stats.Sequence)
+    bytes.writeLong(stats.Sequence)
 
     if (stats.ProcessTags) {
       this._encodeString(bytes, 'ProcessTags')

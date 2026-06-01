@@ -5,6 +5,7 @@ const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
+const getGitMetadata = require('../git_metadata')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
 const { getAgentUrl } = require('../agent/url')
@@ -25,6 +26,9 @@ class RemoteConfig {
   #products = new Set()
   #batchHandlers = new Map()
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
@@ -34,11 +38,12 @@ class RemoteConfig {
       '_dd.rc.client_id': clientId,
     })
 
-    const tags = config.repositoryUrl
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    const tags = repositoryUrl
       ? {
           ...config.tags,
-          [GIT_REPOSITORY_URL]: config.repositoryUrl,
-          [GIT_COMMIT_SHA]: config.commitSHA,
+          [GIT_REPOSITORY_URL]: repositoryUrl,
+          [GIT_COMMIT_SHA]: commitSHA,
         }
       : config.tags
 

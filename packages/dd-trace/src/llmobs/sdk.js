@@ -2,12 +2,16 @@
 
 const { channel } = require('dc-polyfill')
 
-const { isTrue, isError } = require('../util')
+const { isError, isTrue } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const {
+  SPAN_KIND,
+  OUTPUT_VALUE,
+  INPUT_VALUE,
+} = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind,
@@ -29,19 +33,31 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  /**
+   * @param {import('../tracer')} tracer - Tracer instance
+   * @param {import('./index')} llmobsModule - LLMObs module instance
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
+    /** @type {import('../config/config-base')} */
     this._config = config
+
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
   }
 
   get enabled () {
-    return this._config.llmobs.enabled
+    return this._config.llmobs.enabled ?? false
   }
 
   enable (options = {}) {
+    logger.warn(
+      'Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
+      'Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.'
+    )
+
     if (this.enabled) {
       logger.debug('LLMObs is already enabled.')
       return
@@ -56,19 +72,21 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    const llmobs = {
-      mlApp: options.mlApp,
-      agentlessEnabled: options.agentlessEnabled,
-    }
-    // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
-    // based on `APM_TRACING` RC product updates.
-    this._config.updateOptions({ llmobs })
+    // TODO: These configs should be passed through directly at construction time instead.
+    this._config.llmobs.enabled = true
+    this._config.llmobs.mlApp = options.mlApp
+    this._config.llmobs.agentlessEnabled = options.agentlessEnabled
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
   }
 
   disable () {
+    logger.warn(
+      'Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
+      'Set DD_LLMOBS_ENABLED=false to disable LLM Observability.'
+    )
+
     if (!this.enabled) {
       logger.debug('LLMObs is already disabled.')
       return
@@ -102,16 +120,16 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this._extractOptions(options)
+    } = this.#extractOptions(options)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
+        this.#activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
+      this.#activate(span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -132,53 +150,53 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this._extractOptions(options)
+    } = this.#extractOptions(options)
 
     const llmobs = this
 
-    function wrapped () {
+    function wrapped (...args) {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
       const span = llmobs._tracer.scope().active()
-      const fnArgs = arguments
+      const fnArgs = args
 
       const lastArgId = fnArgs.length - 1
       const cb = fnArgs[lastArgId]
       const hasCallback = typeof cb === 'function'
 
       if (hasCallback) {
-        const scopeBoundCb = llmobs._bind(cb)
-        fnArgs[lastArgId] = function () {
+        const scopeBoundCb = llmobs.#bind(cb)
+        fnArgs[lastArgId] = function (...args) {
           // it is standard practice to follow the callback signature (err, result)
           // however, we try to parse the arguments to determine if the first argument is an error
           // if it is not, and is not undefined, we will use that for the output value
-          const maybeError = arguments[0]
-          const maybeResult = arguments[1]
+          const maybeError = args[0]
+          const maybeResult = args[1]
 
-          llmobs._autoAnnotate(
+          llmobs.#autoAnnotate(
             span,
             kind,
             getFunctionArguments(fn, fnArgs),
             isError(maybeError) || maybeError == null ? maybeResult : maybeError
           )
 
-          return scopeBoundCb.apply(this, arguments)
+          return scopeBoundCb.apply(this, args)
         }
       }
 
       try {
-        const result = llmobs._activate(span, { kind, ...llmobsOptions }, () => fn.apply(this, fnArgs))
+        const result = llmobs.#activate(span, { kind, ...llmobsOptions }, () => fn.apply(this, fnArgs))
 
         if (result && typeof result.then === 'function') {
           return result.then(
             value => {
               if (!hasCallback) {
-                llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), value)
+                llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), value)
               }
               return value
             },
             err => {
-              llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
+              llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
               throw err
             }
           )
@@ -189,12 +207,12 @@ class LLMObs extends NoopLLMObs {
         // the callback is called before the function returns (although unlikely)
         // we do not want to throw for "annotating a finished span" in this case
         if (!hasCallback) {
-          llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), result)
+          llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs), result)
         }
 
         return result
       } catch (e) {
-        llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
+        llmobs.#autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
         throw e
       }
     }
@@ -241,7 +259,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -261,8 +279,12 @@ class LLMObs extends NoopLLMObs {
       if (metrics) {
         this._tagger.tagMetrics(span, metrics)
       }
+      // Apply tags before costTags so costTags can reference tags from the same annotation.
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
+      }
+      if (costTags != null) {
+        this._tagger.tagCostTags(span, costTags, 'annotate')
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)
@@ -359,15 +381,15 @@ class LLMObs extends NoopLLMObs {
         throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
       }
 
-      const { label, value, tags } = options
+      const { label, value, tags, reasoning, assessment, metadata } = options
       const metricType = options.metricType?.toLowerCase()
       if (!label) {
         err = 'invalid_metric_label'
         throw new Error('label must be the specified name of the evaluation metric')
       }
-      if (!metricType || !['categorical', 'score', 'boolean'].includes(metricType)) {
+      if (!metricType || !['categorical', 'score', 'boolean', 'json'].includes(metricType)) {
         err = 'invalid_metric_type'
-        throw new Error('metricType must be one of "categorical" or "score"')
+        throw new Error('metricType must be one of "categorical", "score", "boolean" or "json"')
       }
       if (metricType === 'categorical' && typeof value !== 'string') {
         err = 'invalid_metric_value'
@@ -380,6 +402,22 @@ class LLMObs extends NoopLLMObs {
       if (metricType === 'boolean' && typeof value !== 'boolean') {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
+      }
+      if (metricType === 'json' && !(typeof value === 'object' && value != null && !Array.isArray(value))) {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a JSON object for a json metric')
+      }
+      if (assessment != null && assessment !== 'pass' && assessment !== 'fail') {
+        err = 'invalid_assessment'
+        throw new Error('assessment must be pass or fail')
+      }
+      if (reasoning != null && typeof reasoning !== 'string') {
+        err = 'invalid_reasoning'
+        throw new Error('reasoning must be a string')
+      }
+      if (metadata != null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
+        err = 'invalid_metadata'
+        throw new Error('metadata must be a JSON object')
       }
 
       const evaluationTags = {
@@ -407,19 +445,32 @@ class LLMObs extends NoopLLMObs {
       }
 
       // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))) {
+      if (this._config.DD_TRACE_OTEL_ENABLED) {
         evaluationTags.source = 'otel'
       }
 
       const payload = {
-        span_id: spanId,
-        trace_id: traceId,
+        join_on: {
+          span: {
+            span_id: spanId,
+            trace_id: traceId,
+          },
+        },
         label,
         metric_type: metricType,
         ml_app: mlApp,
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
+      }
+      if (reasoning != null) {
+        payload.reasoning = reasoning
+      }
+      if (metadata != null) {
+        payload.metadata = metadata
+      }
+      if (assessment != null) {
+        payload.assessment = assessment
       }
       const currentStore = storage.getStore()
       const routing = currentStore?.routingContext
@@ -473,7 +524,7 @@ class LLMObs extends NoopLLMObs {
     flushCh.publish()
   }
 
-  _autoAnnotate (span, kind, input, output) {
+  #autoAnnotate (span, kind, input, output) {
     const annotations = {}
     if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
       annotations.inputData = input
@@ -491,7 +542,7 @@ class LLMObs extends NoopLLMObs {
     return store?.span
   }
 
-  _activate (span, options, fn) {
+  #activate (span, options, fn) {
     const parentStore = storage.getStore()
     if (this.enabled) storage.enterWith({ ...parentStore, span })
 
@@ -510,22 +561,20 @@ class LLMObs extends NoopLLMObs {
   }
 
   // bind function to active LLMObs span
-  _bind (fn) {
+  #bind (fn) {
     if (typeof fn !== 'function') return fn
 
     const llmobs = this
     const activeSpan = llmobs._active()
 
-    const bound = function () {
-      return llmobs._activate(activeSpan, null, () => {
-        return fn.apply(this, arguments)
+    return function (...args) {
+      return llmobs.#activate(activeSpan, null, () => {
+        return fn.apply(this, args)
       })
     }
-
-    return bound
   }
 
-  _extractOptions (options) {
+  #extractOptions (options) {
     const {
       modelName,
       modelProvider,

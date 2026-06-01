@@ -14,10 +14,10 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
+const responseFinishChannel = channel('apm:http:client:response:finish')
 
-const names = ['http', 'https', 'node:http', 'node:https']
-
-addHook({ name: names }, hookFn)
+addHook({ name: 'http' }, hookFn)
+addHook({ name: 'https' }, hookFn)
 
 function hookFn (http) {
   patch(http, 'request')
@@ -26,10 +26,27 @@ function hookFn (http) {
   return http
 }
 
+// `inputURL` may be the user's options object (for the `http.request(options)`
+// shape); never write directly into it. The result is later mutated by
+// `normalizeHeaders` and read by `url.format`, so the merged object must be
+// owned by the tracer. `undefined` means "no URL supplied" — Node merges
+// with the options object or its defaults, so build a tracer-owned
+// options-only shape and let tracing proceed. `null`/primitive first args
+// are returned as-is so `normalizeHeaders` throws and the surrounding
+// try/catch in `instrumentRequest` falls through to the native request;
+// spreading a primitive yields `{}`, which would silently turn an invalid
+// `http.request(123)` into a synthesized localhost request.
 function combineOptions (inputURL, inputOptions) {
-  return inputOptions !== null && typeof inputOptions === 'object'
-    ? Object.assign(inputURL || {}, inputOptions)
-    : inputURL
+  if (inputURL === undefined) {
+    return inputOptions !== null && typeof inputOptions === 'object' ? { ...inputOptions } : {}
+  }
+  if (inputURL === null || (typeof inputURL !== 'object' && typeof inputURL !== 'function')) {
+    return inputURL
+  }
+  if (inputOptions !== null && typeof inputOptions === 'object') {
+    return { ...inputURL, ...inputOptions }
+  }
+  return { ...inputURL }
 }
 function normalizeHeaders (options) {
   options.headers ??= {}
@@ -37,6 +54,112 @@ function normalizeHeaders (options) {
 
 function normalizeCallback (inputOptions, callback, inputURL) {
   return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
+}
+
+/**
+ * Wires the downstream response so we can observe when the customer consumes
+ * the body and when the stream finishes
+ *
+ * @param {object} ctx - Instrumentation context
+ * @param {import('http').IncomingMessage} res - The downstream response object.
+ * @returns {{ finalizeIfNeeded: () => void }|null} Cleanup helper used for drain.
+ */
+function setupResponseInstrumentation (ctx, res) {
+  const shouldInstrumentFinish = responseFinishChannel.hasSubscribers
+
+  if (!shouldInstrumentFinish) {
+    return null
+  }
+
+  let bodyConsumed = false
+  let finishCalled = false
+  let originalRead = null
+  let dataListenerAdded = false
+  let dataReadStarted = false
+
+  const { shouldCollectBody } = ctx
+  const bodyChunks = shouldCollectBody ? [] : null
+
+  const collectChunk = chunk => {
+    if (!shouldCollectBody || !chunk) return
+
+    if (typeof chunk === 'string') {
+      bodyChunks.push(chunk)
+    } else if (Buffer.isBuffer(chunk)) {
+      bodyChunks.push(chunk)
+    } else {
+      // Handle Uint8Array or other array-like types
+      bodyChunks.push(Buffer.from(chunk))
+    }
+  }
+
+  // Listen for body consumption
+  const onNewListener = (eventName) => {
+    if (eventName === 'data' || eventName === 'readable') {
+      bodyConsumed = true
+
+      // For 'data' events, add our own listener to collect chunks
+      if (eventName === 'data' && !dataListenerAdded && !dataReadStarted) {
+        dataListenerAdded = true
+        res.on('data', collectChunk)
+      }
+
+      // For 'readable' events, wrap the read() method
+      if (eventName === 'readable' && !originalRead && !dataListenerAdded && typeof res.read === 'function') {
+        originalRead = res.read
+        res.read = function (...args) {
+          const chunk = originalRead.apply(this, args)
+          if (!dataListenerAdded) {
+            dataReadStarted = true
+            collectChunk(chunk)
+          }
+          return chunk
+        }
+      }
+    }
+  }
+
+  res.on('newListener', onNewListener)
+
+  // Cleanup function to restore original behavior
+  const cleanup = () => {
+    res.off('newListener', onNewListener)
+    res.off('data', collectChunk)
+
+    if (originalRead) {
+      res.read = originalRead
+      originalRead = null
+    }
+  }
+
+  const notifyFinish = () => {
+    if (finishCalled) return
+    finishCalled = true
+
+    // Combine collected chunks into a single body
+    let body = null
+    if (bodyChunks?.length) {
+      const firstChunk = bodyChunks[0]
+      body = typeof firstChunk === 'string'
+        ? bodyChunks.join('')
+        : Buffer.concat(bodyChunks)
+    }
+
+    responseFinishChannel.publish({ ctx, res, body })
+    cleanup()
+  }
+
+  res.once('end', notifyFinish)
+  res.once('close', notifyFinish)
+
+  return {
+    finalizeIfNeeded () {
+      if (!bodyConsumed) {
+        // Body not consumed, resume to complete the response
+        notifyFinish()
+      }
+    },
+  }
 }
 
 function patch (http, methodName) {
@@ -65,10 +188,10 @@ function patch (http, methodName) {
         let finished = false
         let callback = args.callback
 
-        if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function () {
+        if (typeof callback === 'function') {
+          callback = shimmer.wrapCallback(args.callback, cb => function (...args) {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return cb.apply(this, args)
             })
           })
         }
@@ -91,9 +214,9 @@ function patch (http, methodName) {
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-          req.setTimeout = function () {
+          req.setTimeout = function (...args) {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return setTimeout.apply(this, args)
           }
 
           req.emit = function (eventName, arg) {
@@ -103,7 +226,18 @@ function patch (http, methodName) {
                 ctx.res = res
                 res.once('end', finish)
                 res.once(errorMonitor, finish)
-                break
+
+                const instrumentation = setupResponseInstrumentation(ctx, res)
+
+                if (!instrumentation) {
+                  break
+                }
+
+                const result = emit.apply(this, arguments)
+
+                instrumentation.finalizeIfNeeded()
+
+                return result
               }
               case 'connect':
               case 'upgrade':

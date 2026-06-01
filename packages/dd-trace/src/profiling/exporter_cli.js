@@ -17,8 +17,6 @@ function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
   }
-  const injectionEnabled = (getValueFromEnvSources('DD_INJECTION_ENABLED') ?? '').split(',')
-  const libraryInjected = injectionEnabled.length > 0
   const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
   const activation = ['true', '1'].includes(profilingEnabled)
     ? 'manual'
@@ -29,7 +27,7 @@ function exporterFromURL (url) {
     url,
     logger,
     uploadTimeout: timeoutMs,
-    libraryInjected,
+    libraryInjected: !!getValueFromEnvSources('DD_INJECTION_ENABLED'),
     activation,
   })
 }

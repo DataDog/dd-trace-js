@@ -1,4 +1,9 @@
-<ins>**Please make sure your changes are properly tested**!</ins>
+<!-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -->
+<!-- Please make sure your changes are properly tested -->
+<!-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -->
+
+<!-- PR title must follow Conventional Commits format: type(scope): description -->
+<!-- Valid types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore, revert -->
 
 ### What does this PR do?
 <!-- A brief description of the change being made with this pull request. -->

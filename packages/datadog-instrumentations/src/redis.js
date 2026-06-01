@@ -11,6 +11,9 @@ const finishCh = channel('apm:redis:command:finish')
 const errorCh = channel('apm:redis:command:error')
 
 let createClientUrl
+let createClientName
+const instanceInfo = new WeakMap()
+const connectionInfoCache = new WeakMap()
 
 function wrapAddCommand (addCommand) {
   return function (command) {
@@ -18,10 +21,7 @@ function wrapAddCommand (addCommand) {
       return addCommand.apply(this, arguments)
     }
 
-    const name = command[0]
-    const args = command.slice(1)
-
-    const ctx = getStartCtx(this, name, args, this._url)
+    const ctx = getStartCtx(this, command[0], command, 1)
     return startCh.runStores(ctx, () => {
       const res = addCommand.apply(this, arguments)
 
@@ -33,30 +33,30 @@ function wrapAddCommand (addCommand) {
 }
 
 function wrapCommandQueueClass (cls) {
-  const ret = class RedisCommandQueue extends cls {
+  return class RedisCommandQueue extends cls {
     constructor (...args) {
       super(...args)
+      let url = { host: 'localhost', port: 6379 }
       if (createClientUrl) {
         try {
           const parsed = new URL(createClientUrl)
-          if (parsed) {
-            this._url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
-          }
+          url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
         } catch {
           // ignore
         }
       }
-      this._url = this._url || { host: 'localhost', port: 6379 }
+      instanceInfo.set(this, { connectionName: createClientName, url })
     }
   }
-  return ret
 }
 
 function wrapCreateClient (request) {
   return function (opts) {
     createClientUrl = opts && opts.url
+    createClientName = opts && opts.name
     const ret = request.apply(this, arguments)
     createClientUrl = undefined
+    createClientName = undefined
     return ret
   }
 }
@@ -134,19 +134,33 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   return redis
 })
 
-function getStartCtx (client, command, args, url = {}) {
+function getStartCtx (client, command, args, argsStartIndex) {
+  let cached = connectionInfoCache.get(client)
+  if (cached === undefined) {
+    const info = instanceInfo.get(client)
+    cached = {
+      connectionOptions:
+        client.connection_options || client.connection_option || client.connectionOption || info?.url,
+      connectionName: info?.connectionName,
+    }
+    connectionInfoCache.set(client, cached)
+  }
+
   return {
     db: client.selected_db,
     command,
     args,
-    connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url,
+    argsStartIndex,
+    connectionOptions: cached.connectionOptions,
+    connectionName: cached.connectionName,
   }
 }
 
 function wrapCallback (finishCh, errorCh, ctx, callback) {
-  return shimmer.wrapFunction(callback, callback => function (err) {
+  if (typeof callback !== 'function') return callback
+  return function (err) {
     return finish(finishCh, errorCh, ctx, err, callback, this, arguments)
-  })
+  }
 }
 
 function finish (finishCh, errorCh, ctx, error, callback, thisArg, args) {

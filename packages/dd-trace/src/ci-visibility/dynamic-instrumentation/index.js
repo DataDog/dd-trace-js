@@ -11,6 +11,9 @@ const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
 
 class TestVisDynamicInstrumentation {
+  /**
+   * @param {import('../../config/config-base')} config - Tracer configuration
+   */
   constructor (config) {
     this._config = config
     this.worker = null
@@ -83,7 +86,6 @@ class TestVisDynamicInstrumentation {
           DD_TRACE_ENABLED: 'false',
           DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
           DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
-          DD_TRACING_ENABLED: 'false',
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
         },
         workerData: {
@@ -118,7 +120,7 @@ class TestVisDynamicInstrumentation {
     })
 
     // Allow the parent to exit even if the worker is still running
-    this.worker.unref()
+    this.worker.unref?.()
 
     this.breakpointSetChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointSet.get(probeId)
@@ -126,7 +128,7 @@ class TestVisDynamicInstrumentation {
         resolve()
         probeIdToResolveBreakpointSet.delete(probeId)
       }
-    }).unref()
+    }).unref?.()
 
     this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
@@ -136,7 +138,7 @@ class TestVisDynamicInstrumentation {
       } else {
         log.warn('Received a breakpoint hit for an unknown probe')
       }
-    }).unref()
+    }).unref?.()
 
     this.breakpointRemoveChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointRemove.get(probeId)
@@ -144,12 +146,15 @@ class TestVisDynamicInstrumentation {
         resolve()
         probeIdToResolveBreakpointRemove.delete(probeId)
       }
-    }).unref()
+    }).unref?.()
   }
 }
 
 let dynamicInstrumentation
 
+/**
+ * @param {import('../../config/config-base')} config - Tracer configuration
+ */
 module.exports = function createAndGetTestVisDynamicInstrumentation (config) {
   if (dynamicInstrumentation) {
     return dynamicInstrumentation

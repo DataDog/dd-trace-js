@@ -1,4 +1,4 @@
-name: '[Release Proposal]'
+name: "[Release Proposal]"
 
 on:
   workflow_dispatch:
@@ -14,12 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release-line: ['5']
+        release-line: ["5"]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     steps:
-      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
@@ -30,7 +30,7 @@ jobs:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node
         with:
-          version: ''
+          version: ""
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ steps.octo-sts.outputs.token }}

@@ -3,10 +3,13 @@
 const assert = require('node:assert/strict')
 
 const { channel } = require('dc-polyfill')
-const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { DD_MAJOR } = require('../../../../version')
+const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
@@ -22,6 +25,9 @@ describe('module', () => {
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
   let fetchAgentInfoStub
+
+  /** @type {import('sinon').SinonStub} */
+  let startupLogStub
 
   beforeEach(() => {
     store = {}
@@ -40,7 +46,7 @@ describe('module', () => {
 
     fetchAgentInfoStub = sinon.stub()
 
-    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
+    const llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
       '../log': logger,
@@ -56,18 +62,29 @@ describe('module', () => {
           fetchAgentInfo: fetchAgentInfoStub,
         },
       }),
-    })
+    }
+
+    if (DD_MAJOR < 6) {
+      startupLogStub = sinon.stub(console, 'error')
+    } else {
+      startupLogStub = sinon.stub()
+
+      llmobsModuleProxyRequireMeta['../startup-log'] = {
+        logGenericError: startupLogStub,
+      }
+    }
+
+    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', llmobsModuleProxyRequireMeta)
 
     removeDestroyHandler()
   })
 
   afterEach(() => {
+    sinon.restore()
     llmobsModule.disable()
   })
 
   after(() => {
-    sinon.restore()
-
     // get rid of mock stubs for writers
     delete require.cache[require.resolve('../../../dd-trace/src/llmobs')]
   })
@@ -90,7 +107,7 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
@@ -100,7 +117,7 @@ describe('module', () => {
         'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
@@ -112,27 +129,69 @@ describe('module', () => {
       injectCh.publish({ carrier })
       assert.strictEqual(carrier['x-datadog-tags'], '')
     })
+
+    it('does not produce a literal "undefined" prefix when carrier has no x-datadog-tags', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {}
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
+    })
+
+    it('appends to an existing non-empty x-datadog-tags with a single comma separator', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+      )
+    })
+
+    describe('with DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0', () => {
+      let config
+
+      before(() => {
+        process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = '0'
+        config = getConfigFresh({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+        delete process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+      })
+
+      it('does not write x-datadog-tags', () => {
+        llmobsModule.enable(config)
+
+        const carrier = {}
+        injectCh.publish({ carrier })
+
+        assert.ok(!('x-datadog-tags' in carrier))
+      })
+    })
   })
 
   describe('with agentlessEnabled set to `true`', () => {
     describe('when no api key is provided', () => {
       it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({
+        llmobsModule.enable({
           llmobs: {
             agentlessEnabled: true,
           },
-        }),
-        {
-          message: 'Cannot send LLM Observability data without a running agent ' +
-            'or without both a Datadog API key and site.\n' +
-            'Ensure these configurations are set before running your application.',
+          startupLogs: true,
         })
+
+        sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
     })
 
     describe('when no site is provided', () => {
       it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } }))
+        llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' }, startupLogs: true })
+
+        sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
     })
 
@@ -180,13 +239,17 @@ describe('module', () => {
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }))
+            llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+
+            sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
         })
 
         describe('when no site is provided', () => {
           it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } }))
+            llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' }, startupLogs: true })
+
+            sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
         })
 
@@ -227,20 +290,17 @@ describe('module', () => {
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          assert.throws(
-            () => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }),
-            {
-              message: 'Cannot send LLM Observability data without a running agent ' +
-                'or without both a Datadog API key and site.\n' +
-                'Ensure these configurations are set before running your application.',
-            }
-          )
+          llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+
+          sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
       })
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          assert.throws(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' }))
+          llmobsModule.enable({ llmobs: {}, apiKey: 'test', startupLogs: true })
+
+          sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
       })
 

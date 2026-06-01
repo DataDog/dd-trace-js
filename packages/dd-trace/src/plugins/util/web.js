@@ -7,18 +7,17 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
+const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
+const { storage } = require('../../../../datadog-core')
+const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
-let extractIp
-
 const WEB = types.WEB
 const SERVER = kinds.SERVER
 const RESOURCE_NAME = tags.RESOURCE_NAME
-const SERVICE_NAME = tags.SERVICE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
 const SPAN_KIND = tags.SPAN_KIND
 const ERROR = tags.ERROR
@@ -34,7 +33,6 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
-const ends = new WeakMap()
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -54,6 +52,7 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
 
 const web = {
   TYPE: WEB,
+  /** @type {TracingPlugin | null} */
   plugin: null,
 
   // Ensure the configuration has the correct structure and defaults.
@@ -65,7 +64,9 @@ const web = {
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
-    extractIp = config.clientIpEnabled && require('./ip_extractor').extractIp
+    const extractIp = config.clientIpEnabled
+      ? require('./ip_extractor').extractIp
+      : undefined
 
     return {
       ...config,
@@ -75,6 +76,7 @@ const web = {
       filter,
       middleware,
       queryStringObfuscation,
+      extractIp,
     }
   },
 
@@ -85,7 +87,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
-    span.context()._tags.component = name
+    span.context().setTag('component', name)
     span._integrationName = name
 
     web.setConfig(req, config)
@@ -103,7 +105,7 @@ const web = {
     }
 
     if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
+      web.plugin.setServiceName(span, config.service)
     }
 
     analyticsSampler.sample(span, config.measured, true)
@@ -118,7 +120,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, config, name, req, traceCtx)
+      span = web.startServerlessSpanWithInferredProxy(tracer, config, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -130,27 +132,6 @@ const web = {
 
     return span
   },
-  wrap (req) {
-    const context = contexts.get(req)
-    if (!context.instrumented) {
-      this.wrapEnd(context)
-      context.instrumented = true
-    }
-  },
-  // Start a span and activate a scope for a request.
-  instrument (tracer, config, req, res, name, callback) {
-    const span = this.startSpan(tracer, config, req, res, name)
-
-    this.wrap(req)
-
-    return callback && tracer.scope().activate(span, () => callback(span))
-  },
-
-  // Reactivate the request scope in case it was changed by a middleware.
-  reactivate (req, fn) {
-    return reactivate(req, fn)
-  },
-
   // Add a route segment that will be used for the resource name.
   enterRoute (req, path) {
     if (typeof path === 'string') {
@@ -169,61 +150,6 @@ const web = {
   // Remove the current route segment.
   exitRoute (req) {
     contexts.get(req).paths.pop()
-  },
-
-  // Start a new middleware span and activate a new scope with the span.
-  wrapMiddleware (req, middleware, name, fn) {
-    if (!this.active(req)) return fn()
-
-    const context = contexts.get(req)
-    const tracer = context.tracer
-    const childOf = this.active(req)
-    const config = context.config
-    const traceCtx = context.traceCtx
-
-    if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
-
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
-
-    analyticsSampler.sample(span, config.measured)
-
-    span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>',
-    })
-
-    context.middleware.push(span)
-
-    return tracer.scope().activate(span, fn)
-  },
-
-  // catch errors and apply to active span
-  bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
-    try {
-      return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
-    } catch (e) {
-      web.addError(req, e) // TODO: remove when error formatting is moved to Span
-      throw e
-    }
-  },
-
-  // Finish the active middleware span.
-  finish (req, error) {
-    if (!this.active(req)) return
-
-    const context = contexts.get(req)
-    const span = context.middleware.pop()
-
-    if (span) {
-      if (error) {
-        span.addTags({
-          [ERROR_TYPE]: error.name,
-          [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack,
-        })
-      }
-
-      span.finish()
-    }
   },
 
   // Register a callback to run before res.end() is called.
@@ -274,11 +200,10 @@ const web = {
     return context.middleware.at(-1)
   },
 
-  startChildSpan (tracer, config, name, req, traceCtx) {
+  startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    const { storage } = require('../../../../datadog-core')
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
     let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
@@ -291,9 +216,7 @@ const web = {
       }
     }
 
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
-
-    return span
+    return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
   },
 
   // Validate a request's status code and then add error tags if necessary
@@ -301,9 +224,11 @@ const web = {
     const context = contexts.get(req)
     const { span, inferredProxySpan, error } = context
 
-    const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+    const spanContext = span.context()
+    const spanHasExistingError = spanContext.getTag('error') || spanContext.getTag(ERROR_MESSAGE)
     const inferredSpanContext = inferredProxySpan?.context()
-    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext?._tags[ERROR_MESSAGE]
+    const inferredSpanHasExistingError = inferredSpanContext?.getTag('error') ||
+      inferredSpanContext?.getTag(ERROR_MESSAGE)
 
     const isValidStatusCode = context.config.validateStatus(statusCode)
 
@@ -337,12 +262,21 @@ const web = {
     }
   },
 
-  finishSpan (context) {
+  finishSpan (context, spanType) {
     const { req, res } = context
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context, this.TYPE)
+    // `addRequestTags` is idempotent: in the normal HTTP path it ran during
+    // `web.startSpan`. Serverless callers (e.g. Azure Functions) skip
+    // `web.startSpan` and rely on this call to do the request-side work.
+    addRequestTags(context, spanType)
+    // Configured-header tagging runs at finish time. Framework plugins
+    // (connect, express, ...) install their own config via `setFramework`
+    // after `web.startSpan` has already locked the http-plugin config in;
+    // tagging earlier would use the http-plugin's `headers` list and drop
+    // the framework's.
+    addRequestHeaders(context)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -352,14 +286,14 @@ const web = {
     context.finished = true
   },
 
-  finishAll (context) {
+  finishAll (context, spanType) {
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
     }
 
     web.finishMiddleware(context)
 
-    web.finishSpan(context)
+    web.finishSpan(context, spanType)
 
     finishInferredProxySpan(context)
   },
@@ -369,11 +303,18 @@ const web = {
     const writeHead = res.writeHead
 
     return function (statusCode, statusMessage, headers) {
-      headers = typeof statusMessage === 'string' ? headers : statusMessage
-      headers = { ...res.getHeaders(), ...headers }
+      // CORS preflight tagging only matters for OPTIONS requests. Skip the
+      // getHeaders() spread + isOriginAllowed work entirely for the common
+      // GET / POST / etc. case. Node's http module passes `req.method`
+      // through unchanged, so all standard methods are uppercase; the
+      // `toLowerCase` fallback covers any non-standard caller.
+      if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
+        headers = typeof statusMessage === 'string' ? headers : statusMessage
+        headers = { ...res.getHeaders(), ...headers }
 
-      if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
-        addAllowHeaders(req, res, headers)
+        if (isOriginAllowed(req, headers)) {
+          addAllowHeaders(req, res, headers)
+        }
       }
 
       return writeHead.apply(this, arguments)
@@ -382,32 +323,12 @@ const web = {
   getContext (req) {
     return contexts.get(req)
   },
-  wrapRes (context, req, res, end) {
-    return function () {
-      web.finishAll(context)
+  setRouteOrEndpointTag (req) {
+    const context = contexts.get(req)
 
-      return end.apply(res, arguments)
-    }
-  },
-  wrapEnd (context) {
-    const scope = context.tracer.scope()
-    const req = context.req
-    const res = context.res
-    const end = res.end
+    if (!context) return
 
-    res.writeHead = web.wrapWriteHead(context)
-
-    ends.set(res, this.wrapRes(context, req, res, end))
-
-    Object.defineProperty(res, 'end', {
-      configurable: true,
-      get () {
-        return ends.get(this)
-      },
-      set (value) {
-        ends.set(this, scope.bind(value, context.span))
-      },
-    })
+    applyRouteOrEndpointTag(context)
   },
 }
 
@@ -445,29 +366,32 @@ function splitHeader (str) {
   return typeof str === 'string' ? str.split(/\s*,\s*/) : []
 }
 
-function reactivate (req, fn) {
-  const context = contexts.get(req)
-
-  return context
-    ? context.tracer.scope().activate(context.span, fn)
-    : fn()
-}
-
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
+  const spanContext = span.context()
+
+  // Idempotency guard. `addRequestTags` runs in `web.startSpan` for the
+  // normal HTTP path and again in `web.finishSpan`; without this guard the
+  // second call would re-extract the URL, re-obfuscate the query string,
+  // and re-publish five `tagsUpdateCh` events with the same values. The
+  // serverless path skips `startSpan` and lands here first, in which case
+  // HTTP_URL is unset and the work runs normally.
+  if (spanContext.hasTag(HTTP_URL)) return
+
   const url = extractURL(req)
+  const type = spanType ?? WEB
 
   span.addTags({
     [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: spanType,
+    [SPAN_TYPE]: type,
     [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
-    const clientIp = extractIp(config, req)
+  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
+    const clientIp = config.extractIp(config, req)
 
     if (clientIp) {
       span.setTag(HTTP_CLIENT_IP, clientIp)
@@ -475,22 +399,22 @@ function addRequestTags (context, spanType) {
     }
   }
 
-  addHeaders(context)
+  // Datadog scan/test markers, tagged unconditionally so the API endpoint
+  // reducer can keep scan/test traffic out of the API inventory.
+  const endpointScan = req.headers['x-datadog-endpoint-scan']
+  if (endpointScan !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-endpoint-scan`, endpointScan)
+  }
+  const securityTest = req.headers['x-datadog-security-test']
+  if (securityTest !== undefined) {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.x-datadog-security-test`, securityTest)
+  }
 }
 
 function addResponseTags (context) {
-  const { req, res, paths, span, inferredProxySpan, config } = context
+  const { req, res, inferredProxySpan, span } = context
 
-  const route = paths.join('')
-  if (route) {
-    // Use http.route from trusted framework instrumentation
-    span.setTag(HTTP_ROUTE, route)
-  } else if (config.resourceRenamingEnabled) {
-    // Route is unavailable, compute http.endpoint instead
-    const url = span.context()._tags[HTTP_URL]
-    const endpoint = url ? calculateHttpEndpoint(url) : '/'
-    span.setTag(HTTP_ENDPOINT, endpoint)
-  }
+  applyRouteOrEndpointTag(context)
 
   span.addTags({
     [HTTP_STATUS_CODE]: res.statusCode,
@@ -499,37 +423,76 @@ function addResponseTags (context) {
     [HTTP_STATUS_CODE]: res.statusCode,
   })
 
+  addResponseHeaders(context)
+
   web.addStatusError(req, res.statusCode)
+}
+
+function applyRouteOrEndpointTag (context) {
+  const { paths, span, config } = context
+  if (!span) return
+  const spanContext = span.context()
+
+  // AppSec calls `web.setRouteOrEndpointTag` from a pre-finish hook so the
+  // route/endpoint tags are available for API Security sampling, and the
+  // normal finish-time path runs this again. Either tag being present
+  // means the work has already been done; paths are stable between the
+  // two calls, so the second pass has nothing to add.
+  if (spanContext.hasTag(HTTP_ROUTE) || spanContext.hasTag(HTTP_ENDPOINT)) return
+
+  // Skip the `Array.prototype.join` builtin in the empty / single-segment
+  // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
+  const route = paths.length > 1 ? paths.join('') : paths[0]
+
+  if (route) {
+    // Use http.route from trusted framework instrumentation.
+    span.setTag(HTTP_ROUTE, route)
+    return
+  }
+
+  if (!config.resourceRenamingEnabled) return
+
+  // Route is unavailable, compute http.endpoint once.
+  const url = spanContext.getTag(HTTP_URL)
+  const endpoint = url ? calculateHttpEndpoint(url) : '/'
+  span.setTag(HTTP_ENDPOINT, endpoint)
 }
 
 function addResourceTag (context) {
   const { req, span } = context
-  const tags = span.context()._tags
+  const spanContext = span.context()
 
-  if (tags[RESOURCE_NAME]) return
+  if (spanContext.getTag(RESOURCE_NAME)) return
 
-  const resource = [req.method, tags[HTTP_ROUTE]]
+  const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
     .filter(Boolean)
     .join(' ')
 
   span.setTag(RESOURCE_NAME, resource)
 }
 
-function addHeaders (context) {
-  const { req, res, config, span, inferredProxySpan } = context
+function addRequestHeaders (context) {
+  const { req, config, span, inferredProxySpan } = context
 
   for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
-    const resHeader = res.getHeader(key)
-
     if (reqHeader) {
-      span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
-      inferredProxySpan?.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+      const tagName = tag || `${HTTP_REQUEST_HEADERS}.${key}`
+      span.setTag(tagName, reqHeader)
+      inferredProxySpan?.setTag(tagName, reqHeader)
     }
+  }
+}
 
+function addResponseHeaders (context) {
+  const { res, config, span, inferredProxySpan } = context
+
+  for (const [key, tag] of config.headers) {
+    const resHeader = res.getHeader(key)
     if (resHeader) {
-      span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
-      inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
+      const tagName = tag || `${HTTP_RESPONSE_HEADERS}.${key}`
+      span.setTag(tagName, resHeader)
+      inferredProxySpan?.setTag(tagName, resHeader)
     }
   }
 }

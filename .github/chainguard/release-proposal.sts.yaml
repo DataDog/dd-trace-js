@@ -5,7 +5,6 @@ subject: repo:DataDog/dd-trace-js:ref:refs/heads/master
 claim_pattern:
   event_name: (workflow_dispatch|schedule)
   ref: refs/heads/master
-  ref_protected: "true"
   job_workflow_ref: DataDog/dd-trace-js/.github/workflows/release-proposal.yml@refs/heads/master
 
 permissions:

@@ -1,0 +1,22 @@
+{
+  "supportedConfigurations": {
+    "DD_IAST_ENABLED": [
+      {
+        "configurationNames": [
+          "iast.enabled",
+          "iast",
+          "experimental.iast.enabled",
+          "experimental.iast"
+        ]
+      }
+    ],
+    "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": [
+      {
+        "configurationNames": [
+          "iast.securityControlsConfiguration",
+          "experimental.iast.securityControlsConfiguration"
+        ]
+      }
+    ]
+  }
+}

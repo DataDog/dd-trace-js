@@ -25,11 +25,14 @@ const tags = {
   HTTP_RESPONSE_HEADERS: 'http.response.headers',
   HTTP_USERAGENT: 'http.useragent',
   HTTP_CLIENT_IP: 'http.client_ip',
+  NETWORK_CLIENT_IP: 'network.client.ip',
 
   // Messaging
 
   // DSM Specific
   PATHWAY_HASH: 'pathway.hash',
+  DSM_TRANSACTION_ID: 'dsm.transaction.id',
+  DSM_TRANSACTION_CHECKPOINT: 'dsm.transaction.checkpoint',
 }
 
 // Deprecated

@@ -4,8 +4,9 @@ const assert = require('node:assert/strict')
 
 const childProcess = require('child_process')
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
   let axios, cwd, appDir, appFile, agent, proc
 
@@ -16,7 +17,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
 
     appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
 
-    childProcess.execSync('yarn', { cwd })
+    childProcess.execSync('yarn || yarn', { cwd })
     childProcess.execSync('npx tsc', {
       cwd: appDir,
     })
@@ -41,7 +42,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -64,7 +65,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
       await agent.assertMessageReceived(({ payload }) => {
         const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
         spans.forEach(span => {
-          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
           const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
 
           assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {
@@ -96,7 +97,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
       await agent.assertMessageReceived(({ payload }) => {
         const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
         spans.forEach(span => {
-          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
           const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
 
           assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {

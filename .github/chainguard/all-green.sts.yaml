@@ -1,0 +1,11 @@
+issuer: https://token.actions.githubusercontent.com
+
+subject_pattern: 'repo:DataDog/dd-trace-js:(ref:refs/heads/master|pull_request)'
+
+claim_pattern:
+  event_name: (push|pull_request|schedule)
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/all-green\.yml@.*
+
+permissions:
+  actions: write
+  contents: read

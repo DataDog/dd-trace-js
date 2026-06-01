@@ -15,6 +15,14 @@ describe('attempt to fix tests', () => {
       } else {
         expect(1 + 2).to.equal(3)
       }
+    } else if (process.env.SHOULD_FAIL_FIRST_ONLY) {
+      // First attempt fails, all retries pass. Exit code must still be 1
+      // for plain ATF tests (not quarantined/disabled).
+      if (numAttempt++ === 0) {
+        expect(1 + 2).to.equal(4)
+      } else {
+        expect(1 + 2).to.equal(3)
+      }
     } else {
       expect(1 + 2).to.equal(4)
     }

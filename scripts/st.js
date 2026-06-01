@@ -20,7 +20,7 @@ if (npm) {
 } else {
   console.log('Using local repo')
 
-  const packName = execSync(`npm pack ${ddtracePath}`, {
+  const packName = execSync(`npm pack --silent ${ddtracePath}`, {
     cwd: binariesPath,
     stdio: [null, null, 'inherit'],
     encoding: 'utf8',

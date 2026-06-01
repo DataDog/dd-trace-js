@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.deepseek.com/chat/completions",
+    "headers": {
+      "Content-Length": "303",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.0.0",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": "4.0.0",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v22.17.0",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello, OpenAI!\"\n    }\n  ],\n  \"temperature\": 0.5,\n  \"stream\": false,\n  \"max_tokens\": 100,\n  \"n\": 1,\n  \"user\": \"dd-trace-test\"\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "CF-RAY": "9634baaefa18efa3-EWR",
+      "Connection": "keep-alive",
+      "Content-Length": "111",
+      "Content-Type": "application/json",
+      "Date": "Tue, 22 Jul 2025 17:41:30 GMT",
+      "Server": "cloudflare",
+      "Set-Cookie": "__cf_bm=wKLTWpAihrXPtJXxWf9gg03qzUy4swOVEIjdAL2LVeU-1753206090-1.0.1.1-B0S0e4OYbPrIFhFANl9VPT7Y9Cl7YsZvUIz8QhZKuv.miYh4OgFXRI2a3bkjT1DVdz5L2BWye3LjYCotCH.C54x5Gz68qj_UnMSoWQ7Y6c8; path=/; expires=Tue, 22-Jul-25 18:11:30 GMT; domain=.deepseek.com; HttpOnly; Secure; SameSite=None",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-allow-credentials": "true",
+      "cf-cache-status": "DYNAMIC",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "x-ds-trace-id": "9cb6d19f3bfad709a589688110123087"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-BkZxQcJvaxbyldxLmrNffCobBnd84\",\n  \"object\": \"chat.completion\",\n  \"created\": 1750441008,\n  \"model\": \"deepseek-chat\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"Hello! How can I assist you today?\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 21,\n    \"completion_tokens\": 9,\n    \"total_tokens\": 30,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_07871e2ad8\"\n}\n"
+  }
+}

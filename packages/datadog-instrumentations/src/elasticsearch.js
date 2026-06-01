@@ -6,33 +6,39 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
-addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8'] }, (exports) => {
-  shimmer.wrap(exports.default.prototype, 'request', createWrapRequest('elasticsearch'))
-  shimmer.wrap(exports.default.prototype, 'getConnection', createWrapGetConnection('elasticsearch'))
+addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8 <9'] }, (exports) => {
+  wrapTransportPrototype(exports.default)
   return exports
 })
+
+addHook({ name: '@elastic/transport', versions: ['>=9'] }, (exports) => {
+  wrapTransportPrototype(exports.Transport)
+  return exports
+})
+
+function wrapTransportPrototype (Transport) {
+  shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
+  shimmer.wrap(Transport.prototype, 'getConnection', createWrapGetConnection('elasticsearch'))
+}
 
 addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16 <8', '>=8'] }, Transport => {
   shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
   shimmer.wrap(Transport.prototype, 'getConnection', createWrapGetConnection('elasticsearch'))
-  return Transport
 })
 
 addHook({ name: 'elasticsearch', file: 'src/lib/transport.js', versions: ['>=10'] }, Transport => {
   shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
-  return Transport
 })
 
 addHook({ name: 'elasticsearch', file: 'src/lib/connection_pool.js', versions: ['>=10'] }, ConnectionPool => {
-  shimmer.wrap(ConnectionPool.prototype, 'select', createWrapSelect('elasticsearch'))
-  return ConnectionPool
+  shimmer.wrap(ConnectionPool.prototype, 'select', createWrapSelect())
 })
 
 function createWrapGetConnection (name) {
   const connectCh = channel(`apm:${name}:query:connect`)
   return function wrapRequest (request) {
-    return function () {
-      const connection = request.apply(this, arguments)
+    return function (...args) {
+      const connection = request.apply(this, args)
       if (connectCh.hasSubscribers && connection && connection.url) {
         connectCh.publish(connection.url)
       }
@@ -44,17 +50,17 @@ function createWrapGetConnection (name) {
 function createWrapSelect () {
   const connectCh = channel('apm:elasticsearch:query:connect')
   return function wrapRequest (request) {
-    return function () {
-      if (arguments.length === 1) {
-        const cb = arguments[0]
-        arguments[0] = shimmer.wrapFunction(cb, cb => function (err, connection) {
+    return function (...args) {
+      const cb = args[0]
+      if (args.length === 1 && typeof cb === 'function') {
+        args[0] = shimmer.wrapCallback(cb, cb => function (err, connection) {
           if (connectCh.hasSubscribers && connection && connection.host) {
             connectCh.publish({ hostname: connection.host.host, port: connection.host.port })
           }
           cb(err, connection)
         })
       }
-      return request.apply(this, arguments)
+      return request.apply(this, args)
     }
   }
 }
@@ -79,7 +85,7 @@ function createWrapRequest (name) {
           cb = arguments[lastIndex]
 
           if (typeof cb === 'function') {
-            arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (error) {
+            arguments[lastIndex] = shimmer.wrapCallback(cb, cb => function (error) {
               if (error) {
                 ctx.error = error
                 errorCh.publish(ctx)

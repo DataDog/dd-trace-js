@@ -25,7 +25,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
@@ -170,6 +170,18 @@ describe('Plugin', () => {
             })
           })
 
+          it('should not overwrite a caller-supplied dd field', () => {
+            tracer.scope().activate(span, () => {
+              logger.info({ dd: { custom: 'value' } }, 'message')
+
+              sinon.assert.called(stream.write)
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.deepStrictEqual(record.dd, { custom: 'value' })
+            })
+          })
+
           it('should not inject trace_id or span_id without an active span', () => {
             logger.info('message')
 
@@ -214,7 +226,7 @@ describe('Plugin', () => {
             })
           }
 
-          // TODO: test with a version matrix against pino. externals.json doesn't allow that
+          // TODO: test with a version matrix against pino. externals.js doesn't allow that
           //       and we cannot control the version of pino-pretty internally required by pino
           if (semver.intersects(version, '>=5')) {
             it('should add the trace identifiers to logger instances with pretty print', () => {

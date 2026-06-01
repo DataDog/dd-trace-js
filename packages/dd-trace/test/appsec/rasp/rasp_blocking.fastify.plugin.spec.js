@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -11,7 +12,7 @@ const { getConfigFresh } = require('../../helpers/config')
 const appsec = require('../../../src/appsec')
 
 const { withVersions } = require('../../setup/mocha')
-const { json: blockedJson } = require('../../../src/appsec/blocked_templates')
+const { blockedTemplateJson: blockedJson, setTestBlockingTemplates } = require('../utils')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
@@ -28,6 +29,8 @@ describe('RASP - fastify blocking', () => {
           rasp: { enabled: true },
         },
       }))
+
+      setTestBlockingTemplates()
 
       const fastify = require(`../../../../../versions/fastify@${version}`).get()
       app = fastify()
@@ -98,7 +101,7 @@ describe('RASP - fastify blocking', () => {
     after(async () => {
       await app.server.close()
       appsec.disable()
-      await agent.close({ ritmReset: false })
+      await agent.close()
     })
 
     it('should not block on user error', async () => {
@@ -109,7 +112,7 @@ describe('RASP - fastify blocking', () => {
       sinon.assert.calledOnce(hooks.onError)
       assert.strictEqual(res.status, 500)
       assert.notStrictEqual(res.data, blockedJson)
-      assert(res.data.includes('loul'))
+      assert(res.data.includes('loul'), `Got: ${inspect(res.data)}`)
       await checkRaspExecutedAndNotThreat(agent, false)
     })
 

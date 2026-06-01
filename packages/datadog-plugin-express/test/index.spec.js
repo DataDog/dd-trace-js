@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -10,6 +11,7 @@ const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
+const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -47,7 +49,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -101,7 +103,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -628,7 +630,7 @@ describe('Plugin', () => {
           let span
 
           app.use((req, res, next) => {
-            span = tracer.scope().active()
+            span = storage('legacy').getStore()?.span
 
             sinon.spy(span, 'finish')
 
@@ -825,7 +827,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -861,7 +862,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -899,7 +899,6 @@ describe('Plugin', () => {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
-            return done()
           }
 
           app.get('/foo/bar', (req, res) => {
@@ -1047,7 +1046,7 @@ describe('Plugin', () => {
         it('should activate a span for every middleware on a route', done => {
           const app = express()
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           app.get(
             '/user',
@@ -1425,7 +1424,7 @@ describe('Plugin', () => {
             return layer.regexp.test('/users')
           })
 
-          assert.ok(Object.hasOwn(layer.handle, 'stack'))
+          assert.ok(Object.hasOwn(layer.handle, 'stack'), `Available keys: ${inspect(Object.keys(layer.handle))}`)
         })
 
         it('should keep user stores untouched', done => {
@@ -1440,12 +1439,12 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             try {
               assert.strictEqual(storage.getStore(), store)
+              res.status(200).send()
               done()
             } catch (e) {
+              res.status(200).send()
               done(e)
             }
-
-            res.status(200).send()
           })
 
           appListener = app.listen(0, 'localhost', () => {
@@ -1580,7 +1579,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1705,7 +1704,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

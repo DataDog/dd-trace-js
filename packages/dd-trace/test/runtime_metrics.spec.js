@@ -12,6 +12,7 @@ const sinon = require('sinon')
 
 require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -35,6 +36,10 @@ function createGarbage (count = 50) {
       let runtimeMetrics
       let proxy
       let config
+
+      before(() => {
+        require('../src/process-tags').initialize()
+      })
 
       beforeEach(() => {
         config = {
@@ -207,6 +212,10 @@ function createGarbage (count = 50) {
             obj: {},
             invalid: 't{e*s#t5-:./',
           },
+          DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
+          getOrigin: () => {
+            return 'default'
+          },
         }
 
         clock = sinon.useFakeTimers({
@@ -252,6 +261,28 @@ function createGarbage (count = 50) {
           })
         })
 
+        it('should include process tags when propagateProcessTags is enabled', function () {
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
+        })
+
+        it('should not include process tags when propagateProcessTags is disabled', function () {
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = false
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
+        })
+
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -291,6 +322,9 @@ function createGarbage (count = 50) {
           })
           const isGC95Percentile = sinon.match((value) => {
             return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
+          })
+          const isHeapSpace = sinon.match((metricName) => {
+            return /^heap_space:[a-z_]+$/.test(metricName)
           })
 
           // These return percentages as strings and are tested later.
@@ -349,10 +383,15 @@ function createGarbage (count = 50) {
             })
           )
 
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.available_size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(
+            client.gauge,
+            'runtime.node.heap.available_size.by.space',
+            isFiniteNumber,
+            isHeapSpace
+          )
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber, isHeapSpace)
 
           sinon.assert.called(client.flush)
         })
@@ -375,8 +414,8 @@ function createGarbage (count = 50) {
           // 1 hour even if a single metric is leaking it would get over
           // 64980 calls on its own without any other metric. A slightly lower
           // value is used here to be on the safer side.
-          assert.ok(client.gauge.callCount < 60000)
-          assert.ok(client.increment.callCount < 60000)
+          assert.ok(client.gauge.callCount < 60000, `Expected ${client.gauge.callCount} < 60000`)
+          assert.ok(client.increment.callCount < 60000, `Expected ${client.increment.callCount} < 60000`)
         })
 
         it('should handle configuration changes correctly', async () => {
@@ -389,7 +428,7 @@ function createGarbage (count = 50) {
 
           // Wait for event loop delay observer to trigger.
           let startTime = Date.now()
-          let waitTime = 60
+          const waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -415,7 +454,6 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           startTime = Date.now()
-          waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -431,6 +469,59 @@ function createGarbage (count = 50) {
           sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.95percentile')
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.utilization')
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
+        })
+
+        it('should not load native metrics when native is false, even if eventLoop or gc are enabled', () => {
+          // Stop the default runtimeMetrics instance started in beforeEach
+          runtimeMetrics.stop()
+
+          const nativeMetricsStart = sinon.spy()
+          const nativeMetricsModule = {
+            start: nativeMetricsStart,
+            stop: sinon.spy(),
+            stats: sinon.stub().returns({ cpu: { user: 0, system: 0 }, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
+          }
+
+          const localClient = {
+            gauge: sinon.spy(),
+            increment: sinon.spy(),
+            histogram: sinon.spy(),
+            flush: sinon.spy(),
+          }
+
+          const LocalClient = sinon.spy(function () {
+            return {
+              gauge: localClient.gauge,
+              increment: localClient.increment,
+              histogram: localClient.histogram,
+              flush: localClient.flush,
+            }
+          })
+          LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            '../dogstatsd': {
+              DogStatsDClient: LocalClient,
+            },
+            '@datadog/native-metrics': nativeMetricsModule,
+          })
+
+          const configNativeDisabled = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: false },
+          }
+
+          localRuntimeMetrics.start(configNativeDisabled)
+
+          // Native metrics should not have been started despite eventLoop and gc being enabled
+          sinon.assert.notCalled(nativeMetricsStart)
+
+          // Should still collect basic metrics via the JS fallback path
+          clock.tick(10000)
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
+
+          localRuntimeMetrics.stop()
         })
       })
 
@@ -527,8 +618,8 @@ function createGarbage (count = 50) {
               }
               if (metric === 'runtime.node.cpu.total') {
                 assert(
-                  // Subtracting 0.02 since lower numbers can happen due to rounding issues.
-                  number >= expected - 0.02 && number <= expected + 1,
+                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
+                  number >= expected - 0.1 && number <= expected + 1,
                   `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
                 )
                 totalPercent = number
@@ -558,7 +649,7 @@ function createGarbage (count = 50) {
           const heapUsed = heapUsedCalls[0].args[1]
           const heapTotal = heapTotalCalls[0].args[1]
 
-          assert(heapUsed <= heapTotal)
+          assert(heapUsed <= heapTotal, `Expected ${heapUsed} <= ${heapTotal}`)
         })
       })
 
@@ -651,12 +742,14 @@ function createGarbage (count = 50) {
             return acc
           }, {})
 
-          assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
-          assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
-          assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
-          assert.strictEqual(metrics['runtime.node.mem.total'], totalmem)
-          assert.strictEqual(metrics['runtime.node.mem.free'], freemem)
-          assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
+          assertObjectContains(metrics, {
+            'runtime.node.mem.heap_total': stats.heapTotal,
+            'runtime.node.mem.heap_used': stats.heapUsed,
+            'runtime.node.mem.rss': stats.rss,
+            'runtime.node.mem.total': totalmem,
+            'runtime.node.mem.free': freemem,
+            'runtime.node.mem.external': stats.external,
+          })
         })
       })
 

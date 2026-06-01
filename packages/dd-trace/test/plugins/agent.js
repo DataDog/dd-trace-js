@@ -2,21 +2,35 @@
 
 const assert = require('assert')
 const http = require('http')
-const path = require('path')
 const util = require('util')
+const { setTimeout: wait } = require('timers/promises')
 
 const bodyParser = require('body-parser')
 const express = require('express')
 const msgpack = require('@msgpack/msgpack')
-const proxyquire = require('proxyquire')
 const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
-const ritm = require('../../src/ritm')
 
 // Channel debug patching (loaded via require side-effect when DD_TEST_CHANNEL_DEBUG is set)
 if (process.env.DD_TEST_CHANNEL_DEBUG) require('../debug/channel-patch')
+
+// Modules that close over the previous `Config` / `TracerProxy` singletons.
+// Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
+// `datadog-instrumentations/*` and `plugin_manager.js` stay cached so RITM
+// hooks live for the whole process — see `agent.spec.js` for the regression
+// that pins the single-evaluation invariant.
+const RELOAD_EVICTION_IDS = [
+  '../../../..', // root index.js → `module.exports = require('./packages/dd-trace')`
+  '../..',
+  '../../src',
+  '../../src/proxy',
+  '../../src/config',
+  '../../src/config/defaults',
+  '../../src/serverless',
+]
+
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
@@ -31,6 +45,107 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let loaded = false
+
+// Non-prefix env vars `dd-trace` reads at module load or in instrumentation
+// hot paths. Every non-`DD_*` / non-`OTEL_*` / non-`_DD_*` env read via
+// `getEnvironmentVariable`, `getValueFromEnvSources`, or a destructured
+// `getEnvironmentVariables(...)` in `src/` is registered here so the gate
+// below rebuilds the tracer when a spec mocks the value between two
+// `agent.load()` calls. The `eslint-non-prefix-env-names` rule extracts
+// this Set at lint time and reports new reads that bypass it.
+const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
+  // serverless / IS_SERVERLESS detection
+  'AWS_LAMBDA_FUNCTION_NAME',
+  'FUNCTION_NAME',
+  'FUNCTION_TARGET',
+  'FUNCTIONS_EXTENSION_VERSION',
+  'FUNCTIONS_WORKER_RUNTIME',
+  'GCP_PROJECT',
+  'K_SERVICE',
+  'WEBSITE_SKU',
+  // lambda RITM target path (computed once at module load)
+  'LAMBDA_TASK_ROOT',
+  // serverless service-name fallbacks (Config singleton)
+  'WEBSITE_SITE_NAME',
+  // azure metadata payload (cached at first build)
+  'COMPUTERNAME',
+  'FUNCTIONS_WORKER_RUNTIME_VERSION',
+  'WEBSITE_INSTANCE_ID',
+  'WEBSITE_OWNER_NAME',
+  'WEBSITE_OS',
+  'WEBSITE_RESOURCE_GROUP',
+  // CI-visibility runner detection (test plugins, ci-visibility exporters)
+  'CUCUMBER_WORKER_ID',
+  'JEST_WORKER_ID',
+  'MOCHA_WORKER_ID',
+  'TINYPOOL_WORKER_ID',
+  'npm_config_user_agent',
+  'npm_lifecycle_script',
+  // GitHub Actions CI plugin metadata
+  'GITHUB_EVENT_PATH',
+  'RUNNER_TEMP',
+  // misc CI provider / build tooling reads
+  'HOME',
+  'LAGE_PACKAGE_NAME',
+  'NX_TASK_TARGET_PROJECT',
+  'NYC_CONFIG',
+  // instrumentation reads at module load / hot path
+  'DATABASE_URL',
+  'NODE_OPTIONS',
+  'UV_THREADPOOL_SIZE',
+])
+
+/**
+ * @param {string} key
+ */
+function isTrackedEnvKey (key) {
+  return key.startsWith('DD_') ||
+    key.startsWith('OTEL_') ||
+    key.startsWith('_DD_') ||
+    TRACKED_NON_PREFIX_ENV_NAMES.has(key)
+}
+
+/**
+ * @returns {Record<string, string | undefined>}
+ */
+function captureEnvSnapshot () {
+  const snapshot = Object.create(null)
+  for (const [key, value] of Object.entries(process.env)) {
+    if (isTrackedEnvKey(key)) {
+      snapshot[key] = value
+    }
+  }
+  return snapshot
+}
+
+/**
+ * @param {Record<string, string | undefined>} snapshot
+ */
+function envChangedSince (snapshot) {
+  const seen = new Set()
+  for (const [key, value] of Object.entries(process.env)) {
+    if (isTrackedEnvKey(key)) {
+      if (snapshot[key] !== value) return true
+      seen.add(key)
+    }
+  }
+  for (const key of Object.keys(snapshot)) {
+    if (!seen.has(key)) return true
+  }
+  return false
+}
+
+// Captured at agent.js evaluation, before any `before` hook runs.
+let envSnapshot = captureEnvSnapshot()
+// Stored as a JSON snapshot rather than a reference: a spec that keeps the
+// same `tracerConfig` object alive and mutates it between two `agent.load`
+// calls would otherwise hand the gate `same === same` and skip the rebuild
+// even though the values changed.
+let lastTracerConfigJson = '{}'
+
+/** @type {Map<string, Record<string, unknown> | undefined>} */
+const loadedPlugins = new Map()
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -41,13 +156,13 @@ function isMatchingTrace (spans, spanResourceMatch) {
 
 function ciVisRequestHandler (request, response) {
   response.status(200).send('OK')
-  traceHandlers.forEach(({ handler, spanResourceMatch }) => {
+  for (const { handler, spanResourceMatch } of traceHandlers) {
     const { events } = request.body
     const spans = events.map(event => event.content)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(request.body, request)
     }
-  })
+  }
 }
 
 /**
@@ -114,139 +229,36 @@ function dsmStatsExistWithParentHash (agent, expectedParentHash) {
  * @returns {import('../../src/opentracing/span')[]}
  */
 function unformatSpanEvents (span) {
-  if (span.meta && span.meta.events) {
+  if (span.meta?.events) {
     // Parse the JSON string back into an object
     const events = JSON.parse(span.meta.events)
 
     // Create the _events array
-    const spanEvents = events.map(event => {
+    return events.map(event => {
       return {
         name: event.name,
         startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
         attributes: event.attributes ? event.attributes : undefined,
       }
     })
-
-    // Return the unformatted _events
-    return spanEvents
   }
 
   return [] // Return an empty array if no events are found
 }
 
 /**
- * Adds environment variables to headers.
- *
- * @param {http.IncomingHttpHeaders} headers
- */
-function addEnvironmentVariablesToHeaders (headers) {
-  // get all environment variables that start with "DD_"
-  const ddEnvVars = new Map(
-    Object.entries(process.env)
-      .filter(([key]) => key.startsWith('DD_'))
-  )
-
-  // add plugin name and plugin version to headers, this is used for verifying tested
-  // integration version ranges
-  const currentPlugin = testedPlugins[testedPlugins.length - 1]
-  if (currentPlugin && currentPlugin.pluginName && currentPlugin.pluginVersion) {
-    ddEnvVars.set('DD_INTEGRATION', currentPlugin.pluginName)
-    ddEnvVars.set('DD_INTEGRATION_VERSION', currentPlugin.pluginVersion)
-  }
-
-  // add the DD environment variables to the header if any exist
-  // to send with trace to final agent destination
-  // if (ddEnvVars.size > 0) {
-  //   // TODO: Should we still do this? It has never worked until now.
-  //   headers['X-Datadog-Trace-Env-Variables'] = [...ddEnvVars].map(([key, value]) => `${key}=${value}`).join(',')
-  // }
-
-  // serialize the DD environment variables into a string of k=v pairs separated by comma
-  const serializedEnvVars = Array.from(ddEnvVars.entries())
-    .map(([key, value]) => `${key}=${value}`)
-    .join(',')
-
-  // add the serialized DD environment variables to the header
-  // to send with trace to the final agent destination
-  headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
-}
-
-/**
- * Handles the received trace request and sends trace to Test Agent if bool enabled.
- *
  * @param {express.Request} req
  * @param {express.Response} res
- * @param {boolean} sendToTestAgent
  */
-function handleTraceRequest (req, res, sendToTestAgent) {
-  // handles the received trace request and sends trace to Test Agent if bool enabled.
-  if (sendToTestAgent) {
-    const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
-    const replacer = (k, v) => typeof v === 'bigint' ? Number(v) : v
-
-    // remove incorrect headers
-    delete req.headers.host
-    delete req.headers['content-type']
-    delete req.headers['content-length']
-
-    // add current environment variables to trace headers
-    addEnvironmentVariablesToHeaders(req.headers)
-
-    const testAgentReq = http.request(
-      `${testAgentUrl}/v0.4/traces`, {
-        method: 'PUT',
-        headers: {
-          ...req.headers,
-          'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json',
-        },
-      })
-
-    testAgentReq.on('response', testAgentRes => {
-      if (res._closed) {
-        // Skip handling for already closed agents
-        return
-      }
-
-      if (testAgentRes.statusCode !== 200) {
-        // handle request failures from the Test Agent here
-        let body = ''
-        testAgentRes.on('data', chunk => {
-          body += chunk
-        })
-        testAgentRes.on('end', () => {
-          res.status(400).send(body)
-        })
-      }
-    })
-    testAgentReq.write(JSON.stringify(req.body, replacer))
-    testAgentReq.end()
-  }
-
+function handleTraceRequest (req, res) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-  traceHandlers.forEach(({ handler, spanResourceMatch }) => {
+  for (const { handler, spanResourceMatch } of traceHandlers) {
     const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
     }
-  })
-}
-
-function checkAgentStatus () {
-  const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-
-  return new Promise((resolve) => {
-    const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
-      resolve(response.statusCode === 200)
-    })
-
-    request.on('error', (_error_) => {
-      resolve(false)
-    })
-
-    request.end()
-  })
+  }
 }
 
 function getDsmStats () {
@@ -388,22 +400,25 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
 module.exports = {
   /**
-   * Load the plugin on the tracer with an optional config and start a mock agent.
+   * Load the plugin on the tracer with an optional config and start a
+   * mock agent. The returned promise resolves with the live
+   * `TracerProxy`; specs should bind `tracer` from this return value
+   * rather than capturing `require('../../dd-trace')` themselves, since
+   * the gate-fired rebuild path evicts `dd-trace` from `require.cache`
+   * and rebinds `global._ddtrace`.
    *
    * @overload
-   * @param {string | string[]} pluginNames - Name or list of names of plugins to load
+   * @param {string | string[]} pluginNames
    * @param {Record<string, unknown>} [config]
-   * @param {Record<string, unknown>} [tracerConfig={}]
-   * @returns Promise<void>
+   * @param {Record<string, unknown>} [tracerConfig]
+   * @returns {Promise<import('../../..').default>}
    */
   /**
-   * Load the plugin on the tracer with an optional config and start a mock agent.
-   *
    * @overload
-   * @param {string[]} pluginNames - Name or list of names of plugins to load
+   * @param {string[]} pluginNames
    * @param {Record<string, unknown>[]} config
-   * @param {Record<string, unknown>} [tracerConfig={}]
-   * @returns Promise<void>
+   * @param {Record<string, unknown>} [tracerConfig]
+   * @returns {Promise<import('../../..').default>}
    */
   async load (pluginNames, config, tracerConfig = {}) {
     if (!Array.isArray(pluginNames)) {
@@ -416,19 +431,46 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
-    // Reload dogstatsd to avoid adding new events to the global process object
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
+    const tracerConfigJson = JSON.stringify(tracerConfig)
+    if (
+      !loaded ||
+      global._ddtrace === undefined ||
+      envChangedSince(envSnapshot) ||
+      lastTracerConfigJson !== tracerConfigJson
+    ) {
+      if (global._ddtrace !== undefined) {
+        global._ddtrace._pluginManager.destroy()
+      }
+      // Filter `mainBeforeExit` by name rather than calling
+      // `process.removeAllListeners`: nyc registers a coverage-flush
+      // listener on the same events, and dropping it leaves coverage
+      // unwritten and, after enough rebuilds, hangs the next test.
+      const ddTraceSymbol = Symbol.for('dd-trace')
+      globalThis[ddTraceSymbol]?.beforeExitHandlers?.clear()
+      for (const event of ['exit', 'beforeExit']) {
+        for (const listener of process.listeners(event)) {
+          if (listener.name === 'mainBeforeExit') {
+            process.removeListener(event, listener)
+          }
+        }
+      }
+      delete global._ddtrace
+
+      for (const id of RELOAD_EVICTION_IDS) {
+        delete require.cache[require.resolve(id)]
+      }
+
+      tracer = require('../..')
+      envSnapshot = captureEnvSnapshot()
+      lastTracerConfigJson = tracerConfigJson
+      loaded = true
+    } else {
+      tracer = require('../..')
+    }
+
+    for (let i = 0; i < pluginNames.length; i++) {
+      loadedPlugins.set(pluginNames[i], config[i])
+    }
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -441,9 +483,12 @@ module.exports = {
       next()
     })
 
+    // This is a workaround to ensure that the agent is ready to receive
+    // requests without being cleaned up properly.
+    // TODO: Fix the root cause.
     const innerAgent = agent
 
-    const useTestAgent = await checkAgentStatus()
+    await wait(1)
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -459,35 +504,26 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.put('/v0.4/traces', (req, res) => {
-      handleTraceRequest(req, res, useTestAgent)
-    })
-
-    // CI Visibility Agentless intake
+    agent.put('/v0.4/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
-
-    // EVP proxy endpoint
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
-    // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
       llmobsSpanEventsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
-    // LLM Observability evaluation metrics endpoint
-    agent.post('/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric', (req, res) => {
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric', (req, res) => {
       llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
-    // DSM Checkpoint endpoint
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler }) => {
+      for (const { handler } of statsHandlers) {
         handler(dsmStats)
-      })
+      }
       res.status(200).send()
     })
 
@@ -497,31 +533,31 @@ module.exports = {
     /** @type {(this: server, event: string, ...args: unknown[]) => boolean} */
     const originalEmit = emit
     server.emit = function (event, ...args) {
-      storage('legacy').enterWith({ noop: true })
-      return originalEmit.call(this, event, ...args)
+      return storage('legacy').run({ noop: true }, () => originalEmit.call(this, event, ...args))
     }
 
     server.on('connection', socket => sockets.push(socket))
 
-    const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
+    const promise = /** @type {Promise<import('../../..').default>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
-        const port = listener.address().port
+        const port = this.port = listener.address().port
 
-        tracer.init(Object.assign({}, {
+        tracer.init({
           service: 'test',
           env: 'tester',
           port,
           flushInterval: 0,
           plugins: false,
-        }, tracerConfig))
+          ...tracerConfig,
+        })
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
-        for (let i = 0, l = pluginNames.length; i < l; i++) {
-          tracer.use(pluginNames[i], config[i])
+        for (const [name, pluginConfig] of loadedPlugins) {
+          tracer.use(name, pluginConfig)
         }
 
-        resolve()
+        resolve(tracer)
       })
     }))
 
@@ -654,7 +690,11 @@ module.exports = {
   },
 
   /**
-   * Unregister any outstanding expectation callbacks.
+   * Framework-only — called from `packages/dd-trace/test/setup/mocha.js`'s
+   * global `afterEach` to drop every test's outstanding expectation
+   * callbacks before the next test runs. Tests should never call this:
+   * `agent.close` already covers per-suite teardown, and per-test
+   * expectations are scoped to whichever assertion helper added them.
    */
   reset () {
     traceHandlers.clear()
@@ -664,27 +704,20 @@ module.exports = {
   },
 
   /**
-   * Stop the mock agent, reset all expectations and wipe the require cache.
-   *
-   * Defaults:
-   * - ritmReset: true
-   * - wipe: false
-   *
-   * @param {object} [options]
-   * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
-   * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
-   *     need this.
-   * @returns
+   * Tear down the mock agent and reset every per-test expectation. Idempotent.
+   * The next `agent.load` decides for itself whether to reuse the cached
+   * tracer or rebuild it; tests do not pass options here.
    */
-  close ({ ritmReset = true, wipe = false } = {}) {
-    // Allow close to be called idempotent
+  close () {
     if (listener === null) {
       return Promise.resolve()
     }
 
     listener.close()
     listener = null
-    sockets.forEach(socket => socket.end())
+    for (const socket of sockets) {
+      socket.end()
+    }
     sockets = []
     agent = null
     traceHandlers.clear()
@@ -694,20 +727,22 @@ module.exports = {
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-    if (ritmReset !== false) {
-      ritm.reset()
-    }
-    if (wipe) {
-      this.wipe()
-    }
+    loadedPlugins.clear()
+    // Force the next `agent.load` through the gate-fired rebuild path
+    // so cross-file leaks (`code_origin` tags sticking across files,
+    // `router`'s path-stack accumulating, …) cannot silently inherit
+    // the previous file's `Config` when both load with default
+    // `tracerConfig: {}`.
+    loaded = false
     this.setAvailableEndpoints(DEFAULT_AVAILABLE_ENDPOINTS)
     currentIntegrationName = null
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    return /** @type {Promise<void>} */ (new Promise(resolve => {
       this.server.on('close', () => {
         this.server = null
+        this.port = null
 
         resolve()
       })
@@ -716,27 +751,6 @@ module.exports = {
 
   setAvailableEndpoints (newEndpoints) {
     availableEndpoints = newEndpoints
-  },
-
-  // Wipe the require cache.
-  wipe () {
-    require('../..')._pluginManager.destroy()
-
-    delete require.cache[require.resolve('../..')]
-    delete global._ddtrace
-
-    process.removeAllListeners('exit')
-    process.removeAllListeners('beforeExit')
-
-    const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
-    const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
-      .map(exception => new RegExp(exception))
-
-    Object.keys(require.cache)
-      .filter(name => name.includes(basedir) && !exceptions.some(exception => exception.test(name)))
-      .forEach(name => {
-        delete require.cache[name]
-      })
   },
 
   tracer,

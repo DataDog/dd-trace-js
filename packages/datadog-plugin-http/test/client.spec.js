@@ -50,24 +50,21 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        tracer = require('../../dd-trace')
         appListener = null
       })
 
-      afterEach(() => {
+      afterEach(async () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close({ ritmReset: false })
+        await agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('http', { server: false })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
+        beforeEach(async () => {
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
         })
 
         const spanProducerFn = (done) => {
@@ -946,8 +943,8 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(() => {
-                done(new Error('Noop request was traced.'))
                 clearTimeout(timer)
+                done(new Error('Noop request was traced.'))
               })
 
             appListener = server(app, port => {
@@ -1185,7 +1182,7 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz'],
+              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz', 'X-Request-Id'],
             },
           }
 
@@ -1211,6 +1208,7 @@ describe('Plugin', () => {
                 const meta = traces[0][0].meta
 
                 assert.strictEqual(meta[`${HTTP_REQUEST_HEADERS}.host`], `localhost:${port}`)
+                assert.strictEqual(meta[`${HTTP_REQUEST_HEADERS}.x-request-id`], 'request-id')
                 assert.strictEqual(meta['http.baz'], 'baz')
                 assert.strictEqual(meta[`${HTTP_RESPONSE_HEADERS}.x-foo`], 'foo')
                 assert.strictEqual(meta['http.bar'], 'bar')
@@ -1219,7 +1217,7 @@ describe('Plugin', () => {
               .catch(done)
 
             const url = `${protocol}://localhost:${port}/user`
-            const headers = { 'x-baz': 'baz' }
+            const headers = { 'x-baz': 'baz', 'X-Request-Id': 'request-id' }
             const req = http.request(url, { headers }, res => {
               res.on('data', () => {})
             })

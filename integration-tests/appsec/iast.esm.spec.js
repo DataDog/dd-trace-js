@@ -3,8 +3,9 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('ESM', () => {
   let axios, cwd, appFile, agent, proc
 
@@ -40,7 +41,7 @@ describe('ESM', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -65,7 +66,7 @@ describe('ESM', () => {
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
-            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
             assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
@@ -76,7 +77,7 @@ describe('ESM', () => {
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
-            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
             assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)

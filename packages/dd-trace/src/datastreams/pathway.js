@@ -7,18 +7,24 @@ const crypto = require('crypto')
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const log = require('../log')
 const pick = require('../../../datadog-core/src/utils/src/pick')
-const { encodeVarint, decodeVarint } = require('./encoding')
+const { encodeVarintInto, decodeVarint } = require('./encoding')
 
 const cache = new LRUCache({ max: 500 })
 
 const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
 
+const PATHWAY_CONTEXT_BYTES = 20
+
+// Reused across `encodePathwayContext` calls; the buffer is fully rewritten before each
+// `Buffer.from(...)` copy-out so callers never observe mutation between checkpoints.
+const pathwayScratch = Buffer.allocUnsafe(PATHWAY_CONTEXT_BYTES)
+
 const logKeys = [CONTEXT_PROPAGATION_KEY, CONTEXT_PROPAGATION_KEY_BASE64]
 
 function shaHash (checkpointString) {
-  const hash = crypto.createHash('sha256').update(checkpointString).digest('hex').slice(0, 16)
-  return Buffer.from(hash, 'hex')
+  // Copy out of the 32-byte digest so the LRU cache doesn't retain it.
+  return Buffer.from(crypto.createHash('sha256').update(checkpointString).digest().subarray(0, 8))
 }
 
 /**
@@ -26,17 +32,31 @@ function shaHash (checkpointString) {
  * @param {string} env
  * @param {string[]} edgeTags
  * @param {Buffer} parentHash
+ * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
  */
-function computeHash (service, env, edgeTags, parentHash) {
+function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
   edgeTags.sort()
-  const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
+  const hashableEdgeTags = edgeTags.includes('manual_checkpoint:true')
+    ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
+    : edgeTags
 
-  const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}`
+  // The cache key includes parentHash so a fan-in node with different parents
+  // gets distinct cache entries; the hash input below excludes parentHash and
+  // gets combined with it via a second sha pass to produce the final hash.
+  const joinedEdgeTags = hashableEdgeTags.join('')
+  const propagationHex = propagationHashBigInt ? propagationHashBigInt.toString(16) : ''
+  const propagationPart = propagationHex ? `:${propagationHex}` : ''
+  const key = `${service}${env}${joinedEdgeTags}${parentHash}${propagationPart}`
+
   let value = cache.get(key)
   if (value) {
     return value
   }
-  const currentHash = shaHash(`${service}${env}` + hashableEdgeTags.join(''))
+
+  const baseString = `${service}${env}${joinedEdgeTags}`
+  const hashInput = propagationHex ? `${baseString}:${propagationHex}` : baseString
+
+  const currentHash = shaHash(hashInput)
   const buf = Buffer.concat([currentHash, parentHash], 16)
   value = shaHash(buf.toString())
   cache.set(key, value)
@@ -51,11 +71,12 @@ function computeHash (service, env, edgeTags, parentHash) {
  * @returns {Buffer}
  */
 function encodePathwayContext (dataStreamsContext) {
-  return Buffer.concat([
-    dataStreamsContext.hash,
-    Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
-    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6))),
-  ], 20)
+  let offset = dataStreamsContext.hash.copy(pathwayScratch, 0)
+  offset = encodeVarintInto(pathwayScratch, offset, Math.round(dataStreamsContext.pathwayStartNs / 1e6))
+  offset = encodeVarintInto(pathwayScratch, offset, Math.round(dataStreamsContext.edgeStartNs / 1e6))
+  // No-op when offset >= PATHWAY_CONTEXT_BYTES; otherwise pads stale bytes from a previous call.
+  pathwayScratch.fill(0, offset, PATHWAY_CONTEXT_BYTES)
+  return Buffer.from(pathwayScratch.subarray(0, PATHWAY_CONTEXT_BYTES))
 }
 
 /**
@@ -159,6 +180,7 @@ const DsmPathwayCodec = {
 }
 
 module.exports = {
+  CONTEXT_PROPAGATION_KEY_BASE64,
   computePathwayHash: computeHash,
   encodePathwayContext,
   decodePathwayContext,

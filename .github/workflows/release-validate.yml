@@ -1,20 +1,16 @@
-name: 'Release Validation'
+name: "Release Validation"
 
 on:
-  pull_request:
+  push:
     branches:
       - v[0-9]+.[0-9]+.[0-9]+-proposal
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate-proposal:
-    strategy:
-      fail-fast: false
-      matrix:
-        release-line: ['5']
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,7 +23,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/node
         with:
-          version: ''
+          version: ""
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

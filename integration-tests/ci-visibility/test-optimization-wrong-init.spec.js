@@ -2,6 +2,7 @@
 
 const { once } = require('node:events')
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { exec } = require('child_process')
 
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
@@ -19,7 +20,10 @@ const testFrameworks = [
   {
     testFramework: 'jest',
     command: 'node ./ci-visibility/test-optimization-wrong-init/run-jest.js',
-    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js',
+    expectedOutput: [
+      'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js',
+      'Test Suites:\\s+1 passed, 1 total',
+    ].join('|'),
   },
   {
     testFramework: 'vitest',
@@ -44,8 +48,8 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
   describe(`test optimization wrong init for ${testFramework}`, () => {
     let cwd, receiver, childProcess, processOutput
 
-    // cucumber does not support Node.js@18 anymore
-    if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
+    // cucumber and vitest@4.x do not support Node.js@18
+    if (NODE_MAJOR <= 18 && (testFramework === 'cucumber' || testFramework === 'vitest')) return
 
     const testFrameworks = ['jest', 'mocha', 'vitest']
 
@@ -116,11 +120,9 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
         eventsPromise,
       ])
 
-      assert.ok(
-        processOutput.includes(
-          `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`
-        )
-      )
+      const reason = 'is not initialized because Test Optimization mode is not enabled.'
+      const expectedSubstring = `Plugin "${testFramework}" ${reason}`
+      assert.ok(processOutput.includes(expectedSubstring), `Got: ${inspect(processOutput)}`)
       assert.match(processOutput, new RegExp(expectedOutput))
     })
   })

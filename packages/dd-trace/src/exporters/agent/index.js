@@ -24,7 +24,6 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
-      config,
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
@@ -51,7 +50,8 @@ class AgentExporter {
       this.#timer = setTimeout(() => {
         this._writer.flush()
         this.#timer = undefined
-      }, flushInterval).unref()
+      }, flushInterval)
+      this.#timer.unref?.()
     }
   }
 

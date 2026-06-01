@@ -4,12 +4,12 @@ const reporterEnabled = ['spec']
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 if (process.env.CI) {
-  reporterEnabled.push('mocha-junit-reporter')
+  reporterEnabled.push('./scripts/junit-reporter.js')
 }
 
 module.exports = {
   reporterEnabled,
-  mochaJunitReporterReporterOptions: {
+  scriptsJunitReporterJsReporterOptions: {
     mochaFile: `./node-${process.versions.node}-junit.xml`,
   },
 }

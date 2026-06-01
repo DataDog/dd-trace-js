@@ -3,8 +3,11 @@
 const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
+const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
 
 const { NODE_MAJOR } = require('../../../../../../version')
+
+const isDdTrace = iastFilter.isDdTrace
 
 const {
   assertLlmObsSpanEvent,
@@ -18,7 +21,19 @@ const {
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
 
 function getAiSdkOpenAiPackage (vercelAiVersion) {
-  return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
+  if (semifies(vercelAiVersion, '>=6.0.0')) {
+    return '@ai-sdk/openai'
+  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
+    return '@ai-sdk/openai@2.0.0'
+  } else {
+    return '@ai-sdk/openai@1.3.23'
+  }
+}
+
+const MOCK_TELEMETRY_METADATA = {
+  userId: '12345',
+  organizationId: 'orgAbc123',
+  conversationId: 'convAbc123',
 }
 
 describe('Plugin', () => {
@@ -27,6 +42,19 @@ describe('Plugin', () => {
   })
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
+
+  before(async () => {
+    iastFilter.isDdTrace = file => {
+      if (file.includes('dd-trace-js/versions/')) {
+        return false
+      }
+      return isDdTrace(file)
+    }
+  })
+
+  after(() => {
+    iastFilter.isDdTrace = isDdTrace
+  })
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
@@ -51,6 +79,9 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         temperature: 0.5,
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
@@ -63,7 +94,9 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowMetadata = {}
+      const expectedWorkflowMetadata = {
+        ...MOCK_TELEMETRY_METADATA,
+      }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
         expectedWorkflowMetadata.maxOutputTokens = 100
@@ -95,6 +128,7 @@ describe('Plugin', () => {
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
+          ...MOCK_TELEMETRY_METADATA,
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -117,6 +151,9 @@ describe('Plugin', () => {
         model: openai('gpt-4o-mini'),
         schema,
         prompt: 'Invent a character for a video game',
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -124,6 +161,7 @@ describe('Plugin', () => {
       const expectedWorkflowMetadata = {
         schema: MOCK_OBJECT,
         output: 'object',
+        ...MOCK_TELEMETRY_METADATA,
       }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
@@ -149,6 +187,7 @@ describe('Plugin', () => {
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: MOCK_TELEMETRY_METADATA,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -157,6 +196,9 @@ describe('Plugin', () => {
       await ai.embed({
         model: openai.embedding('text-embedding-ada-002'),
         value: 'hello world',
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -167,13 +209,14 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: 'hello world',
         outputValue: '[1 embedding(s) returned with size 1536]',
+        metadata: {
+          ...MOCK_TELEMETRY_METADATA,
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
-        expectedWorkflowSpanEvent.metadata = {
-          maxRetries: MOCK_NUMBER,
-        }
+        expectedWorkflowSpanEvent.metadata.maxRetries = MOCK_NUMBER
       }
 
       assertLlmObsSpanEvent(llmobsSpans[0], expectedWorkflowSpanEvent)
@@ -188,6 +231,7 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }],
         outputValue: '[1 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: MOCK_TELEMETRY_METADATA,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -196,6 +240,13 @@ describe('Plugin', () => {
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],
+        experimental_telemetry: {
+          metadata: {
+            userId: '12345',
+            organizationId: 'orgAbc123',
+            conversationId: 'convAbc123',
+          },
+        },
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -207,11 +258,14 @@ describe('Plugin', () => {
         inputValue: JSON.stringify(['hello world', 'goodbye world']),
         outputValue: '[2 embedding(s) returned with size 1536]',
         tags: { ml_app: 'test', integration: 'ai' },
+        metadata: {
+          userId: '12345',
+          organizationId: 'orgAbc123',
+          conversationId: 'convAbc123',
+        },
       }
       if (semifies(realVersion, '>=5.0.0')) {
-        expectedWorkflowSpanEvent.metadata = {
-          maxRetries: MOCK_NUMBER,
-        }
+        expectedWorkflowSpanEvent.metadata.maxRetries = MOCK_NUMBER
       }
 
       assertLlmObsSpanEvent(llmobsSpans[0], expectedWorkflowSpanEvent)
@@ -226,6 +280,11 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }, { text: 'goodbye world' }],
         outputValue: '[2 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: {
+          userId: '12345',
+          organizationId: 'orgAbc123',
+          conversationId: 'convAbc123',
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -237,6 +296,9 @@ describe('Plugin', () => {
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
         temperature: 0.5,
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       }
       if (semifies(realVersion, '>=5.0.0')) {
         options.maxOutputTokens = 100
@@ -255,6 +317,8 @@ describe('Plugin', () => {
         semifies(realVersion, '>=5.0.0')
           ? { maxRetries: MOCK_NUMBER, maxOutputTokens: 100 }
           : { maxSteps: MOCK_NUMBER }
+
+      Object.assign(expectedMetadata, MOCK_TELEMETRY_METADATA)
 
       assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
@@ -281,6 +345,7 @@ describe('Plugin', () => {
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
+          ...MOCK_TELEMETRY_METADATA,
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -303,6 +368,9 @@ describe('Plugin', () => {
         model: openai('gpt-4o-mini'),
         schema,
         prompt: 'Invent a character for a video game',
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       })
 
       const partialObjectStream = result.partialObjectStream
@@ -316,6 +384,7 @@ describe('Plugin', () => {
       const expectedWorkflowMetadata = {
         schema: MOCK_OBJECT,
         output: 'object',
+        ...MOCK_TELEMETRY_METADATA,
       }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
@@ -344,13 +413,14 @@ describe('Plugin', () => {
           role: 'assistant',
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: MOCK_TELEMETRY_METADATA,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
     it('creates a span for a tool call', async () => {
       let tools
-      let additionalOptions = {}
+      let additionalOptions
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -495,7 +565,7 @@ describe('Plugin', () => {
 
     it('created a span for a tool call from a stream', async () => {
       let tools
-      let additionalOptions = {}
+      let additionalOptions
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -709,6 +779,253 @@ describe('Plugin', () => {
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    describe('ToolLoopAgent', function () {
+      beforeEach(function () {
+        if (semifies(realVersion, '<6.0.0')) {
+          this.skip()
+        }
+      })
+
+      it('creates a text generation root span for ToolLoopAgent.generate', async () => {
+        const agent = new ai.ToolLoopAgent({
+          model: openai('gpt-4o-mini'),
+          instructions: 'You are a helpful assistant',
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+          tools: {
+            weather: ai.tool({
+              description: 'Get the weather in a given location',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {
+                  location: { type: 'string', description: 'The location to get the weather for' },
+                },
+              }),
+              execute: async ({ location }) => ({
+                location,
+                temperature: 72,
+              }),
+            }),
+          },
+        })
+
+        const result = await agent.generate({
+          prompt: 'What is the weather in Tokyo?',
+        })
+
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(4)
+
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          name: 'generateText',
+          spanKind: 'workflow',
+          inputValue: 'What is the weather in Tokyo?',
+          outputValue: MOCK_STRING,
+          metadata: {
+            maxRetries: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[1], {
+          span: apmSpans[1],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doGenerate',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+          ],
+          outputMessages: [{
+            role: 'assistant',
+            tool_calls: [{
+              tool_id: toolCallId,
+              name: 'weather',
+              arguments: {
+                location: 'Tokyo',
+              },
+              type: 'function',
+            }],
+          }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[2], {
+          span: apmSpans[2],
+          parentId: llmobsSpans[0].span_id,
+          name: 'weather',
+          spanKind: 'tool',
+          inputValue: JSON.stringify({ location: 'Tokyo' }),
+          outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[3], {
+          span: apmSpans[3],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doGenerate',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+            {
+              content: '',
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'weather',
+                arguments: {
+                  location: 'Tokyo',
+                },
+                type: 'function',
+              }],
+            },
+            {
+              content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+
+      it('creates a text generation root span for ToolLoopAgent.stream', async () => {
+        const agent = new ai.ToolLoopAgent({
+          model: openai('gpt-4o-mini'),
+          instructions: 'You are a helpful assistant',
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+          tools: {
+            weather: ai.tool({
+              description: 'Get the weather in a given location',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {
+                  location: { type: 'string', description: 'The location to get the weather for' },
+                },
+              }),
+              execute: async ({ location }) => ({
+                location,
+                temperature: 72,
+              }),
+            }),
+          },
+        })
+
+        const result = await agent.stream({
+          prompt: 'What is the weather in Tokyo?',
+        })
+
+        const textStream = result.textStream
+
+        for await (const part of textStream) {} // eslint-disable-line
+
+        const stepsPromise = result._steps ?? result.stepsPromise
+        const steps = stepsPromise.status.value
+        const toolCallId = steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(4)
+
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          name: 'streamText',
+          spanKind: 'workflow',
+          inputValue: 'What is the weather in Tokyo?',
+          outputValue: MOCK_STRING,
+          metadata: {
+            maxRetries: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[1], {
+          span: apmSpans[1],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doStream',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+          ],
+          outputMessages: [{
+            role: 'assistant',
+            content: MOCK_STRING,
+            tool_calls: [{
+              tool_id: toolCallId,
+              name: 'weather',
+              arguments: {
+                location: 'Tokyo',
+              },
+              type: 'function',
+            }],
+          }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[2], {
+          span: apmSpans[2],
+          parentId: llmobsSpans[0].span_id,
+          name: 'weather',
+          spanKind: 'tool',
+          inputValue: JSON.stringify({ location: 'Tokyo' }),
+          outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[3], {
+          span: apmSpans[3],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doStream',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+            {
+              content: '',
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'weather',
+                arguments: {
+                  location: 'Tokyo',
+                },
+                type: 'function',
+              }],
+            },
+            {
+              content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
       })
     })
   })

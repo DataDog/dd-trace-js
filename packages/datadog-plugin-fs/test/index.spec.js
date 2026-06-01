@@ -7,7 +7,8 @@ const util = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const realFS = Object.assign({}, require('node:fs'))
+const realFS = { ...require('node:fs') }
+const { storage } = require('../../datadog-core')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
@@ -21,7 +22,7 @@ describe('Plugin', () => {
     let fs
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
@@ -74,7 +75,7 @@ describe('Plugin', () => {
     let tmpdir
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
@@ -109,6 +110,16 @@ describe('Plugin', () => {
               realFS.closeSync(fd)
             }
           })
+        })
+      })
+
+      describe('existsSync', () => {
+        it('should not leak noop store to parent context', () => {
+          const storeBefore = storage('legacy').getStore()
+
+          fs.existsSync(__filename)
+
+          assert.strictEqual(storage('legacy').getStore(), storeBefore)
         })
       })
     })
@@ -1883,7 +1894,8 @@ describe('Plugin', () => {
         if (name.split('.').reduce(reducer, realFS)) {
           describe(name, () => {
             fn(name, (fs, args, done, withError) => {
-              const span = {}
+              const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 args.push((err) => {
                   assert.strictEqual(tracer.scope().active(), span)
@@ -1902,7 +1914,8 @@ describe('Plugin', () => {
         if (realFS.promises && name in realFS.promises) {
           describe('promises.' + name, () => {
             fn('promises.' + name, (fs, args, done, withError) => {
-              const span = {}
+              const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 return fs.promises[name].apply(fs.promises, args)
                   .then(() => {
@@ -1937,12 +1950,13 @@ describe('Plugin', () => {
 })
 
 function mkExpected (props) {
-  const meta = Object.assign({ component: 'fs', 'span.kind': 'internal' }, props.meta)
-  const expected = Object.assign({
+  const meta = { component: 'fs', 'span.kind': 'internal', ...props.meta }
+  const expected = {
     name: 'fs.operation',
     error: 0,
     service: 'test',
-  }, props)
+    ...props,
+  }
   expected.meta = meta
   return expected
 }

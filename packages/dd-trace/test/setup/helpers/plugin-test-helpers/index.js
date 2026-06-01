@@ -18,12 +18,13 @@ function createIntegrationTestSuite (pluginName, packageName, options, testCallb
           })
 
           after(async () => {
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           before(async () => {
             meta.tracer = require('../../../../../dd-trace').init()
             const mod = require(`../../../../../../versions/${packageName}@${version}`)
+            meta.versionMod = mod
             meta.mod = options.subModule ? mod.get(options.subModule) : mod.get()
           })
 

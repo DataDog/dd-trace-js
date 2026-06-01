@@ -8,13 +8,9 @@ const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { getValueFromEnvSources } = require('../config/helper')
 
 const { NODE_MAJOR } = require('../../../../version')
-// TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
-// It is only a variable for testing. Think about alternatives.
-const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
-const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
+const processTags = require('../process-tags')
 
 const eventLoopDelayResolution = 4
 
@@ -34,31 +30,46 @@ let eventLoopDelayObserver = null
 // https://github.com/DataDog/dogweb/blob/prod/integration/node/node_metadata.csv
 
 module.exports = {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     this.stop()
+    // The agent expects a flush every ten seconds, so this is for tests only.
+    const flushIntervalMs = config.DD_RUNTIME_METRICS_FLUSH_INTERVAL
     const clientConfig = DogStatsDClient.generateClientConfig(config)
+
+    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
+      for (const tag of processTags.tagsArray) {
+        clientConfig.tags.push(tag)
+      }
+    }
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
+
+    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     if (trackGc) {
       startGCObserver()
     }
 
-    // Using no-gc prevents the native gc metrics from being tracked. Not
-    // passing any options means all metrics are tracked.
-    // TODO: This is a workaround. We should find a better solution.
-    const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+    const useNative = config.runtimeMetrics.native !== false
 
-    try {
-      nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start(...watchers)
-    } catch (error) {
-      log.error('Error starting native metrics', error)
-      nativeMetrics = null
+    if (useNative) {
+      // Using no-gc prevents the native gc metrics from being tracked. Not
+      // passing any options means all metrics are tracked.
+      // TODO: This is a workaround. We should find a better solution.
+      const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+
+      try {
+        nativeMetrics = require('@datadog/native-metrics')
+        nativeMetrics.start(...watchers)
+      } catch (error) {
+        log.error('Error starting native metrics', error)
+        nativeMetrics = null
+      }
     }
-
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     lastTime = performance.now()
 
@@ -67,7 +78,7 @@ module.exports = {
         captureNativeMetrics(trackEventLoop, trackGc)
         captureCommonMetrics(trackEventLoop)
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     } else {
       lastCpuUsage = process.cpuUsage()
 
@@ -89,10 +100,10 @@ module.exports = {
           captureEventLoopDelay()
         }
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     }
 
-    interval.unref()
+    interval.unref?.()
   },
 
   stop () {
@@ -238,7 +249,7 @@ function captureHeapSpace () {
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
-    const tags = [`space:${stats[i].space_name}`]
+    const tags = [`heap_space:${stats[i].space_name}`]
 
     client.gauge('runtime.node.heap.size.by.space', stats[i].space_size, tags)
     client.gauge('runtime.node.heap.used_size.by.space', stats[i].space_used_size, tags)

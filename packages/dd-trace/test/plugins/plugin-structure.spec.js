@@ -70,10 +70,10 @@ function extractRuntimePluginPackageNames (pluginsIndexSource) {
 
 function extractDocsApiPluginList (apiMdSource) {
   const start = apiMdSource.indexOf('<h3 id="integrations-list">Available Plugins</h3>')
-  assert.ok(start !== -1, 'Could not find Available Plugins heading in docs/API.md')
+  assert.notStrictEqual(start, -1, 'Could not find Available Plugins heading in docs/API.md')
 
   const end = apiMdSource.indexOf('<h2 id="manual-instrumentation">', start)
-  assert.ok(end !== -1, 'Could not find Manual Instrumentation heading in docs/API.md')
+  assert.notStrictEqual(end, -1, 'Could not find Manual Instrumentation heading in docs/API.md')
 
   const section = apiMdSource.slice(start, end)
   return extractPluginIds(section, /^\* \[([^\]]+)\]\(/gm, 1)
@@ -153,7 +153,7 @@ describe('Plugin Structure Validation', () => {
 
     for (const hook of Object.values(hooks)) {
       let hookFn = hook
-      if (typeof hook === 'object' && hook.fn) {
+      if (hook !== null && typeof hook === 'object' && hook.fn) {
         hookFn = hook.fn
       }
       const hookString = hookFn.toString()

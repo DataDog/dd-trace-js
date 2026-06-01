@@ -3,8 +3,9 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
 // These test are here and not in the integration tests
 // because they require postgres instance
 describe('RASP - sql_injection - integration', () => {
@@ -35,7 +36,7 @@ describe('RASP - sql_injection - integration', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -49,7 +50,10 @@ describe('RASP - sql_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
         assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
@@ -67,7 +71,10 @@ describe('RASP - sql_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
         assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
@@ -85,7 +92,10 @@ describe('RASP - sql_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
         assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }

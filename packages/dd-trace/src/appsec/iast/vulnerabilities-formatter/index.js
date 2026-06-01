@@ -83,14 +83,12 @@ class VulnerabilityFormatter {
   formatVulnerability (vulnerability, sourcesIndexes, sources) {
     const { type, hash, evidence, location } = vulnerability
 
-    const formattedVulnerability = {
+    return {
       type,
       hash,
       evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources),
       location,
     }
-
-    return formattedVulnerability
   }
 
   toJson (vulnerabilitiesToFormat) {

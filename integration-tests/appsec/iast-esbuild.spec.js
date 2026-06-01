@@ -6,18 +6,18 @@ const { setTimeout } = require('timers/promises')
 const childProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
-const { promisify } = require('util')
+const { promisify, inspect } = require('util')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 const exec = promisify(childProcess.exec)
 const retry = async fn => {
   try {
     await fn()
   } catch {
-    await setTimeout(60_000)
+    await setTimeout(5_000)
     await fn()
   }
 }
@@ -38,7 +38,7 @@ describe('esbuild support for IAST', () => {
     await exec('npm init -y', { cwd: craftedNodeModulesDir })
     await retry(() => exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
       cwd: craftedNodeModulesDir,
-      timeout: 3e3,
+      timeout: 60_000,
     }))
   })
 
@@ -46,7 +46,7 @@ describe('esbuild support for IAST', () => {
     return agent.assertMessageReceived(({ payload }) => {
       const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
       spans.forEach(span => {
-        assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+        assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
         const spanIastData = JSON.parse(span.meta['_dd.iast.json'])
         assert.strictEqual(spanIastData.vulnerabilities[0].type, 'COMMAND_INJECTION')
         assert.strictEqual(spanIastData.vulnerabilities[0].location.path, expectedPath)
@@ -55,8 +55,11 @@ describe('esbuild support for IAST', () => {
         }
 
         const ddStack = msgpack.decode(span.meta_struct['_dd.stack'])
-        assert.ok(Object.hasOwn(ddStack.vulnerability[0], 'frames'))
-        assert.ok(ddStack.vulnerability[0].frames.length > 0)
+        assert.ok(
+          Object.hasOwn(ddStack.vulnerability[0], 'frames'),
+          `Available keys: ${inspect(Object.keys(ddStack.vulnerability[0]))}`
+        )
+        assert.ok(ddStack.vulnerability[0].frames.length > 0, `Expected ${ddStack.vulnerability[0].frames.length} > 0`)
       })
     }, null, 1, true)
   }
@@ -109,7 +112,7 @@ describe('esbuild support for IAST', () => {
       })
 
       afterEach(async () => {
-        contextVars.proc.kill()
+        await stopProc(contextVars.proc)
         await contextVars.agent.stop()
       })
     }
@@ -118,7 +121,9 @@ describe('esbuild support for IAST', () => {
   describe('cjs', () => {
     const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
 
-    before(async () => {
+    before(async function () {
+      this.timeout(120_000)
+
       const setup = await setupApplication('iast-esbuild-cjs')
       context.applicationDir = setup.applicationDir
       context.bundledApplicationDir = setup.bundledApplicationDir

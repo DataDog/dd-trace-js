@@ -1,5 +1,7 @@
 'use strict'
 
+const { EOL } = require('node:os')
+
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
@@ -23,10 +25,11 @@ class Crashtracker {
     }
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     if (this.#started) return this.configure(config)
-
-    this.#started = true
 
     try {
       binding.init(
@@ -34,9 +37,21 @@ class Crashtracker {
         this.#getReceiverConfig(),
         this.#getMetadata(config)
       )
+      this.#started = true
+      this.#trackUnhandledExceptions()
     } catch (e) {
-      log.error('Error initialising crashtracker', e)
+      log.error('Error initializing crashtracker', e)
     }
+  }
+
+  #trackUnhandledExceptions () {
+    process.once('uncaughtExceptionMonitor', (error, origin) => {
+      try {
+        binding.reportUncaughtExceptionMonitor(error, origin)
+      } catch (e) {
+        process.stderr.write(`Error reporting uncaught exception to crashtracker: ${e.toString()}${EOL}`)
+      }
+    })
   }
 
   withProfilerSerializing (f) {
@@ -49,8 +64,17 @@ class Crashtracker {
   }
 
   // TODO: Send only configured values when defaults are fixed.
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   #getConfig (config) {
     const url = getAgentUrl(config)
+
+    // Out-of-process symbolication currently works on
+    // Linux only, does not work on Mac.
+    const resolveMode = require('os').platform === 'linux'
+      ? 'EnabledWithSymbolsInReceiver'
+      : 'EnabledWithInprocessSymbols'
 
     return {
       additional_files: [],
@@ -67,9 +91,10 @@ class Crashtracker {
         },
         timeout_ms: 3000,
       },
-      timeout_ms: 5000,
-      // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
-      resolve_frames: 'EnabledWithInprocessSymbols',
+      timeout: { secs: 5, nanos: 0 },
+      demangle_names: true,
+      signals: [],
+      resolve_frames: resolveMode,
     }
   }
 

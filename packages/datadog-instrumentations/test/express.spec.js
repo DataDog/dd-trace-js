@@ -38,7 +38,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not abort the request by default', async () => {
@@ -79,7 +79,7 @@ withVersions('express', 'express', version => {
       // Router does not exist in Express 5
       it('should work correctly when router[method] is called without handler', () => {
         const router = express.Router()
-        assert.doesNotThrow(() => { router.bind('/test') })
+        router.bind('/test')
       })
     }
   })

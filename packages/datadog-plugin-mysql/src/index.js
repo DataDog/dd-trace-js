@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const CLIENT_PORT_KEY = require('../../dd-trace/src/constants')
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MySQLPlugin extends DatabasePlugin {
@@ -33,7 +33,7 @@ class MySQLPlugin extends DatabasePlugin {
         [CLIENT_PORT_KEY]: ctx.conf.port,
       },
     }, ctx)
-    ctx.sql = this.injectDbmQuery(span, ctx.sql, service)
+    ctx.sql = this.injectDbmQuery(span, ctx.sql, service.name)
 
     return ctx.currentStore
   }

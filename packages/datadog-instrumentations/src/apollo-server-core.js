@@ -10,9 +10,9 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
   const HttpQueryError = runHttpQueryModule.HttpQueryError
 
   shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
-    return function runHttpQuery () {
+    return function runHttpQuery (...args) {
       if (!requestChannel.start.hasSubscribers) {
-        return originalRunHttpQuery.apply(this, arguments)
+        return originalRunHttpQuery.apply(this, args)
       }
 
       const abortController = new AbortController()
@@ -22,7 +22,7 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
         originalRunHttpQuery,
         { abortController, abortData },
         this,
-        ...arguments)
+        ...args)
 
       const abortPromise = new Promise((resolve, reject) => {
         abortController.signal.addEventListener('abort', (event) => {

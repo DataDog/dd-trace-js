@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -19,7 +21,7 @@ describe('Plugin', () => {
   describe('amqp10', () => {
     before(() => agent.load('rhea'))
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('amqp10', 'amqp10', version => {
       beforeEach(() => {
@@ -81,22 +83,28 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                assert.strictEqual(span.name, expectedSchema.send.opName)
-                assert.strictEqual(span.service, expectedSchema.send.serviceName)
-                assert.strictEqual(span.resource, 'send amq.topic')
+                assertObjectContains(span, {
+                  name: expectedSchema.send.opName,
+                  service: expectedSchema.send.serviceName,
+                  resource: 'send amq.topic',
+                  meta: {
+                    'span.kind': 'producer',
+                    'out.host': 'localhost',
+                    'amqp.connection.host': 'localhost',
+                    'amqp.connection.user': 'admin',
+                    'amqp.link.target.address': 'amq.topic',
+                    'amqp.link.role': 'sender',
+                    component: 'amqp10',
+                    '_dd.integration': 'amqp10',
+                  },
+                  metrics: {
+                    'network.destination.port': 5673,
+                    'amqp.connection.port': 5673,
+                    'amqp.link.handle': 1,
+                  },
+                })
                 assert.ok(!('type' in span))
-                assert.strictEqual(span.meta['span.kind'], 'producer')
-                assert.strictEqual(span.meta['out.host'], 'localhost')
-                assert.strictEqual(span.meta['amqp.connection.host'], 'localhost')
-                assert.strictEqual(span.meta['amqp.connection.user'], 'admin')
-                assert.strictEqual(span.meta['amqp.link.target.address'], 'amq.topic')
-                assert.strictEqual(span.meta['amqp.link.role'], 'sender')
                 assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
-                assert.strictEqual(span.meta.component, 'amqp10')
-                assert.strictEqual(span.meta['_dd.integration'], 'amqp10')
-                assert.strictEqual(span.metrics['network.destination.port'], 5673)
-                assert.strictEqual(span.metrics['amqp.connection.port'], 5673)
-                assert.strictEqual(span.metrics['amqp.link.handle'], 1)
               })
               .then(done)
               .catch(done)
@@ -139,7 +147,10 @@ describe('Plugin', () => {
             const promise = sender.send({ key: 'value' })
 
             return promise.then(() => {
-              assert.ok(!Object.hasOwn(promise, 'value') && ('value' in promise))
+              assert.ok(
+                !Object.hasOwn(promise, 'value') && ('value' in promise),
+                `Got: ${inspect(!Object.hasOwn(promise, 'value'))} && ${inspect('value' in promise)}`
+              )
             })
           })
 
@@ -154,19 +165,25 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.receive.opName)
-                assert.strictEqual(span.service, expectedSchema.receive.serviceName)
-                assert.strictEqual(span.resource, 'receive amq.topic')
-                assert.strictEqual(span.type, 'worker')
-                assert.strictEqual(span.meta['span.kind'], 'consumer')
-                assert.strictEqual(span.meta['amqp.connection.host'], 'localhost')
-                assert.strictEqual(span.meta['amqp.connection.user'], 'admin')
-                assert.strictEqual(span.meta['amqp.link.source.address'], 'amq.topic')
-                assert.strictEqual(span.meta['amqp.link.role'], 'receiver')
+                assertObjectContains(span, {
+                  name: expectedSchema.receive.opName,
+                  service: expectedSchema.receive.serviceName,
+                  resource: 'receive amq.topic',
+                  type: 'worker',
+                  meta: {
+                    'span.kind': 'consumer',
+                    'amqp.connection.host': 'localhost',
+                    'amqp.connection.user': 'admin',
+                    'amqp.link.source.address': 'amq.topic',
+                    'amqp.link.role': 'receiver',
+                    component: 'amqp10',
+                  },
+                  metrics: {
+                    'amqp.connection.port': 5673,
+                    'amqp.link.handle': 0,
+                  },
+                })
                 assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
-                assert.strictEqual(span.meta.component, 'amqp10')
-                assert.strictEqual(span.metrics['amqp.connection.port'], 5673)
-                assert.strictEqual(span.metrics['amqp.link.handle'], 0)
               })
               .then(done)
               .catch(done)

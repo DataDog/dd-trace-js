@@ -59,14 +59,17 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       withPeerService(
         () => tracer,
         'mongodb-core',
         () => {
-          const PeerCat = mongoose.model('PeerCat', { name: String })
+          // Use existing model if already compiled: on master, --retries 1 reruns failed tests on
+          // the same Mongoose instance, and calling model() with a schema a second time throws
+          // OverwriteModelError.
+          const PeerCat = mongoose.models.PeerCat || mongoose.model('PeerCat', { name: String })
           return new PeerCat({ name: 'PeerCat' }).save()
         },
         () => dbName,
@@ -75,7 +78,7 @@ describe('Plugin', () => {
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
 
-        const span = {}
+        const span = tracer.startSpan('test')
         const kitty = new Cat({ name: 'Zildjian' })
 
         return tracer.scope().activate(span, () => {
@@ -89,7 +92,7 @@ describe('Plugin', () => {
         it('should propagate context with queries', done => {
           const Cat = mongoose.model('Cat2', { name: String })
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             Cat.find({ name: 'Zildjian' }).exec(() => {
@@ -106,7 +109,7 @@ describe('Plugin', () => {
         it('should propagate context with aggregations', done => {
           const Cat = mongoose.model('Cat3', { name: String })
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             temporaryWarningExceptions.add(
@@ -130,7 +133,7 @@ describe('Plugin', () => {
             setImmediate(resolve)
           })
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           return tracer.scope().activate(span, () => {
             return promise.then(() => {
@@ -142,7 +145,7 @@ describe('Plugin', () => {
         it('should propagate context with queries', () => {
           const Cat = mongoose.model('Cat2', { name: String })
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           return tracer.scope().activate(span, () => {
             return Cat.find({ name: 'Zildjian' }).exec().then(() => {
@@ -154,7 +157,7 @@ describe('Plugin', () => {
         it('should propagate context with aggregations', () => {
           const Cat = mongoose.model('Cat3', { name: String })
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           return tracer.scope().activate(span, () => {
             return Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec().then(() => {

@@ -3,8 +3,9 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('./helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
 describe('Remote config client id', () => {
   let axios, cwd, appFile
 
@@ -34,7 +35,7 @@ describe('Remote config client id', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -60,18 +61,18 @@ describe('Remote config client id', () => {
           assert.ok(Array.isArray(processTags), 'process_tags should be an array')
 
           // Verify required process tags are present
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.basedir:')))
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.name:')))
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.type:')))
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.workdir:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.basedir:')), `Got: ${inspect(processTags)}`)
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.name:')), `Got: ${inspect(processTags)}`)
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.type:')), `Got: ${inspect(processTags)}`)
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.workdir:')), `Got: ${inspect(processTags)}`)
 
           // Verify entrypoint.type has the expected value
-          assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'))
+          assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'), `Got: ${inspect(processTags)}`)
+          agent.removeListener('remote-config-request', handleRemoteConfigRequest)
           done()
         } catch (err) {
-          done(err)
-        } finally {
           agent.removeListener('remote-config-request', handleRemoteConfigRequest)
+          done(err)
         }
       }
 
@@ -98,7 +99,7 @@ describe('Remote config client id', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -106,7 +107,10 @@ describe('Remote config client id', () => {
       await axios.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
-        assert.ok(payload[0][0].meta['_dd.rc.client_id'] == null)
+        assert.ok(
+          payload[0][0].meta['_dd.rc.client_id'] == null,
+          `Expected ${payload[0][0].meta['_dd.rc.client_id']} == null`
+        )
       })
     })
   })

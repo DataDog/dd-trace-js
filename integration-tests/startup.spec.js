@@ -10,6 +10,7 @@ const {
   FakeAgent,
   spawnProc,
   spawnProcAndExpectExit,
+  stopProc,
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage,
@@ -40,7 +41,7 @@ const execArgvs = [
 execArgvs.forEach(({ execArgv, skip, optional = true }) => {
   const describe = skip ? globalThis.describe.skip : globalThis.describe
 
-  describe(`startup ${execArgv.join(' ').concat(`(optional: ${optional})`)}`, () => {
+  describe(`startup ${execArgv.join(' ').concat(` (optional: ${optional})`)}`, () => {
     let agent
     let proc
     let cwd
@@ -71,7 +72,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -85,9 +86,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
         })
@@ -139,9 +140,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `localhost:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
         })
@@ -154,7 +155,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -168,9 +169,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
         })
@@ -186,9 +187,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `localhost:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
         })
@@ -203,7 +204,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -214,9 +215,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, '127.0.0.1:8126')
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
         })
@@ -232,9 +233,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, '127.0.0.1:8126')
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
         })

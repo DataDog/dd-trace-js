@@ -7,7 +7,9 @@ module.exports = {
   DECORATOR: '_ml_obs.decorator',
   INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
+  COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
   METRICS: '_ml_obs.metrics',
+  TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
   PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',
@@ -16,6 +18,9 @@ module.exports = {
   NAME: '_ml_obs.name',
   TRACE_ID: '_ml_obs.trace_id',
   PROPAGATED_TRACE_ID_KEY: '_dd.p.llmobs_trace_id',
+  LLMOBS_TRACE_ID_BRIDGE_KEY: 'llmobs_trace_id',
+  LLMOBS_PARENT_ID_BRIDGE_KEY: 'llmobs_parent_id',
+  LLMOBS_SUBMITTED_TAG_KEY: '_dd.llmobs.submitted',
   ROOT_PARENT_ID: 'undefined',
   DEFAULT_PROMPT_NAME: 'unnamed-prompt',
   INTERNAL_CONTEXT_VARIABLE_KEYS: '_dd_context_variable_keys',
@@ -23,6 +28,7 @@ module.exports = {
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
+  UNKNOWN_MODEL_PROVIDER: 'unknown',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
@@ -38,6 +44,8 @@ module.exports = {
   TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
   CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'cache_read_input_tokens',
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'cache_write_input_tokens',
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY: 'ephemeral_5m_input_tokens',
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY: 'ephemeral_1h_input_tokens',
   REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',

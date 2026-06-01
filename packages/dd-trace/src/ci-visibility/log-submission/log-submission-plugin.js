@@ -2,26 +2,25 @@
 
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
 
 function getWinstonLogSubmissionParameters (config) {
-  const { site, service } = config
+  const { site, service, apiKey, DD_AGENTLESS_LOG_SUBMISSION_URL } = config
 
   const defaultParameters = {
     host: `http-intake.logs.${site}`,
     path: `/api/v2/logs?ddsource=winston&service=${service}`,
     ssl: true,
     headers: {
-      'DD-API-KEY': getValueFromEnvSources('DD_API_KEY'),
+      'DD-API-KEY': apiKey,
     },
   }
 
-  if (!getValueFromEnvSources('DD_AGENTLESS_LOG_SUBMISSION_URL')) {
+  if (!DD_AGENTLESS_LOG_SUBMISSION_URL) {
     return defaultParameters
   }
 
   try {
-    const url = new URL(getValueFromEnvSources('DD_AGENTLESS_LOG_SUBMISSION_URL'))
+    const url = new URL(DD_AGENTLESS_LOG_SUBMISSION_URL)
     return {
       host: url.hostname,
       port: url.port,

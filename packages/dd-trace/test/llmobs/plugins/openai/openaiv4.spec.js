@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -20,7 +21,7 @@ describe('integrations', () => {
   let deepseekOpenai
 
   describe('openai', () => {
-    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai' })
 
     withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
@@ -575,6 +576,31 @@ describe('integrations', () => {
         assert.equal(llmobsSpans[0].meta.model_provider, 'deepseek', 'Model provider does not match')
       })
 
+      it('sets model_provider to unknown for unrecognized base URLs', async () => {
+        const OpenAI = require(moduleRequirePath).get()
+        const customClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'http://localhost:8000',
+        })
+
+        try {
+          await customClient.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'user', content: 'Hello, OpenAI!' },
+            ],
+            temperature: 0.5,
+            max_tokens: 100,
+          })
+        } catch {
+          // expected error — no server is running
+        }
+
+        const { llmobsSpans } = await getEvents()
+
+        assert.equal(llmobsSpans[0].meta.model_provider, 'unknown', 'Model provider does not match')
+      })
+
       it('submits a chat completion span with cached token metrics', async () => {
         const baseMessages = [{ role: 'system', content: 'You are an expert software engineer '.repeat(200) }]
 
@@ -738,7 +764,7 @@ describe('integrations', () => {
         })
 
         for await (const part of stream) {
-          assert.ok(Object.hasOwn(part, 'type'))
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()

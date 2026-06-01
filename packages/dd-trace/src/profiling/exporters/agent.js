@@ -9,6 +9,7 @@ const retry = require('../../../../../vendor/dist/retry')
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
+const log = require('../../log')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
 const telemetryMetrics = require('../../telemetry/metrics')
@@ -38,32 +39,31 @@ function countStatusCode (statusCode) {
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
-  const store = storage('legacy').getStore()
-  storage('legacy').enterWith({ noop: true })
-  requestCounter.inc()
-  const start = perf.now()
-  const req = request(options, res => {
-    durationDistribution.track(perf.now() - start)
-    countStatusCode(res.statusCode)
-    if (res.statusCode >= 400) {
-      statusCodeErrorCounter.inc()
-      const error = new Error(`HTTP Error ${res.statusCode}`)
-      error.status = res.statusCode
-      callback(error)
-    } else {
-      callback(null, res)
+  storage('legacy').run({ noop: true }, () => {
+    requestCounter.inc()
+    const start = perf.now()
+    const req = request(options, res => {
+      durationDistribution.track(perf.now() - start)
+      countStatusCode(res.statusCode)
+      if (res.statusCode >= 400) {
+        statusCodeErrorCounter.inc()
+        const error = new Error(`HTTP Error ${res.statusCode}`)
+        error.status = res.statusCode
+        callback(error)
+      } else {
+        callback(null, res)
+      }
+    })
+
+    req.on('error', (err) => {
+      networkErrorCounter.inc()
+      callback(err)
+    })
+    if (form) {
+      sizeDistribution.track(form.size())
+      form.pipe(req)
     }
   })
-
-  req.on('error', (err) => {
-    networkErrorCounter.inc()
-    callback(err)
-  })
-  if (form) {
-    sizeDistribution.track(form.size())
-    form.pipe(req)
-  }
-  storage('legacy').enterWith(store)
 }
 
 function getBody (stream, callback) {
@@ -90,9 +90,8 @@ function computeRetries (uploadTimeout) {
 class AgentExporter extends EventSerializer {
   constructor (config = {}) {
     super(config)
-    const { url, logger, uploadTimeout } = config
+    const { url, uploadTimeout } = config
     this._url = url
-    this._logger = logger
 
     const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
 
@@ -110,12 +109,11 @@ class AgentExporter extends EventSerializer {
       contentType: 'application/json',
     }])
 
-    this._logger.debug(() => {
-      return `Building agent export report:\n${event}`
-    })
+    log.debug('Building agent export report:\n%s', event)
 
     for (const [type, buffer] of Object.entries(profiles)) {
-      this._logger.debug(() => {
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.debug(() => {
         const bytes = buffer.toString('hex').match(/../g).join(' ')
         return `Adding ${type} profile to agent export: ` + bytes
       })
@@ -164,7 +162,8 @@ class AgentExporter extends EventSerializer {
           options.port = httpOptions.port
         }
 
-        this._logger.debug(() => {
+        // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+        log.debug(() => {
           return `Submitting profiler agent report attempt #${attempt} to: ${JSON.stringify(options)}`
         })
 
@@ -172,7 +171,7 @@ class AgentExporter extends EventSerializer {
           if (err) {
             const { status } = err
             if ((typeof status !== 'number' || status >= 500 || status === 429) && operation.retry(err)) {
-              this._logger.warn(`Error from the agent: ${err.message}`)
+              log.warn('Error from the agent: %s', err.message)
             } else {
               reject(err)
             }
@@ -181,9 +180,10 @@ class AgentExporter extends EventSerializer {
 
           getBody(response, (err, body) => {
             if (err) {
-              this._logger.warn(`Error reading agent response: ${err.message}`)
+              log.warn('Error reading agent response: %s', err.message)
             } else {
-              this._logger.debug(() => {
+              // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+              log.debug(() => {
                 const bytes = (body.toString('hex').match(/../g) || []).join(' ')
                 return `Agent export response: ${bytes}`
               })

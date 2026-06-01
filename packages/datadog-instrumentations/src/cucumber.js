@@ -1,18 +1,32 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestSuitePath,
+  getRelativeCoverageFiles,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
+  applySkippedCoverageToCoverage,
+  getTestCoverageLinesPercentage,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
+const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -44,6 +58,8 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
+const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
@@ -55,22 +71,37 @@ const originalCoverageMap = createCoverageMap()
 const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
+/** For ATR: statuses keyed by stable scenario id (uri:name) so retries accumulate correctly */
+const atrStatusesByScenarioKey = new Map()
 const numRetriesByPickleId = new Map()
+const efdRetryCountByPickleId = new Map()
+const efdSlowAbortedPickleIds = new Set()
+const finishedParallelSuites = new Set()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
+const attemptToFixTestsByTestFullname = new Map()
 const modifiedTestsByPickleId = new Map()
+// Pickle IDs for tests that are genuinely new (not in known tests list).
+const newTestPickleIds = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 
 let eventDataCollector = null
 let pickleByFile = {}
 const pickleResultByFile = {}
 
 let skippableSuites = []
+let skippableSuitesCoverage = {}
+let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
+let isItrEnabled = false
 let isSuitesSkippingEnabled = false
+let isCoverageReportUploadEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionSlowTestRetries = {}
 let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
@@ -84,9 +115,53 @@ let numTestRetries = 0
 let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
+let repositoryRoot
 
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
+}
+
+function hasSkippableSuitesCoverage () {
+  return skippableSuitesCoverage &&
+    typeof skippableSuitesCoverage === 'object' &&
+    Object.keys(skippableSuitesCoverage).length > 0
+}
+
+function isTiaCoverageBackfillEnabled () {
+  return isItrEnabled && isCoverageReportUploadEnabled
+}
+
+function getCoverageRootDir () {
+  return repositoryRoot || process.cwd()
+}
+
+function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
+  return !isSuitesSkipped || hasBackfilledCoverage
+}
+
+function getSkippedSuitesCoverageForRun () {
+  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+    ? skippableSuitesCoverage
+    : {}
+}
+
+function applySkippedCoverageToCucumberCoverageMap () {
+  if (!isTiaCoverageBackfillEnabled()) return false
+  return applySkippedCoverageToCoverage(originalCoverageMap, skippedSuitesCoverage, getCoverageRootDir())
+}
+
+function getCucumberTestSessionCoverageFiles () {
+  return getRelativeCoverageFiles(getExecutableFilesFromCoverage(originalCoverageMap), getCoverageRootDir())
+}
+
+function resetSuiteSkippingRunState () {
+  skippableSuites = []
+  skippableSuitesCoverage = {}
+  skippedSuitesCoverage = {}
+  skippedSuites = []
+  isSuitesSkipped = false
+  repositoryRoot = undefined
+  writeCoverageBackfillToCache({})
 }
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
@@ -97,6 +172,68 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
     return 'skip'
   }
   return 'pass'
+}
+
+function getConfiguredEfdRetryCount () {
+  const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  return maxSlowTestRetryCount || earlyFlakeDetectionNumRetries
+}
+
+function publishWorkerEfdRetryCount (pickle, retryCount) {
+  if (typeof process.send !== 'function') return
+
+  try {
+    process.send({
+      [DD_EFD_RETRY_COUNT_MESSAGE]: {
+        pickleId: pickle.id,
+        retryCount,
+        testFileAbsolutePath: pickle.uri,
+        testName: pickle.name,
+      },
+    })
+  } catch {
+    // ignore IPC errors
+  }
+}
+
+function finishParallelSuiteIfDone (testFileAbsolutePath) {
+  const finished = pickleResultByFile[testFileAbsolutePath]
+  const expectedPickles = pickleByFile[testFileAbsolutePath]
+
+  if (!finished || !expectedPickles || finished.length !== expectedPickles.length) return
+  if (finishedParallelSuites.has(testFileAbsolutePath)) return
+
+  finishedParallelSuites.add(testFileAbsolutePath)
+  testSuiteFinishCh.publish({
+    status: getSuiteStatusFromTestStatuses(finished),
+    testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
+  })
+}
+
+function maybeRecordFinalParallelEfdStatus ({ pickleId, testFileAbsolutePath, testFullname }) {
+  const efdRetryCount = efdRetryCountByPickleId.get(pickleId)
+  const testStatuses = newTestsByTestFullname.get(testFullname)
+  const finished = pickleResultByFile[testFileAbsolutePath]
+
+  if (efdRetryCount === undefined || !testStatuses || !finished) return
+  if (testStatuses.length !== efdRetryCount + 1) return
+
+  finished.push(getTestStatusFromRetries(testStatuses))
+  newTestsByTestFullname.delete(testFullname)
+  finishParallelSuiteIfDone(testFileAbsolutePath)
+}
+
+function handleEfdRetryCountMessage (message) {
+  const { pickleId, retryCount, testFileAbsolutePath, testName } = message
+
+  if (!pickleId || typeof retryCount !== 'number' || !testFileAbsolutePath || !testName) return
+
+  efdRetryCountByPickleId.set(pickleId, retryCount)
+  maybeRecordFinalParallelEfdStatus({
+    pickleId,
+    testFileAbsolutePath,
+    testFullname: `${testFileAbsolutePath}:${testName}`,
+  })
 }
 
 function getStatusFromResult (result) {
@@ -150,6 +287,16 @@ function getTestStatusFromRetries (testStatuses) {
   return 'pass'
 }
 
+function getTestStatusFromAttemptToFixExecutions (testStatuses) {
+  if (testStatuses.every(status => status === 'pass')) {
+    return 'pass'
+  }
+  if (testStatuses.every(status => status === 'skip')) {
+    return 'skip'
+  }
+  return 'fail'
+}
+
 function getErrorFromCucumberResult (cucumberResult) {
   if (!cucumberResult.message) {
     return
@@ -164,9 +311,9 @@ function getErrorFromCucumberResult (cucumberResult) {
   return error
 }
 
-function getChannelPromise (channelToPublishTo, isParallel = false, frameworkVersion = null) {
+function getChannelPromise (channelToPublishTo, frameworkVersion = null) {
   return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, isParallel, frameworkVersion })
+    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
   })
 }
 
@@ -231,19 +378,53 @@ function getPickleByFile (runtimeOrCoodinator) {
   }, {})
 }
 
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isLastAtrRetry,
+  isLastEfdRetry,
+  isLastAttemptToFix,
+  hasPassedAllRetries,
+  isQuarantined,
+  isDisabled,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (status === 'skip' || (!isLastAttemptToFix && (isQuarantined || isDisabled))) {
+    return 'skip'
+  }
+
+  // When no retry feature is active, every execution is final
+  if (!isLastAtrRetry && !isLastEfdRetry && !isLastAttemptToFix) {
+    return status
+  }
+
+  // ATR and EFD: pass unless every attempt failed
+  if (isLastAtrRetry || isLastEfdRetry) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+
+  // Branch for ATF (We need to check hasPassedAllRetries)
+  if (isLastAttemptToFix) {
+    return hasPassedAllRetries ? 'pass' : 'fail'
+  }
+}
+
 function wrapRun (pl, isLatestVersion, version) {
   if (patched.has(pl)) return
 
   patched.add(pl)
 
-  shimmer.wrap(pl.prototype, 'run', run => function () {
+  shimmer.wrap(pl.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return run.apply(this, args)
     }
 
     let numAttempt = 0
 
     const testFileAbsolutePath = this.pickle.uri
+    const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
     const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
@@ -255,10 +436,13 @@ function wrapRun (pl, isLatestVersion, version) {
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
+    if (isTestManagementTestsEnabled && getTestProperties(testSuitePath, this.pickle.name).attemptToFix) {
+      logAttemptToFixTestExecution(testSuitePath, this.pickle.name, loggedAttemptToFixTests)
+    }
     testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', async (testCase) => {
+      const onEnvelope = async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -275,6 +459,17 @@ function wrapRun (pl, isLatestVersion, version) {
             const isFirstAttempt = numAttempt++ === 0
             const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
+            // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
+            if (isFlakyTestRetriesEnabled) {
+              const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+              const atrKey = `${this.pickle.uri}:${nameForKey}`
+              if (atrStatusesByScenarioKey.has(atrKey)) {
+                atrStatusesByScenarioKey.get(atrKey).push('fail')
+              } else {
+                atrStatusesByScenarioKey.set(atrKey, ['fail'])
+              }
+            }
+
             if (promises.hitBreakpointPromise) {
               await promises.hitBreakpointPromise
             }
@@ -288,13 +483,16 @@ function wrapRun (pl, isLatestVersion, version) {
             testStartCh.runStores(newCtx, () => {})
           }
         }
-      })
+      }
+      this.eventBroadcaster.on('envelope', onEnvelope)
       let promise
+      const executionStart = performance.now()
 
       testFnCh.runStores(ctx, () => {
-        promise = run.apply(this, arguments)
+        promise = run.apply(this, args)
       })
       promise.finally(async () => {
+        this.eventBroadcaster.removeListener('envelope', onEnvelope)
         const result = this.getWorstStepResult()
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
@@ -346,20 +544,104 @@ function wrapRun (pl, isLatestVersion, version) {
         }
 
         if (isKnownTestsEnabled && status !== 'skip') {
-          isNew = numRetries !== undefined
+          isNew = newTestPickleIds.has(this.pickle.id)
         }
 
         if (isNew || isModified) {
           isEfdRetry = numRetries > 0
         }
 
+        if (
+          isEarlyFlakeDetectionEnabled &&
+          status !== 'skip' &&
+          (isNew || isModified) &&
+          !isEfdRetry &&
+          !efdRetryCountByPickleId.has(this.pickle.id)
+        ) {
+          const retryCount = getEfdRetryCount(performance.now() - executionStart, earlyFlakeDetectionSlowTestRetries)
+          efdRetryCountByPickleId.set(this.pickle.id, retryCount)
+          if (retryCount === 0) {
+            efdSlowAbortedPickleIds.add(this.pickle.id)
+          }
+        }
+
+        const efdRetryCount = efdRetryCountByPickleId.get(this.pickle.id) ?? earlyFlakeDetectionNumRetries
+
+        // Check if all EFD retries failed
+        if (isEfdRetry && (isNew || isModified)) {
+          const statuses = lastStatusByPickleId.get(this.pickle.id)
+          if (statuses.length === efdRetryCount + 1) {
+            const { fail } = statuses.reduce((acc, status) => {
+              acc[status]++
+              return acc
+            }, { pass: 0, fail: 0 })
+            if (fail === efdRetryCount + 1) {
+              hasFailedAllRetries = true
+            }
+          }
+        }
+
+        // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
+        // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
+        if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
+          const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+          const atrKey = `${this.pickle.uri}:${nameForKey}`
+          if (atrStatusesByScenarioKey.has(atrKey)) {
+            atrStatusesByScenarioKey.get(atrKey).push(status)
+          } else {
+            atrStatusesByScenarioKey.set(atrKey, [status])
+          }
+          const atrStatuses = atrStatusesByScenarioKey.get(atrKey)
+          const pickleStatuses = lastStatusByPickleId.get(this.pickle.id)
+          const statusesToCheck = atrStatuses?.length >= (numTestRetries + 1) ? atrStatuses : pickleStatuses
+          if (statusesToCheck && statusesToCheck.length === numTestRetries + 1 &&
+            statusesToCheck.every(s => s === 'fail')) {
+            hasFailedAllRetries = true
+          }
+        }
+
         const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
 
+        if (isAttemptToFix) {
+          recordAttemptToFixExecution(attemptToFixExecutions, {
+            testSuite: testSuitePath,
+            testName: this.pickle.name,
+            status,
+            isDisabled,
+            isQuarantined,
+          })
+        }
+
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
         }
+
+        // Notice that ATR is handled using cucumber native retries features.
+        // Therefore, if we reach this point, we are certain that it's the last ATR execution
+        const isLastAtrRetry = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0
+
+        const statuses = lastStatusByPickleId.get(this.pickle.id)
+        const isLastEfdRetry = isEfdRetry && statuses?.length === efdRetryCount + 1
+        const isLastAttemptToFixRetry = isAttemptToFix && statuses?.length === testManagementAttemptToFixRetries + 1
+
+        // Intermediate (non-last EFD or ATF retries) executions do not report a final status
+        const isIntermediateExecution = (isEfdRetry && !isLastEfdRetry) || (isAttemptToFix && !isLastAttemptToFixRetry)
+
+        const finalStatus = isIntermediateExecution
+          ? undefined
+          : getFinalStatus({
+            status,
+            hasFailedAllRetries,
+            isLastAtrRetry,
+            isLastEfdRetry,
+            isLastAttemptToFix: isLastAttemptToFixRetry,
+            hasPassedAllRetries,
+            isQuarantined,
+            isDisabled,
+          })
+
         testFinishCh.publish({
           status,
           skipReason,
@@ -375,7 +657,9 @@ function wrapRun (pl, isLatestVersion, version) {
           isDisabled,
           isQuarantined,
           isModified,
+          earlyFlakeAbortReason: efdSlowAbortedPickleIds.has(this.pickle.id) ? 'slow' : undefined,
           ...attemptCtx.currentStore,
+          finalStatus,
         })
       })
       return promise
@@ -386,11 +670,11 @@ function wrapRun (pl, isLatestVersion, version) {
       })
     }
   })
-  shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
+  shimmer.wrap(pl.prototype, 'runStep', runStep => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return runStep.apply(this, arguments)
+      return runStep.apply(this, args)
     }
-    const testStep = arguments[0]
+    const testStep = args[0]
     let resource
 
     if (isLatestVersion) {
@@ -402,7 +686,7 @@ function wrapRun (pl, isLatestVersion, version) {
     const ctx = { resource }
     return testStepStartCh.runStores(ctx, () => {
       try {
-        const promise = runStep.apply(this, arguments)
+        const promise = runStep.apply(this, args)
 
         promise.then((result) => {
           const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
@@ -452,6 +736,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
     }
+    resetSuiteSkippingRunState()
     const options = getCucumberOptions(this)
 
     if (!isParallel && this.adapter?.options) {
@@ -459,34 +744,53 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel, frameworkVersion)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
 
+    repositoryRoot = configurationResponse.repositoryRoot
+    isItrEnabled = configurationResponse.libraryConfig?.isItrEnabled
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
+    earlyFlakeDetectionSlowTestRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
     earlyFlakeDetectionFaultyThreshold = configurationResponse.libraryConfig?.earlyFlakeDetectionFaultyThreshold
-    isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
+    isSuitesSkippingEnabled = isItrEnabled && configurationResponse.libraryConfig?.isSuitesSkippingEnabled
+    isCoverageReportUploadEnabled = configurationResponse.libraryConfig?.isCoverageReportUploadEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
-    numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    const configRetryCount = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    numTestRetries = (typeof configRetryCount === 'number' && configRetryCount > 0) ? configRetryCount : 0
     isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
     isTestManagementTestsEnabled = configurationResponse.libraryConfig?.isTestManagementEnabled
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
     isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
 
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+      skippableSuitesResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled,
+      isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled,
+      getKnownTests: () => getChannelPromise(knownTestsCh),
+      getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+      getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+    })
+
     if (isKnownTestsEnabled) {
-      const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (knownTestsResponse.err) {
+      const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
+      if (currentKnownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
       } else {
-        knownTests = knownTestsResponse.knownTests
+        knownTests = currentKnownTestsResponse.knownTests
       }
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableResponse = await getChannelPromise(skippableSuitesCh)
+      const skippableResponse = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
 
       errorSkippableRequest = skippableResponse.err
-      skippableSuites = skippableResponse.skippableSuites
+      skippableSuites = skippableResponse.skippableSuites ?? []
+      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage ?? {}
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator
@@ -507,6 +811,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         }
 
         skippedSuites = [...filteredPickles.skippedSuites]
+        skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
+        writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
         itrCorrelationId = skippableResponse.itrCorrelationId
       }
     }
@@ -527,11 +833,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isTestManagementTestsEnabled) {
-      const testManagementTestsResponse = await getChannelPromise(testManagementTestsCh)
-      if (testManagementTestsResponse.err) {
+      const currentTestManagementTestsResponse =
+        testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
+      if (currentTestManagementTestsResponse.err) {
         isTestManagementTestsEnabled = false
       } else {
-        testManagementTests = testManagementTestsResponse.testManagementTests
+        testManagementTests = currentTestManagementTestsResponse.testManagementTests
       }
     }
 
@@ -549,6 +856,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       options.retry = numTestRetries
     }
 
+    atrStatusesByScenarioKey.clear()
+    attemptToFixTestsByTestFullname.clear()
+    efdRetryCountByPickleId.clear()
+    efdSlowAbortedPickleIds.clear()
+    finishedParallelSuites.clear()
+    newTestsByTestFullname.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
@@ -563,13 +876,25 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     let testCodeCoverageLinesTotal
+    let testSessionCoverageFiles
 
-    if (global.__coverage__) {
+    if (global.__coverage__ || untestedCoverage) {
       try {
+        let hasBackfilledCoverage = false
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
-        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        hasBackfilledCoverage = applySkippedCoverageToCucumberCoverageMap()
+        if (shouldReportCodeCoverageLinesPct(hasBackfilledCoverage)) {
+          testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+            originalCoverageMap,
+            undefined,
+            getCoverageRootDir()
+          )
+        }
+        if (isTiaCoverageBackfillEnabled()) {
+          testSessionCoverageFiles = getCucumberTestSessionCoverageFiles()
+        }
       } catch {
         // ignore errors
       }
@@ -581,6 +906,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       status: success ? 'pass' : 'fail',
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites: skippedSuites.length,
       hasUnskippableSuites: isUnskippable,
       hasForcedToRunSuites: isForcedToRun,
@@ -589,6 +915,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isTestManagementTestsEnabled,
       isParallel,
     })
+    logTestOptimizationSummary({ attemptToFixExecutions })
+    loggedAttemptToFixTests.clear()
     eventDataCollector = null
     return success
   }
@@ -633,6 +961,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let isQuarantined = false
     let isModified = false
 
+    const originalDryRun = this.options.dryRun
     if (isTestManagementTestsEnabled) {
       const testProperties = getTestProperties(testSuitePath, pickle.name)
       isAttemptToFix = testProperties.attemptToFix
@@ -665,11 +994,17 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isKnownTestsEnabled && !isAttemptToFix) {
       isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
+        newTestPickleIds.add(pickle.id)
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
+    const firstExecutionStart = performance.now()
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+    const firstExecutionDurationMs = performance.now() - firstExecutionStart
+
+    // Restore dryRun so it doesn't affect subsequent tests in the same worker
+    this.options.dryRun = originalDryRun
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses.at(-1)
@@ -685,7 +1020,18 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     // If it's a new test and it hasn't been skipped, we run it again
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && (isNew || isModified)) {
-      for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+      let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
+      if (efdRetryCount === undefined) {
+        efdRetryCount = getEfdRetryCount(firstExecutionDurationMs, earlyFlakeDetectionSlowTestRetries)
+        efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
+        if (efdRetryCount === 0) {
+          efdSlowAbortedPickleIds.add(pickle.id)
+        }
+      }
+      if (isWorker) {
+        publishWorkerEfdRetryCount(pickle, efdRetryCount)
+      }
+      for (let retryIndex = 0; retryIndex < efdRetryCount; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
         // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
@@ -694,6 +1040,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
     let shouldBePassedByTestManagement = false
+    let shouldBeFailedByAttemptToFix = false
     if ((isNew || isModified) && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -710,7 +1057,15 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
 
-    if (isTestManagementTestsEnabled && (isDisabled || isQuarantined)) {
+    if (isAttemptToFix && testStatuses.length === testManagementAttemptToFixRetries + 1) {
+      testStatus = getTestStatusFromAttemptToFixExecutions(testStatuses)
+      if (testStatus === 'fail') {
+        this.success = false
+        shouldBeFailedByAttemptToFix = true
+      }
+    }
+
+    if (isTestManagementTestsEnabled && !isAttemptToFix && (isDisabled || isQuarantined)) {
       this.success = true
       shouldBePassedByTestManagement = true
     }
@@ -726,7 +1081,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       // last test in suite
       const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
       if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
@@ -746,8 +1101,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       return shouldBePassedByEFD
     }
 
-    if (isNewerCucumberVersion && isTestManagementTestsEnabled && (isQuarantined || isDisabled)) {
+    if (isNewerCucumberVersion && isTestManagementTestsEnabled && !isAttemptToFix && (isQuarantined || isDisabled)) {
       return shouldBePassedByTestManagement
+    }
+
+    if (isNewerCucumberVersion && isAttemptToFix && shouldBeFailedByAttemptToFix) {
+      return false
     }
 
     return runTestCaseResult
@@ -765,9 +1124,14 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
       if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
+        collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
         workerReportTraceCh.publish(payload)
         return
       }
+    }
+    if (message[DD_EFD_RETRY_COUNT_MESSAGE]) {
+      handleEfdRetryCountMessage(message[DD_EFD_RETRY_COUNT_MESSAGE])
+      return
     }
 
     const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
@@ -784,6 +1148,10 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         // ignore errors and continue
         return parseWorkerMessageFunction.apply(this, arguments)
       }
+    }
+    if (parsed[DD_EFD_RETRY_COUNT_MESSAGE]) {
+      handleEfdRetryCountMessage(parsed[DD_EFD_RETRY_COUNT_MESSAGE])
+      return
     }
     let pickle
 
@@ -839,11 +1207,33 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
           testStatuses = [status]
           newTestsByTestFullname.set(testFullname, testStatuses)
         }
-        // We have finished all retries
-        if (testStatuses.length === earlyFlakeDetectionNumRetries + 1) {
-          const newTestFinalStatus = getTestStatusFromRetries(testStatuses)
-          // we only push to `finished` if the retries have finished
-          finished.push(newTestFinalStatus)
+        let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
+        if (efdRetryCount === undefined) {
+          efdRetryCount = status === 'skip'
+            ? 0
+            : getConfiguredEfdRetryCount()
+          efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
+          if (efdRetryCount === 0 && status !== 'skip') {
+            efdSlowAbortedPickleIds.add(pickle.id)
+          }
+        }
+        maybeRecordFinalParallelEfdStatus({ pickleId: pickle.id, testFileAbsolutePath, testFullname })
+      } else if (
+        isTestManagementTestsEnabled &&
+        getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
+      ) {
+        const testFullname = `${pickle.uri}:${pickle.name}`
+        let testStatuses = attemptToFixTestsByTestFullname.get(testFullname)
+        if (testStatuses) {
+          testStatuses.push(status)
+        } else {
+          testStatuses = [status]
+          attemptToFixTestsByTestFullname.set(testFullname, testStatuses)
+        }
+
+        if (status === 'skip' || testStatuses.length === testManagementAttemptToFixRetries + 1) {
+          finished.push(getTestStatusFromAttemptToFixExecutions(testStatuses))
+          attemptToFixTestsByTestFullname.delete(testFullname)
         }
       } else {
         // TODO: can we get error message?
@@ -851,12 +1241,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         finished.push(status)
       }
 
-      if (finished.length === pickleByFile[testFileAbsolutePath].length) {
-        testSuiteFinishCh.publish({
-          status: getSuiteStatusFromTestStatuses(finished),
-          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
-        })
-      }
+      finishParallelSuiteIfDone(testFileAbsolutePath)
     }
 
     return parseWorkerResponse
@@ -962,9 +1347,9 @@ addHook({
   versions: ['>=11.0.0'],
   file: 'lib/formatter/helpers/event_data_collector.js',
 }, (eventDataCollectorPackage) => {
-  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
+  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function (...args) {
     eventDataCollector = this
-    return parseEnvelope.apply(this, arguments)
+    return parseEnvelope.apply(this, args)
   })
   return eventDataCollectorPackage
 })
@@ -983,18 +1368,20 @@ addHook({
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
   )
   // EFD in parallel mode only supported in >=11.0.0
-  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
+  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function (...args) {
     if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
       this.options.worldParameters._ddIsKnownTestsEnabled = true
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+      this.options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
     } else {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
       this.options.worldParameters._ddIsKnownTestsEnabled = false
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
+      this.options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = {}
     }
 
     if (isImpactedTestsEnabled) {
@@ -1002,7 +1389,16 @@ addHook({
       this.options.worldParameters._ddModifiedFiles = modifiedFiles
     }
 
-    return startWorker.apply(this, arguments)
+    this.options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+    this.options.worldParameters._ddNumTestRetries = numTestRetries
+
+    if (isTestManagementTestsEnabled) {
+      this.options.worldParameters._ddIsTestManagementTestsEnabled = true
+      this.options.worldParameters._ddTestManagementTests = testManagementTests
+      this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+    }
+
+    return startWorker.apply(this, args)
   })
   return adapterPackage
 })
@@ -1032,10 +1428,18 @@ addHook({
       isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
       if (isEarlyFlakeDetectionEnabled) {
         earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
+        earlyFlakeDetectionSlowTestRetries = this.options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries ?? {}
       }
       isImpactedTestsEnabled = !!this.options.worldParameters._ddImpactedTestsEnabled
       if (isImpactedTestsEnabled) {
         modifiedFiles = this.options.worldParameters._ddModifiedFiles
+      }
+      isFlakyTestRetriesEnabled = !!this.options.worldParameters._ddIsFlakyTestRetriesEnabled
+      numTestRetries = this.options.worldParameters._ddNumTestRetries ?? 0
+      isTestManagementTestsEnabled = !!this.options.worldParameters._ddIsTestManagementTestsEnabled
+      if (isTestManagementTestsEnabled) {
+        testManagementTests = this.options.worldParameters._ddTestManagementTests
+        testManagementAttemptToFixRetries = this.options.worldParameters._ddTestManagementAttemptToFixRetries
       }
     }
   )

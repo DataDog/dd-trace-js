@@ -97,7 +97,10 @@ module.exports.checkForPotentialConflicts = function () {
 }
 
 module.exports.flushStartupLogs = function (log) {
+  // Some callers pass `./log/writer` (simple pass-through) while others pass the main `./log`
+  // module (which supports lazy delegate functions). Invoke closures here so both work.
   while (warnings.length) {
-    log.warn(warnings.shift())
+    const entry = warnings.shift()
+    log.warn(typeof entry === 'function' ? entry() : entry)
   }
 }

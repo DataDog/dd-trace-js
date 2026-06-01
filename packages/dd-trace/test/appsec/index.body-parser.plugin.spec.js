@@ -7,10 +7,11 @@ const axios = require('axios')
 const sinon = require('sinon')
 
 const appsec = require('../../src/appsec')
-const { json } = require('../../src/appsec/blocked_templates')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const { withVersions } = require('../setup/mocha')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
     let port, server, requestBody
@@ -44,6 +45,7 @@ withVersions('body-parser', 'body-parser', version => {
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -52,7 +54,7 @@ withVersions('body-parser', 'body-parser', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not block the request without an attack', async () => {
@@ -99,11 +101,12 @@ withVersions('body-parser', 'body-parser', version => {
         assert.deepStrictEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
 
-        await agent.assertSomeTraces((traces) => {
-          const span = traces[0][0]
-          assert.strictEqual(span.metrics['_dd.appsec.truncated.string_length'], 5000)
-          assert.strictEqual(span.metrics['_dd.appsec.truncated.container_size'], 300)
-          assert.strictEqual(span.metrics['_dd.appsec.truncated.container_depth'], 20)
+        await agent.assertFirstTraceSpan({
+          metrics: {
+            '_dd.appsec.truncated.string_length': 5000,
+            '_dd.appsec.truncated.container_size': 300,
+            '_dd.appsec.truncated.container_depth': 20,
+          },
         })
       }
     })

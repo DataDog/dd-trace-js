@@ -4,7 +4,12 @@ const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup({ dependencies: ['fastify'] })
+  const t = setup({
+    dependencies: ['fastify'],
+    env: {
+      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: '100',
+    },
+  })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
@@ -63,6 +68,13 @@ describe('Dynamic Instrumentation', function () {
               },
             },
             emptyObj: { type: 'Object', fields: {} },
+            map: {
+              type: 'Map',
+              entries: [
+                [{ type: 'number', value: '1' }, { type: 'number', value: '2' }],
+                [{ type: 'number', value: '3' }, { type: 'number', value: '4' }],
+              ],
+            },
             p: {
               type: 'Promise',
               fields: {
@@ -136,6 +148,7 @@ describe('Dynamic Instrumentation', function () {
             arr: { type: 'Array', notCapturedReason: 'depth' },
             obj: { type: 'Object', notCapturedReason: 'depth' },
             emptyObj: { type: 'Object', notCapturedReason: 'depth' },
+            map: { type: 'Map', notCapturedReason: 'depth' },
             p: { type: 'Promise', notCapturedReason: 'depth' },
             arrowFn: { type: 'Function', notCapturedReason: 'depth' },
           })
@@ -191,9 +204,12 @@ describe('Dynamic Instrumentation', function () {
           if ('fields' in prop) {
             if (prop.notCapturedReason === 'fieldCount') {
               assert.strictEqual(Object.keys(prop.fields).length, maxFieldCount)
-              assert.ok(prop.size > maxFieldCount)
+              assert.ok(prop.size > maxFieldCount, `Expected ${prop.size} > ${maxFieldCount}`)
             } else {
-              assert.ok(Object.keys(prop.fields).length < maxFieldCount)
+              assert.ok(
+                Object.keys(prop.fields).length < maxFieldCount,
+                `Expected ${Object.keys(prop.fields).length} < ${maxFieldCount}`
+              )
             }
           }
 
@@ -215,12 +231,12 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(locals.request.type, 'Request')
           assert.strictEqual(Object.keys(locals.request.fields).length, maxFieldCount)
           assert.strictEqual(locals.request.notCapturedReason, 'fieldCount')
-          assert.ok(locals.request.size > maxFieldCount)
+          assert.ok(locals.request.size > maxFieldCount, `Expected ${locals.request.size} > ${maxFieldCount}`)
 
           assert.strictEqual(locals.fastify.type, 'Object')
           assert.strictEqual(Object.keys(locals.fastify.fields).length, maxFieldCount)
           assert.strictEqual(locals.fastify.notCapturedReason, 'fieldCount')
-          assert.ok(locals.fastify.size > maxFieldCount)
+          assert.ok(locals.fastify.size > maxFieldCount, `Expected ${locals.fastify.size} > ${maxFieldCount}`)
 
           for (const value of Object.values(locals)) {
             assertMaxFieldCount(value)
@@ -287,7 +303,7 @@ describe('Dynamic Instrumentation', function () {
           const { raw } = captures.lines[t.breakpoint.line].locals.request.fields
           assert.strictEqual(raw.notCapturedReason, 'fieldCount')
           assert.strictEqual(Object.keys(raw.fields).length, 20)
-          assert.ok(raw.size > 20)
+          assert.ok(raw.size > 20, `Expected ${raw.size} > 20`)
           done()
         })
 

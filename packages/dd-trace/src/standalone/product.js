@@ -1,6 +1,6 @@
 'use strict'
 
-const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
+const { SAMPLING_MECHANISM_APPSEC, SAMPLING_MECHANISM_AI_GUARD } = require('../constants')
 const RateLimiter = require('../rate_limiter')
 
 /**
@@ -26,6 +26,7 @@ const PRODUCTS = {
   DSM: { id: 1 << 2 },
   DJM: { id: 1 << 3 },
   DBM: { id: 1 << 4 },
+  AI_GUARD: { id: 1 << 5, mechanism: SAMPLING_MECHANISM_AI_GUARD },
 }
 
 module.exports = {

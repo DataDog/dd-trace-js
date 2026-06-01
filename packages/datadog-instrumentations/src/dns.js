@@ -1,7 +1,9 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { channel, addHook } = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
+const { createCallbackInstrumentor } = require('./helpers/callback-instrumentor')
+const { createPromiseInstrumentor } = require('./helpers/promise-instrumentor')
 
 const rrtypes = {
   resolveAny: 'ANY',
@@ -17,82 +19,80 @@ const rrtypes = {
   resolveSoa: 'SOA',
 }
 
-const rrtypeMap = new WeakMap()
-const names = ['dns', 'node:dns']
+// `dns.promises` and `require('dns/promises')` resolve to the same exports object. Both
+// access paths register a hook, so without a guard the second hook to fire would stack a
+// second wrap layer on top and publish every `apm:dns:*` event twice per call. The WeakSet
+// collapses the two hooks to one wrap regardless of which one runs first.
+const wrappedPromiseApis = new WeakSet()
 
-addHook({ name: names }, dns => {
-  shimmer.wrap(dns, 'lookup', fn => wrap('apm:dns:lookup', fn, 2))
-  shimmer.wrap(dns, 'lookupService', fn => wrap('apm:dns:lookup_service', fn, 2))
-  shimmer.wrap(dns, 'resolve', fn => wrap('apm:dns:resolve', fn, 2))
-  shimmer.wrap(dns, 'reverse', fn => wrap('apm:dns:reverse', fn, 2))
+addHook({ name: 'dns' }, dns => {
+  patchApi(dns, createCallbackInstrumentor, buildCallbackArgsContext)
 
-  patchResolveShorthands(dns)
-
-  if (dns.Resolver) {
-    shimmer.wrap(dns.Resolver.prototype, 'resolve', fn => wrap('apm:dns:resolve', fn, 2))
-    shimmer.wrap(dns.Resolver.prototype, 'reverse', fn => wrap('apm:dns:reverse', fn, 2))
-
-    patchResolveShorthands(dns.Resolver.prototype)
+  if (dns.promises) {
+    patchPromiseApi(dns.promises)
   }
 
   return dns
 })
 
-function patchResolveShorthands (prototype) {
+addHook({ name: 'dns/promises' }, dnsPromises => {
+  patchPromiseApi(dnsPromises)
+  return dnsPromises
+})
+
+function patchPromiseApi (api) {
+  if (wrappedPromiseApis.has(api)) return
+  wrappedPromiseApis.add(api)
+  patchApi(api, createPromiseInstrumentor, buildPromiseArgsContext)
+}
+
+function patchApi (api, instrumentorFactory, buildArgsContext) {
+  const lookup = instrumentorFactory('apm:dns:lookup', { captureResult: true })
+  const lookupService = instrumentorFactory('apm:dns:lookup_service', { captureResult: true })
+  const resolve = instrumentorFactory('apm:dns:resolve', { captureResult: true })
+  const reverse = instrumentorFactory('apm:dns:reverse', { captureResult: true })
+
+  shimmer.wrap(api, 'lookup', lookup(buildArgsContext()))
+  shimmer.wrap(api, 'lookupService', lookupService(buildArgsContext()))
+  shimmer.wrap(api, 'resolve', resolve(buildArgsContext()))
+  shimmer.wrap(api, 'reverse', reverse(buildArgsContext()))
+
+  patchResolveShorthands(api, resolve, buildArgsContext)
+
+  if (api.Resolver) {
+    shimmer.wrap(api.Resolver.prototype, 'resolve', resolve(buildArgsContext()))
+    shimmer.wrap(api.Resolver.prototype, 'reverse', reverse(buildArgsContext()))
+
+    patchResolveShorthands(api.Resolver.prototype, resolve, buildArgsContext)
+  }
+}
+
+function patchResolveShorthands (prototype, resolve, buildArgsContext) {
   for (const method of Object.keys(rrtypes)) {
     if (prototype[method]) {
-      rrtypeMap.set(prototype[method], rrtypes[method])
-      shimmer.wrap(prototype, method, fn => wrap('apm:dns:resolve', fn, 2, rrtypes[method]))
+      shimmer.wrap(prototype, method, resolve(buildArgsContext(rrtypes[method])))
     }
   }
 }
 
-function wrap (prefix, fn, expectedArgs, rrtype) {
-  const startCh = channel(prefix + ':start')
-  const finishCh = channel(prefix + ':finish')
-  const errorCh = channel(prefix + ':error')
-
-  const wrapped = function () {
-    const cb = arguments[arguments.length - 1]
-    if (
-      !startCh.hasSubscribers ||
-      arguments.length < expectedArgs ||
-      typeof cb !== 'function'
-    ) {
-      return fn.apply(this, arguments)
-    }
-
-    const args = [...arguments]
-    args.pop() // gets rid of the callback
+function buildCallbackArgsContext (rrtype) {
+  return function (_, args) {
+    if (args.length < 2) return
+    const captured = [...args]
+    captured.pop() // remove the callback
     if (rrtype) {
-      args.push(rrtype)
+      captured.push(rrtype)
     }
-
-    const ctx = { args }
-
-    return startCh.runStores(ctx, () => {
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error, result, ...args) {
-        if (error) {
-          ctx.error = error
-          errorCh.publish(ctx)
-        }
-
-        ctx.result = result
-        finishCh.runStores(ctx, cb, this, error, result, ...args)
-      })
-
-      try {
-        return fn.apply(this, arguments)
-      // TODO deal with promise versions when we support `dns/promises`
-      } catch (error) {
-        void error.stack // trigger getting the stack at the original throwing point
-        ctx.error = error
-        errorCh.publish(ctx)
-
-        throw error
-      }
-    })
+    return { args: captured }
   }
+}
 
-  return wrapped
+function buildPromiseArgsContext (rrtype) {
+  return function (_, args) {
+    const captured = [...args]
+    if (rrtype) {
+      captured.push(rrtype)
+    }
+    return { args: captured }
+  }
 }

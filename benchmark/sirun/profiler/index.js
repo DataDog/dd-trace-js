@@ -1,43 +1,19 @@
 'use strict'
 
-const {
-  profiler,
-  WallProfiler,
-  SpaceProfiler,
-} = require('../../../packages/dd-trace/src/profiling')
+const assert = require('node:assert/strict')
+
+const tracer = require('../../..')
 
 const { PROFILER } = process.env
 
-const profilers = []
-
-if (PROFILER === 'wall' || PROFILER === 'all') {
-  profilers.push(new WallProfiler())
+if (PROFILER !== 'wall' && PROFILER !== 'all') {
+  process.env.DD_PROFILING_WALLTIME_ENABLED = 'false'
 }
-if (PROFILER === 'space' || PROFILER === 'all') {
-  profilers.push(new SpaceProfiler())
+if (PROFILER !== 'space' && PROFILER !== 'all') {
+  process.env.DD_PROFILING_HEAP_ENABLED = 'false'
 }
+process.env.DD_PROFILING_HEAP_SAMPLING_INTERVAL = '0'
 
-if (profilers.length === 0) {
-  // Add a no-op "profiler"
-  profilers.push({
-    start: () => {},
-    stop: () => {},
-    profile: () => { return true },
-    encode: () => { Promise.resolve(true) },
-  })
-}
+tracer.init({ profiling: 'true' })
 
-const exporters = [{
-  export () {
-    profiler.stop()
-    return Promise.resolve()
-  },
-}]
-
-profiler._start({
-  profilers,
-  exporters,
-  interval: 0,
-}).then(() => {
-  profiler._timer.ref()
-})
+assert.equal(tracer._profilerStarted, true, 'profiler.start did not return true')

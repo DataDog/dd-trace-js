@@ -31,9 +31,23 @@ const {
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
   DECISION_MAKER_KEY,
+  SAMPLING_KNUTH_RATE,
 } = require('./constants')
 
 const DEFAULT_KEY = 'service:,env:'
+
+/**
+ * Formats a sampling rate as a string with up to 6 decimal digits and no trailing zeros.
+ *
+ * @param {number} rate
+ */
+function formatKnuthRate (rate) {
+  const string = Number(rate).toFixed(6)
+  for (let i = string.length - 1; i > 0; i--) {
+    if (string[i] === '0') continue
+    return string.slice(0, i + (string[i] === '.' ? 0 : 1))
+  }
+}
 
 const defaultSampler = new Sampler(AUTO_KEEP)
 
@@ -96,7 +110,7 @@ class PrioritySampler {
    * Assigns a sampling priority to a span if not already set.
    *
    * @param {DatadogSpan} span
-   * @param {boolean} [auto=true] - Whether to use automatic sampling if no manual tags are present.
+   * @param {boolean} [auto] - Whether to use automatic sampling if no manual tags are present.
    * @returns {void}
    */
   sample (span, auto = true) {
@@ -111,7 +125,7 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this._getPriorityFromTags(context._tags, context)
+    const tag = this._getPriorityFromTags(context.getTags(), context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -134,9 +148,8 @@ class PrioritySampler {
   update (rates) {
     const samplers = {}
 
-    for (const key in rates) {
-      const rate = rates[key]
-      samplers[key] = new Sampler(rate)
+    for (const key of Object.keys(rates)) {
+      samplers[key] = new Sampler(rates[key])
     }
 
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
@@ -235,7 +248,7 @@ class PrioritySampler {
     }
     const rawPriority = tags[SAMPLING_PRIORITY]
     if (rawPriority !== undefined) {
-      const priority = Number.parseInt(String(rawPriority), 10)
+      const priority = Math.trunc(rawPriority)
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP
@@ -254,6 +267,7 @@ class PrioritySampler {
    */
   #getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
     if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
@@ -286,13 +300,19 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   #getPriorityByAgent (context) {
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    const key = `service:${context.getTag(SERVICE_NAME)},env:${this._env}`
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
+    const rate = sampler.rate()
+    context._trace[SAMPLING_AGENT_DECISION] = rate
 
-    context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
+    if (sampler === defaultSampler) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    } else {
+      context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
+      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+    }
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
@@ -313,7 +333,10 @@ class PrioritySampler {
       if (!trace.tags[DECISION_MAKER_KEY]) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
-    } else {
+    } else if (DECISION_MAKER_KEY in trace.tags) {
+      // Guard the `delete` so the common drop path doesn't pay the V8
+      // dictionary-mode transition unless a prior keep decision actually
+      // set the tag.
       delete trace.tags[DECISION_MAKER_KEY]
     }
   }

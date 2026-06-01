@@ -3,12 +3,14 @@
 const assert = require('node:assert/strict')
 
 const http2 = require('http2')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   spawnPluginIntegrationTestProc,
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 
 describe('esm', () => {
@@ -28,7 +30,7 @@ describe('esm', () => {
   })
 
   afterEach(async () => {
-    proc && proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -38,9 +40,9 @@ describe('esm', () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
+          assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
           assert.strictEqual(payload[0].length, 1)
           assert.strictEqual(payload[0][0].name, 'web.request')
           assert.strictEqual(payload[0][0].meta.component, 'http2')

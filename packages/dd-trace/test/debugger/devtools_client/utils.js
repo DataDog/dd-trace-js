@@ -14,6 +14,18 @@ module.exports = {
  */
 
 /**
+ * @typedef {object} CaptureExpression
+ * @property {string} name - The name of the expression (used as key in snapshot)
+ * @property {object} expr - The expression AST to evaluate
+ * @property {{
+ *   maxReferenceDepth?: number,
+ *   maxCollectionSize?: number,
+ *   maxFieldCount?: number,
+ *   maxLength?: number
+ * }} [capture] - Optional per-expression capture limits
+ */
+
+/**
  * @typedef {object} ProbeConfig
  * @property {string} id
  * @property {number} version
@@ -23,7 +35,8 @@ module.exports = {
  * @property {string[]} tags
  * @property {string} template
  * @property {Array<{ str: string } | { dsl: string, json: object }>} segments
- * @property {boolean} captureSnapshot
+ * @property {boolean} [captureSnapshot] - Capture full snapshot
+ * @property {CaptureExpression[]} [captureExpressions] - Expressions to capture
  * @property {'EXIT'} evaluateAt
  * @property {{
  *   maxReferenceDepth?: number,

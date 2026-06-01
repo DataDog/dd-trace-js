@@ -12,9 +12,6 @@ require('../setup/core')
 const id = require('../../src/id')
 
 const {
-  MAX_META_KEY_LENGTH,
-  MAX_META_VALUE_LENGTH,
-  MAX_METRIC_KEY_LENGTH,
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_RESOURCE_NAME_LENGTH,
@@ -72,26 +69,32 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    assert.strictEqual(decodedTrace.version, 1)
-    assertObjectContains(decodedTrace.metadata['*'], {
-      language: 'javascript',
-      library_version: ddTraceVersion,
-    })
     const spanEvent = decodedTrace.events[0]
-    assert.strictEqual(spanEvent.type, 'span')
-    assert.strictEqual(spanEvent.version, 1)
     assert.strictEqual(spanEvent.content.trace_id.toString(10), trace[0].trace_id.toString(10))
     assert.strictEqual(spanEvent.content.span_id.toString(10), trace[0].span_id.toString(10))
     assert.strictEqual(spanEvent.content.parent_id.toString(10), trace[0].parent_id.toString(10))
-    assertObjectContains(spanEvent.content, {
-      name: 'test',
-      resource: 'test-r',
-      service: 'test-s',
-      type: 'foo',
+    assertObjectContains(decodedTrace, {
+      version: 1,
+      metadata: {
+        '*': {
+          language: 'javascript',
+          library_version: ddTraceVersion,
+        },
+      },
+      events: [{
+        type: 'span',
+        version: 1,
+        content: {
+          name: 'test',
+          resource: 'test-r',
+          service: 'test-s',
+          type: 'foo',
+          error: 0,
+          start: 123,
+          duration: 456,
+        },
+      }],
     })
-    assert.strictEqual(spanEvent.content.error, 0)
-    assert.strictEqual(spanEvent.content.start, 123)
-    assert.strictEqual(spanEvent.content.duration, 456)
 
     assert.deepStrictEqual(spanEvent.content.meta, {
       bar: 'baz',
@@ -184,42 +187,8 @@ describe('agentless-ci-visibility-encode', () => {
     assert.strictEqual(spanEvent.content.name, DEFAULT_SPAN_NAME)
   })
 
-  it('should cut too long meta and metrics keys and meta values', () => {
-    const tooLongKey = new Array(300).fill('a').join('')
-    const tooLongValue = new Array(26000).fill('a').join('')
-    const traceToTruncate = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
-      error: 0,
-      meta: {
-        [tooLongKey]: tooLongValue,
-      },
-      metrics: {
-        [tooLongKey]: 15,
-      },
-      start: 123,
-      duration: 456,
-      type: 'foo',
-      name: '',
-      resource: '',
-      service: '',
-    }]
-    encoder.encode(traceToTruncate)
-
-    const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
-    const spanEvent = decodedTrace.events[0]
-    assert.deepStrictEqual(spanEvent.content.meta, {
-      [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`,
-    })
-    assert.deepStrictEqual(spanEvent.content.metrics, {
-      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15,
-    })
-  })
-
-  it('should not encode events other than sessions and suites if the trace is a test session', () => {
-    const traceToFilter = [
+  it('should encode all events including non-test spans alongside test sessions', () => {
+    const traceWithMixedSpans = [
       {
         trace_id: id('1234abcd1234abcd'),
         span_id: id('1234abcd1234abcd'),
@@ -250,13 +219,14 @@ describe('agentless-ci-visibility-encode', () => {
       },
     ]
 
-    encoder.encode(traceToFilter)
+    encoder.encode(traceWithMixedSpans)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
-    assert.strictEqual(decodedTrace.events.length, 1)
+    assert.strictEqual(decodedTrace.events.length, 2)
     assert.strictEqual(decodedTrace.events[0].type, 'test_session_end')
     assert.deepStrictEqual(decodedTrace.events[0].content.type, 'test_session_end')
+    assert.strictEqual(decodedTrace.events[1].type, 'span')
   })
 
   it('does not crash if test_session_id is in meta but not test_module_id', () => {
@@ -287,6 +257,7 @@ describe('agentless-ci-visibility-encode', () => {
   describe('addMetadataTags', () => {
     afterEach(() => {
       encoder.metadataTags = {}
+      encoder.wildcardMetadataTags = {}
     })
 
     it('should add simple metadata tags', () => {
@@ -317,6 +288,94 @@ describe('agentless-ci-visibility-encode', () => {
       encoder.metadataTags = { test: { tag: 'value1' } }
       encoder.addMetadataTags({})
       assert.deepStrictEqual(encoder.metadataTags, { test: { tag: 'value1' } })
+    })
+
+    // The CI Visibility flow calls `addMetadataTags` from two channels —
+    // `ci:<framework>:session:start` adds `test_session.name`, and the async
+    // `ci:<framework>:library-configuration` callback adds capability tags
+    // once the backend responds. If an integration finishes a span between
+    // those two calls (e.g. a `dns.promises.lookup` from vite startup), the
+    // encoder previously flushed the payload prefix on the first `encode()`
+    // and the later capability tags never reached the wire.
+    it('encodes metadata at flush time, not at first encode', () => {
+      encoder.addMetadataTags({ test: { 'test_session.name': 'my-session' } })
+      encoder.encode(trace)
+      encoder.addMetadataTags({
+        test: { '_dd.library_capabilities.auto_test_retries': '1' },
+        test_session_end: { 'test_session.name': 'my-session' },
+      })
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      assert.deepStrictEqual(decoded.metadata.test, {
+        'test_session.name': 'my-session',
+        '_dd.library_capabilities.auto_test_retries': '1',
+      })
+      assert.deepStrictEqual(decoded.metadata.test_session_end, {
+        'test_session.name': 'my-session',
+      })
+      assert.strictEqual(decoded.events.length, 1)
+    })
+
+    it('encodes metadata added across multiple flushes', () => {
+      encoder.encode(trace)
+      encoder.addMetadataTags({ test: { 'first.flush.tag': '1' } })
+      const firstBuffer = encoder.makePayload()
+      const firstDecoded = msgpack.decode(firstBuffer, { useBigInt64: true })
+      assert.deepStrictEqual(firstDecoded.metadata.test, { 'first.flush.tag': '1' })
+
+      encoder.encode(trace)
+      encoder.addMetadataTags({ test: { 'second.flush.tag': '2' } })
+      const secondBuffer = encoder.makePayload()
+      const secondDecoded = msgpack.decode(secondBuffer, { useBigInt64: true })
+
+      assert.deepStrictEqual(secondDecoded.metadata.test, {
+        'first.flush.tag': '1',
+        'second.flush.tag': '2',
+      })
+    })
+
+    it('stores wildcard tags in wildcardMetadataTags and leaves metadataTags untouched', () => {
+      encoder.addMetadataTags({
+        '*': { 'test.command': 'mocha', 'test_session.name': 'my-session' },
+        test: { 'test_session.name': 'my-session' },
+      })
+
+      assert.deepStrictEqual(encoder.wildcardMetadataTags, {
+        'test.command': 'mocha',
+        'test_session.name': 'my-session',
+      })
+      assert.deepStrictEqual(encoder.metadataTags, {
+        test: { 'test_session.name': 'my-session' },
+      })
+    })
+
+    it('merges successive wildcard tags without clearing previously set ones', () => {
+      encoder.addMetadataTags({ '*': { 'test.command': 'mocha' } })
+      encoder.addMetadataTags({ '*': { 'test_session.name': 'my-session' } })
+
+      assert.deepStrictEqual(encoder.wildcardMetadataTags, {
+        'test.command': 'mocha',
+        'test_session.name': 'my-session',
+      })
+    })
+
+    it('encodes wildcard tags into metadata["*"] in the payload', () => {
+      encoder.addMetadataTags({
+        '*': { 'test.command': 'mocha', 'test_session.name': 'my-session' },
+        test: { '_dd.library_capabilities.auto_test_retries': '1' },
+      })
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      assert.strictEqual(decoded.metadata['*']['test.command'], 'mocha')
+      assert.strictEqual(decoded.metadata['*']['test_session.name'], 'my-session')
+      assert.deepStrictEqual(decoded.metadata.test, {
+        '_dd.library_capabilities.auto_test_retries': '1',
+      })
     })
   })
 })

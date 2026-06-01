@@ -1,12 +1,17 @@
 'use strict'
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { pollInterval, setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
+
+  before(function () {
+    require('../../packages/dd-trace/src/process-tags').initialize()
+  })
 
   describe('diagnostics messages', function () {
     it('should send expected diagnostics messages if probe is received and triggered', function (done) {
@@ -204,6 +209,9 @@ describe('Dynamic Instrumentation', function () {
         let receivedAckUpdate = false
 
         t.agent.on('remote-config-ack-update', (id, version, state, error) => {
+          // Transitional UNACKNOWLEDGED can arrive before the worker transitions to ERROR.
+          if (state === UNACKNOWLEDGED) return
+
           assert.strictEqual(id, `logProbe_${config.id}`)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ERROR)
@@ -232,7 +240,7 @@ describe('Dynamic Instrumentation', function () {
             assertUUID(diagnostics.runtimeId)
 
             if (diagnostics.status === 'ERROR') {
-              assert.ok(Object.hasOwn(diagnostics, 'exception'))
+              assert.ok(Object.hasOwn(diagnostics, 'exception'), `Available keys: ${inspect(Object.keys(diagnostics))}`)
               assert.deepStrictEqual(['message', 'stacktrace'], Object.keys(diagnostics.exception).sort())
               assert.strictEqual(typeof diagnostics.exception.message, 'string')
               assert.strictEqual(typeof diagnostics.exception.stacktrace, 'string')

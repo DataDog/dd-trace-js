@@ -3,6 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const { createWrapRouterMethod } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { getCompileToRegexp } = require('./path-to-regexp')
 const {
   setRouterMountPath,
   markAppMounted,
@@ -25,8 +26,6 @@ function wrapHandle (handle) {
     return handle.apply(this, arguments)
   }
 }
-
-const wrapRouterMethod = createWrapRouterMethod('express')
 
 const responseJsonChannel = channel('datadog:express:response:json:start')
 
@@ -55,13 +54,12 @@ function wrapResponseRender (render) {
 
     const abortController = new AbortController()
     return responseRenderChannel.traceSync(
-      function () {
+      function (...args) {
         if (abortController.signal.aborted) {
-          const error = abortController.signal.reason || new Error('Aborted')
-          throw error
+          throw abortController.signal.reason || new Error('Aborted')
         }
 
-        return render.apply(this, arguments)
+        return render.apply(this, args)
       },
       {
         req: this.req,
@@ -146,7 +144,7 @@ function wrapAppUse (use) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.application, 'all', wrapAppAll)
   shimmer.wrap(express.application, 'route', wrapAppRoute)
@@ -163,6 +161,8 @@ addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, expres
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
+  const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp())
+
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
@@ -172,7 +172,7 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, next => function (...args) {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -182,7 +182,7 @@ function publishQueryParsedAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, arguments)
+    return next.apply(this, args)
   })
 }
 
@@ -191,8 +191,8 @@ addHook({
   versions: ['4'],
   file: 'lib/middleware/query.js',
 }, query => {
-  return shimmer.wrapFunction(query, query => function () {
-    const queryMiddleware = query.apply(this, arguments)
+  return shimmer.wrapFunction(query, query => function (...args) {
+    const queryMiddleware = query.apply(this, args)
 
     return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
@@ -204,9 +204,9 @@ addHook({
 const processParamsStartCh = channel('datadog:express:process_params:start')
 function wrapProcessParamsMethod (requestPositionInArguments) {
   return function wrapProcessParams (original) {
-    return function wrappedProcessParams () {
+    return function wrappedProcessParams (...args) {
       if (processParamsStartCh.hasSubscribers) {
-        const req = arguments[requestPositionInArguments]
+        const req = args[requestPositionInArguments]
         const abortController = new AbortController()
 
         processParamsStartCh.publish({
@@ -219,24 +219,24 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
         if (abortController.signal.aborted) return
       }
 
-      return original.apply(this, arguments)
+      return original.apply(this, args)
     }
   }
 }
 
-addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
   return express
 })
 
-addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
 })
 
 const queryReadCh = channel('datadog:express:query:finish')
 
-addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, request => {
+addHook({ name: 'express', file: 'lib/request.js', versions: ['>=5.0.0'] }, request => {
   shimmer.wrap(request, 'query', function (originalGet) {
     return function wrappedGet () {
       const query = originalGet.call(this)

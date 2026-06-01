@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, before, after } = require('mocha')
+const { describe, it, before } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
@@ -16,11 +16,6 @@ describe('Telemetry logs', () => {
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
-  })
-
-  after(() => {
-    clock.restore()
-    telemetry.stop()
   })
 
   it('should be started and send logs when log received via the datadog:telemetry:log channel', () => {

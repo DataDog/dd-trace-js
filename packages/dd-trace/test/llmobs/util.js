@@ -2,6 +2,7 @@
 
 const util = require('node:util')
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { before, beforeEach, after } = require('mocha')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
@@ -40,8 +41,12 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 /**
  * @typedef {{
  *   label: string,
- *   traceId: string,
- *   spanId: string,
+ *   joinOn: {
+ *     span: {
+ *       traceId: string,
+ *       spanId: string,
+ *     },
+ *   },
  *   metricType: 'categorical' | 'score',
  *   mlApp: string,
  *   timestamp?: number,
@@ -134,6 +139,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     outputMessages,
     outputValue,
     outputDocuments,
+    toolDefinitions,
   } = expected
 
   if (inputMessages && inputDocuments && inputValue) {
@@ -254,7 +260,12 @@ function assertLlmObsSpanEvent (actual, expected) {
     expectedMeta.input = { documents: inputDocuments }
   } else if (inputValue) {
     expectedMeta.input = { value: inputValue }
+  } else {
+    // span_processor.js always sets meta.input = {} even when no input is tagged
+    expectedMeta.input = {}
   }
+
+  if (toolDefinitions) expectedMeta.tool_definitions = toolDefinitions
 
   const expectedSpanEvent = {
     span_id: fromBuffer(span.span_id),
@@ -279,8 +290,12 @@ function assertLlmObsSpanEvent (actual, expected) {
 function assertLlmObsEvaluationMetric (actual, expected) {
   const {
     label,
-    traceId = MOCK_STRING,
-    spanId = MOCK_STRING,
+    joinOn = {
+      span: {
+        traceId: MOCK_STRING,
+        spanId: MOCK_STRING,
+      },
+    },
     metricType,
     mlApp,
     timestamp = MOCK_NUMBER,
@@ -318,8 +333,12 @@ function assertLlmObsEvaluationMetric (actual, expected) {
   }
 
   const expectedEvaluationMetric = {
-    span_id: spanId,
-    trace_id: traceId,
+    join_on: {
+      span: {
+        trace_id: joinOn.span.traceId,
+        span_id: joinOn.span.spanId,
+      },
+    },
     label,
     metric_type: metricType,
     ml_app: mlApp,
@@ -371,7 +390,6 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {object} options
  * @param {string} options.plugin
  * @param {object} options.tracerConfigOptions
- * @param {object} options.closeOptions
  * @returns {{
  *   getEvents: () => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
  *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
@@ -380,7 +398,6 @@ function fromBuffer (spanProperty, isNumber = false) {
 function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
-  closeOptions = {},
 } = {}) {
   /** @type {Promise<Array<Array<object>>>} */
   let apmTracesPromise
@@ -397,8 +414,8 @@ function useLlmObs ({
     _DD_LLMOBS_FLUSH_INTERVAL: 0,
   })
 
-  before(() => {
-    return agent.load(plugin, {}, {
+  before(async () => {
+    await agent.load(plugin, {}, {
       llmobs: {
         mlApp: 'test',
         agentlessEnabled: false,
@@ -409,8 +426,8 @@ function useLlmObs ({
 
   beforeEach(resetTracesPromises)
 
-  after(() => {
-    return agent.close({ ritmReset: false, ...closeOptions })
+  after(async () => {
+    await agent.close()
   })
 
   return {
@@ -488,9 +505,12 @@ function assertPromptTracking (
 
   // Verify tags
   assert(spanEvent.tags, 'Span event should include tags')
-  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
+  assert(
+    spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`),
+    `Got: ${inspect(spanEvent.tags)}`
+  )
   if (promptMultimodal) {
-    assert(spanEvent.tags.includes('prompt_multimodal:true'))
+    assert(spanEvent.tags.includes('prompt_multimodal:true'), `Got: ${inspect(spanEvent.tags)}`)
   }
 }
 

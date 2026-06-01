@@ -28,7 +28,8 @@ function lazyClass (classGetter, methods = [], staticMethods = []) {
   }
 
   const activate = () => {
-    return (ActiveClass = ActiveClass || classGetter())
+    ActiveClass ??= classGetter()
+    return ActiveClass
   }
 
   for (const method of methods) {
@@ -71,6 +72,7 @@ const DsmPathwayCodec = lazyClass(() => require('./pathway').DsmPathwayCodec, []
 const DataStreamsCheckpointer = lazyClass(() => require('./checkpointer').DataStreamsCheckpointer, [
   'setProduceCheckpoint',
   'setConsumeCheckpoint',
+  'trackTransaction',
 ])
 
 /**
@@ -79,6 +81,7 @@ const DataStreamsCheckpointer = lazyClass(() => require('./checkpointer').DataSt
 const DataStreamsManager = lazyClass(() => require('./manager').DataStreamsManager, [
   'setCheckpoint',
   'decodeDataStreamsContext',
+  'trackTransaction',
 ])
 
 // TODO: Are all those methods actually public?
@@ -92,6 +95,7 @@ const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsP
   'setCheckpoint',
   'recordOffset',
   'setOffset',
+  'trackTransaction',
   'setUrl',
   'trySampleSchema',
   'canSampleSchema',

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const semifies = require('semifies')
 const {
@@ -9,10 +10,14 @@ const {
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 function getOpenaiVersion (realVersion) {
+  if (semifies(realVersion, '>=6.0.0')) {
+    return '3.0.0'
+  }
   if (semifies(realVersion, '>=5.0.0')) {
     return '2.0.0'
   }
@@ -42,7 +47,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -50,7 +55,7 @@ describe('esm', () => {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
           // special check for ai spans
           for (const spans of payload) {

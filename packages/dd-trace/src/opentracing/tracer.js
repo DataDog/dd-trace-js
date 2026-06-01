@@ -21,8 +21,6 @@ const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
   constructor (config, prioritySampler) {
-    const Exporter = getExporter(config.experimental.exporter)
-
     this._config = config
     this._service = config.service
     this._version = config.version
@@ -30,7 +28,21 @@ class DatadogTracer {
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
-    this._exporter = new Exporter(config, this._prioritySampler)
+
+    // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
+    // exporter when the tracer is running in Test Optimization mode. Test spans
+    // (test_session/test_module/ test_suite/test) belong on the citestcycle
+    // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
+    // vars set in their environment (e.g. for a separate telemetry integration)
+    // silently lose all test spans.
+    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
+      const { createOtlpTraceExporter } = require('../opentelemetry/trace')
+      this._exporter = createOtlpTraceExporter(config)
+    } else {
+      const Exporter = getExporter(config.experimental.exporter)
+      this._exporter = new Exporter(config, this._prioritySampler)
+    }
+
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
     this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
@@ -38,7 +50,7 @@ class DatadogTracer {
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
-      [formats.BINARY]: new BinaryPropagator(config),
+      [formats.BINARY]: new BinaryPropagator(),
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
@@ -111,7 +123,7 @@ class DatadogTracer {
  * Get the span context from a span or a span context.
  *
  * @param {Span|SpanContext} spanContext
- * @returns {SpanContext}
+ * @returns {SpanContext|null}
  */
 function getContext (spanContext) {
   if (spanContext instanceof Span) {

@@ -37,7 +37,7 @@ describe('Child process plugin', () => {
       }
 
       tracerStub = {
-        startSpan: sinon.stub(),
+        startSpan: sinon.stub().returns(spanStub),
       }
 
       configStub = {
@@ -66,6 +66,7 @@ describe('Child process plugin', () => {
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
+              '_dd.svc_src': 'opt.plugin',
               'cmd.exec': JSON.stringify(['ls', '-l']),
             },
             integrationName: 'child_process',
@@ -90,6 +91,7 @@ describe('Child process plugin', () => {
               'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
+              '_dd.svc_src': 'opt.plugin',
               'cmd.shell': 'ls -l',
             },
             integrationName: 'child_process',
@@ -117,6 +119,7 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['echo', arg, '']),
+              '_dd.svc_src': 'opt.plugin',
               'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
@@ -144,6 +147,7 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.shell': 'ls -l /h ',
+              '_dd.svc_src': 'opt.plugin',
               'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
@@ -172,6 +176,7 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
+              '_dd.svc_src': 'opt.plugin',
               'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
@@ -200,6 +205,7 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.shell': 'ls -l /home -t',
+              '_dd.svc_src': 'opt.plugin',
               'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
@@ -398,7 +404,7 @@ describe('Child process plugin', () => {
 
     afterEach(() => {
       global.Promise = originalPromise
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
@@ -498,7 +504,7 @@ describe('Child process plugin', () => {
         })
       })
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
       const parentSpanList = [true, false]
       parentSpanList.forEach(hasParentSpan => {
         let parentSpan
@@ -643,7 +649,7 @@ describe('Child process plugin', () => {
         })
       })
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
       const parentSpanList = [true, false]
       parentSpanList.forEach(parentSpan => {
         describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {

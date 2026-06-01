@@ -8,7 +8,7 @@ const sinon = require('sinon')
 
 const axios = require('axios').create({ validateStatus: null })
 const agent = require('../../dd-trace/test/plugins/agent')
-const { storage } = require('../../datadog-core')
+const { getActiveRequest } = require('../../dd-trace/src/appsec/store')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('passport-local', 'passport-local', version => {
@@ -17,7 +17,11 @@ withVersions('passport-local', 'passport-local', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load(['http', 'express', 'passport', 'passport-local'], { client: false })
+      return agent.load(
+        ['http', 'express', 'passport', 'passport-local'],
+        { client: false },
+        { appsec: { enabled: true } }
+      )
     })
 
     before((done) => {
@@ -106,7 +110,7 @@ withVersions('passport-local', 'passport-local', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not call subscriber when an error occurs', async () => {
@@ -160,7 +164,8 @@ withVersions('passport-local', 'passport-local', version => {
 
     it('should block when subscriber aborts', async () => {
       subscriberStub = sinon.spy(({ abortController }) => {
-        storage('legacy').getStore().req.res.writeHead(403).end('Blocked')
+        const req = getActiveRequest()
+        req.res.writeHead(403).end('Blocked')
         abortController.abort()
       })
 
@@ -173,7 +178,7 @@ withVersions('passport-local', 'passport-local', version => {
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController(),
+        abortController: sinon.match(ac => ac instanceof AbortController && ac.signal.aborted === true),
       })
     })
   })

@@ -1,8 +1,5 @@
 'use strict'
 
-// Increase max listeners to avoid warnings in tests
-process.setMaxListeners(50)
-
 const assert = require('assert')
 const os = require('os')
 const http = require('http')
@@ -16,13 +13,45 @@ const { trace, context } = require('@opentelemetry/api')
 require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
+/**
+ * @param {object} type protobufjs Type instance for the OTLP service message
+ * @param {object} message Decoded protobufjs Message
+ * @param {Buffer} originalPayload Raw wire bytes captured from the exporter
+ */
+function assertWireRoundTrip (type, message, originalPayload) {
+  assert(Buffer.isBuffer(originalPayload) && originalPayload.length > 0)
+  const reEncoded = Buffer.from(type.encode(message).finish())
+  const projectOptions = { longs: String, bytes: String, enums: String }
+  assert.deepStrictEqual(
+    type.toObject(type.decode(reEncoded), projectOptions),
+    type.toObject(message, projectOptions),
+  )
+}
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
 
-  function setupTracer (enabled = true, maxExportBatchSize = '1') {
+  function setupLogs (enabled = true, maxExportBatchSize = '1') {
     process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
     process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize // Force immediate export
+
+    logs.disable()
+    const config = getConfigFresh()
+    if (config.DD_LOGS_OTEL_ENABLED) {
+      const { initializeOpenTelemetryLogs } =
+        proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
+      initializeOpenTelemetryLogs(config)
+    }
+    return { config, logs, loggerProvider: logs.getLoggerProvider() }
+  }
+
+  // Full tracer.init() path. Needed for tests that assert on runtime pieces only populated by the
+  // full pipeline (e.g. the `_dd.rc.client_id` resource attribute added by remote config).
+  function setupLogsFull (maxExportBatchSize = '1') {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+    process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize
 
     const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './config': getConfigFresh,
@@ -49,9 +78,14 @@ describe('OpenTelemetry Logs', () => {
         const mockReq = {
           write: (data) => { capturedPayload = data },
           end: () => {
-            const decoded = protocol === 'json'
-              ? JSON.parse(capturedPayload.toString())
-              : protoLogsService.decode(capturedPayload)
+            let decoded
+            if (protocol === 'json') {
+              decoded = JSON.parse(capturedPayload.toString())
+            } else {
+              const message = protoLogsService.decode(capturedPayload)
+              assertWireRoundTrip(protoLogsService, message, capturedPayload)
+              decoded = message
+            }
             validator(decoded, capturedHeaders)
             validatorCalled = true
           },
@@ -131,13 +165,17 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(log1.spanId.toString('hex'), '1234567890abcdef')
 
         const log2 = scope.logRecords[1]
-        assert.strictEqual(log2.severityText, 'ERROR')
-        assert.strictEqual(log2.severityNumber, 17)
-        assert.strictEqual(log2.body.stringValue, 'Test error message')
+        assertObjectContains(log2, {
+          severityText: 'ERROR',
+          severityNumber: 17,
+          body: {
+            stringValue: 'Test error message',
+          },
+        })
         assert.strictEqual(log2.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
         assert.strictEqual(log2.spanId.toString('hex'), '1234567890abcdef')
       })
-      setupTracer(true, '2')
+      setupLogs(true, '2')
 
       const spanContext = {
         traceId: '1234567890abcdef1234567890abcdef',
@@ -167,7 +205,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'Protobuf format')
       })
 
-      const { logs } = setupTracer()
+      const { logs } = setupLogs()
       logs.getLogger({ name: 'test' }).emit({ severityText: 'INFO', body: 'Protobuf format' })
     })
 
@@ -177,7 +215,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'JSON format')
       }, 'json')
 
-      const { logs } = setupTracer()
+      const { logs } = setupLogs()
       logs.getLogger('test').emit({ severityText: 'DEBUG', body: 'JSON format' })
     })
 
@@ -188,7 +226,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'before shutdown')
       })
 
-      const { logs, loggerProvider } = setupTracer(true, '2')
+      const { logs, loggerProvider } = setupLogs(true, '2')
       const logger1 = logs.getLogger('test-logger')
 
       // Emit before shutdown - should work
@@ -220,7 +258,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(log.body.stringValue, 'Scope test')
       })
 
-      const { logs } = setupTracer()
+      const { logs } = setupLogs()
       logs.getLogger('test-logger').emit({
         body: 'Scope test',
         instrumentationScope: { name: 'custom-scope', version: '2.0.0' },
@@ -237,8 +275,11 @@ describe('OpenTelemetry Logs', () => {
       process.env.DD_TRACE_OTEL_ENABLED = 'true'
 
       mockOtlpExport((decoded, capturedHeaders) => {
-        // Validate payload body
-        const actual = JSON.parse(JSON.stringify(decoded.toJSON()))
+        const actual = JSON.parse(JSON.stringify(protoLogsService.toObject(decoded, {
+          longs: String,
+          bytes: String,
+          enums: String,
+        })))
         const attrs = actual.resourceLogs[0].resource.attributes
         const runtimeId = attrs.find(a => a.key === 'runtime-id').value.stringValue
         const clientId = attrs.find(a => a.key === '_dd.rc.client_id').value.stringValue
@@ -254,15 +295,12 @@ describe('OpenTelemetry Logs', () => {
                 { key: 'runtime-id', value: { stringValue: runtimeId } },
                 { key: '_dd.rc.client_id', value: { stringValue: clientId } },
               ],
-              droppedAttributesCount: 0,
             },
             scopeLogs: [{
               scope: {
                 name: 'test-service',
                 version: '1.0.0',
-                droppedAttributesCount: 0,
               },
-              schemaUrl: '',
               logRecords: [{
                 body: { stringValue: 'HTTP test message' },
                 severityText: 'ERROR',
@@ -285,7 +323,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(capturedHeaders['x-api-key'], 'test123')
       })
 
-      setupTracer()
+      setupLogsFull()
 
       const spanContext = {
         traceId: '00000000000000000000000000000001',
@@ -327,7 +365,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(scope2.logRecords[0].body.stringValue, 'Message from logger2')
       })
 
-      setupTracer(true, '2')
+      setupLogs(true, '2')
 
       const spanContext = {
         traceId: '1234567890abcdef1234567890abcdef',
@@ -360,7 +398,7 @@ describe('OpenTelemetry Logs', () => {
         done()
       })
 
-      const { logs } = setupTracer()
+      const { logs } = setupLogs()
       const logger = logs.getLogger('test-logger')
 
       // Emit with an invalid severity number (999)
@@ -380,11 +418,14 @@ describe('OpenTelemetry Logs', () => {
 
         // Integer body (protobuf returns Long objects for int64)
         const intValue = logRecords[1].body.intValue
-        assert.strictEqual(typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
+        assert.strictEqual(intValue !== null && typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
 
         // Double/float body
-        assert(logRecords[2].body.doubleValue !== undefined)
-        assert(Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001)
+        assert.notStrictEqual(logRecords[2].body.doubleValue, undefined)
+        assert(
+          Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001,
+          `Expected ${Math.abs(logRecords[2].body.doubleValue - 3.14159)} < 0.00001`
+        )
 
         // Boolean body
         assert.strictEqual(logRecords[3].body.boolValue, true)
@@ -396,7 +437,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(logRecords[4].body.kvlistValue.values[0].value.stringValue, 'bar')
         assert.strictEqual(logRecords[4].body.kvlistValue.values[1].key, 'baz')
         const bazValue = logRecords[4].body.kvlistValue.values[1].value.intValue
-        assert.strictEqual(typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
+        assert.strictEqual(bazValue !== null && typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
 
         // Default case (symbol) - should convert to string
         assert.strictEqual(logRecords[5].body.stringValue, 'Symbol(test)')
@@ -404,7 +445,7 @@ describe('OpenTelemetry Logs', () => {
         done()
       })
 
-      const { logs } = setupTracer(true, '6')
+      const { logs } = setupLogs(true, '6')
       const logger = logs.getLogger('test-logger')
 
       // Emit logs with different body types
@@ -426,7 +467,7 @@ describe('OpenTelemetry Logs', () => {
       process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '10'
       process.env.OTEL_BSP_SCHEDULE_DELAY = '100' // 100ms timeout
 
-      const { logs } = setupTracer()
+      const { logs } = setupLogs()
       const logger = logs.getLogger('test-logger')
 
       logger.emit({ body: 'timeout test' })
@@ -441,10 +482,12 @@ describe('OpenTelemetry Logs', () => {
         const resourceAttrs = {}
         resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
 
-        assert.strictEqual(resourceAttrs['service.name'], 'my-service')
-        assert.strictEqual(resourceAttrs['service.version'], 'v1.2.3')
-        assert.strictEqual(resourceAttrs['deployment.environment'], 'production')
-        assert.strictEqual(resourceAttrs['host.name'], os.hostname())
+        assertObjectContains(resourceAttrs, {
+          'service.name': 'my-service',
+          'service.version': 'v1.2.3',
+          'deployment.environment': 'production',
+          'host.name': os.hostname(),
+        })
         done()
       })
 
@@ -453,13 +496,13 @@ describe('OpenTelemetry Logs', () => {
       process.env.DD_ENV = 'production'
       process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
 
-      const { logs } = setupTracer()
+      const { logs } = setupLogs()
       const logger = logs.getLogger('test-logger')
       logger.emit({ body: 'test' })
     })
 
     it('handles multiple register() calls', () => {
-      const { logs, loggerProvider } = setupTracer()
+      const { logs, loggerProvider } = setupLogs()
 
       // Calling register again should not throw
       loggerProvider.register()
@@ -474,21 +517,21 @@ describe('OpenTelemetry Logs', () => {
     it('uses default protobuf protocol', () => {
       delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
       delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert(loggerProvider.processor)
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
     })
 
     it('configures protocol from environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/json')
     })
 
     it('prioritizes logs-specific protocol over generic protocol', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
       process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/json')
     })
 
@@ -496,7 +539,7 @@ describe('OpenTelemetry Logs', () => {
       const logMock = mockLogWarn()
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
 
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
       assert.match(logMock.getMessage(), /OTLP gRPC protocol is not supported/)
 
@@ -505,7 +548,7 @@ describe('OpenTelemetry Logs', () => {
 
     it('configures OTLP endpoint from environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4321/v1/logs'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
       assert.strictEqual(loggerProvider.processor.exporter.options.hostname, 'custom')
       assert.strictEqual(loggerProvider.processor.exporter.options.port, '4321')
@@ -514,21 +557,27 @@ describe('OpenTelemetry Logs', () => {
     it('prioritizes logs-specific endpoint over generic endpoint', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318/v1/logs'
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://generic:4318/v1/logs'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
       assert.strictEqual(loggerProvider.processor.exporter.options.hostname, 'custom')
       assert.strictEqual(loggerProvider.processor.exporter.options.port, '4318')
     })
 
-    it('appends /v1/logs to endpoint if not provided', () => {
-      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318'
-      const { loggerProvider } = setupTracer()
+    it('appends /v1/logs when deriving the URL from the generic OTEL_EXPORTER_OTLP_ENDPOINT', () => {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://custom:4318'
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
+    })
+
+    it('uses a signal-specific endpoint as-is without appending /v1/logs', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318'
+      const { loggerProvider } = setupLogs()
+      assert.strictEqual(loggerProvider.processor.exporter.options.path, '/')
     })
 
     it('configures OTLP headers from environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_HEADERS = 'api-key=secret,env=prod'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       const exporter = loggerProvider.processor.exporter
       assert.strictEqual(exporter.options.headers['api-key'], 'secret')
       assert.strictEqual(exporter.options.headers.env, 'prod')
@@ -537,7 +586,7 @@ describe('OpenTelemetry Logs', () => {
     it('prioritizes logs-specific headers over generic OTLP headers', () => {
       process.env.OTEL_EXPORTER_OTLP_HEADERS = 'generic=value,shared=generic'
       process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'logs-specific=value,shared=logs'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       const exporter = loggerProvider.processor.exporter
       assert.strictEqual(exporter.options.headers['logs-specific'], 'value')
       assert.strictEqual(exporter.options.headers.shared, 'logs')
@@ -546,19 +595,19 @@ describe('OpenTelemetry Logs', () => {
 
     it('configures OTLP timeout from environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT = '1000'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.options.timeout, 1000)
     })
 
     it('prioritizes logs-specific timeout over generic timeout', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT = '1000'
       process.env.OTEL_EXPORTER_OTLP_TIMEOUT = '2000'
-      const { loggerProvider } = setupTracer()
+      const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.options.timeout, 1000)
     })
 
     it('does not initialize when OTEL logs are disabled', () => {
-      const { loggerProvider } = setupTracer(false)
+      const { loggerProvider } = setupLogs(false)
       const { LoggerProvider } = require('../../src/opentelemetry/logs')
 
       // Should return no-op provider when disabled, not our custom LoggerProvider
@@ -566,25 +615,25 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('disables log injection when OTEL logs are enabled', () => {
-      const { tracer, loggerProvider } = setupTracer()
+      const { config, loggerProvider } = setupLogs()
 
       assert(loggerProvider)
-      assert.strictEqual(tracer._tracer._config.logInjection, false)
+      assert.strictEqual(config.logInjection, false)
     })
 
     it('disables log injection even when DD_LOGS_INJECTION is explicitly set to true', () => {
       // OTEL logs and DD log injection are mutually exclusive
       process.env.DD_LOGS_INJECTION = 'true'
-      const { tracer, loggerProvider } = setupTracer()
+      const { config, loggerProvider } = setupLogs()
 
       assert(loggerProvider)
-      assert.strictEqual(tracer._tracer._config.logInjection, false)
+      assert.strictEqual(config.logInjection, false)
     })
   })
 
   describe('Telemetry Metrics', () => {
     it('tracks telemetry metrics for exported logs', () => {
-      setupTracer()
+      setupLogs()
       const telemetryMetrics = {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) },
       }

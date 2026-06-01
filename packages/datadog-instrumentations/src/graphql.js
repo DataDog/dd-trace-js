@@ -1,5 +1,7 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
@@ -10,7 +12,13 @@ const ddGlobal = globalThis[Symbol.for('dd-trace')]
 
 /** cached objects */
 
+// `contexts` is the fast resolver-side lookup; `executeCtx` is the fallback
+// when `contextValue` is a primitive and cannot key a WeakMap.
 const contexts = new WeakMap()
+const executeCtx = new AsyncLocalStorage()
+// Tracks normalized args already instrumented in an outer wrap so graphql-yoga
+// (which stacks `execute` + `normalizedExecutor`) only emits one span per call.
+const instrumentedArgs = new WeakSet()
 const documentSources = new WeakMap()
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
@@ -62,14 +70,17 @@ function getOperation (document, operationName) {
 function normalizeArgs (args, defaultFieldResolver) {
   if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
 
-  args[0].contextValue ||= {}
-  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
+  const original = args[0]
+  const normalized = {
+    ...original,
+    fieldResolver: wrapResolve(original.fieldResolver || defaultFieldResolver),
+  }
 
-  return args[0]
+  args[0] = normalized
+  return normalized
 }
 
 function normalizePositional (args, defaultFieldResolver) {
-  args[3] = args[3] || {} // contextValue
   args[6] = wrapResolve(args[6] || defaultFieldResolver) // fieldResolver
   args.length = Math.max(args.length, 7)
 
@@ -82,6 +93,12 @@ function normalizePositional (args, defaultFieldResolver) {
     operationName: args[5],
     fieldResolver: args[6],
   }
+}
+
+// `WeakMap.set` throws `TypeError` on a non-object key; `get`/`has`/`delete`
+// silently miss. Skip the WeakMap entirely for non-keyable `contextValue`.
+function isWeakMapKey (value) {
+  return value !== null && typeof value === 'object'
 }
 
 function wrapParse (parse) {
@@ -129,7 +146,7 @@ function wrapValidate (validate) {
       try {
         errors = validate.apply(this, arguments)
         if (errors && errors[0]) {
-          ctx.error = errors && errors[0]
+          ctx.error = errors[0]
           validateErrorCh.publish(ctx)
         }
         return errors
@@ -155,25 +172,36 @@ function wrapExecute (execute) {
         return exe.apply(this, arguments)
       }
 
+      // The outer wrap leaves its normalized args object in `arguments[0]`; on
+      // graphql-yoga's inner wrap that reference is already known here.
+      if (instrumentedArgs.has(arguments[0])) {
+        return exe.apply(this, arguments)
+      }
+
       const args = normalizeArgs(arguments, defaultFieldResolver)
       const schema = args.schema
       const document = args.document
       const source = documentSources.get(document)
       const contextValue = args.contextValue
+      const keyable = isWeakMapKey(contextValue)
       const operation = getOperation(document, args.operationName)
 
-      if (contexts.has(contextValue)) {
+      if (keyable && contexts.has(contextValue)) {
         return exe.apply(this, arguments)
       }
 
       const ctx = {
         operation,
         args,
-        docSource: documentSources.get(document),
+        docSource: source,
         source,
-        fields: {},
+        fields: new Map(),
         abortController: new AbortController(),
       }
+
+      // Only the object form leaves a stable single-object handle in
+      // `arguments[0]` for the inner wrap to see.
+      if (args === arguments[0]) instrumentedArgs.add(args)
 
       return startExecuteCh.runStores(ctx, () => {
         if (schema) {
@@ -181,9 +209,9 @@ function wrapExecute (execute) {
           wrapFields(schema._mutationType)
         }
 
-        contexts.set(contextValue, ctx)
+        if (keyable) contexts.set(contextValue, ctx)
 
-        return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
+        const finish = (err, res) => {
           if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
 
           const error = err || (res && res.errors && res.errors[0])
@@ -194,8 +222,16 @@ function wrapExecute (execute) {
           }
 
           ctx.res = res
+          if (keyable) contexts.delete(contextValue)
+          instrumentedArgs.delete(args)
           finishExecuteCh.publish(ctx)
-        })
+        }
+
+        // Skip the ALS entry on the common object-`contextValue` path; the
+        // resolver reaches `ctx` via the WeakMap there.
+        return keyable
+          ? callInAsyncScope(exe, this, arguments, ctx.abortController, finish)
+          : executeCtx.run(ctx, () => callInAsyncScope(exe, this, arguments, ctx.abortController, finish))
       })
     }
   }
@@ -207,18 +243,40 @@ function wrapResolve (resolve) {
   function resolveAsync (source, args, contextValue, info) {
     if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
 
-    const ctx = contexts.get(contextValue)
+    // `WeakMap.get(primitive)` returns `undefined`, so the fallback covers
+    // executes that ran with a primitive `contextValue`.
+    const ctx = contexts.get(contextValue) ?? executeCtx.getStore()
 
+    /* istanbul ignore if: resolver invoked outside execute(), so no per-execute ctx was registered */
     if (!ctx) return resolve.apply(this, arguments)
 
     const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
-      field.ctx.error = err
-      field.ctx.info = info
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
-    })
+    if (ctx.abortController.signal.aborted) {
+      publishResolverFinish(field, null)
+      throw new AbortError('Aborted')
+    }
+
+    try {
+      const result = resolve.call(this, source, args, contextValue, info)
+      if (result !== null && typeof result?.then === 'function') {
+        return result.then(
+          res => {
+            publishResolverFinish(field, null)
+            return res
+          },
+          error => {
+            publishResolverFinish(field, error)
+            throw error
+          }
+        )
+      }
+      publishResolverFinish(field, null)
+      return result
+    } catch (error) {
+      publishResolverFinish(field, error)
+      throw error
+    }
   }
 
   patchedResolvers.add(resolveAsync)
@@ -226,66 +284,128 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb = cb || (() => {})
+/**
+ * @param {{ ctx: object, error: unknown }} field
+ * @param {unknown} error
+ */
+function publishResolverFinish (field, error) {
+  const fieldCtx = field.ctx
+  fieldCtx.error = error
+  fieldCtx.field = field
+  updateFieldCh.publish(fieldCtx)
+}
 
-  if (abortController?.signal.aborted) {
+function callInAsyncScope (fn, thisArg, args, abortController, cb) {
+  if (abortController.signal.aborted) {
     cb(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
     const result = fn.apply(thisArg, args)
-    if (result && typeof result.then === 'function') {
+    if (result !== null && typeof result?.then === 'function') {
       return result.then(
         res => {
           cb(null, res)
           return res
         },
-        err => {
-          cb(err)
-          throw err
+        /* istanbul ignore next: graphql.execute() rejects only via custom executors (graphql-yoga / graphql-tools) */
+        error => {
+          cb(error)
+          throw error
         }
       )
     }
     cb(null, result)
     return result
-  } catch (err) {
-    cb(err)
-    throw err
+  } catch (error) {
+    cb(error)
+    throw error
   }
 }
 
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
-  }
-  return flattened.reverse()
-}
+/**
+ * @typedef {{ prev: PathNode | undefined, key: string | number }} PathNode
+ *
+ * @typedef {{ error: unknown, ctx: object }} TrackedField
+ */
 
+/**
+ * @param {{
+ *   fields: Map<object, TrackedField>,
+ *   collapse: boolean,
+ *   collapsedFields?: Map<string, TrackedField>,
+ *   pathCache?: Map<PathNode, string>,
+ * }} rootCtx
+ * @param {import('graphql').GraphQLResolveInfo} info
+ * @param {Record<string, unknown>} args
+ */
 function assertField (rootCtx, info, args) {
-  const pathInfo = info && info.path
+  const path = info.path
+  const collapse = rootCtx.collapse
 
-  const path = pathToArray(pathInfo)
+  const cache = rootCtx.pathCache ??= new Map()
+  const prev = path.prev
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
 
-  const pathString = path.join('.')
-  const fields = rootCtx.fields
+  const pathString = prev === undefined
+    ? String(segment)
+    : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
+  cache.set(path, pathString)
 
-  let field = fields[pathString]
+  const fieldCtx = {
+    rootCtx,
+    args,
+    path,
+    pathString,
+    fieldName: info.fieldName,
+    returnType: info.returnType,
+    fieldNode: info.fieldNodes[0],
+    variableValues: info.variableValues,
+  }
+  // Publish per resolver call, before the collapse / depth dedupe below.
+  // IAST mutates each call's own args object; if siblings 2..N skip the
+  // publish, those args objects never get tainted.
+  startResolveCh.publish(fieldCtx)
 
-  if (!field) {
-    const fieldCtx = { info, rootCtx, args }
-    startResolveCh.publish(fieldCtx)
-    field = fields[pathString] = {
-      error: null,
-      ctx: fieldCtx,
-    }
+  let collapsedFields
+  if (collapse) {
+    collapsedFields = rootCtx.collapsedFields ??= new Map()
+    const existing = collapsedFields.get(pathString)
+    // Subsequent siblings of a collapsed list share the first sibling's field
+    // so updateFieldCh fires for every call and the span's finishTime tracks
+    // the last sibling's completion, not the first.
+    if (existing !== undefined) return existing
   }
 
+  const field = { error: null, ctx: fieldCtx }
+  rootCtx.fields.set(path, field)
+  if (collapsedFields !== undefined) collapsedFields.set(pathString, field)
   return field
+}
+
+/**
+ * Cold path for assertField. graphql-js inserts a synthetic array-index
+ * node between a list field and its items, and that node never reaches a
+ * resolver — so assertField has no chance to cache it. The first child of
+ * the list item that hits the path cache lands here to walk and populate
+ * back to a cached ancestor.
+ *
+ * @param {PathNode} path
+ * @param {Map<PathNode, string>} cache
+ * @param {boolean} collapse
+ */
+function buildCachedPathString (path, cache, collapse) {
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
+  const prev = path.prev
+
+  const pathString = prev === undefined
+    ? String(segment)
+    : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
+  cache.set(path, pathString)
+  return pathString
 }
 
 function wrapFields (type) {
@@ -295,9 +415,7 @@ function wrapFields (type) {
 
   patchedTypes.add(type)
 
-  for (const key of Object.keys(type._fields)) {
-    const field = type._fields[key]
-
+  for (const field of Object.values(type._fields)) {
     wrapFieldResolve(field)
     wrapFieldType(field)
   }
@@ -321,15 +439,19 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  for (const key of Object.keys(fields).reverse()) {
-    const field = fields[key]
-    field.ctx.finishTime = field.finishTime
-    field.ctx.field = field
+  for (const field of fields.values()) {
+    const fieldCtx = field.ctx
+    // A depth-gated field publishes startResolveCh for IAST/AppSec but the
+    // resolve plugin's start short-circuits before creating a span, so there
+    // is no span here to finish.
+    if (fieldCtx.currentStore === undefined) continue
+    fieldCtx.finishTime = field.finishTime
+    fieldCtx.field = field
     if (field.error) {
-      field.ctx.error = field.error
-      resolveErrorCh.publish(field.ctx)
+      fieldCtx.error = field.error
+      resolveErrorCh.publish(fieldCtx)
     }
-    finishResolveCh.publish(field.ctx)
+    finishResolveCh.publish(fieldCtx)
   }
 }
 
@@ -342,11 +464,11 @@ addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor =>
   return executor
 })
 
-addHook({ name: '@graphql-tools/executor', file: 'cjs/execution/execute.js', versions: ['>=0.0.14'] }, execute => {
-  shimmer.wrap(execute, 'execute', wrapExecute(execute))
-  return execute
-})
-
+// TODO(BridgeAR): graphql >=17.0.0-alpha.9 routes execute() through
+// experimentalExecuteIncrementally(), bypassing this hook. The same
+// function returns { initialResult, subsequentResults } for @defer /
+// @stream which callInAsyncScope does not handle — execute finishes
+// before the streamed payloads land.
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
   shimmer.wrap(execute, 'execute', wrapExecute(execute))
   return execute

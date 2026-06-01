@@ -2,8 +2,11 @@
 
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
-const { COMPONENT } = require('../constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../constants')
+const { INTEGRATION_SERVICE } = require('../service-naming/source-resolver')
 const Plugin = require('./plugin')
+
+const legacyStorage = storage('legacy')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -16,11 +19,18 @@ class TracingPlugin extends Plugin {
   }
 
   get activeSpan () {
-    const store = storage('legacy').getStore()
+    const store = /** @type {{ span?: import('../../../..').Span }} */ (legacyStorage.getStore())
 
-    return store && store.span
+    return store?.span
   }
 
+  /**
+   * @param {object} opts
+   * @param {string} [opts.type]
+   * @param {string} [opts.id]
+   * @param {string} [opts.kind]
+   * @returns {{ name: string, source: string | undefined }}
+   */
   serviceName (opts = {}) {
     const {
       type = this.constructor.type,
@@ -31,6 +41,13 @@ class TracingPlugin extends Plugin {
     return this._tracer._nomenclature.serviceName(type, kind, id, opts)
   }
 
+  /**
+   * @param {object} opts
+   * @param {string} [opts.type]
+   * @param {string} [opts.id]
+   * @param {string} [opts.kind]
+   * @returns {string}
+   */
   operationName (opts = {}) {
     const {
       type = this.constructor.type,
@@ -41,6 +58,10 @@ class TracingPlugin extends Plugin {
     return this._tracer._nomenclature.opName(type, kind, id, opts)
   }
 
+  /**
+   * @param {object} config
+   * @returns {object}
+   */
   configure (config) {
     return super.configure({
       ...config,
@@ -53,11 +74,17 @@ class TracingPlugin extends Plugin {
 
   start () {} // implemented by individual plugins
 
+  /**
+   * @param {{ currentStore?: { span: import('../../../..').Span } }} ctx
+   */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
     span?.finish()
   }
 
+  /**
+   * @param {{ currentStore?: { span: import('../../../..').Span }, error?: unknown }} ctxOrError
+   */
   error (ctxOrError) {
     if (ctxOrError?.currentStore) {
       ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)
@@ -73,32 +100,78 @@ class TracingPlugin extends Plugin {
       const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
 
       if (this[event]) {
-        this.addTraceSub(event, message => {
-          this[event](message)
-        })
+        this.addTraceSub(event, this[event].bind(this))
       }
 
       if (this[bindName]) {
-        this.addTraceBind(event, message => this[bindName](message))
+        this.addTraceBind(event, this[bindName].bind(this))
       }
     }
   }
 
+  /**
+   * @param {string} eventName
+   * @param {Function} handler
+   */
   addTraceSub (eventName, handler) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
     this.addSub(`${prefix}:${eventName}`, handler)
   }
 
+  /**
+   * @param {string} eventName
+   * @param {Function} transform
+   */
   addTraceBind (eventName, transform) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
     this.addBind(`${prefix}:${eventName}`, transform)
   }
 
+  /**
+   * Record the integration's intended `service.name` on a span without writing the tag.
+   *
+   * Use this when the plugin has already set `service.name` directly on the span (e.g. via
+   * the `tracer.startSpan` tags object) and only needs to stamp the marker so
+   * `Span#finish` can later detect user overrides and re-attribute the source.
+   *
+   * Prefer {@link TracingPlugin#setServiceName} when the tag itself also needs to be written.
+   *
+   * No-op when there is nothing meaningful to record
+   *
+   * @param {import('../opentracing/span')} span Internal DatadogSpan instance.
+   * @param {string|undefined} name Service name the integration is claiming.
+   */
+  stampIntegrationService (span, name) {
+    if (name === undefined) return
+    span[INTEGRATION_SERVICE] = name
+  }
+
+  /**
+   * Set `service.name` on a span on behalf of this integration and stamp the marker.
+   *
+   * Use this for late-binding cases where the service is not known at startSpan time
+   * (e.g. web framework config applied after the span is already open).
+   *
+   * For spans started via {@link TracingPlugin#startSpan}, pass `service` as an option
+   * instead — it sets the tag and stamps the marker in one step.
+   *
+   * @param {import('../opentracing/span')} span Internal DatadogSpan instance.
+   * @param {string} name Service name the integration is claiming.
+   */
+  setServiceName (span, name) {
+    // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name -- this is the implementation
+    span._spanContext.setTag('service.name', name)
+    this.stampIntegrationService(span, name)
+  }
+
+  /**
+   * @param {unknown} error
+   * @param {import('../../../..').Span} [span]
+   */
   addError (error, span = this.activeSpan) {
-    if (span && !span._spanContext._tags.error) {
+    if (span && !span.context().getTag('error')) {
       // Errors may be wrapped in a context.
-      error = (error && error.error) || error
-      span.setTag('error', error || 1)
+      span.setTag('error', error?.error || error || 1)
     }
   }
 
@@ -122,7 +195,8 @@ class TracingPlugin extends Plugin {
    * @param {string} [options.kind] - The kind of the span.
    * @param {object} [options.meta] - The meta data for the span.
    * @param {object} [options.metrics] - The metrics for the span.
-   * @param {string} [options.service] - The service name.
+   * @param {string | { name: string, source?: string }} [options.service] - The service name, or an object with
+   *   name and source.
    * @param {number} [options.startTime] - The start time of the span.
    * @param {string} [options.resource] - The resource name.
    * @param {string} [options.type] - The type of the span.
@@ -145,13 +219,28 @@ class TracingPlugin extends Plugin {
       resource,
       type,
     } = options
-
+    let serviceSource
     const tracer = options.tracer || this.tracer
     const config = options.config || this.config
 
-    const store = storage('legacy').getStore()
+    if (service && typeof service === 'object') {
+      serviceSource = service.source
+      service = service.name
+    } else if (service !== undefined) {
+      // service is a plain value returned by service naming/config logic
+      serviceSource = service ? 'opt.plugin' : undefined
+    }
+
+    const store = legacyStorage.getStore()
     if (store && childOf === undefined) {
       childOf = /** @type {import('../opentracing/span') | undefined} */ (store.span)
+    }
+
+    // clear service source if service is the same as tracer._service
+    const serviceName = service || meta?.service
+
+    if (!serviceName || serviceName === tracer._service) {
+      serviceSource = undefined
     }
 
     const span = tracer.startSpan(name, {
@@ -159,10 +248,11 @@ class TracingPlugin extends Plugin {
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': service || meta?.service || tracer._service,
+        'service.name': serviceName || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
+        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
         ...meta,
         ...metrics,
       },
@@ -170,11 +260,13 @@ class TracingPlugin extends Plugin {
       links: childOf?._links,
     })
 
+    this.stampIntegrationService(span, serviceName)
+
     analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
     if (enterOrCtx === true) {
-      storage('legacy').enterWith({ ...store, span })
+      legacyStorage.enterWith({ ...store, span })
     } else if (enterOrCtx) {
       enterOrCtx.parentStore = store
       enterOrCtx.currentStore = { ...store, span }

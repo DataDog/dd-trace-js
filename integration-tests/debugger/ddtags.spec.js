@@ -3,7 +3,9 @@
 const os = require('os')
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const { version } = require('../../package.json')
+const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -24,7 +26,7 @@ describe('Dynamic Instrumentation', function () {
         t.triggerBreakpoint()
 
         t.agent.on('debugger-input', ({ query }) => {
-          assert.ok(Object.hasOwn(query, 'ddtags'))
+          assert.ok(Object.hasOwn(query, 'ddtags'), `Available keys: ${inspect(Object.keys(query))}`)
 
           const ddtags = extractDDTagsFromQuery(query)
 
@@ -37,12 +39,14 @@ describe('Dynamic Instrumentation', function () {
             'version',
           ], Object.keys(ddtags).sort())
 
-          assert.strictEqual(ddtags.env, 'test-env')
-          assert.strictEqual(ddtags.version, 'test-version')
-          assert.strictEqual(ddtags.debugger_version, version)
-          assert.strictEqual(ddtags.host_name, os.hostname())
-          assert.strictEqual(ddtags['git.commit.sha'], 'test-commit-sha')
-          assert.strictEqual(ddtags['git.repository_url'], 'test-repository-url')
+          assertObjectContains(ddtags, {
+            env: 'test-env',
+            version: 'test-version',
+            debugger_version: version,
+            host_name: os.hostname(),
+            'git.commit.sha': 'test-commit-sha',
+            'git.repository_url': 'test-repository-url',
+          })
 
           done()
         })
@@ -58,7 +62,7 @@ describe('Dynamic Instrumentation', function () {
         t.triggerBreakpoint()
 
         t.agent.on('debugger-input', ({ query }) => {
-          assert.ok(Object.hasOwn(query, 'ddtags'))
+          assert.ok(Object.hasOwn(query, 'ddtags'), `Available keys: ${inspect(Object.keys(query))}`)
 
           const ddtags = extractDDTagsFromQuery(query)
 

@@ -21,7 +21,7 @@ describe('NoopTracer', () => {
       tracer.trace('test', {}, (span, done) => {
         assert.ok(span instanceof Span)
         assert.strictEqual(typeof done, 'function')
-        assert.doesNotThrow(done)
+        done()
       })
     })
 

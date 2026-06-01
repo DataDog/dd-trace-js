@@ -8,28 +8,28 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
   const finishCh = channel('apm:mysql:query:finish')
   const errorCh = channel('apm:mysql:query:error')
 
-  shimmer.wrap(Connection.prototype, 'query', query => function () {
+  shimmer.wrap(Connection.prototype, 'query', query => function (...args) {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
-    const sql = arguments[0].sql || arguments[0]
+    const sql = args[0].sql || args[0]
     const conf = this.config
     const ctx = { sql, conf }
 
     return startCh.runStores(ctx, () => {
-      if (arguments[0].sql) {
-        arguments[0].sql = ctx.sql
+      if (args[0].sql) {
+        args[0].sql = ctx.sql
       } else {
-        arguments[0] = ctx.sql
+        args[0] = ctx.sql
       }
 
       try {
-        const res = query.apply(this, arguments)
+        const res = query.apply(this, args)
 
         if (res._callback) {
           const cb = res._callback
-          res._callback = shimmer.wrapFunction(cb, cb => function (error, result) {
+          res._callback = shimmer.wrapCallback(cb, cb => function (error, result) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)
@@ -63,8 +63,8 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
   const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
 
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
-    arguments[0] = function () {
-      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
+    arguments[0] = function (...args) {
+      return connectionFinishCh.runStores(ctx, cb, this, ...args)
     }
 
     const ctx = {}
@@ -74,24 +74,24 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
     return getConnection.apply(this, arguments)
   })
 
-  shimmer.wrap(Pool.prototype, 'query', query => function () {
+  shimmer.wrap(Pool.prototype, 'query', query => function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
-    const sql = arguments[0].sql || arguments[0]
+    const sql = args[0].sql || args[0]
     const ctx = { sql }
     const finish = () => finishPoolQueryCh.publish(ctx)
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const cb = arguments[arguments.length - 1]
+      const cb = args[args.length - 1]
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
-          return finishPoolQueryCh.runStores(ctx, cb, this, ...arguments)
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
+          return finishPoolQueryCh.runStores(ctx, cb, this, ...args)
         })
       }
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
 
       if (retval && retval.then) {
         retval.then(finish).catch(finish)

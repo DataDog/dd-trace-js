@@ -67,7 +67,8 @@ describe('Service naming', () => {
         inbound: {
           kafka: {
             opName: sinon.spy(),
-            serviceName: sinon.spy(),
+            serviceName: sinon.stub().returns('kafka-service'),
+            serviceSource: sinon.stub().returns('kafka'),
           },
         },
       },
@@ -86,8 +87,10 @@ describe('Service naming', () => {
     describe('Service name getter', () => {
       it('should add service name and passthrough service name arguments', () => {
         const opts = { tracerService: 'test-service', ...extra }
-        resolver.getServiceName('messaging', 'inbound', 'kafka', opts)
+        const result = resolver.getServiceName('messaging', 'inbound', 'kafka', opts)
         sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.serviceName, opts)
+        sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.serviceSource, opts)
+        assert.deepStrictEqual(result, { name: 'kafka-service', source: 'kafka' })
       })
     })
   })

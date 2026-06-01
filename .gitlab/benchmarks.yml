@@ -1,6 +1,7 @@
 variables:
   MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
+  SLS_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "5.0"
@@ -67,16 +68,10 @@ check-big-regressions:
 
 benchmark:
   extends: .benchmarks
+  # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
+  # one, change the other — otherwise variants get silently skipped.
   parallel:
     matrix:
-      - MAJOR_VERSION: 18
-        GROUP: 1
-      - MAJOR_VERSION: 18
-        GROUP: 2
-      - MAJOR_VERSION: 18
-        GROUP: 3
-      - MAJOR_VERSION: 18
-        GROUP: 4
       - MAJOR_VERSION: 20
         GROUP: 1
       - MAJOR_VERSION: 20
@@ -85,6 +80,10 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 20
         GROUP: 4
+      - MAJOR_VERSION: 20
+        GROUP: 5
+      - MAJOR_VERSION: 20
+        GROUP: 6
       - MAJOR_VERSION: 22
         GROUP: 1
       - MAJOR_VERSION: 22
@@ -93,6 +92,10 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 22
         GROUP: 4
+      - MAJOR_VERSION: 22
+        GROUP: 5
+      - MAJOR_VERSION: 22
+        GROUP: 6
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -101,8 +104,12 @@ benchmark:
         GROUP: 3
       - MAJOR_VERSION: 24
         GROUP: 4
+      - MAJOR_VERSION: 24
+        GROUP: 5
+      - MAJOR_VERSION: 24
+        GROUP: 6
   variables:
-    SPLITS: 4
+    SPLITS: 6
 
 benchmark-serverless:
   stage: benchmarks
@@ -116,7 +123,16 @@ benchmark-serverless:
   needs:
     - benchmark-serverless-trigger
   script:
-    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
+    - curl -OL "https://binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
+    - mv "authanywhere-linux-amd64" /bin/authanywhere
+    - chmod +x /bin/authanywhere
+    - BTI_CI_API_TOKEN=$(authanywhere --audience rapid-devex-ci)
+    - >-
+      BTI_RESPONSE=$(curl --silent --request GET \
+        --header "$BTI_CI_API_TOKEN" \  --header "Content-Type: application/vnd.api+json" \
+        "https://bti-ci-api.us1.ddbuild.io/internal/ci/gitlab/token?owner=DataDog&repository=serverless-tools")
+    - GITLAB_TOKEN=$(echo "$BTI_RESPONSE" | jq -r '.token // empty')
+    - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
     - ./ci/check_trigger_status.sh
 
 benchmark-serverless-trigger:
@@ -128,6 +144,7 @@ benchmark-serverless-trigger:
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
+    branch: $SLS_CI_BRANCH
     strategy: depend
   allow_failure: true
   variables:
@@ -140,3 +157,6 @@ benchmark-serverless-trigger:
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_GITLAB_USER_LOGIN: $GITLAB_USER_LOGIN
     UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
+    # only available on Merge Requests
+    UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"

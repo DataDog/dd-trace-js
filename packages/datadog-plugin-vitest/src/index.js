@@ -2,7 +2,6 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
@@ -16,7 +15,7 @@ const {
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
-  TEST_LEVEL_EVENT_TYPES,
+  TEST_COMMAND,
   TEST_SESSION_NAME,
   TEST_SOURCE_START,
   TEST_IS_NEW,
@@ -33,6 +32,8 @@ const {
   TEST_RETRY_REASON_TYPES,
   isModifiedTest,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -54,6 +55,16 @@ class VitestPlugin extends CiPlugin {
     super(...args)
 
     this.taskToFinishTime = new WeakMap()
+
+    this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
+      const testSessionSpanContext = this.testSessionSpan?.context()
+      const testModuleSpanContext = this.testModuleSpan?.context()
+      onDone({
+        testSessionId: testSessionSpanContext?.toTraceId(),
+        testModuleId: testModuleSpanContext?.toSpanId(),
+        testCommand: this.command,
+      })
+    })
 
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
       // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
@@ -117,6 +128,7 @@ class VitestPlugin extends CiPlugin {
         testSuiteAbsolutePath,
         isRetry,
         isNew,
+        hasDynamicName,
         isAttemptToFix,
         isQuarantined,
         isDisabled,
@@ -147,6 +159,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
+      }
+      if (hasDynamicName) {
+        extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
       }
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
@@ -180,6 +195,10 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
+    this.addBind('ci:vitest:test:fn', (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addBind('ci:vitest:test:finish-time', (ctx) => {
       const { status, task, attemptToFixPassed, attemptToFixFailed } = ctx
       const span = ctx.currentStore?.span
@@ -204,12 +223,16 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason }) => {
       if (span) {
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
-        })
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+        }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
       }
@@ -223,6 +246,8 @@ class VitestPlugin extends CiPlugin {
       promises,
       hasFailedAllRetries,
       attemptToFixFailed,
+      finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (!span) {
         return
@@ -236,9 +261,7 @@ class VitestPlugin extends CiPlugin {
           promises.setProbePromise = setProbePromise
         }
       }
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
-      })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
       span.setTag(TEST_STATUS, 'fail')
 
       if (error) {
@@ -249,6 +272,12 @@ class VitestPlugin extends CiPlugin {
       }
       if (attemptToFixFailed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+      }
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       if (duration) {
         span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
@@ -268,53 +297,51 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
+          [TEST_FINAL_STATUS]: 'skip',
           ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         }
       )
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS],
-      })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
       testSpan.finish()
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
-      this.command = getValueFromEnvSources('DD_CIVISIBILITY_TEST_COMMAND')
+      const testCommand = ctx.testCommand || 'vitest run'
+      const { testSessionId, testModuleId } = ctx
+      this.command = testCommand
       this.frameworkVersion = frameworkVersion
-      const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_SESSION_ID'),
-        'x-datadog-parent-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_MODULE_ID'),
-      })
+      const testSessionSpanContext = testSessionId && testModuleId
+        ? this.tracer.extract('text_map', {
+          'x-datadog-trace-id': testSessionId,
+          'x-datadog-parent-id': testModuleId,
+        })
+        : undefined
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
       if (this.tracer._exporter.addMetadataTags) {
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
-        metadataTags.test = {
-          ...metadataTags.test,
-          ...libraryCapabilitiesTags,
-        }
-        this.tracer._exporter.addMetadataTags(metadataTags)
+        this.tracer._exporter.addMetadataTags({
+          '*': { [TEST_COMMAND]: testCommand, [TEST_SESSION_NAME]: testSessionName },
+          test: getLibraryCapabilitiesTags(this.constructor.id),
+        })
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'vitest'
-      )
-      testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
-      testSuiteMetadata[TEST_SOURCE_START] = 1
+      // Request error tags are applied to test spans in the main process (worker-report:trace handler)
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'vitest'
+        ),
+        [TEST_SOURCE_FILE]: testSuite,
+        [TEST_SOURCE_START]: 1,
+      }
 
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {
@@ -401,11 +428,13 @@ class VitestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       this.tracer._exporter.flush(onFinish)
     })

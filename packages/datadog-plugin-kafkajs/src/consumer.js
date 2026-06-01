@@ -40,29 +40,42 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
    * @returns {ConsumerBacklog}
    */
   transformCommit (commit) {
-    const { groupId, partition, offset, topic } = commit
-    return {
+    const { groupId, partition, offset, topic, clusterId } = commit
+    const backlog = {
       partition,
       topic,
       type: 'kafka_commit',
       offset: Number(offset),
       consumer_group: groupId,
     }
+    if (clusterId) {
+      backlog.kafka_cluster_id = clusterId
+    }
+    return backlog
   }
 
   commit (commitList) {
     if (!this.config.dsmEnabled) return
-    const keys = [
-      'consumer_group',
-      'type',
-      'partition',
-      'offset',
-      'topic',
-    ]
-    for (const commit of commitList.map(this.transformCommit)) {
-      if (keys.some(key => !commit.hasOwnProperty(key))) continue
+    for (const rawCommit of commitList) {
+      const commit = this.transformCommit(rawCommit)
       this.tracer.setOffset(commit)
     }
+  }
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { topic, message, groupId, clusterId } = ctx.extractedArgs || ctx
+    const headers = convertToTextMap(message?.headers)
+    if (!headers) return
+
+    const { span } = ctx.currentStore
+    const payloadSize = getMessageSize(message)
+    this.tracer.decodeDataStreamsContext(headers)
+    const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+    if (clusterId) {
+      edgeTags.push(`kafka_cluster_id:${clusterId}`)
+    }
+    this.tracer.setCheckpoint(edgeTags, span, payloadSize)
   }
 
   bindStart (ctx) {
@@ -88,16 +101,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       },
     }, ctx)
     if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
-
-    if (this.config.dsmEnabled && headers) {
-      const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(headers)
-      const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
-      if (clusterId) {
-        edgeTags.push(`kafka_cluster_id:${clusterId}`)
-      }
-      this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-    }
 
     if (afterStartCh.hasSubscribers) {
       afterStartCh.publish({ topic, partition, message, groupId, currentStore: ctx.currentStore })

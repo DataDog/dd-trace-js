@@ -3,12 +3,14 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
 /**
  * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
@@ -29,7 +31,7 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
 
       if (statusCode !== 200) {
         body = '{}'
-      } if (stream) {
+      } else if (stream) {
         body = fs.createReadStream(path.join(__dirname, 'resources', `${scenario}.txt`))
       } else {
         const contents = require(`./resources/${scenario}.json`)
@@ -91,27 +93,26 @@ describe('Plugin', () => {
 
       after(() => {
         authStub.restore()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('generateContent', () => {
         useScenario({ scenario: 'generate-content-single-response' })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-
-            assert.strictEqual(span.name, 'vertexai.request')
-            assert.strictEqual(span.resource, 'GenerativeModel.generateContent')
-            assert.strictEqual(span.meta['span.kind'], 'client')
-
-            assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+          const checkTraces = agent.assertFirstTraceSpan({
+            name: 'vertexai.request',
+            resource: 'GenerativeModel.generateContent',
+            meta: {
+              'span.kind': 'client',
+              'vertexai.request.model': 'gemini-1.5-flash-002',
+            },
           })
 
           const { response } = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }],
           })
-          assert.ok(Object.hasOwn(response, 'candidates'))
+          assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
           await checkTraces
         })
@@ -123,7 +124,7 @@ describe('Plugin', () => {
 
           const { response } = await model.generateContent('Hello, how are you?')
 
-          assert.ok(Object.hasOwn(response, 'candidates'))
+          assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
           await checkTraces
         })
@@ -149,30 +150,32 @@ describe('Plugin', () => {
         useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-
-            assert.strictEqual(span.name, 'vertexai.request')
-            assert.strictEqual(span.resource, 'GenerativeModel.generateContentStream')
-            assert.strictEqual(span.meta['span.kind'], 'client')
-
-            assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+          const checkTraces = agent.assertFirstTraceSpan({
+            name: 'vertexai.request',
+            resource: 'GenerativeModel.generateContentStream',
+            meta: {
+              'span.kind': 'client',
+              'vertexai.request.model': 'gemini-1.5-flash-002',
+            },
           })
 
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
 
           // check that response is a promise
-          assert.ok(response && typeof response.then === 'function')
+          assert.ok(
+            response && typeof response.then === 'function',
+            `Expected a thenable, got: ${inspect(response)}`
+          )
 
           const promState = await promiseState(response)
           assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
 
           for await (const chunk of stream) {
-            assert.ok(Object.hasOwn(chunk, 'candidates'))
+            assert.ok(Object.hasOwn(chunk, 'candidates'), `Available keys: ${inspect(Object.keys(chunk))}`)
           }
 
           const result = await response
-          assert.ok(Object.hasOwn(result, 'candidates'))
+          assert.ok(Object.hasOwn(result, 'candidates'), `Available keys: ${inspect(Object.keys(result))}`)
 
           await checkTraces
         })
@@ -183,14 +186,13 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-single-response' })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.name, 'vertexai.request')
-              assert.strictEqual(span.resource, 'ChatSession.sendMessage')
-              assert.strictEqual(span.meta['span.kind'], 'client')
-
-              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+            const checkTraces = agent.assertFirstTraceSpan({
+              name: 'vertexai.request',
+              resource: 'ChatSession.sendMessage',
+              meta: {
+                'span.kind': 'client',
+                'vertexai.request.model': 'gemini-1.5-flash-002',
+              },
             })
 
             const chat = model.startChat({
@@ -201,7 +203,7 @@ describe('Plugin', () => {
             })
             const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
 
-            assert.ok(Object.hasOwn(response, 'candidates'))
+            assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
             await checkTraces
           })
@@ -214,7 +216,7 @@ describe('Plugin', () => {
             const chat = model.startChat({})
             const { response } = await chat.sendMessage('Hello, how are you?')
 
-            assert.ok(Object.hasOwn(response, 'candidates'))
+            assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
             await checkTraces
           })
@@ -227,7 +229,7 @@ describe('Plugin', () => {
             const chat = model.startChat({})
             const { response } = await chat.sendMessage(['Hello, how are you?', 'What should I do today?'])
 
-            assert.ok(Object.hasOwn(response, 'candidates'))
+            assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
             await checkTraces
           })
@@ -237,31 +239,33 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.name, 'vertexai.request')
-              assert.strictEqual(span.resource, 'ChatSession.sendMessageStream')
-              assert.strictEqual(span.meta['span.kind'], 'client')
-
-              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+            const checkTraces = agent.assertFirstTraceSpan({
+              name: 'vertexai.request',
+              resource: 'ChatSession.sendMessageStream',
+              meta: {
+                'span.kind': 'client',
+                'vertexai.request.model': 'gemini-1.5-flash-002',
+              },
             })
 
             const chat = model.startChat({})
             const { stream, response } = await chat.sendMessageStream('Hello, how are you?')
 
             // check that response is a promise
-            assert.ok(response && typeof response.then === 'function')
+            assert.ok(
+              response && typeof response.then === 'function',
+              `Expected a thenable, got: ${inspect(response)}`
+            )
 
             const promState = await promiseState(response)
             assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
 
             for await (const chunk of stream) {
-              assert.ok(Object.hasOwn(chunk, 'candidates'))
+              assert.ok(Object.hasOwn(chunk, 'candidates'), `Available keys: ${inspect(Object.keys(chunk))}`)
             }
 
             const result = await response
-            assert.ok(Object.hasOwn(result, 'candidates'))
+            assert.ok(Object.hasOwn(result, 'candidates'), `Available keys: ${inspect(Object.keys(result))}`)
 
             await checkTraces
           })

@@ -16,7 +16,7 @@ class MemcachedPlugin extends CachePlugin {
       [CLIENT_PORT_KEY]: address[1],
     }
 
-    if (this.config.memcachedCommandEnabled) {
+    if (this.config.DD_TRACE_MEMCACHED_COMMAND_ENABLED) {
       meta['memcached.command'] = query.command
     }
 

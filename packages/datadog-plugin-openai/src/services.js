@@ -20,6 +20,7 @@ module.exports.init = function (tracerConfig) {
         `env:${tracerConfig.tags.env}`,
         `version:${tracerConfig.tags.version}`,
       ],
+      lookup: tracerConfig.lookup,
     })
     : new NoopDogStatsDClient()
 
@@ -35,7 +36,8 @@ module.exports.init = function (tracerConfig) {
 
   interval = setInterval(() => {
     metrics.flush()
-  }, FLUSH_INTERVAL).unref()
+  }, FLUSH_INTERVAL)
+  interval.unref?.()
 
   return { metrics, logger }
 }

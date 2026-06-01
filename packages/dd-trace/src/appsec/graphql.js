@@ -1,8 +1,8 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
 const log = require('../log')
 const web = require('../plugins/util/web')
+const { getActiveRequest } = require('./store')
 const {
   addSpecificEndpoint,
   specificBlockingTypes,
@@ -33,7 +33,7 @@ function disable () {
 }
 
 function onGraphqlStartResolve ({ context, resolverInfo }) {
-  const req = storage('legacy').getStore()?.req
+  const req = getActiveRequest()
 
   if (!req) return
 
@@ -52,7 +52,7 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
 }
 
 function enterInApolloMiddleware (data) {
-  const req = data?.req || storage('legacy').getStore()?.req
+  const req = data?.req || getActiveRequest()
   if (!req) return
 
   graphqlRequestData.set(req, {
@@ -61,7 +61,7 @@ function enterInApolloMiddleware (data) {
 }
 
 function enterInApolloServerCoreRequest () {
-  const req = storage('legacy').getStore()?.req
+  const req = getActiveRequest()
   if (!req) return
 
   graphqlRequestData.set(req, {
@@ -71,19 +71,19 @@ function enterInApolloServerCoreRequest () {
 }
 
 function enterInApolloRequest () {
-  const req = storage('legacy').getStore()?.req
+  const req = getActiveRequest()
 
   const requestData = graphqlRequestData.get(req)
   if (requestData) {
     // Set isInGraphqlRequest=true since this function only runs for GraphQL requests
     // This works for both Apollo v4 (middleware) and v5 (HTTP server) contexts
     requestData.isInGraphqlRequest = true
-    addSpecificEndpoint(req.method, req.originalUrl || req.url, specificBlockingTypes.GRAPHQL)
+    addSpecificEndpoint(req, specificBlockingTypes.GRAPHQL)
   }
 }
 
 function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
-  const req = storage('legacy').getStore()?.req
+  const req = getActiveRequest()
   if (!req) return
 
   const requestData = graphqlRequestData.get(req)

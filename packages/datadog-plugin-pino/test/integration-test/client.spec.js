@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -28,7 +30,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -42,7 +44,7 @@ describe('esm', () => {
           undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
-            assert.ok(Object.hasOwn(jsonObject, 'dd'))
+            assert.ok(Object.hasOwn(jsonObject, 'dd'), `Available keys: ${inspect(Object.keys(jsonObject))}`)
           }
         )
       }).timeout(20000)

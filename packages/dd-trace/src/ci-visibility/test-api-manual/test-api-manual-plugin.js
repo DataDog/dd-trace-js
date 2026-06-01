@@ -8,6 +8,8 @@ const {
 } = require('../../plugins/util/test')
 const { storage } = require('../../../../datadog-core')
 
+const legacyStorage = storage('legacy')
+
 class TestApiManualPlugin extends CiPlugin {
   static id = 'test-api-manual'
 
@@ -17,13 +19,13 @@ class TestApiManualPlugin extends CiPlugin {
     this.sourceRoot = process.cwd()
 
     this.unconfiguredAddSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
-      const store = storage('legacy').getStore()
+      const store = legacyStorage.getStore()
       const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
       const testSpan = this.startTestSpan(testName, testSuiteRelative)
       this.enter(testSpan, store)
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
-      const store = storage('legacy').getStore()
+      const store = legacyStorage.getStore()
       const testSpan = store && store.span
       if (testSpan) {
         testSpan.setTag(TEST_STATUS, status)
@@ -35,7 +37,7 @@ class TestApiManualPlugin extends CiPlugin {
       }
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {
-      const store = storage('legacy').getStore()
+      const store = legacyStorage.getStore()
       const testSpan = store && store.span
       if (testSpan) {
         testSpan.addTags(tags)
@@ -54,6 +56,10 @@ class TestApiManualPlugin extends CiPlugin {
     })
   }
 
+  /**
+   * @param {import('../../config/config-base')} config - Tracer configuration
+   * @param {boolean} shouldGetEnvironmentData - Whether to get environment data
+   */
   configure (config, shouldGetEnvironmentData) {
     this._config = config
     super.configure(config, shouldGetEnvironmentData)

@@ -1,20 +1,22 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withAwsSdkV3Versions } = require('../spec_helpers')
 
 describe('recursion regression test', () => {
   let agent
   let proc
 
-  withVersions('aws-sdk', ['@aws-sdk/smithy-client'], version => {
+  withAwsSdkV3Versions(version => {
     useSandbox([`'@aws-sdk/client-sqs'@${version}'`], false, [
       './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
 
@@ -23,14 +25,14 @@ describe('recursion regression test', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     it('does not cause a recursion error when many commands are sent', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.equal(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
       })
 

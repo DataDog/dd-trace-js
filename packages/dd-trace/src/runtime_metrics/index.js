@@ -14,6 +14,9 @@ const noop = runtimeMetrics = {
 }
 
 module.exports = {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
@@ -26,8 +29,8 @@ module.exports = {
 
   stop () {
     runtimeMetrics.stop()
-
-    Object.setPrototypeOf(module.exports, runtimeMetrics = noop)
+    runtimeMetrics = noop
+    Object.setPrototypeOf(module.exports, noop)
   },
 }
 

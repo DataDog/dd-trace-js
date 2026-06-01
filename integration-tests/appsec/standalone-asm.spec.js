@@ -2,12 +2,14 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
+const { inspect } = require('node:util')
 
 const {
   sandboxCwd,
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
   curlAndAssertMessage,
   curl,
 } = require('../helpers')
@@ -60,7 +62,7 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -68,9 +70,9 @@ describe('Standalone ASM', () => {
     it('should send correct headers and tags on first req', async () => {
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 1)
-        assert.ok(Array.isArray(payload[0]))
+        assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
 
         // express.request + router.middleware x 2
         assert.strictEqual(payload[0].length, 3)
@@ -82,7 +84,7 @@ describe('Standalone ASM', () => {
     it('should keep fifth req because RateLimiter allows 1 req/min', async () => {
       const promise = curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         if (payload.length === 4) {
           assertKeep(payload[0][0])
           assertDrop(payload[1][0])
@@ -92,7 +94,7 @@ describe('Standalone ASM', () => {
           // req after a minute
         } else {
           const fifthReq = payload[0]
-          assert.ok(Array.isArray(fifthReq))
+          assert.ok(Array.isArray(fifthReq), `Expected array, got ${inspect(fifthReq)}`)
           assert.strictEqual(fifthReq.length, 3)
 
           const { meta, metrics } = fifthReq[0]
@@ -122,7 +124,7 @@ describe('Standalone ASM', () => {
       const urlAttack = proc.url + '?query=1 or 1=1'
       return curlAndAssertMessage(agent, urlAttack, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 4)
 
         assertKeep(payload[3][0])
@@ -135,7 +137,7 @@ describe('Standalone ASM', () => {
       const url = proc.url + '/login?user=test'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 4)
 
         assertKeep(payload[3][0])
@@ -148,7 +150,7 @@ describe('Standalone ASM', () => {
       const url = proc.url + '/sdk'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 4)
 
         assertKeep(payload[3][0])
@@ -161,12 +163,15 @@ describe('Standalone ASM', () => {
       const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 4)
 
         const expressReq4 = payload[3][0]
         assertKeep(expressReq4)
-        assert.ok(Object.hasOwn(expressReq4.meta, '_dd.iast.json'))
+        assert.ok(
+          Object.hasOwn(expressReq4.meta, '_dd.iast.json'),
+          `Available keys: ${inspect(Object.keys(expressReq4.meta))}`
+        )
         assert.strictEqual(expressReq4.metrics['_dd.iast.enabled'], 1)
       })
     })
@@ -184,7 +189,7 @@ describe('Standalone ASM', () => {
       })
 
       afterEach(async () => {
-        proc2.kill()
+        await stopProc(proc2)
       })
 
       // proc/drop-and-call-sdk:
@@ -196,7 +201,7 @@ describe('Standalone ASM', () => {
         const url = `${proc.url}/propagation-after-drop-and-call-sdk?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
           assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /sdk')
           assert.notStrictEqual(innerReq, undefined)
@@ -213,7 +218,7 @@ describe('Standalone ASM', () => {
           const url = `${proc.url}/propagation-with-event?port=${port2}`
           return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
             assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
             const innerReq = payload.find(p => p[0].resource === 'GET /down')
             assert.notStrictEqual(innerReq, undefined)
@@ -228,7 +233,7 @@ describe('Standalone ASM', () => {
         const url = `${proc.url}/propagation-without-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
           assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
           assert.notStrictEqual(innerReq, undefined)
@@ -242,11 +247,14 @@ describe('Standalone ASM', () => {
         const url = `${proc.url}/propagation-with-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
           assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
           assert.notStrictEqual(innerReq, undefined)
-          assert.ok(Object.hasOwn(innerReq[0].meta, '_dd.p.other'))
+          assert.ok(
+            Object.hasOwn(innerReq[0].meta, '_dd.p.other'),
+            `Available keys: ${inspect(Object.keys(innerReq[0].meta))}`
+          )
         }, undefined, undefined, true)
       })
     })
@@ -268,14 +276,14 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     it('should keep fifth req because of api security sampler', async () => {
       const promise = curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         if (payload.length === 4) {
           assertKeep(payload[0][0])
           assertDrop(payload[1][0])
@@ -285,7 +293,7 @@ describe('Standalone ASM', () => {
           // req after 30s
         } else {
           const fifthReq = payload[0]
-          assert.ok(Array.isArray(fifthReq))
+          assert.ok(Array.isArray(fifthReq), `Expected array, got ${inspect(fifthReq)}`)
           assert.strictEqual(fifthReq.length, 3)
           assertKeep(fifthReq[0])
         }
@@ -316,7 +324,7 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -324,15 +332,18 @@ describe('Standalone ASM', () => {
       const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
         assert.ok(!('datadog-client-computed-stats' in headers))
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 1)
-        assert.ok(Array.isArray(payload[0]))
+        assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
 
         // express.request + router.middleware x 2
         assert.strictEqual(payload[0].length, 3)
 
         const { meta, metrics } = payload[0][0]
-        assert.ok(Object.hasOwn(meta, '_dd.iast.json')) // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
+        assert.ok(
+          Object.hasOwn(meta, '_dd.iast.json'),
+          `Available keys: ${inspect(Object.keys(meta))}`
+        ) // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
 
         assert.ok(!('_dd.p.ts' in meta))
         assert.ok(!('_dd.apm.enabled' in metrics))
@@ -344,15 +355,18 @@ describe('Standalone ASM', () => {
 
       return curlAndAssertMessage(agent, urlAttack, ({ headers, payload }) => {
         assert.ok(!('datadog-client-computed-stats' in headers))
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 1)
-        assert.ok(Array.isArray(payload[0]))
+        assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
 
         // express.request + router.middleware x 2
         assert.strictEqual(payload[0].length, 3)
 
         const { meta, metrics } = payload[0][0]
-        assert.ok(Object.hasOwn(meta, '_dd.appsec.json')) // crs-942-100 triggered
+        assert.ok(
+          Object.hasOwn(meta, '_dd.appsec.json'),
+          `Available keys: ${inspect(Object.keys(meta))}`
+        ) // crs-942-100 triggered
 
         assert.ok(!('_dd.p.ts' in meta))
         assert.ok(!('_dd.apm.enabled' in metrics))

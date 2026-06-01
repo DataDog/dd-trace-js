@@ -1,0 +1,12 @@
+issuer: https://token.actions.githubusercontent.com
+
+subject: repo:DataDog/dd-trace-js:environment:npm
+
+claim_pattern:
+  event_name: (push|workflow_dispatch)
+  ref: refs/heads/(v[345]\.x|master)
+  repository: DataDog/dd-trace-js
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/release\.yml@refs/heads/(v[345]\.x|master)
+
+permissions:
+  contents: write

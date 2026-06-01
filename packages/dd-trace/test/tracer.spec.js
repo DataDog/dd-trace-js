@@ -69,8 +69,8 @@ describe('Tracer', () => {
 
       tracer.trace('name', options, span => {
         assert.ok(span instanceof Span)
-        assertObjectContains(span.context()._tags, options.tags)
-        assertObjectContains(span.context()._tags, {
+        assertObjectContains(span.context().getTags(), options.tags)
+        assertObjectContains(span.context().getTags(), {
           [SERVICE_NAME]: 'service',
           [RESOURCE_NAME]: 'resource',
           [SPAN_TYPE]: 'type',
@@ -152,7 +152,7 @@ describe('Tracer', () => {
       try {
         tracer.trace('name', {}, _span => {
           span = _span
-          tags = span.context()._tags
+          tags = span.context().getTags()
           sinon.spy(span, 'finish')
           throw new Error('boom')
         })
@@ -192,7 +192,7 @@ describe('Tracer', () => {
 
         tracer.trace('name', {}, (_span, _done) => {
           span = _span
-          tags = span.context()._tags
+          tags = span.context().getTags()
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -241,7 +241,7 @@ describe('Tracer', () => {
         tracer
           .trace('name', {}, _span => {
             span = _span
-            tags = span.context()._tags
+            tags = span.context().getTags()
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
@@ -257,7 +257,7 @@ describe('Tracer', () => {
           .catch(done)
       })
 
-      it.skip('should not treat rejections as handled', done => {
+      it('should not treat rejections as handled', done => {
         const err = new Error('boom')
 
         tracer
@@ -294,7 +294,7 @@ describe('Tracer', () => {
       tracer.trace('getRumData', {}, () => {
         const data = tracer.getRumData()
         const time = Date.now()
-        const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
+        const re = /<meta name="dd-trace-id" content="(\w+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
         const [, traceId, traceTime] = re.exec(data)
         const span = tracer.scope().active().context()
         assert.strictEqual(traceId, span.toTraceId())

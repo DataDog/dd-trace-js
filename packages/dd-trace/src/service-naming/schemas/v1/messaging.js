@@ -24,6 +24,14 @@ const messaging = {
       opName: () => 'azure.eventhubs.send',
       serviceName: identityService,
     },
+    'electron:ipc:main:send': {
+      opName: () => 'electron.main.send',
+      serviceName: identityService,
+    },
+    'electron:ipc:renderer:send': {
+      opName: () => 'electron.renderer.send',
+      serviceName: identityService,
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
       serviceName: identityService,
@@ -34,6 +42,10 @@ const messaging = {
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.send',
+      serviceName: identityService,
+    },
+    nats: {
+      opName: () => 'nats.send',
       serviceName: identityService,
     },
     rhea: amqpOutbound,
@@ -53,7 +65,23 @@ const messaging = {
   consumer: {
     amqplib: amqpInbound,
     amqp10: amqpInbound,
+    'electron:ipc:main:receive': {
+      opName: () => 'electron.main.receive',
+      serviceName: identityService,
+    },
+    'electron:ipc:main:handle': {
+      opName: () => 'electron.main.handle',
+      serviceName: identityService,
+    },
+    'electron:ipc:renderer:receive': {
+      opName: () => 'electron.renderer.receive',
+      serviceName: identityService,
+    },
     'google-cloud-pubsub': {
+      opName: () => 'gcp.pubsub.process',
+      serviceName: identityService,
+    },
+    'google-cloud-pubsub-push-subscription': {
       opName: () => 'gcp.pubsub.process',
       serviceName: identityService,
     },
@@ -63,6 +91,10 @@ const messaging = {
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.process',
+      serviceName: identityService,
+    },
+    nats: {
+      opName: () => 'nats.process',
       serviceName: identityService,
     },
     rhea: amqpInbound,

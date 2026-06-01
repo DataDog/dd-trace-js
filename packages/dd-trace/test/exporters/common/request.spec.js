@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const zlib = require('node:zlib')
+const stream = require('node:stream')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -41,6 +42,8 @@ describe('request', function () {
   let request
   let log
   let docker
+  let maxAttempts
+  let retryStubs
 
   beforeEach(() => {
     log = {
@@ -52,9 +55,22 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       },
     }
+    // The retry policy is exercised in retry.spec.js. Here we keep the integration
+    // deterministic: zero backoff, no startup-phase mutation, attempt count
+    // overridable per test.
+    maxAttempts = 2
+    retryStubs = {
+      getRetryDelay: sinon.fake.returns(0),
+      getMaxAttempts: sinon.fake(() => maxAttempts),
+      markEndpointReached: sinon.fake(),
+    }
     request = proxyquire('../../../src/exporters/common/request', {
       './docker': docker,
       '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
     })
   })
 
@@ -121,21 +137,33 @@ describe('request', function () {
     })
   })
 
-  // TODO: use fake timers to avoid delaying tests
-  it('should timeout after 2 seconds by default', function (done) {
-    nock('http://localhost:80')
-      .put('/path')
-      .times(2)
-      .delay(2001)
-      .reply(200)
+  // Live timeout → abort → retry → 'socket hang up' is covered by
+  // `should have a configurable timeout` below at timeout: 100. Here we only
+  // need to pin the default constant, which is faster and avoids waiting
+  // for a real timer.
+  it('defaults the request timeout to 2 seconds', (done) => {
+    const sandbox = sinon.createSandbox()
+    const realRequest = http.request
+    let observedTimeout
+    sandbox.replace(http, 'request', function (...args) {
+      const req = realRequest.apply(this, args)
+      const originalSetTimeout = req.setTimeout
+      req.setTimeout = function (timeout, callback) {
+        observedTimeout = timeout
+        return originalSetTimeout.call(this, timeout, callback)
+      }
+      return req
+    })
+
+    nock('http://localhost:80').put('/path').reply(200, 'OK')
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-    }, err => {
-      assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'socket hang up')
-      done()
+    }, (err) => {
+      sandbox.restore()
+      assert.strictEqual(observedTimeout, 2000)
+      done(err)
     })
   })
 
@@ -176,9 +204,11 @@ describe('request', function () {
   })
 
   it('should retry', (done) => {
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
     nock('http://localhost:80')
       .put('/path')
-      .replyWithError({ code: 'ECONNRESET' })
+      .replyWithError(error)
       .put('/path')
       .reply(200, 'OK')
 
@@ -191,21 +221,97 @@ describe('request', function () {
     })
   })
 
-  it('should not retry more than once', (done) => {
-    const error = new Error('Error ECONNRESET')
+  it('should not retry on a non-retriable error code', (done) => {
+    const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })
 
     nock('http://localhost:80')
-      .put('/path')
-      .replyWithError(error)
       .put('/path')
       .replyWithError(error)
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-    }, (err, res) => {
+    }, (err) => {
       assert.strictEqual(err, error)
       done()
+    })
+  })
+
+  it('should not retry on an uncoded error', (done) => {
+    const error = new Error('Error ECONNRESET')
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err) => {
+      assert.strictEqual(err, error)
+      done()
+    })
+  })
+
+  it('should retry on ECONNREFUSED until max attempts and propagate the final error', (done) => {
+    maxAttempts = 5
+
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .times(5)
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err) => {
+      assert.strictEqual(err, error)
+      done()
+    })
+  })
+
+  it('passes the per-request options into the retry helpers', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+    nock('http://test:123')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    const options = {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'PUT',
+    }
+
+    request(Buffer.from(''), options, (err) => {
+      sinon.assert.calledWith(retryStubs.getMaxAttempts, options)
+      sinon.assert.calledWith(retryStubs.getRetryDelay, options, 1)
+      sinon.assert.calledWith(retryStubs.markEndpointReached, options)
+      done(err)
+    })
+  })
+
+  it('should retry on UDS ENOENT (socket file not yet present)', (done) => {
+    const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
     })
   })
 
@@ -282,30 +388,45 @@ describe('request', function () {
       })
   })
 
+  // unix:<path> URLs go through parseUrl(), which extracts the socket path
+  // and hands it to http.request via options.socketPath. Assert that mapping
+  // directly via the http.request spy.
   it('should parse unix domain sockets properly', (done) => {
     const sock = '/tmp/unix_socket'
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
 
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
         method: 'PUT',
       },
-      (err, _) => {
-        assert.strictEqual(err.address, sock)
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, sock)
         done()
       })
   })
 
   it('should parse windows named pipes properly', (done) => {
     const pipe = '//./pipe/datadogtrace'
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
 
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
         method: 'PUT',
       },
-      (err, _) => {
-        assert.strictEqual(err.address, pipe)
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, pipe)
         done()
       })
   })
@@ -318,7 +439,7 @@ describe('request', function () {
     const charLength = body.length
     const byteLength = Buffer.byteLength(body, 'utf-8')
 
-    assert.ok(charLength < byteLength)
+    assert.ok(charLength < byteLength, `Expected ${charLength} < ${byteLength}`)
 
     nock('http://test:123').post('/').reply(200, 'OK')
 
@@ -328,6 +449,7 @@ describe('request', function () {
         host: 'test',
         port: 123,
         method: 'POST',
+        path: '/',
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       },
       (err, res) => {
@@ -433,5 +555,54 @@ describe('request', function () {
         done(err)
       })
     })
+  })
+
+  it('should drop requests when too much data is buffered', (done) => {
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize).fill(69)
+
+    nock('http://test:123', {
+      reqheaders: {
+        'content-type': 'application/octet-stream',
+        'content-length': bufferSize,
+      },
+    })
+      .put('/path')
+      .times(10)
+      .reply(200, 'OK')
+
+    let okCount = 0
+    let koCount = 0
+
+    for (let i = 0; i < 10; i++) {
+      request(
+        stream.Readable.from(buffer),
+        {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
+        },
+        (err, res) => {
+          if (err) return done(err)
+
+          if (res) {
+            assert.strictEqual(res, 'OK')
+            okCount++
+          } else {
+            koCount++
+          }
+
+          if (okCount + koCount === 10) {
+            assert.strictEqual(okCount, 8)
+            assert.strictEqual(koCount, 2)
+            done()
+          }
+        })
+    }
   })
 })

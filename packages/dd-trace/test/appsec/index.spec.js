@@ -31,11 +31,17 @@ const {
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
+
+const blockedTemplate = {
+  html: blockedTemplateHtml,
+  json: blockedTemplateJson,
+}
 
 const resultActions = {
   actions: {
@@ -66,6 +72,7 @@ describe('AppSec Index', function () {
 
   beforeEach(() => {
     config = {
+      inferredProxyServicesEnabled: false,
       appsec: {
         enabled: true,
         rules: './path/rules.json',
@@ -175,7 +182,7 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(blocking.setTemplates, config)
       sinon.assert.calledOnceWithExactly(RuleManager.loadRules, config.appsec)
-      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec)
+      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec, config.inferredProxyServicesEnabled)
       sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, 'anon', false)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.subscribe, AppSec.incomingHttpStartTranslator)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.subscribe, AppSec.incomingHttpEndTranslator)
@@ -284,7 +291,7 @@ describe('AppSec Index', function () {
 
       sinon.stub(RuleManager, 'clearAllRules')
 
-      assert.doesNotThrow(AppSec.disable)
+      AppSec.disable()
 
       sinon.assert.calledOnce(RuleManager.clearAllRules)
     })
@@ -361,6 +368,105 @@ describe('AppSec Index', function () {
           'http.client_ip': '127.0.0.1',
         },
       }, req)
+    })
+
+    describe('inferred proxy spans', () => {
+      it('should add _dd.appsec.enabled to inferred proxy span when present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
+
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnceWithExactly(inferredProxySpan.setTag, '_dd.appsec.enabled', 1)
+      })
+
+      it('should not fail when inferred proxy span is not present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
+
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({})
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnce(rootSpan.addTags)
+      })
+
+      it('should not add _dd.appsec.enabled to inferred proxy span when inferredProxyServicesEnabled is false', () => {
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.notCalled(inferredProxySpan.setTag)
+      })
     })
   })
 
@@ -623,6 +729,47 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
+
+    it('should normalize response header names to lowercase before storing', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+        },
+        method: 'GET',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+      }
+      const res = { getHeaders: () => ({}), statusCode: 200 }
+
+      const mixedCaseHeaders = {
+        'Content-Type': 'application/json',
+        'Content-Length': 137,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: mixedCaseHeaders,
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {
+        'content-type': 'application/json',
+        'content-length': 137,
+      }, undefined)
+    })
   })
 
   describe('Api Security', () => {
@@ -799,10 +946,17 @@ describe('AppSec Index', function () {
     beforeEach(() => {
       sinon.stub(waf, 'run')
 
+      const rootSpanTags = {}
       rootSpan = {
         setTag: sinon.stub(),
-        _tags: {},
-        context: () => ({ _tags: rootSpan._tags }),
+        _tags: rootSpanTags,
+        context: () => ({
+          _tags: rootSpanTags,
+          getTags () { return rootSpanTags },
+          getTag (key) { return rootSpanTags[key] },
+          setTag (key, value) { rootSpanTags[key] = value },
+          hasTag (key) { return key in rootSpanTags },
+        }),
       }
       web.root.returns(rootSpan)
 
@@ -1002,7 +1156,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackLogin() returns action', () => {
@@ -1083,7 +1238,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackUser() returns action', () => {
@@ -1539,6 +1695,7 @@ describe('IP blocking', function () {
         },
       },
     }))
+    setTestBlockingTemplates()
 
     RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
   })
@@ -1549,7 +1706,7 @@ describe('IP blocking', function () {
 
   after(() => {
     appListener && appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('do not block the request', () => {

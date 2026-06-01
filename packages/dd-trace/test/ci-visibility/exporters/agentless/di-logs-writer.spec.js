@@ -4,21 +4,25 @@ const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../../../../dd-trace/test/setup/core')
-const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const log = require('../../../../src/log')
+
+const DynamicInstrumentationLogsWriterWithApiKey = proxyquire(
+  '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+  { '../../../config': () => ({ apiKey: '1' }) }
+)
+const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 
 describe('Test Visibility DI Writer', () => {
   beforeEach(() => {
     nock.cleanAll()
-    process.env.DD_API_KEY = '1'
   })
 
   afterEach(() => {
-    delete process.env.DD_API_KEY
     sinon.restore()
   })
 
@@ -31,7 +35,7 @@ describe('Test Visibility DI Writer', () => {
         })
         .reply(202)
 
-      const logsWriter = new DynamicInstrumentationLogsWriter({ url: 'http://www.example.com' })
+      const logsWriter = new DynamicInstrumentationLogsWriterWithApiKey({ url: 'http://www.example.com' })
 
       logsWriter.append({ message: 'test' })
       logsWriter.append({ message: 'test2' })
@@ -49,7 +53,7 @@ describe('Test Visibility DI Writer', () => {
         .post('/api/v2/logs')
         .reply(500)
 
-      const logsWriter = new DynamicInstrumentationLogsWriter({ url: 'http://www.example.com' })
+      const logsWriter = new DynamicInstrumentationLogsWriterWithApiKey({ url: 'http://www.example.com' })
 
       logsWriter.append({ message: 'test5' })
       logsWriter.append({ message: 'test6' })
@@ -64,8 +68,6 @@ describe('Test Visibility DI Writer', () => {
 
   context('agent based', () => {
     it('can send logs to the debugger endpoint in the agent', (done) => {
-      delete process.env.DD_API_KEY
-
       const scope = nock('http://www.example.com')
         .post('/debugger/v1/input', body => {
           assert.deepStrictEqual(body, [{ message: 'test3' }, { message: 'test4' }])
@@ -85,8 +87,6 @@ describe('Test Visibility DI Writer', () => {
     })
 
     it('logs an error if the request fails', (done) => {
-      delete process.env.DD_API_KEY
-
       const logErrorSpy = sinon.spy(log, 'error')
 
       const scope = nock('http://www.example.com')

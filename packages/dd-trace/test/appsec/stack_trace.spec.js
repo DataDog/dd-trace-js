@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
+const { inspect } = require('node:util')
 
 const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
 
@@ -148,7 +149,10 @@ describe('Stack trace reporter', () => {
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
       assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
-      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
+      assert.ok(
+        Object.hasOwn(rootSpan.meta_struct, 'another_tag'),
+        `Available keys: ${inspect(Object.keys(rootSpan.meta_struct))}`
+      )
     })
 
     it('should add stack trace to rootSpan when meta_struct is already present and contains another stack', () => {
@@ -181,7 +185,10 @@ describe('Stack trace reporter', () => {
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].language, 'nodejs')
       assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].frames, expectedFrames)
-      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
+      assert.ok(
+        Object.hasOwn(rootSpan.meta_struct, 'another_tag'),
+        `Available keys: ${inspect(Object.keys(rootSpan.meta_struct))}`
+      )
     })
 
     it('should add stack trace when the max stack trace is 0', () => {
@@ -201,7 +208,10 @@ describe('Stack trace reporter', () => {
       reportStackTrace(rootSpan, stackId, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
-      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
+      assert.ok(
+        Object.hasOwn(rootSpan.meta_struct, 'another_tag'),
+        `Available keys: ${inspect(Object.keys(rootSpan.meta_struct))}`
+      )
     })
 
     it('should add stack trace when the max stack trace is negative', () => {
@@ -221,7 +231,10 @@ describe('Stack trace reporter', () => {
       reportStackTrace(rootSpan, stackId, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
-      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
+      assert.ok(
+        Object.hasOwn(rootSpan.meta_struct, 'another_tag'),
+        `Available keys: ${inspect(Object.keys(rootSpan.meta_struct))}`
+      )
     })
 
     it('should not report stackTraces if callSiteList is undefined', () => {
@@ -232,7 +245,10 @@ describe('Stack trace reporter', () => {
       }
       const stackId = 'test_stack_id'
       reportStackTrace(rootSpan, stackId, undefined)
-      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
+      assert.ok(
+        Object.hasOwn(rootSpan.meta_struct, 'another_tag'),
+        `Available keys: ${inspect(Object.keys(rootSpan.meta_struct))}`
+      )
       assert.ok(!('_dd.stack' in rootSpan.meta_struct))
     })
   })

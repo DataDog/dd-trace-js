@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const agent = require('../plugins/agent')
-const tracer = require('../../../../index')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 
@@ -14,6 +14,7 @@ describe('Attacker fingerprinting', () => {
     let controller
     let appListener
     let port
+    let tracer
 
     function listener (req, res) {
       if (controller) {
@@ -28,7 +29,7 @@ describe('Attacker fingerprinting', () => {
     })
 
     before(async () => {
-      await agent.load('http')
+      tracer = await agent.load('http')
       http = require('http')
     })
 
@@ -44,7 +45,7 @@ describe('Attacker fingerprinting', () => {
     after(() => {
       appListener.close()
       appsec.disable()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should provide fingerprinting on successful user login track', (done) => {
@@ -56,9 +57,15 @@ describe('Attacker fingerprinting', () => {
       }
 
       agent.assertSomeTraces(traces => {
-        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'))
+        assert.ok(
+          Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'),
+          `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+        )
         assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
-        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'))
+        assert.ok(
+          Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'),
+          `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+        )
         assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
@@ -76,9 +83,15 @@ describe('Attacker fingerprinting', () => {
       }
 
       agent.assertSomeTraces(traces => {
-        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'))
+        assert.ok(
+          Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'),
+          `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+        )
         assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
-        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'))
+        assert.ok(
+          Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'),
+          `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+        )
         assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 

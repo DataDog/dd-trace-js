@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
-const { Span } = require('../../../vendor/dist/opentracing')
+const { Span } = require('opentracing')
 require('./setup/core')
 const Scope = require('../src/scope')
 
@@ -38,7 +38,7 @@ describe('Scope', () => {
     })
 
     it('should support an invalid callback', () => {
-      assert.doesNotThrow(() => { scope.activate(span, 'invalid') }, Error)
+      scope.activate(span, 'invalid')
     })
 
     it('should activate the span on the current scope', () => {

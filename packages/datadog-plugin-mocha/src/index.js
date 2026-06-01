@@ -1,14 +1,17 @@
 'use strict'
 
+// Capture real Date.now at module load time, before any test can install fake timers.
+const realDateNow = Date.now.bind(Date)
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
   getTestSuitePath,
+  getRelativeCoverageFiles,
   getTestParametersString,
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
@@ -23,8 +26,6 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   MOCHA_IS_PARALLEL,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -34,6 +35,8 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  TEST_FINAL_STATUS,
+  TEST_HAS_DYNAMIC_NAME,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -71,8 +74,10 @@ class MochaPlugin extends CiPlugin {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
+      const relativeCoverageFiles = [
+        ...getRelativeCoverageFiles(coverageFiles, this.repositoryRoot || this.sourceRoot),
+        getTestSuitePath(suiteFile, this.repositoryRoot || this.sourceRoot),
+      ]
 
       const { _traceId, _spanId } = testSuiteSpan.context()
 
@@ -95,12 +100,16 @@ class MochaPlugin extends CiPlugin {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'mocha'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'mocha'
+        ),
+        ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
+      }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -146,7 +155,7 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!testSuiteSpan.context()._tags[TEST_STATUS]) {
+        if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
         testSuiteSpan.finish()
@@ -212,9 +221,17 @@ class MochaPlugin extends CiPlugin {
       attemptToFixFailed,
       isAttemptToFixRetry,
       isAtrRetry,
+      finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+        }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
@@ -236,16 +253,10 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
-        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          {
-            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew: spanTags[TEST_IS_NEW] === 'true',
-            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER],
-          }
+          this.getTestTelemetryTags(span)
         )
 
         span.finish()
@@ -310,16 +321,10 @@ class MochaPlugin extends CiPlugin {
           span.setTag('error', err)
         }
 
-        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          {
-            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew: spanTags[TEST_IS_NEW] === 'true',
-            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER],
-          }
+          this.getTestTelemetryTags(span)
         )
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
@@ -328,8 +333,8 @@ class MochaPlugin extends CiPlugin {
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
-            while (Date.now() < waitUntil) {
+            const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
+            while (realDateNow() < waitUntil) {
               // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
               // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
               // fall back to a fixed syncronous delay.
@@ -350,6 +355,7 @@ class MochaPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites,
       hasForcedToRunSuites,
       hasUnskippableSuites,
@@ -360,7 +366,11 @@ class MochaPlugin extends CiPlugin {
       isParallel,
     }) => {
       if (this.testSessionSpan) {
-        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
+        const {
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          isCoverageReportUploadEnabled,
+        } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
@@ -392,6 +402,13 @@ class MochaPlugin extends CiPlugin {
           }
         )
 
+        if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+          this.tracer._exporter.exportCoverage({
+            sessionId: this.testSessionSpan.context()._traceId,
+            files: testSessionCoverageFiles,
+          })
+        }
+
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
@@ -402,11 +419,13 @@ class MochaPlugin extends CiPlugin {
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+          hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+        })
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
       }
       this.libraryConfig = null
@@ -431,6 +450,7 @@ class MochaPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
     } = testInfo
 
     const extraTags = {}
@@ -480,6 +500,10 @@ class MochaPlugin extends CiPlugin {
         extraTags[TEST_IS_RETRY] = 'true'
         extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

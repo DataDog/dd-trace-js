@@ -16,11 +16,8 @@ const iastEnabledConfig = {
 
 describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
-    let rewriter = null
-    assert.doesNotThrow(() => {
-      rewriter = require('@datadog/wasm-js-rewriter')
-    }, Error)
-    assert.notStrictEqual(rewriter, null)
+    const rewriter = require('@datadog/wasm-js-rewriter')
+    assert.ok(rewriter)
   })
 
   describe('Enabling rewriter', () => {
@@ -66,8 +63,8 @@ describe('IAST Rewriter', () => {
       workerThreads = require('worker_threads')
 
       MessageChannel = workerThreads.MessageChannel
-      workerThreads.MessageChannel = function () {
-        const res = new MessageChannel(...arguments)
+      workerThreads.MessageChannel = function (...args) {
+        const res = new MessageChannel(...args)
         port1On = sinon.spy(res.port1, 'on')
         port1Unref = sinon.spy(res.port1, 'unref')
 

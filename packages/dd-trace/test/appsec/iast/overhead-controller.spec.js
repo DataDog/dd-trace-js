@@ -34,9 +34,7 @@ describe('Overhead controller', () => {
       oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 
       const config = getConfigFresh({
-        experimental: {
-          iast: true,
-        },
+        iast: true,
       })
       overheadController.configure(config.iast)
     })
@@ -442,12 +440,10 @@ describe('Overhead controller', () => {
 
         it('should detect vulnerabilities only in one if max concurrent is 1', (done) => {
           const config = getConfigFresh({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100,
-                maxConcurrentRequests: 1,
-              },
+            iast: {
+              enabled: true,
+              requestSampling: 100,
+              maxConcurrentRequests: 1,
             },
           })
           iast.enable(config)
@@ -494,13 +490,11 @@ describe('Overhead controller', () => {
 
         it('should detect vulnerabilities in both if max concurrent is 2', (done) => {
           const config = getConfigFresh({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100,
-                maxConcurrentRequests: 2,
-                deduplicationEnabled: false,
-              },
+            iast: {
+              enabled: true,
+              requestSampling: 100,
+              maxConcurrentRequests: 2,
+              deduplicationEnabled: false,
             },
           })
           iast.enable(config)
@@ -550,13 +544,11 @@ describe('Overhead controller', () => {
           // 3 in parallel => 2 detects - 1 not detects
           // on finish the first => launch 2 - should detect 1 more
           const config = getConfigFresh({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100,
-                maxConcurrentRequests: 2,
-                deduplicationEnabled: false,
-              },
+            iast: {
+              enabled: true,
+              requestSampling: 100,
+              maxConcurrentRequests: 2,
+              deduplicationEnabled: false,
             },
           })
           iast.enable(config)
@@ -622,12 +614,10 @@ describe('Overhead controller', () => {
 
         it('should add _dd.iast.enabled tag even when no vulnerability is detected', (done) => {
           const config = getConfigFresh({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100,
-                maxConcurrentRequests: 1,
-              },
+            iast: {
+              enabled: true,
+              requestSampling: 100,
+              maxConcurrentRequests: 1,
             },
           })
           iast.enable(config)

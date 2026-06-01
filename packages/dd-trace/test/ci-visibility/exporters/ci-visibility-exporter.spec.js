@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 const fs = require('node:fs')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -13,10 +14,10 @@ const nock = require('nock')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../../../dd-trace/test/setup/core')
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
+const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 
 describe('CI Visibility Exporter', () => {
-  const port = 8126
-  const url = `http://127.0.0.1:${port}`
+  const url = `http://${hostname}:${port}`
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
@@ -44,7 +45,7 @@ describe('CI Visibility Exporter', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
-        assert.ok(err == null)
+        assert.ok(err == null, `Expected ${err} == null`)
         assert.strictEqual(scope.isDone(), true)
         done()
       })
@@ -205,7 +206,7 @@ describe('CI Visibility Exporter', () => {
             isSuitesSkippingEnabled: true,
             isEarlyFlakeDetectionEnabled: false,
           })
-          assert.ok(err == null)
+          assert.ok(err == null, `Expected ${err} == null`)
           assert.strictEqual(scope.isDone(), true)
           done()
         })
@@ -582,7 +583,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
-        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
+        assert.ok(
+          !ciVisibilityExporter._traceBuffer.includes(trace),
+          `Got: ${inspect(ciVisibilityExporter._traceBuffer)}`
+        )
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
@@ -600,7 +604,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
-        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
+        assert.ok(
+          !ciVisibilityExporter._traceBuffer.includes(trace),
+          `Got: ${inspect(ciVisibilityExporter._traceBuffer)}`
+        )
         sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
     })
@@ -619,7 +626,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
         ciVisibilityExporter.export(trace)
-        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
+        assert.ok(
+          !ciVisibilityExporter._traceBuffer.includes(trace),
+          `Got: ${inspect(ciVisibilityExporter._traceBuffer)}`
+        )
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
@@ -648,7 +658,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter.exportCoverage(coverage)
-        assert.ok(!ciVisibilityExporter._coverageBuffer.includes(coverage))
+        assert.ok(
+          !ciVisibilityExporter._coverageBuffer.includes(coverage),
+          `Got: ${inspect(ciVisibilityExporter._coverageBuffer)}`
+        )
         sinon.assert.notCalled(ciVisibilityExporter._coverageWriter.append)
       })
     })
@@ -670,7 +683,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._canUseCiVisProtocol = true
 
         ciVisibilityExporter.exportCoverage(coverage)
-        assert.ok(!ciVisibilityExporter._coverageBuffer.includes(coverage))
+        assert.ok(
+          !ciVisibilityExporter._coverageBuffer.includes(coverage),
+          `Got: ${inspect(ciVisibilityExporter._coverageBuffer)}`
+        )
         sinon.assert.called(ciVisibilityExporter._coverageWriter.append)
       })
     })
@@ -846,6 +862,160 @@ describe('CI Visibility Exporter', () => {
           })
           assert.strictEqual(scope.isDone(), true)
           assert.notStrictEqual(requestHeaders['accept-encoding'], 'gzip')
+          done()
+        })
+      })
+
+      it('should handle paginated responses and merge tests across pages', (done) => {
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: {
+                  jest: {
+                    suite1: ['test1'],
+                  },
+                },
+                page_info: {
+                  cursor: 'cursor_page2',
+                  has_next: true,
+                  size: 1,
+                },
+              },
+            },
+          }))
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: {
+                  jest: {
+                    suite1: ['test2'],
+                    suite2: ['test3'],
+                  },
+                },
+                page_info: {
+                  cursor: '',
+                  has_next: false,
+                  size: 2,
+                },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
+            jest: {
+              suite1: ['test1', 'test2'],
+              suite2: ['test3'],
+            },
+          })
+          assert.strictEqual(scope.isDone(), true)
+          done()
+        })
+      })
+
+      it('should handle backward-compatible response without page_info', (done) => {
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: {
+                  jest: {
+                    suite1: ['test1'],
+                  },
+                },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
+            jest: {
+              suite1: ['test1'],
+            },
+          })
+          assert.strictEqual(scope.isDone(), true)
+          done()
+        })
+      })
+
+      it('should send page_info in request payload', (done) => {
+        let firstRequestBody
+        let secondRequestBody
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests', (body) => {
+            firstRequestBody = body
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: { jest: { suite1: ['test1'] } },
+                page_info: { cursor: 'abc123', has_next: true, size: 1 },
+              },
+            },
+          }))
+          .post('/api/v2/ci/libraries/tests', (body) => {
+            secondRequestBody = body
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: { jest: { suite2: ['test2'] } },
+                page_info: { cursor: '', has_next: false, size: 1 },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err) => {
+          assert.strictEqual(err, null)
+          assert.strictEqual(scope.isDone(), true)
+          // First request should have empty page_info
+          assert.deepStrictEqual(firstRequestBody.data.attributes.page_info, {})
+          // Second request should have page_state from cursor
+          assert.deepStrictEqual(secondRequestBody.data.attributes.page_info, { page_state: 'abc123' })
+          done()
+        })
+      })
+
+      it('should return error when has_next is true but cursor is missing', (done) => {
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: { jest: { suite1: ['test1'] } },
+                page_info: { has_next: true, size: 1 },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err) => {
+          assert.notStrictEqual(err, null)
+          assert.match(err.message, /has_next=true but no cursor/)
+          assert.strictEqual(scope.isDone(), true)
           done()
         })
       })

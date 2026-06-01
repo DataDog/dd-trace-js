@@ -28,12 +28,12 @@ function wrapServer (server) {
 }
 
 function wrapStart (start) {
-  return shimmer.wrapFunction(start, start => function () {
+  return shimmer.wrapFunction(start, start => function (...args) {
     if (this && typeof this.ext === 'function') {
       this.ext('onPreResponse', onPreResponse)
     }
 
-    return start.apply(this, arguments)
+    return start.apply(this, args)
   })
 }
 

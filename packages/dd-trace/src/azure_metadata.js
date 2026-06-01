@@ -3,12 +3,9 @@
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
-const {
-  getEnvironmentVariable,
-  getEnvironmentVariables,
-  getValueFromEnvSources,
-} = require('./config/helper')
-const { getIsAzureFunction, getIsFlexConsumptionAzureFunction } = require('./serverless')
+const getConfig = require('./config')
+const { getEnvironmentVariable } = require('./config/helper')
+const { getIsAzureFunction } = require('./serverless')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -20,7 +17,20 @@ function extractSubscriptionID (ownerName) {
 }
 
 function extractResourceGroup (ownerName) {
-  return /.+\+(.+)-.+webspace(-Linux)?/.exec(ownerName)?.[1]
+  // WEBSITE_OWNER_NAME format: `<sub-id>+<rg>-<region>webspace[-Linux]`. Region
+  // names have no `-`; resource groups can. Plain string ops read more directly
+  // than `/.+\+(.+)-.+webspace(-Linux)?/` and avoid the engine backtracking
+  // through three `.+` quantifiers to land on the right `-`.
+  if (typeof ownerName !== 'string') return
+  const plusIdx = ownerName.indexOf('+')
+  if (plusIdx === -1) return
+  let rest = ownerName.slice(plusIdx + 1)
+  if (rest.endsWith('-Linux')) rest = rest.slice(0, -'-Linux'.length)
+  if (!rest.endsWith('webspace')) return
+  rest = rest.slice(0, -'webspace'.length)
+  const lastDash = rest.lastIndexOf('-')
+  if (lastDash === -1) return
+  return rest.slice(0, lastDash)
 }
 
 function buildResourceID (subscriptionID, siteName, resourceGroup) {
@@ -46,38 +56,37 @@ function trimObject (obj) {
 }
 
 function buildMetadata () {
-  const {
-    COMPUTERNAME,
-    FUNCTIONS_EXTENSION_VERSION,
-    FUNCTIONS_WORKER_RUNTIME,
-    FUNCTIONS_WORKER_RUNTIME_VERSION,
-    WEBSITE_INSTANCE_ID,
-    WEBSITE_OWNER_NAME,
-    WEBSITE_OS,
-    WEBSITE_RESOURCE_GROUP,
-    WEBSITE_SITE_NAME,
-  } = getEnvironmentVariables()
+  const COMPUTERNAME = getEnvironmentVariable('COMPUTERNAME')
+  const FUNCTIONS_EXTENSION_VERSION = getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION')
+  const FUNCTIONS_WORKER_RUNTIME = getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME')
+  const FUNCTIONS_WORKER_RUNTIME_VERSION = getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME_VERSION')
+  const WEBSITE_INSTANCE_ID = getEnvironmentVariable('WEBSITE_INSTANCE_ID')
+  const WEBSITE_OWNER_NAME = getEnvironmentVariable('WEBSITE_OWNER_NAME')
+  const WEBSITE_OS = getEnvironmentVariable('WEBSITE_OS')
+  const WEBSITE_RESOURCE_GROUP = getEnvironmentVariable('WEBSITE_RESOURCE_GROUP')
+  const WEBSITE_SITE_NAME = getEnvironmentVariable('WEBSITE_SITE_NAME')
+  const WEBSITE_SKU = getEnvironmentVariable('WEBSITE_SKU')
 
-  const DD_AAS_DOTNET_EXTENSION_VERSION = getValueFromEnvSources('DD_AAS_DOTNET_EXTENSION_VERSION')
-  const DD_AZURE_RESOURCE_GROUP = getValueFromEnvSources('DD_AZURE_RESOURCE_GROUP')
+  const { DD_AZURE_RESOURCE_GROUP } = getConfig()
+  const isAzureFunction = FUNCTIONS_EXTENSION_VERSION !== undefined && FUNCTIONS_WORKER_RUNTIME !== undefined
+  const isFlexConsumptionAzureFunction = isAzureFunction && WEBSITE_SKU === 'FlexConsumption'
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
   const siteName = WEBSITE_SITE_NAME
 
-  const [siteKind, siteType] = getIsAzureFunction()
+  const [siteKind, siteType] = isAzureFunction
     ? ['functionapp', 'function']
     : ['app', 'app']
 
   // Azure Functions on Flex Consumption plans require the `DD_AZURE_RESOURCE_GROUP` env var.
   // If this logic ever changes, update the logic in `libdatadog`, `serverless-components/src/datadog-trace-agent`,
   // and the serverless compat layers accordingly.
-  const resourceGroup = getIsFlexConsumptionAzureFunction()
+  const resourceGroup = isFlexConsumptionAzureFunction
     ? (DD_AZURE_RESOURCE_GROUP ?? WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
     : (WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
 
   return trimObject({
-    extensionVersion: DD_AAS_DOTNET_EXTENSION_VERSION,
     functionRuntimeVersion: FUNCTIONS_EXTENSION_VERSION,
     instanceID: WEBSITE_INSTANCE_ID,
     instanceName: COMPUTERNAME,

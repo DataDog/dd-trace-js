@@ -1,9 +1,9 @@
 'use strict'
+const getConfig = require('../../../config')
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
-const { getValueFromEnvSources } = require('../../../config/helper')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
 const BaseWriter = require('../../../exporters/common/writer')
@@ -26,7 +26,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       path: '/api/v2/logs',
       method: 'POST',
       headers: {
-        'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
+        'dd-api-key': getConfig().apiKey,
         'Content-Type': 'application/json',
       },
       timeout: this.timeout,

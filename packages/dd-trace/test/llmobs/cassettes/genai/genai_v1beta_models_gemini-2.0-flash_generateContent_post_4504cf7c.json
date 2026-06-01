@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+    "headers": {
+      "Connection": "keep-alive",
+      "User-Agent": "google-genai-sdk/1.19.0 gl-node/v22.17.0",
+      "x-goog-api-client": "google-genai-sdk/1.19.0 gl-node/v22.17.0",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "65"
+    },
+    "body": "{\"contents\":[{\"parts\":[{\"text\":\"Hello, world!\"}],\"role\":\"user\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Alt-Svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+      "Content-Encoding": "gzip",
+      "Content-Type": "application/json; charset=UTF-8",
+      "Date": "Wed, 03 Dec 2025 20:02:38 GMT",
+      "Server": "scaffolding on HTTPServer2",
+      "Server-Timing": "gfet4t7; dur=372",
+      "Transfer-Encoding": "chunked",
+      "Vary": "Origin",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-XSS-Protection": "0"
+    },
+    "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"Hello there! How can I help you today?\\n\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"avgLogprobs\": -0.014444851062514565\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 4,\n    \"candidatesTokenCount\": 11,\n    \"totalTokenCount\": 15,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 4\n      }\n    ],\n    \"candidatesTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 11\n      }\n    ]\n  },\n  \"modelVersion\": \"gemini-2.0-flash\",\n  \"responseId\": \"Xpcwab__A73f_uMPs9qB0A0\"\n}\n"
+  }
+}

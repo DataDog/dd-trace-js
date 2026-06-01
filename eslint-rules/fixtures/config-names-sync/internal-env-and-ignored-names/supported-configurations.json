@@ -1,0 +1,23 @@
+{
+  "supportedConfigurations": {
+    "DD_LLMOBS_ENABLED": [
+      {
+        "internalPropertyName": "llmobs.enabled"
+      }
+    ],
+    "DD_LLMOBS_ML_APP": [
+      {
+        "configurationNames": [
+          "llmobs.mlApp"
+        ]
+      }
+    ],
+    "DD_TRACE_ENABLED": [
+      {
+        "configurationNames": [
+          "tracing"
+        ]
+      }
+    ]
+  }
+}

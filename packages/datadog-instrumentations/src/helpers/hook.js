@@ -1,17 +1,44 @@
 'use strict'
+
 const path = require('path')
+
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
+const log = require('../../../dd-trace/src/log')
+const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+
+/**
+ * @param {string} moduleBaseDir
+ * @returns {string|undefined}
+ */
+function getVersion (moduleBaseDir) {
+  if (moduleBaseDir) {
+    return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
+  }
+
+  // In a packaged Electron binary, built-in modules (like 'electron', 'electron/main') have no
+  // moduleBaseDir. Use the Electron version for version checks when available, otherwise fall back
+  // to the Node.js version.
+  return process.versions?.electron ?? process.version
+}
 
 /**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
  * In practice, `modules` is always an array with a single entry.
  *
+ * @overload
+ * @param {string[]} modules list of modules to hook into
+ * @param {object} hookOptions hook options
+ * @param {Function} onrequire callback to be executed upon encountering module
+ */
+/**
+ * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {object} hookOptions hook options
  * @param {Function} onrequire callback to be executed upon encountering module
  */
 function Hook (modules, hookOptions, onrequire) {
+  // TODO: Rewrite this to use class syntax. The same should be done for ritm.
   if (!(this instanceof Hook)) return new Hook(modules, hookOptions, onrequire)
 
   if (typeof hookOptions === 'function') {
@@ -26,11 +53,28 @@ function Hook (modules, hookOptions, onrequire) {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
-    if (this._patched[filename] && patched.has(moduleExports)) {
-      return patched.get(moduleExports)
+    let defaultWrapResult
+
+    const wrappedOnrequire = (moduleExports, ...args) => {
+      if (this._patched[filename] && patched.has(moduleExports)) {
+        return patched.get(moduleExports)
+      }
+
+      const result = onrequire(moduleExports, ...args)
+      if (result && (typeof result === 'object' || typeof result === 'function')) {
+        patched.set(moduleExports, result)
+        patched.set(result, result)
+      }
+
+      return result
     }
 
-    let defaultWrapResult
+    try {
+      moduleVersion ||= getVersion(moduleBaseDir)
+    } catch (error) {
+      log.error('Error getting version for "%s": %s', moduleName, error.message, error)
+      return
+    }
 
     if (
       isIitm &&
@@ -38,19 +82,15 @@ function Hook (modules, hookOptions, onrequire) {
       (typeof moduleExports.default === 'object' ||
       typeof moduleExports.default === 'function')
     ) {
-      defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = wrappedOnrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    const newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
     if (defaultWrapResult) newExports.default = defaultWrapResult
 
     this._patched[filename] = true
-    if (newExports &&
-      (typeof newExports === 'object' ||
-      typeof newExports === 'function')) {
-      patched.set(moduleExports, newExports)
-    }
+
     return newExports
   }
 
@@ -58,12 +98,6 @@ function Hook (modules, hookOptions, onrequire) {
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })
-}
-
-Hook.prototype.unhook = function () {
-  this._ritmHook.unhook()
-  this._iitmHook.unhook()
-  this._patched = Object.create(null)
 }
 
 module.exports = Hook

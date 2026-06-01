@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -10,6 +11,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../../../datadog-core')
 const { AppsecFsPlugin } = require('../../../src/appsec/rasp/fs-plugin')
 const agent = require('../../plugins/agent')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const opStartCh = dc.channel('apm:fs:operation:start')
 const opFinishCh = dc.channel('apm:fs:operation:finish')
@@ -103,7 +105,7 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onFsOperationStart()
 
-      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.ok(Object.hasOwn(store, 'fs'), `Available keys: ${inspect(Object.keys(store))}`)
       assert.strictEqual(store.fs.parentStore, origStore)
       assert.strictEqual(store.fs.root, true)
 
@@ -119,7 +121,7 @@ describe('AppsecFsPlugin', () => {
 
       const rootStore = appsecFsPlugin._onFsOperationStart()
 
-      assert.ok(Object.hasOwn(rootStore, 'fs'))
+      assert.ok(Object.hasOwn(rootStore, 'fs'), `Available keys: ${inspect(Object.keys(rootStore))}`)
       assert.strictEqual(rootStore.fs.parentStore, origStore)
       assert.strictEqual(rootStore.fs.root, true)
 
@@ -127,10 +129,13 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onFsOperationStart()
 
-      assert.ok(Object.hasOwn(store, 'fs'))
-      assert.strictEqual(store.fs.parentStore, rootStore)
-      assert.strictEqual(store.fs.root, false)
-      assert.strictEqual(store.orig, true)
+      assertObjectContains(store, {
+        fs: {
+          parentStore: rootStore,
+          root: false,
+        },
+        orig: true,
+      })
 
       storage('legacy').enterWith(store)
 
@@ -154,7 +159,7 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onResponseRenderStart()
 
-      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.ok(Object.hasOwn(store, 'fs'), `Available keys: ${inspect(Object.keys(store))}`)
       assert.strictEqual(store.fs.parentStore, origStore)
       assert.strictEqual(store.fs.opExcluded, true)
 
@@ -171,7 +176,7 @@ describe('AppsecFsPlugin', () => {
     describe('apm:fs:operation', () => {
       let fs
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
 
       beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
         fs = require('fs')

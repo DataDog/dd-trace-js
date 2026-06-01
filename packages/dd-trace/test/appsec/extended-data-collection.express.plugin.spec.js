@@ -18,7 +18,7 @@ describe('extended data collection', () => {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   withVersions('express', 'express', expressVersion => {
@@ -107,11 +107,9 @@ describe('extended data collection', () => {
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.strictEqual(span.type, 'web')
-
         assert.strictEqual(span.meta['http.request.headers.custom-request-header-1'], undefined)
         assert.strictEqual(span.meta['http.request.headers.custom-request-header-2'], undefined)
         assert.strictEqual(span.meta['http.request.headers.custom-request-header-3'], undefined)
-
         assert.strictEqual(span.meta['http.response.headers.custom-response-header-1'], undefined)
         assert.strictEqual(span.meta['http.response.headers.custom-response-header-2'], undefined)
         assert.strictEqual(span.meta['http.response.headers.custom-response-header-3'], undefined)
@@ -142,26 +140,26 @@ describe('extended data collection', () => {
         }
       )
 
-      await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.strictEqual(span.type, 'web')
-        assert.strictEqual(span.meta['http.request.headers.authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.proxy-authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.www-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.proxy-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.proxy-authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.cookie'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.set-cookie'], '<redacted>')
-
-        assert.strictEqual(span.meta['http.response.headers.authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.proxy-authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.www-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.proxy-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.proxy-authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.cookie'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.set-cookie'], '<redacted>')
+      await agent.assertFirstTraceSpan({
+        type: 'web',
+        meta: {
+          'http.request.headers.authorization': '<redacted>',
+          'http.request.headers.proxy-authorization': '<redacted>',
+          'http.request.headers.www-authenticate': '<redacted>',
+          'http.request.headers.proxy-authenticate': '<redacted>',
+          'http.request.headers.authentication-info': '<redacted>',
+          'http.request.headers.proxy-authentication-info': '<redacted>',
+          'http.request.headers.cookie': '<redacted>',
+          'http.request.headers.set-cookie': '<redacted>',
+          'http.response.headers.authorization': '<redacted>',
+          'http.response.headers.proxy-authorization': '<redacted>',
+          'http.response.headers.www-authenticate': '<redacted>',
+          'http.response.headers.proxy-authenticate': '<redacted>',
+          'http.response.headers.authentication-info': '<redacted>',
+          'http.response.headers.proxy-authentication-info': '<redacted>',
+          'http.response.headers.cookie': '<redacted>',
+          'http.response.headers.set-cookie': '<redacted>',
+        },
       })
     })
 
@@ -203,8 +201,14 @@ describe('extended data collection', () => {
         assert.strictEqual(collectedRequestHeaders, 8)
         assert.strictEqual(collectedResponseHeaders, 8)
 
-        assert.ok(span.metrics['_dd.appsec.request.header_collection.discarded'] > 2)
-        assert.ok(span.metrics['_dd.appsec.response.header_collection.discarded'] > 2)
+        assert.ok(
+          span.metrics['_dd.appsec.request.header_collection.discarded'] > 2,
+          `Expected ${span.metrics['_dd.appsec.request.header_collection.discarded']} > 2`
+        )
+        assert.ok(
+          span.metrics['_dd.appsec.response.header_collection.discarded'] > 2,
+          `Expected ${span.metrics['_dd.appsec.response.header_collection.discarded']} > 2`
+        )
 
         const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
         assert.deepEqual(metaStructBody, requestBody)

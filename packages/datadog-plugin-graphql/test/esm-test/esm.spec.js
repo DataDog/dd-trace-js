@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const semver = require('semver')
@@ -10,6 +11,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -27,14 +29,14 @@ describe('Plugin (ESM)', () => {
       })
 
       afterEach(async () => {
-        proc && proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
       it('should instrument GraphQL execution with ESM', async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
         })
 
@@ -72,7 +74,7 @@ describe('Plugin (ESM)', () => {
         it('should instrument GraphQL Yoga execution with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
           })
 

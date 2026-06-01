@@ -12,10 +12,10 @@ const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
@@ -45,7 +45,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -56,6 +56,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -110,7 +111,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -121,6 +122,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -219,7 +221,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -229,6 +231,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -308,7 +311,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -318,13 +321,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
       appsec.disable()
-      // TODO: Remove the workaround once https://github.com/sinonjs/sinon/issues/2671 is resolved
-      preHandlerHookSpy.resetHistory()
-      preValidationHookSpy.resetHistory()
       sinon.reset()
     })
 
@@ -501,6 +502,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
                 },
               })
             )
+            setTestBlockingTemplates()
           })
 
           afterEach(() => {
@@ -509,7 +511,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           after(() => {
             server?.close()
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should not block the request without an attack', async () => {
@@ -605,7 +607,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       after(() => {
         server?.close()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should not block the request without an attack', async () => {
@@ -685,7 +687,7 @@ describe('Api Security - Fastify', () => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

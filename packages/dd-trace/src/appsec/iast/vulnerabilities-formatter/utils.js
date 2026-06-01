@@ -1,17 +1,19 @@
 'use strict'
 
 const crypto = require('crypto')
-const { DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./evidence-redaction/sensitive-regex')
+
+const { defaults } = require('../../../config/defaults')
 
 const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
 const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 
 // eslint-disable-next-line @stylistic/max-len
-const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(String.raw`(?:"(${STRINGIFY_RANGE_KEY}_\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\d+_(\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\d+_([\s0-9.a-zA-Z]*)")`, 'gm')
-const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(String.raw`"(${STRINGIFY_RANGE_KEY}_\d+_)`, 'gm')
+const REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING = new RegExp(String.raw`"${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\d+_([\s\-+0-9.a-zA-Z]*)"`)
+const REGEX_FOR_STRINGIFY_SENSITIVE = new RegExp(String.raw`${STRINGIFY_SENSITIVE_KEY}_\d+_(\d+)_`)
+const REGEX_FOR_STRINGIFY_RANGE = new RegExp(String.raw`(${STRINGIFY_RANGE_KEY}_\d+_)`)
 
-const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
+const sensitiveValueRegex = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
 
 function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
   for (const key of Object.keys(target)) {
@@ -40,7 +42,6 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
     let counter = 0
     const allRanges = {}
     const sensitiveKeysMapping = {}
-
     iterateObject(obj, (val, levelKeys, parent, key) => {
       let currentLevelClone = cloneObj
       for (let i = 0; i < levelKeys.length - 1; i++) {
@@ -107,55 +108,90 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
     value = JSON.stringify(cloneObj, null, 2)
 
     if (counter > 0) {
-      const keysRegex = loadSensitiveRanges
-        ? KEYS_REGEX_WITH_SENSITIVE_RANGES
-        : KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
-      keysRegex.lastIndex = 0
+      const segments = []
+      let outputLength = 0
+      let pos = 0
+      let rangeKeyIndex = value.indexOf(STRINGIFY_RANGE_KEY)
 
-      let regexRes = keysRegex.exec(value)
-      while (regexRes) {
-        const offset = regexRes.index + 1 // +1 to increase the " char
+      while (rangeKeyIndex > -1) {
+        let remainingStringValue = value.slice(rangeKeyIndex)
+        let cleanLength = rangeKeyIndex - pos
 
-        if (regexRes[1]) {
-          // is a range
-          const rangesId = regexRes[1]
-          value = value.replace(rangesId, '')
+        if (remainingStringValue.startsWith(STRINGIFY_SENSITIVE_NOT_STRING_KEY)) {
+          // In this case, we want to remove also the previous " char, because the value is not an string
+          rangeKeyIndex--
+          cleanLength--
+          remainingStringValue = value.slice(rangeKeyIndex)
+          const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING.exec(remainingStringValue)
 
-          const updatedRanges = allRanges[rangesId].map(range => {
-            return {
+          if (regexRes?.index === 0) {
+            const matchValue = regexRes[0]
+            const originalValue = regexRes[1]
+            const start = outputLength + cleanLength
+
+            sensitiveRanges.push({
+              start,
+              end: start + originalValue.length,
+            })
+            segments.push(value.slice(pos, rangeKeyIndex), originalValue)
+            outputLength += cleanLength + originalValue.length
+            pos = rangeKeyIndex + matchValue.length
+          } else {
+            // can't happen, the only way to this to happen is
+            // if the JSON has a value starting with the value of STRINGIFY_SENSITIVE_NOT_STRING_KEY
+            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1))
+            outputLength += cleanLength + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1
+            pos = rangeKeyIndex + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1
+          }
+        } else if (remainingStringValue.startsWith(STRINGIFY_SENSITIVE_KEY)) {
+          const regexRes = REGEX_FOR_STRINGIFY_SENSITIVE.exec(remainingStringValue)
+          if (regexRes?.index === 0) {
+            const start = outputLength + cleanLength
+
+            sensitiveRanges.push({
+              start,
+              end: start + Number.parseInt(regexRes[1]),
+            })
+            segments.push(value.slice(pos, rangeKeyIndex))
+            outputLength += cleanLength
+            pos = rangeKeyIndex + regexRes[0].length
+          } else {
+            // can't happen, the only way to this to happen is
+            // if the JSON has a value starting with the value of STRINGIFY_SENSITIVE_KEY
+            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length))
+            outputLength += cleanLength + STRINGIFY_SENSITIVE_KEY.length
+            pos = rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length
+          }
+        } else {
+          const regexRes = REGEX_FOR_STRINGIFY_RANGE.exec(remainingStringValue)
+          if (regexRes?.index === 0) {
+            const start = outputLength + cleanLength
+            const rangesId = regexRes[1]
+
+            const updatedRanges = allRanges[rangesId].map(range => ({
               ...range,
-              start: range.start + offset,
-              end: range.end + offset,
-            }
-          })
+              start: range.start + start,
+              end: range.end + start,
+            }))
+            ranges.push(...updatedRanges)
 
-          ranges.push(...updatedRanges)
-        } else if (regexRes[2]) {
-          // is a sensitive string literal
-          const sensitiveId = regexRes[2]
-
-          sensitiveRanges.push({
-            start: offset,
-            end: offset + Number.parseInt(regexRes[3]),
-          })
-
-          value = value.replace(sensitiveId, '')
-        } else if (regexRes[4]) {
-          // is a sensitive value (number, null, false, ...)
-          const sensitiveId = regexRes[4]
-          const originalValue = regexRes[5]
-
-          sensitiveRanges.push({
-            start: regexRes.index,
-            end: regexRes.index + originalValue.length,
-          })
-
-          value = value.replace(sensitiveId, originalValue)
+            segments.push(value.slice(pos, rangeKeyIndex))
+            outputLength += cleanLength
+            pos = rangeKeyIndex + regexRes[0].length
+          } else {
+            // can't happen, the only way to this to happen is
+            // if the JSON has a value starting with the value of STRINGIFY_RANGE_KEY
+            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_RANGE_KEY.length))
+            outputLength += cleanLength + STRINGIFY_RANGE_KEY.length
+            pos = rangeKeyIndex + STRINGIFY_RANGE_KEY.length
+          }
         }
 
-        keysRegex.lastIndex = 0
-        regexRes = keysRegex.exec(value)
+        rangeKeyIndex = value.indexOf(STRINGIFY_RANGE_KEY, pos)
       }
+
+      segments.push(value.slice(pos))
+      value = segments.join('')
     }
   } else {
     value = JSON.stringify(obj, null, 2)

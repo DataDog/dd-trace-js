@@ -22,7 +22,7 @@ function finish (ctx) {
 
 addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
-    return function wrappedExecute (dbQuery, ...args) {
+    return function wrappedExecute (dbQuery) {
       if (!startChannel.hasSubscribers) {
         return execute.apply(this, arguments)
       }
@@ -72,6 +72,11 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       }
 
       return startChannel.runStores(ctx, () => {
+        // bindStart is skipped when tracing is suppressed (legacy store is `noop`),
+        // leaving ctx.injected unset — do not overwrite the caller's SQL argument.
+        if (ctx.injected !== undefined) {
+          arguments[0] = ctx.injected
+        }
         try {
           let result = execute.apply(this, arguments)
 
@@ -137,21 +142,21 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
     }
   })
   shimmer.wrap(oracledb.Pool.prototype, 'getConnection', getConnection => {
-    return function wrappedGetConnection () {
+    return function wrappedGetConnection (...args) {
       let callback
-      if (typeof arguments[arguments.length - 1] === 'function') {
-        callback = arguments[arguments.length - 1]
+      if (typeof args[args.length - 1] === 'function') {
+        callback = args[args.length - 1]
       }
       if (callback) {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
+        args[args.length - 1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
           if (connection) {
             connectionAttributes.set(connection, poolAttributes.get(this))
           }
           callback(err, connection)
         })
-        getConnection.apply(this, arguments)
+        getConnection.apply(this, args)
       } else {
-        return getConnection.apply(this, arguments).then((connection) => {
+        return getConnection.apply(this, args).then((connection) => {
           connectionAttributes.set(connection, poolAttributes.get(this))
           return connection
         })

@@ -17,6 +17,22 @@
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "later"
       }
+    },
+    "finish-immediately-with-tags": {
+      "baseline": "finish-immediately",
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "FINISH": "now",
+        "SHAPE": "tags"
+      }
+    },
+    "finish-immediately-with-tags-and-otel": {
+      "baseline": "finish-immediately",
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "FINISH": "now",
+        "SHAPE": "tags-and-otel"
+      }
     }
   }
 }

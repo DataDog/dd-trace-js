@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -74,10 +75,7 @@ describe('IAST TaintTracking Operations', () => {
   afterEach(sinon.restore)
 
   it('Addon should return a TaintedUtils instance', () => {
-    let TaintedUtils = null
-    assert.doesNotThrow(() => {
-      TaintedUtils = require('@datadog/native-iast-taint-tracking')
-    }, Error)
+    const TaintedUtils = require('@datadog/native-iast-taint-tracking')
     assert.notStrictEqual(TaintedUtils, null)
   })
 
@@ -471,7 +469,7 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Given null iastContext should return empty array', () => {
       const result = taintTrackingOperations.getRanges(null)
-      assert.ok(Array.isArray(result))
+      assert.ok(Array.isArray(result), `Expected array, got ${inspect(result)}`)
       assert.strictEqual(result.length, 0)
     })
   })

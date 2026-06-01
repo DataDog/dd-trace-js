@@ -9,10 +9,9 @@ const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
@@ -28,7 +27,7 @@ describe('Plugin', () => {
     setup()
     this.timeout(10000)
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let tracer
       let AWS
       let dynamo
@@ -44,7 +43,7 @@ describe('Plugin', () => {
           tracer = require('../../dd-trace')
           tracer.init()
           await agent.load()
-          await agent.close({ ritmReset: false, wipe: true })
+          await agent.close()
           await agent.load(
             'aws-sdk',
             {},
@@ -153,7 +152,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await resetLocalStackDynamo()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         describe('with payload tagging', () => {
@@ -162,6 +161,7 @@ describe('Plugin', () => {
               resource: `putItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -186,6 +186,7 @@ describe('Plugin', () => {
               resource: `updateItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -215,6 +216,7 @@ describe('Plugin', () => {
               resource: `deleteItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -249,6 +251,7 @@ describe('Plugin', () => {
               resource: `getItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -271,7 +274,7 @@ describe('Plugin', () => {
 
         describe('span pointers', () => {
           beforeEach(async () => {
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           async function testSpanPointers ({ env, expectedHashes, operation }) {
@@ -699,7 +702,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with single table', () => {
         const configStr = '{"Table1": ["key1", "key2"]}'
-        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: configStr }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
@@ -709,7 +712,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with multiple tables', () => {
         const configStr = '{"Table1": ["key1"], "Table2": ["key2", "key3"]}'
-        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: configStr }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
@@ -720,7 +723,7 @@ describe('Plugin', () => {
 
       it('should fail for invalid entries', () => {
         const configStr = '{"Table1": {"key1": 42}, "Table42": ["key1"], "Table2": ["key1", "key2", "key3"]}'
-        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: configStr }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {

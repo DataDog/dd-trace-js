@@ -1,9 +1,8 @@
 'use strict'
 
-const request = require('../../exporters/common/request')
+const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -13,8 +12,10 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
 const { writeSettingsToCache } = require('../test-optimization-cache')
+const request = require('./request')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
+const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 
 function getLibraryConfiguration ({
@@ -35,6 +36,7 @@ function getLibraryConfiguration ({
   custom,
   tag,
 }, done) {
+  const config = getConfig()
   const options = {
     path: '/api/v2/libraries/tests/services/setting',
     method: 'POST',
@@ -49,11 +51,10 @@ function getLibraryConfiguration ({
     options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getValueFromEnvSources('DD_API_KEY')
-    if (!apiKey) {
+    if (!config.apiKey) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = config.apiKey
   }
 
   const data = JSON.stringify({
@@ -115,6 +116,8 @@ function getLibraryConfiguration ({
           isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
           earlyFlakeDetectionNumRetries:
             earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
+          earlyFlakeDetectionSlowTestRetries:
+            earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
           earlyFlakeDetectionFaultyThreshold:
             earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
           isFlakyTestRetriesEnabled,
@@ -129,11 +132,11 @@ function getLibraryConfiguration ({
 
         log.debug('Remote settings: %j', settings)
 
-        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {
+        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
           settings.isCodeCoverageEnabled = true
           log.debug('Dangerously set code coverage to true')
         }
-        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {
+        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
           settings.isSuitesSkippingEnabled = true
           log.debug('Dangerously set test skipping to true')
         }

@@ -76,6 +76,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
       appsec.disable()
     }
 
+    // TODO: Use configWithOrigin /generateTelemetry instead of manually constructing the change.
     updateConfig([
       {
         name: 'appsec.enabled',

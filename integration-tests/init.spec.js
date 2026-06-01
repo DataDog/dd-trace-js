@@ -273,7 +273,9 @@ describe('init.js', () => {
 // or on 18.0.0 in particular.
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
-    setShouldKill(false)
+    // Node 20.0.0 can leave short-lived loader-based children alive after they
+    // print the expected output, so terminate them after a short grace period.
+    setShouldKill(process.versions.node === '20.0.0')
     useSandbox()
     stubTracerIfNeeded()
 

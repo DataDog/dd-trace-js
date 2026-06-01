@@ -6,6 +6,9 @@ const telemetry = require('../telemetry')
 const { fetchAgentInfo } = require('../../agent/info')
 const { getAgentUrl } = require('../../agent/url')
 
+/**
+ * @param {import('../../config/config-base')} config
+ */
 function setAgentStrategy (config, setWritersAgentlessValue) {
   const agentlessEnabled = config.llmobs.agentlessEnabled
 

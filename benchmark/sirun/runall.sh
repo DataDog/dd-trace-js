@@ -5,10 +5,15 @@ set -e
 DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
 CWD=$(pwd)
 
+# Background subshells can't share a bash variable, so failed variants
+# write their dir/variant name here and the parent counts lines after `wait`.
+FAILURES_FILE=$(mktemp)
+
 function cleanup {
   for D in "${DIRS[@]}"; do
     rm -f "${CWD}/${D}/meta-temp.json"
   done
+  rm -f "$FAILURES_FILE"
 }
 
 trap cleanup EXIT
@@ -32,17 +37,35 @@ fi
     && PLUGINS="bluebird|q|graphql|express" yarn services
 )
 
+(
+  cd "${CWD}/startup/everything-fixture" &&
+  npm ci --no-audit --no-fund || (sleep 60 && npm ci --no-audit --no-fund)
+)
+
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
 TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
-export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
+# Derive cpuset start from the kernel when CPU_START_ID is not provided
+if [[ -z "${CPU_START_ID}" ]]; then
+  CPUSET_START=$(grep -oP 'Cpus_allowed_list:\s*\K\d+' /proc/self/status 2>/dev/null || echo "0")
+else
+  CPUSET_START="${CPU_START_ID}"
+fi
+export CPU_AFFINITY="${CPUSET_START}"
+
+echo "CPU diagnostics:"
+echo "  nproc: ${TOTAL_CPU_CORES}"
+echo "  CPU_START_ID: ${CPU_START_ID:-<unset>}"
+echo "  CPUSET_START: ${CPUSET_START}"
+echo "  CPU_AFFINITY start: ${CPU_AFFINITY}"
+echo "  cpuset: $(cat /proc/self/status 2>/dev/null | grep Cpus_allowed_list || echo 'N/A')"
 
 nvm install $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
-CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # reset for each node.js version
+CPU_AFFINITY="${CPUSET_START}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 
@@ -60,8 +83,8 @@ BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
-if [[ ${GROUP_SIZE} -gt 24 ]]; then
-  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (${TOTAL_CPU_CORES} cores)"
+if [[ ${GROUP_SIZE} -gt ${TOTAL_CPU_CORES} ]]; then
+  echo "Group size ${GROUP_SIZE} exceeds available CPU cores (${TOTAL_CPU_CORES} from nproc)"
   exit 1
 fi
 
@@ -77,7 +100,16 @@ for D in "${DIRS[@]}"; do
 
       export SIRUN_VARIANT=$V
 
-      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
+      (
+        if time node ../run-one-variant.js >> ../results.ndjson; then
+          echo "${D}/${V} finished."
+        else
+          echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
+          # Append-only writes to a single tempfile from parallel subshells are
+          # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
+          echo "${D}/${V}" >> "$FAILURES_FILE"
+        fi
+      ) &
       ((CPU_AFFINITY=CPU_AFFINITY+1))
     fi
 
@@ -97,3 +129,11 @@ if [ "$DEBUG_RESULTS" == "true" ]; then
 fi
 
 echo "all tests for ${VERSION} have now completed."
+
+FAILED_COUNT=$(wc -l < "$FAILURES_FILE" | tr -d ' ')
+if [[ "${FAILED_COUNT}" -gt 0 ]]; then
+  echo "" >&2
+  echo "${FAILED_COUNT} variant(s) failed:" >&2
+  sed 's/^/  - /' "$FAILURES_FILE" >&2
+  exit 1
+fi
