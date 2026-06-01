@@ -2,7 +2,7 @@
 
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook } = require('./helpers/instrument')
+const { addHook, AsyncResource } = require('./helpers/instrument')
 const aiGuard = require('./helpers/openai-ai-guard')
 
 const ch = dc.tracingChannel('apm:openai:request')
@@ -242,6 +242,12 @@ for (const extension of extensions) {
           return ch.start.runStores(ctx, () => {
             const apiProm = methodFn.apply(this, args)
 
+            // The OpenAI SDK returns a lazy APIPromise whose `parse`/`asResponse` run later, in
+            // the caller's async context. Bind them to the active `openai.request` span context
+            // captured here (inside `runStores`) so the AI Guard evaluations they publish nest the
+            // `ai_guard` span under it. Identity (no-op) when AI Guard is not active for this call.
+            const bindToSpan = guard ? fn => AsyncResource.bind(fn) : fn => fn
+
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
               shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function (...args) {
@@ -251,12 +257,12 @@ for (const extension of extensions) {
                 // this is a new apipromise instance
                 const unwrappedPromise = origApiPromThenUnwrap.apply(this, args)
 
-                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function (...args) {
+                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => bindToSpan(function (...args) {
                   const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
                   return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
-                })
+                }))
 
                 return unwrappedPromise
               })
@@ -264,14 +270,14 @@ for (const extension of extensions) {
 
             // wrapping `parse` avoids problematic wrapping of `then` when trying to call
             // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-            shimmer.wrap(apiProm, 'parse', origApiPromParse => function (...args) {
+            shimmer.wrap(apiProm, 'parse', origApiPromParse => bindToSpan(function (...args) {
               const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
               return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
-            })
+            }))
 
-            if (guard) aiGuard.wrapAsResponse(apiProm, guard)
+            if (guard) aiGuard.wrapAsResponse(apiProm, guard, bindToSpan)
 
             ch.end.publish(ctx)
 
@@ -300,23 +306,33 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
         return body
       }
 
-      finish(ctx, {
+      const responseData = {
         headers: response.headers,
         data: body,
         request: {
           path: response.url,
           method: options.method,
         },
+      }
+
+      if (!guard) {
+        finish(ctx, responseData)
+        return body
+      }
+
+      // Run After Model AI Guard before finishing the span. When it blocks it rejects, so the
+      // outer catch finishes the span with the AIGuardAbortError and marks openai.request (the
+      // LLM Obs span) as errored. Finishing here also keeps openai.request wrapped around its
+      // child `ai_guard` span instead of closing before the After Model evaluation completes.
+      return aiGuard.evaluateOutput(guard, body).then(() => {
+        finish(ctx, responseData)
+        return body
       })
-
-      if (!guard) return body
-
-      return aiGuard.evaluateOutput(guard, body).then(() => body)
     })
     .catch(error => {
-      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in
-      // success branch, before-model block, or openai error) — record the error now.
-      // If finish already ran successfully (after-model block), don't double-publish.
+      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in the success
+      // branch, Before Model block, After Model block, or openai error) — record the error now so
+      // the openai.request span is marked errored. If finish already ran, don't double-publish.
       if (!ctx.result) finish(ctx, undefined, error)
       throw error
     })

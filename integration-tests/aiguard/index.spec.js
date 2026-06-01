@@ -18,6 +18,32 @@ function assertHasGuardSpan (payload, predicate) {
   assert.notStrictEqual(matching, undefined)
 }
 
+// Every `ai_guard` span produced by an auto-instrumented call must nest under the LLM
+// span (e.g. `openai.request`), matching the Vercel AI SDK behavior. This guards the
+// fix that binds the OpenAI lazy APIPromise `parse`/`asResponse` to the LLM span context.
+function assertGuardSpansChildOf (payload, parentName) {
+  const parent = payload[0].find(span => span.name === parentName)
+  assert.notStrictEqual(parent, undefined, `expected a ${parentName} span`)
+  const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+  assert.ok(guardSpans.length > 0, 'expected at least one ai_guard span')
+  for (const span of guardSpans) {
+    assert.strictEqual(
+      span.parent_id.toString(),
+      parent.span_id.toString(),
+      `ai_guard span ${span.span_id} should be a child of ${parentName} ${parent.span_id}`
+    )
+  }
+}
+
+// When AI Guard blocks (Before or After Model), the AIGuardAbortError must propagate to the
+// LLM span (e.g. `openai.request`) and mark it as errored, matching the dd-trace-py behavior.
+function assertLlmSpanErrored (payload, name) {
+  const span = payload[0].find(span => span.name === name)
+  assert.notStrictEqual(span, undefined, `expected a ${name} span`)
+  assert.strictEqual(span.error, 1, `${name} span should be errored when AI Guard blocks`)
+  assert.strictEqual(span.meta['error.type'], 'AIGuardAbortError')
+}
+
 function findMetric (series, metricName) {
   return series.find(s => s.metric === metricName)
 }
@@ -227,6 +253,8 @@ describe('AIGuard SDK integration tests', () => {
         for (const span of guardSpans) {
           assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
         }
+        // Both Before and After Model spans must nest under the openai.request LLM span.
+        assertGuardSpansChildOf(payload, 'openai.request')
       })
     })
 
@@ -240,6 +268,8 @@ describe('AIGuard SDK integration tests', () => {
           span.meta['ai_guard.action'] === 'DENY' &&
           span.meta['ai_guard.blocked'] === 'true'
         )
+        assertGuardSpansChildOf(payload, 'openai.request')
+        assertLlmSpanErrored(payload, 'openai.request')
       })
     })
   }
@@ -260,6 +290,10 @@ describe('AIGuard SDK integration tests', () => {
           span.meta['ai_guard.action'] === 'DENY' &&
           span.meta['ai_guard.blocked'] === 'true'
         )
+        // Before Model (ALLOW) and After Model (DENY) spans must nest under openai.request.
+        assertGuardSpansChildOf(payload, 'openai.request')
+        // An After Model block must still mark the openai.request LLM span as errored.
+        assertLlmSpanErrored(payload, 'openai.request')
       })
     })
   }

@@ -226,13 +226,15 @@ function createGuard (baseResource, callArgs, stream) {
  *
  * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
  * @param {Guard} guard
+ * @param {(fn: Function) => Function} [bind] - Binds the replacement to the LLM span's async
+ *   context so the Before Model `ai_guard` span nests under it. Defaults to identity.
  */
-function wrapAsResponse (apiProm, guard) {
+function wrapAsResponse (apiProm, guard, bind = fn => fn) {
   if (typeof apiProm.asResponse !== 'function') return
-  shimmer.wrap(apiProm, 'asResponse', origAsResponse => function (...args) {
+  shimmer.wrap(apiProm, 'asResponse', origAsResponse => bind(function (...args) {
     const responsePromise = origAsResponse.apply(this, args)
     return Promise.all([guard.getInputEval(), responsePromise]).then(([, response]) => response)
-  })
+  }))
 }
 
 /**
