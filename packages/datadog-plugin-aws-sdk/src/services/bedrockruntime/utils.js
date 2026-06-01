@@ -551,7 +551,7 @@ function buildToolResult ({ toolUseId, content }) {
 function resolveToolResultItem (item) {
   if (typeof item.text === 'string') return item.text
   if (item.json != null) return JSON.stringify(item.json)
-  return `[Unsupported content type(s): ${Object.keys(item).join(',')}]`
+  return `[Unsupported content type(s): ${getContentBlockType(item)}]`
 }
 
 function buildUsage (usage = {}) {

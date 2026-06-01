@@ -11,6 +11,7 @@ const {
   cacheReadRequest,
   converseRequest,
   converseToolResultRequest,
+  converseUnsupportedBlocksRequest,
 } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
@@ -407,6 +408,49 @@ describe('Plugin', () => {
               temperature: modelConfig.temperature,
               max_tokens: modelConfig.maxTokens,
               stop_reason: MOCK_STRING,
+            },
+            tags: { ml_app: 'test', integration: 'bedrock' },
+          })
+        })
+
+        it('should label unsupported converse content blocks and tool-result items', async function () {
+          if (typeof AWS.ConverseCommand !== 'function') return this.skip()
+          const { response } = converseUnsupportedBlocksRequest
+          const command = new AWS.ConverseCommand({
+            modelId: converseUnsupportedBlocksRequest.modelId,
+            ...converseUnsupportedBlocksRequest.request,
+          })
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [{ content: converseUnsupportedBlocksRequest.userPrompt, role: 'user' }],
+            outputMessages: [{
+              role: 'assistant',
+              content: response.unsupportedContent,
+              tool_results: [{
+                name: '',
+                result: response.unsupportedToolResult,
+                tool_id: response.toolResultId,
+                type: 'tool_result',
+              }],
+            }],
+            metrics: {
+              input_tokens: response.inputTokens,
+              output_tokens: response.outputTokens,
+              total_tokens: response.inputTokens + response.outputTokens,
+              cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
+            },
+            modelName: converseUnsupportedBlocksRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
+            metadata: {
+              temperature: modelConfig.temperature,
+              max_tokens: modelConfig.maxTokens,
+              stop_reason: response.stopReason,
             },
             tags: { ml_app: 'test', integration: 'bedrock' },
           })

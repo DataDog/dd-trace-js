@@ -456,4 +456,22 @@ bedrockruntime.converseToolResultRequest = {
   },
 }
 
+bedrockruntime.converseUnsupportedBlocksRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+  userPrompt: 'hi',
+  request: {
+    messages: [{ role: 'user', content: [{ text: 'hi' }] }],
+    inferenceConfig: { temperature, maxTokens },
+  },
+  response: {
+    stopReason: 'end_turn',
+    inputTokens: 3,
+    outputTokens: 2,
+    toolResultId: 'tr-1',
+    unsupportedToolResult: '[Unsupported content type(s): weird]',
+    unsupportedContent: '[Unsupported content type: reasoningContent]',
+  },
+}
+
 module.exports = bedrockruntime
