@@ -102,9 +102,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  // Span names whose underlying ops use the SDK's retry mechanism and therefore carry
-  // the aws.durable.operation_attempt metric.
-  const RETRYABLE_SPAN_NAMES = new Set(['aws.durable.step', 'aws.durable.wait_for_condition'])
+  // Derived from the plugin's static retryable property — stays in sync automatically.
+  const contextPlugins = require('../src/context')
+  const RETRYABLE_SPAN_NAMES = new Set(
+    Object.values(contextPlugins).filter(cls => cls.retryable).map(cls => cls.spanName)
+  )
 
   for (const { span, operationName, run, opts } of [
     {
