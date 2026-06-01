@@ -76,16 +76,6 @@ class DatadogTracer {
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
     this._url = agentUrl
 
-    // The native exporter does not yet emit process tags. Warn once at init
-    // so users with DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true don't
-    // silently lose tags they think are enabled.
-    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
-      log.warn(
-        'DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED is not yet supported by the native span %s',
-        'pipeline; process tags will not be emitted.'
-      )
-    }
-
     log.debug('Native spans mode enabled')
 
     this._propagators = {

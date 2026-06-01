@@ -214,6 +214,123 @@ describe('NativeSpanContext', () => {
       spanContext.setTag('test.key', null)
       sinon.assert.notCalled(nativeSpans.queueOp)
     })
+
+    it('should drop NaN number metrics rather than emitting NaN', () => {
+      spanContext.setTag('bad.metric', Number.NaN)
+      // NaN is never queued to native (matches the legacy formatter).
+      for (const call of nativeSpans.queueOp.getCalls()) {
+        assert.notStrictEqual(call.args[2], 'bad.metric')
+      }
+      sinon.assert.notCalled(nativeSpans.queueBatchMetrics)
+    })
+
+    it('should flatten plain object tag values one level', () => {
+      spanContext.setTag('obj', { a: 1, b: 'x', c: true })
+      const calls = nativeSpans.queueOp.getCalls().map(c => c.args)
+      // number -> metric, string -> meta, boolean -> 0/1 metric, all prefixed
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'obj.a'),
+        [OpCode.SetMetricAttr, slotIndex, 'obj.a', ['f64', 1]]
+      )
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'obj.b'),
+        [OpCode.SetMetaAttr, slotIndex, 'obj.b', 'x']
+      )
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'obj.c'),
+        [OpCode.SetMetricAttr, slotIndex, 'obj.c', ['f64', 1]]
+      )
+      // The unflattened key itself is never emitted as [object Object].
+      assert.strictEqual(calls.find(a => a[2] === 'obj'), undefined)
+    })
+
+    it('should not flatten arrays — stringified as a meta leaf', () => {
+      spanContext.setTag('arr', [1, 2, 3])
+      const calls = nativeSpans.queueOp.getCalls().map(c => c.args)
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'arr'),
+        [OpCode.SetMetaAttr, slotIndex, 'arr', '1,2,3']
+      )
+    })
+
+    it('should treat Buffer and URL values as stringified meta leaves', () => {
+      spanContext.setTag('buf', Buffer.from('hello'))
+      spanContext.setTag('url', new URL('https://example.com/path'))
+      const calls = nativeSpans.queueOp.getCalls().map(c => c.args)
+      // Buffers/URLs are not flattened — they stringify to a single meta tag.
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'buf'),
+        [OpCode.SetMetaAttr, slotIndex, 'buf', 'hello']
+      )
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'url'),
+        [OpCode.SetMetaAttr, slotIndex, 'url', 'https://example.com/path']
+      )
+      // No flattened sub-keys leaked from the URL object.
+      assert.strictEqual(calls.find(a => String(a[2]).startsWith('url.')), undefined)
+    })
+
+    it('should not crash when a tag value has a throwing toString', () => {
+      // Array leaf is stringified via String([...]) -> element.toString().
+      const hostile = [{ toString () { throw new Error('boom') } }]
+      // Must not throw into the caller; coerces to a safe placeholder.
+      spanContext.setTag('hostile', hostile)
+      const calls = nativeSpans.queueOp.getCalls().map(c => c.args)
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'hostile'),
+        [OpCode.SetMetaAttr, slotIndex, 'hostile', '[unserializable]']
+      )
+    })
+
+    it('should only flatten objects one level deep', () => {
+      spanContext.setTag('obj', { a: 1, b: { c: 'foo' } })
+      const calls = nativeSpans.queueOp.getCalls().map(c => c.args)
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'obj.a'),
+        [OpCode.SetMetricAttr, slotIndex, 'obj.a', ['f64', 1]]
+      )
+      // The nested object stops at one level: stringified, not flattened.
+      assert.deepStrictEqual(
+        calls.find(a => a[2] === 'obj.b'),
+        [OpCode.SetMetaAttr, slotIndex, 'obj.b', '[object Object]']
+      )
+      assert.strictEqual(calls.find(a => a[2] === 'obj.b.c'), undefined)
+    })
+  })
+
+  describe('syncToNativeOnly (batch path)', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id,
+        slotIndex,
+      })
+    })
+
+    it('batches meta/metrics, drops NaN, and flattens objects one level', () => {
+      spanContext.syncToNativeOnly({
+        'good.metric': 123,
+        'bad.metric': Number.NaN,
+        'a.string': 'hello',
+        flag: true,
+        obj: { a: 1, b: 'x' },
+      })
+
+      const metricBatch = nativeSpans.queueBatchMetrics.getCall(0).args[1]
+      const metaBatch = nativeSpans.queueBatchMeta.getCall(0).args[1]
+
+      // NaN is dropped; valid number, boolean, and flattened obj.a are metrics.
+      assert.deepStrictEqual(metricBatch, [
+        ['good.metric', 123],
+        ['flag', 1],
+        ['obj.a', 1],
+      ])
+      // Strings and the flattened obj.b land in meta.
+      assert.deepStrictEqual(metaBatch, [
+        ['a.string', 'hello'],
+        ['obj.b', 'x'],
+      ])
+    })
   })
 
   // getTag/hasTag/deleteTag/getTags inherit from DatadogSpanContext and are

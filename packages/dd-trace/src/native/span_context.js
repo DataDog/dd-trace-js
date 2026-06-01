@@ -30,6 +30,65 @@ const SPECIAL_KEYS = new Set([
 const NAME_VALUE = Symbol('nameValue')
 const NATIVE_READY = Symbol('nativeReady')
 
+/**
+ * Stringify an object-valued tag leaf without letting a throwing `toString`
+ * or getter crash the caller. In native mode tag coercion runs synchronously
+ * inside the user's `setTag` call (the legacy pipeline deferred it to flush
+ * time), so a throwing conversion here would surface in application code.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function safeString (value) {
+  try {
+    return String(value)
+  } catch {
+    return '[unserializable]'
+  }
+}
+
+/**
+ * Coerce a tag value into native meta/metric entries, mirroring the legacy
+ * span_format `addTag`. This is the single source of truth for the tag
+ * coercion rules: strings → meta, finite numbers → metrics (NaN is dropped,
+ * not sent), booleans → 0/1 metrics. Plain objects are flattened one level
+ * (`key.prop`); arrays, Buffers, URLs and already-nested values are
+ * stringified as a meta leaf. Results are appended to the provided arrays.
+ *
+ * Per-tag hot paths inline the primitive dispatch (to avoid array allocation)
+ * and only delegate object values here, so keep the primitive rules in sync.
+ *
+ * @param {Array<[string, string]>} meta
+ * @param {Array<[string, number]>} metrics
+ * @param {string} key
+ * @param {unknown} value
+ * @param {boolean} [nested] - true once recursed; blocks deeper flattening
+ */
+function appendTag (meta, metrics, key, value, nested) {
+  switch (typeof value) {
+    case 'string':
+      meta.push([key, value])
+      break
+    case 'number':
+      // Old pipeline dropped NaN metrics rather than emitting NaN.
+      if (!Number.isNaN(value)) metrics.push([key, value])
+      break
+    case 'boolean':
+      metrics.push([key, value ? 1 : 0])
+      break
+    default:
+      if (value == null) break
+      // Flatten plain objects one level; everything else is a string leaf.
+      if (!nested && !Array.isArray(value) && !Buffer.isBuffer(value) && !(value instanceof URL)) {
+        for (const prop of Object.keys(value)) {
+          appendTag(meta, metrics, `${key}.${prop}`, value[prop], true)
+        }
+      } else {
+        meta.push([key, safeString(value)])
+      }
+  }
+}
+
 class NativeSpanContext extends DatadogSpanContext {
   #nativeSpans
 
@@ -111,14 +170,17 @@ class NativeSpanContext extends DatadogSpanContext {
       return
     }
 
-    // Fast path: non-special number tags
+    // Fast path: non-special number tags. NaN metrics are dropped (never
+    // emitted) to match the legacy formatter.
     if (typeof value === 'number' && !SPECIAL_KEYS.has(key)) {
-      this.#nativeSpans.queueOp(
-        OpCode.SetMetricAttr,
-        this._slotIndex,
-        key,
-        ['f64', value],
-      )
+      if (!Number.isNaN(value)) {
+        this.#nativeSpans.queueOp(
+          OpCode.SetMetricAttr,
+          this._slotIndex,
+          key,
+          ['f64', value],
+        )
+      }
       return
     }
 
@@ -144,12 +206,8 @@ class NativeSpanContext extends DatadogSpanContext {
 
       if (SPECIAL_KEYS.has(key)) {
         this.#syncTagToNative(key, value)
-      } else if (typeof value === 'number') {
-        metricBatch.push([key, value])
-      } else if (typeof value === 'boolean') {
-        metricBatch.push([key, value ? 1 : 0])
       } else {
-        metaBatch.push([key, String(value)])
+        appendTag(metaBatch, metricBatch, key, value)
       }
     }
 
@@ -176,11 +234,19 @@ class NativeSpanContext extends DatadogSpanContext {
     if (SPECIAL_KEYS.has(key)) {
       this.#syncTagToNative(key, value)
     } else if (typeof value === 'number') {
-      this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value]])
+      // NaN metrics are dropped to match the legacy formatter (see appendTag).
+      if (!Number.isNaN(value)) this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value]])
     } else if (typeof value === 'boolean') {
       this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value ? 1 : 0]])
+    } else if (typeof value === 'string') {
+      this.#nativeSpans.queueBatchMeta(this._slotIndex, [[key, value]])
     } else {
-      this.#nativeSpans.queueBatchMeta(this._slotIndex, [[key, String(value)]])
+      // Objects: flatten one level via the shared coercion helper.
+      const meta = []
+      const metrics = []
+      appendTag(meta, metrics, key, value)
+      if (meta.length > 0) this.#nativeSpans.queueBatchMeta(this._slotIndex, meta)
+      if (metrics.length > 0) this.#nativeSpans.queueBatchMetrics(this._slotIndex, metrics)
     }
   }
 
@@ -323,29 +389,27 @@ class NativeSpanContext extends DatadogSpanContext {
         return
 
       default:
-        // Regular tags go to meta (string) or metrics (number)
-        if (typeof value === 'number') {
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetricAttr,
-            this._slotIndex,
-            key,
-            ['f64', value]
-          )
+        // Regular tags: strings → meta, finite numbers → metrics (NaN dropped),
+        // booleans → 0/1. Primitives are dispatched inline to avoid array
+        // allocation; objects are flattened one level via appendTag.
+        if (typeof value === 'string') {
+          this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, key, value)
+        } else if (typeof value === 'number') {
+          if (!Number.isNaN(value)) {
+            this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._slotIndex, key, ['f64', value])
+          }
         } else if (typeof value === 'boolean') {
-          // Booleans are stored as metrics (0 or 1)
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetricAttr,
-            this._slotIndex,
-            key,
-            ['f64', value ? 1 : 0]
-          )
+          this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._slotIndex, key, ['f64', value ? 1 : 0])
         } else {
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetaAttr,
-            this._slotIndex,
-            key,
-            String(value)
-          )
+          const meta = []
+          const metrics = []
+          appendTag(meta, metrics, key, value)
+          for (const [k, v] of meta) {
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, k, v)
+          }
+          for (const [k, v] of metrics) {
+            this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._slotIndex, k, ['f64', v])
+          }
         }
     }
   }
