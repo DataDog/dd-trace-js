@@ -6,7 +6,10 @@ const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 const bodyParserReadCh = channel('datadog:body-parser:read:finish')
 
 function publishRequestBodyAndNext (req, res, next) {
-  return shimmer.wrapCallback(next, next => function (...args) {
+  // Named `next`/arity-1 mirrors the express continuation so wrapCallback skips
+  // its name/length rewrite; `_error` only pads the arity and `arguments`
+  // forwards whatever next was called with.
+  return shimmer.wrapCallback(next, original => function next (_error) {
     if (bodyParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const body = req.body
@@ -16,7 +19,7 @@ function publishRequestBodyAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, args)
+    return original.apply(this, arguments)
   })
 }
 
