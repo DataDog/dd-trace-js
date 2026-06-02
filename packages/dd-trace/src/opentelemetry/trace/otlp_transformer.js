@@ -16,6 +16,11 @@ const SPAN_KIND_CONSUMER = protoSpanKind.values.SPAN_KIND_CONSUMER
 // Cached zero Identifier used to detect zero IDs without re-allocating per span.
 const ZERO_ID = id('0')
 
+// DD propagation tag carrying the upper 64 bits of a 128-bit trace ID as 16 hex chars.
+// span_format.js#extractChunkTags only copies this onto the first-in-chunk span, so the
+// transformer scans the batch to find it and applies it to every span's traceId.
+const TRACE_ID_128 = '_dd.p.tid'
+
 /**
  * @typedef {import('../../id').Identifier} Identifier
  *
@@ -65,6 +70,7 @@ const STATUS_CODE_ERROR = 2
 const EXCLUDED_META_KEYS = new Set([
   '_dd.span_links',
   'span.kind',
+  TRACE_ID_128,
 ])
 
 /**
@@ -113,6 +119,18 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @returns {object[]} Array of scope span objects
    */
   #transformScopeSpans (spans) {
+    let traceKey
+    let traceIdHigh
+    const otlpSpans = spans.map((span) => {
+      // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
+      // Reset at each trace boundary for batching of multiple traces.
+      const key = span.trace_id.toString(16)
+      if (key !== traceKey) {
+        traceKey = key
+        traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
+      }
+      return this.#transformSpan(span, traceIdHigh)
+    })
     return [{
       scope: {
         name: 'dd-trace-js',
@@ -121,7 +139,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         droppedAttributesCount: 0,
       },
       schemaUrl: '',
-      spans: spans.map(span => this.#transformSpan(span)),
+      spans: otlpSpans,
     }]
   }
 
@@ -129,14 +147,15 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * Transforms a single DD-formatted span to an OTLP Span object.
    *
    * @param {DDFormattedSpan} span - DD-formatted span to transform
+   * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
    * @returns {object} OTLP Span object
    */
-  #transformSpan (span) {
+  #transformSpan (span, traceIdHigh) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
     return {
-      traceId: this.#idToBytes(span.trace_id, 16),
+      traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
       spanId: this.#idToBytes(span.span_id, 8),
       parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
       name: span.resource,
