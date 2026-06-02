@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setImmediate } = require('node:timers/promises')
+
 const proxyquire = require('proxyquire').noCallThru()
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -75,7 +77,7 @@ describe('handler checkpoint hook', () => {
 
     void wrappedHandler({}, durableContext)
     executionContext.terminationManager.terminate({ reason: 'CALLBACK_PENDING' })
-    await new Promise(resolve => setImmediate(resolve))
+    await setImmediate()
 
     assert.equal(terminateCalls, 1)
     assert.equal(checkpointSaveCalls.length, 1)
@@ -98,7 +100,7 @@ describe('handler checkpoint hook', () => {
     const wrappedHandler = ctx.arguments[5]
     void wrappedHandler({}, { checkpoint: { checkpoint: async () => {} } })
     executionContext.terminationManager.terminate({ reason: 'CHECKPOINT_FAILED' })
-    await new Promise(resolve => setImmediate(resolve))
+    await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 0)
   })
@@ -115,7 +117,7 @@ describe('handler checkpoint hook', () => {
     const wrappedHandler = ctx.arguments[5]
     void wrappedHandler({}, { checkpoint: { checkpoint: async () => {} } })
     executionContext.terminationManager.terminate({ reason: 'A_REASON_THE_SDK_HAS_NOT_TAUGHT_US_ABOUT' })
-    await new Promise(resolve => setImmediate(resolve))
+    await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 0)
   })
@@ -132,7 +134,7 @@ describe('handler checkpoint hook', () => {
     const wrappedHandler = ctx.arguments[5]
     void wrappedHandler({}, { checkpoint: { checkpoint: async () => {} } })
     executionContext.terminationManager.terminate()
-    await new Promise(resolve => setImmediate(resolve))
+    await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 1)
   })
@@ -165,7 +167,7 @@ describe('handler checkpoint hook', () => {
       // The handler arg must also remain untouched so the user code runs unaltered.
       assert.strictEqual(typeof ctx.arguments[5], 'function')
       executionContext.terminationManager.terminate({ reason: 'CALLBACK_PENDING' })
-      await new Promise(resolve => setImmediate(resolve))
+      await setImmediate()
       assert.equal(checkpointSaveCalls.length, 0)
     })
 
