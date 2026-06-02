@@ -30,6 +30,8 @@ const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibili
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
 
+const cucumberWorkerThreadsPatchModule = require.resolve('./cucumber-worker-threads')
+
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
@@ -69,6 +71,7 @@ const originalCoverageMap = createCoverageMap()
 
 // TODO: remove in a later major version
 const patched = new WeakSet()
+const patchedCucumberWorkers = new WeakSet()
 
 const lastStatusByPickleId = new Map()
 /** For ATR: statuses keyed by stable scenario id (uri:name) so retries accumulate correctly */
@@ -180,19 +183,267 @@ function getConfiguredEfdRetryCount () {
 }
 
 function publishWorkerEfdRetryCount (pickle, retryCount) {
-  if (typeof process.send !== 'function') return
+  const message = {
+    [DD_EFD_RETRY_COUNT_MESSAGE]: {
+      pickleId: pickle.id,
+      retryCount,
+      testFileAbsolutePath: pickle.uri,
+      testName: pickle.name,
+    },
+  }
+
+  if (typeof process.send === 'function') {
+    try {
+      process.send(message)
+    } catch {
+      // ignore IPC errors
+    }
+    return
+  }
 
   try {
-    process.send({
-      [DD_EFD_RETRY_COUNT_MESSAGE]: {
-        pickleId: pickle.id,
-        retryCount,
-        testFileAbsolutePath: pickle.uri,
-        testName: pickle.name,
-      },
-    })
+    const { isMainThread, parentPort } = require('node:worker_threads')
+    if (isMainThread || !parentPort) return
+
+    parentPort.postMessage(message)
   } catch {
     // ignore IPC errors
+  }
+}
+
+function configureParallelWorkerWorldParameters (options) {
+  options.worldParameters ??= {}
+
+  if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
+    options.worldParameters._ddIsKnownTestsEnabled = true
+    options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+    options.worldParameters._ddKnownTests = knownTests
+    options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
+  } else {
+    isEarlyFlakeDetectionEnabled = false
+    isKnownTestsEnabled = false
+    options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
+    options.worldParameters._ddIsKnownTestsEnabled = false
+    options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
+    options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = {}
+  }
+
+  if (isImpactedTestsEnabled) {
+    options.worldParameters._ddImpactedTestsEnabled = isImpactedTestsEnabled
+    options.worldParameters._ddModifiedFiles = modifiedFiles
+  }
+
+  options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+  options.worldParameters._ddNumTestRetries = numTestRetries
+
+  if (isTestManagementTestsEnabled) {
+    options.worldParameters._ddIsTestManagementTestsEnabled = true
+    options.worldParameters._ddTestManagementTests = testManagementTests
+    options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+  }
+}
+
+function readParallelWorkerWorldParameters (options) {
+  const worldParameters = options?.worldParameters
+  if (!worldParameters) return
+
+  isKnownTestsEnabled = !!worldParameters._ddIsKnownTestsEnabled
+  if (isKnownTestsEnabled) {
+    knownTests = worldParameters._ddKnownTests
+    // if for whatever reason the worker does not receive valid known tests, we disable EFD and known tests
+    if (!isValidKnownTests(knownTests)) {
+      isKnownTestsEnabled = false
+      knownTests = {}
+    }
+  }
+  isEarlyFlakeDetectionEnabled = !!worldParameters._ddIsEarlyFlakeDetectionEnabled
+  if (isEarlyFlakeDetectionEnabled) {
+    earlyFlakeDetectionNumRetries = worldParameters._ddEarlyFlakeDetectionNumRetries
+    earlyFlakeDetectionSlowTestRetries = worldParameters._ddEarlyFlakeDetectionSlowTestRetries ?? {}
+  }
+  isImpactedTestsEnabled = !!worldParameters._ddImpactedTestsEnabled
+  if (isImpactedTestsEnabled) {
+    modifiedFiles = worldParameters._ddModifiedFiles
+  }
+  isFlakyTestRetriesEnabled = !!worldParameters._ddIsFlakyTestRetriesEnabled
+  numTestRetries = worldParameters._ddNumTestRetries ?? 0
+  isTestManagementTestsEnabled = !!worldParameters._ddIsTestManagementTestsEnabled
+  if (isTestManagementTestsEnabled) {
+    testManagementTests = worldParameters._ddTestManagementTests
+    testManagementAttemptToFixRetries = worldParameters._ddTestManagementAttemptToFixRetries
+  }
+}
+
+function handleDdWorkerMessage (message) {
+  if (Array.isArray(message)) {
+    const [messageCode, payload] = message
+    if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
+      collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
+      workerReportTraceCh.publish(payload)
+      return true
+    }
+  }
+
+  if (message?.[DD_EFD_RETRY_COUNT_MESSAGE]) {
+    handleEfdRetryCountMessage(message[DD_EFD_RETRY_COUNT_MESSAGE])
+    return true
+  }
+
+  return false
+}
+
+function onCucumberWorkerThreadMessage (message) {
+  if (!testSuiteFinishCh.hasSubscribers) return
+
+  handleDdWorkerMessage(message)
+}
+
+function registerWorkerThreadMessageHandlers (workers) {
+  if (!workers) return
+
+  for (const worker of workers) {
+    worker.workerThread.on('message', onCucumberWorkerThreadMessage)
+  }
+}
+
+function registerWorkerThreadPatchModule (supportCodeLibrary) {
+  const requireModules = supportCodeLibrary?.originalCoordinates?.requireModules
+  if (!Array.isArray(requireModules) || requireModules.includes(cucumberWorkerThreadsPatchModule)) return
+
+  requireModules.unshift(cucumberWorkerThreadsPatchModule)
+}
+
+function getRunningAssembledTestCase (adapter, worker) {
+  const command = adapter.running?.get(worker)
+  return command?.assembledTestCase
+}
+
+function maybeStartParallelSuite (pickle) {
+  if (!pickle) return
+
+  const testFileAbsolutePath = pickle.uri
+  if (pickleResultByFile[testFileAbsolutePath]) return
+
+  pickleResultByFile[testFileAbsolutePath] = []
+  testSuiteStartCh.publish({
+    testFileAbsolutePath,
+  })
+}
+
+function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
+  const { status } = getStatusFromResultLatest(worstTestStepResult)
+  let isNew = false
+
+  if (isKnownTestsEnabled) {
+    isNew = isNewTest(pickle.uri, pickle.name)
+  }
+
+  const testFileAbsolutePath = pickle.uri
+  const finished = pickleResultByFile[testFileAbsolutePath] || (pickleResultByFile[testFileAbsolutePath] = [])
+
+  if (isEarlyFlakeDetectionEnabled && isNew) {
+    const testFullname = `${pickle.uri}:${pickle.name}`
+    let testStatuses = newTestsByTestFullname.get(testFullname)
+    if (testStatuses) {
+      testStatuses.push(status)
+    } else {
+      testStatuses = [status]
+      newTestsByTestFullname.set(testFullname, testStatuses)
+    }
+    let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
+    if (efdRetryCount === undefined) {
+      efdRetryCount = status === 'skip'
+        ? 0
+        : getConfiguredEfdRetryCount()
+      efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
+      if (efdRetryCount === 0 && status !== 'skip') {
+        efdSlowAbortedPickleIds.add(pickle.id)
+      }
+    }
+    maybeRecordFinalParallelEfdStatus({ pickleId: pickle.id, testFileAbsolutePath, testFullname })
+  } else if (
+    isTestManagementTestsEnabled &&
+    getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
+  ) {
+    const testFullname = `${pickle.uri}:${pickle.name}`
+    let testStatuses = attemptToFixTestsByTestFullname.get(testFullname)
+    if (testStatuses) {
+      testStatuses.push(status)
+    } else {
+      testStatuses = [status]
+      attemptToFixTestsByTestFullname.set(testFullname, testStatuses)
+    }
+
+    if (status === 'skip' || testStatuses.length === testManagementAttemptToFixRetries + 1) {
+      finished.push(getTestStatusFromAttemptToFixExecutions(testStatuses))
+      attemptToFixTestsByTestFullname.delete(testFullname)
+    }
+  } else {
+    // TODO: can we get error message?
+    finished.push(status)
+  }
+
+  finishParallelSuiteIfDone(testFileAbsolutePath)
+}
+
+function getWrappedHandleWorkerThreadEvent (handleEventFromWorker) {
+  return function (worker, event) {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return handleEventFromWorker.apply(this, arguments)
+    }
+
+    if (handleDdWorkerMessage(event)) return
+
+    const envelope = event?.type === 'ENVELOPE' && event.envelope
+    if (!envelope) {
+      return handleEventFromWorker.apply(this, arguments)
+    }
+
+    const assembledTestCase = getRunningAssembledTestCase(this, worker)
+
+    if (envelope.testCaseStarted) {
+      maybeStartParallelSuite(assembledTestCase?.pickle)
+    }
+
+    const result = handleEventFromWorker.apply(this, arguments)
+
+    if (envelope.testCaseFinished && assembledTestCase?.pickle && eventDataCollector) {
+      const worstTestStepResult =
+        eventDataCollector.getTestCaseAttempt(envelope.testCaseFinished.testCaseStartedId).worstTestStepResult
+      handleParallelTestCaseFinished(assembledTestCase.pickle, worstTestStepResult)
+    }
+
+    return result
+  }
+}
+
+function getWrappedWorkerThreadsSetup (setup) {
+  return async function () {
+    if (testSuiteFinishCh.hasSubscribers) {
+      configureParallelWorkerWorldParameters(this.options)
+      registerWorkerThreadPatchModule(this.supportCodeLibrary)
+    }
+
+    const result = await setup.apply(this, arguments)
+
+    if (testSuiteFinishCh.hasSubscribers) {
+      registerWorkerThreadMessageHandlers(this.workers)
+    }
+
+    return result
+  }
+}
+
+function getWrappedWorkerThreadsTeardown (teardown) {
+  return function () {
+    if (testSuiteFinishCh.hasSubscribers && this.workers) {
+      for (const worker of this.workers) {
+        worker.workerThread.removeListener('message', onCucumberWorkerThreadMessage)
+      }
+    }
+
+    return teardown.apply(this, arguments)
   }
 }
 
@@ -929,6 +1180,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (!testSuiteFinishCh.hasSubscribers) {
       return runTestCaseFunction.apply(this, arguments)
     }
+    if (isWorker) {
+      readParallelWorkerWorldParameters(this.options)
+    }
     const pickle = isNewerCucumberVersion
       ? arguments[0].pickle
       : this.eventDataCollector.getPickle(arguments[0])
@@ -1113,26 +1367,25 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
   }
 }
 
+function patchCucumberWorkerRunTestCase (workerPackage, isWorker) {
+  const workerPrototype = workerPackage?.Worker?.prototype
+  if (!workerPrototype || patchedCucumberWorkers.has(workerPrototype)) return
+
+  patchedCucumberWorkers.add(workerPrototype)
+  shimmer.wrap(
+    workerPrototype,
+    'runTestCase',
+    runTestCase => getWrappedRunTestCase(runTestCase, true, isWorker)
+  )
+}
+
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion) {
   return function (worker, message) {
     if (!testSuiteFinishCh.hasSubscribers) {
       return parseWorkerMessageFunction.apply(this, arguments)
     }
-    // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing,
-    // or cucumber will throw an error
-    // TODO: identify the message better
-    if (Array.isArray(message)) {
-      const [messageCode, payload] = message
-      if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
-        collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
-        workerReportTraceCh.publish(payload)
-        return
-      }
-    }
-    if (message[DD_EFD_RETRY_COUNT_MESSAGE]) {
-      handleEfdRetryCountMessage(message[DD_EFD_RETRY_COUNT_MESSAGE])
-      return
-    }
+    // If it's a dd-trace message, stop cucumber processing or cucumber will throw an error.
+    if (handleDdWorkerMessage(message)) return
 
     const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
@@ -1149,10 +1402,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         return parseWorkerMessageFunction.apply(this, arguments)
       }
     }
-    if (parsed[DD_EFD_RETRY_COUNT_MESSAGE]) {
-      handleEfdRetryCountMessage(parsed[DD_EFD_RETRY_COUNT_MESSAGE])
-      return
-    }
+    if (handleDdWorkerMessage(parsed)) return
     let pickle
 
     if (parsed.testCaseStarted) {
@@ -1162,15 +1412,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         const { pickleId } = this.eventDataCollector.testCaseMap[parsed.testCaseStarted.testCaseId]
         pickle = this.eventDataCollector.getPickle(pickleId)
       }
-      // THIS FAILS IN PARALLEL MODE
-      const testFileAbsolutePath = pickle.uri
-      // First test in suite
-      if (!pickleResultByFile[testFileAbsolutePath]) {
-        pickleResultByFile[testFileAbsolutePath] = []
-        testSuiteStartCh.publish({
-          testFileAbsolutePath,
-        })
-      }
+      maybeStartParallelSuite(pickle)
     }
 
     const parseWorkerResponse = parseWorkerMessageFunction.apply(this, arguments)
@@ -1188,65 +1430,14 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         pickle = testCase.pickle
       }
 
-      const { status } = getStatusFromResultLatest(worstTestStepResult)
-      let isNew = false
-
-      if (isKnownTestsEnabled) {
-        isNew = isNewTest(pickle.uri, pickle.name)
-      }
-
-      const testFileAbsolutePath = pickle.uri
-      const finished = pickleResultByFile[testFileAbsolutePath]
-
-      if (isEarlyFlakeDetectionEnabled && isNew) {
-        const testFullname = `${pickle.uri}:${pickle.name}`
-        let testStatuses = newTestsByTestFullname.get(testFullname)
-        if (testStatuses) {
-          testStatuses.push(status)
-        } else {
-          testStatuses = [status]
-          newTestsByTestFullname.set(testFullname, testStatuses)
-        }
-        let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
-        if (efdRetryCount === undefined) {
-          efdRetryCount = status === 'skip'
-            ? 0
-            : getConfiguredEfdRetryCount()
-          efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
-          if (efdRetryCount === 0 && status !== 'skip') {
-            efdSlowAbortedPickleIds.add(pickle.id)
-          }
-        }
-        maybeRecordFinalParallelEfdStatus({ pickleId: pickle.id, testFileAbsolutePath, testFullname })
-      } else if (
-        isTestManagementTestsEnabled &&
-        getTestProperties(getTestSuitePath(testFileAbsolutePath, process.cwd()), pickle.name).attemptToFix
-      ) {
-        const testFullname = `${pickle.uri}:${pickle.name}`
-        let testStatuses = attemptToFixTestsByTestFullname.get(testFullname)
-        if (testStatuses) {
-          testStatuses.push(status)
-        } else {
-          testStatuses = [status]
-          attemptToFixTestsByTestFullname.set(testFullname, testStatuses)
-        }
-
-        if (status === 'skip' || testStatuses.length === testManagementAttemptToFixRetries + 1) {
-          finished.push(getTestStatusFromAttemptToFixExecutions(testStatuses))
-          attemptToFixTestsByTestFullname.delete(testFullname)
-        }
-      } else {
-        // TODO: can we get error message?
-        const finished = pickleResultByFile[testFileAbsolutePath]
-        finished.push(status)
-      }
-
-      finishParallelSuiteIfDone(testFileAbsolutePath)
+      handleParallelTestCaseFinished(pickle, worstTestStepResult)
     }
 
     return parseWorkerResponse
   }
 }
+
+module.exports.patchCucumberWorkerRunTestCase = patchCucumberWorkerRunTestCase
 
 // Test start / finish for older versions. The only hook executed in workers when in parallel mode
 addHook({
@@ -1319,11 +1510,7 @@ addHook({
   versions: ['>=11.0.0'],
   file: 'lib/runtime/worker.js',
 }, (workerPackage) => {
-  shimmer.wrap(
-    workerPackage.Worker.prototype,
-    'runTestCase',
-    runTestCase => getWrappedRunTestCase(runTestCase, true, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
-  )
+  patchCucumberWorkerRunTestCase(workerPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
   return workerPackage
 })
 
@@ -1359,7 +1546,7 @@ addHook({
 // In `startWorker` we pass early flake detection info to the worker.
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
+  versions: ['>=11.0.0 <13.0.0'],
   file: 'lib/runtime/parallel/adapter.js',
 }, (adapterPackage) => {
   shimmer.wrap(
@@ -1369,37 +1556,34 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function (...args) {
-    if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
-      this.options.worldParameters._ddIsKnownTestsEnabled = true
-      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-      this.options.worldParameters._ddKnownTests = knownTests
-      this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-      this.options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
-    } else {
-      isEarlyFlakeDetectionEnabled = false
-      isKnownTestsEnabled = false
-      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
-      this.options.worldParameters._ddIsKnownTestsEnabled = false
-      this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
-      this.options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = {}
-    }
-
-    if (isImpactedTestsEnabled) {
-      this.options.worldParameters._ddImpactedTestsEnabled = isImpactedTestsEnabled
-      this.options.worldParameters._ddModifiedFiles = modifiedFiles
-    }
-
-    this.options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-    this.options.worldParameters._ddNumTestRetries = numTestRetries
-
-    if (isTestManagementTestsEnabled) {
-      this.options.worldParameters._ddIsTestManagementTestsEnabled = true
-      this.options.worldParameters._ddTestManagementTests = testManagementTests
-      this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
-    }
-
+    configureParallelWorkerWorldParameters(this.options)
     return startWorker.apply(this, args)
   })
+  return adapterPackage
+})
+
+// Only executed in parallel mode for >=13, in the main process.
+// Cucumber v13 uses worker_threads and receives worker events via MessagePort.
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=13.0.0'],
+  file: 'lib/runtime/parallel/adapter.js',
+}, (adapterPackage) => {
+  shimmer.wrap(
+    adapterPackage.WorkerThreadsAdapter.prototype,
+    'setup',
+    setup => getWrappedWorkerThreadsSetup(setup)
+  )
+  shimmer.wrap(
+    adapterPackage.WorkerThreadsAdapter.prototype,
+    'handleEventFromWorker',
+    handleEventFromWorker => getWrappedHandleWorkerThreadEvent(handleEventFromWorker)
+  )
+  shimmer.wrap(
+    adapterPackage.WorkerThreadsAdapter.prototype,
+    'teardown',
+    teardown => getWrappedWorkerThreadsTeardown(teardown)
+  )
   return adapterPackage
 })
 
@@ -1408,7 +1592,7 @@ addHook({
 // `getWrappedRunTestCase`.
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
+  versions: ['>=11.0.0 <13.0.0'],
   file: 'lib/runtime/parallel/worker.js',
 }, (workerPackage) => {
   shimmer.wrap(
@@ -1416,31 +1600,7 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isKnownTestsEnabled = !!this.options.worldParameters._ddIsKnownTestsEnabled
-      if (isKnownTestsEnabled) {
-        knownTests = this.options.worldParameters._ddKnownTests
-        // if for whatever reason the worker does not receive valid known tests, we disable EFD and known tests
-        if (!isValidKnownTests(knownTests)) {
-          isKnownTestsEnabled = false
-          knownTests = {}
-        }
-      }
-      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
-      if (isEarlyFlakeDetectionEnabled) {
-        earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
-        earlyFlakeDetectionSlowTestRetries = this.options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries ?? {}
-      }
-      isImpactedTestsEnabled = !!this.options.worldParameters._ddImpactedTestsEnabled
-      if (isImpactedTestsEnabled) {
-        modifiedFiles = this.options.worldParameters._ddModifiedFiles
-      }
-      isFlakyTestRetriesEnabled = !!this.options.worldParameters._ddIsFlakyTestRetriesEnabled
-      numTestRetries = this.options.worldParameters._ddNumTestRetries ?? 0
-      isTestManagementTestsEnabled = !!this.options.worldParameters._ddIsTestManagementTestsEnabled
-      if (isTestManagementTestsEnabled) {
-        testManagementTests = this.options.worldParameters._ddTestManagementTests
-        testManagementAttemptToFixRetries = this.options.worldParameters._ddTestManagementAttemptToFixRetries
-      }
+      readParallelWorkerWorldParameters(this.options)
     }
   )
   return workerPackage
