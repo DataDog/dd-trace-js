@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-3-haiku-20240307-v1:0/converse",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"messages\": [{\"role\": \"user\", \"content\": [{\"text\": \"hi\"}]}], \"inferenceConfig\": {\"temperature\": 0.5, \"maxTokens\": 512}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "x-amzn-RequestId": "00000000-0000-0000-0000-000000000000"
+    },
+    "body": "{\"metrics\": {\"latencyMs\": 100}, \"output\": {\"message\": {\"role\": \"assistant\", \"content\": [{\"toolResult\": {\"toolUseId\": \"tr-1\", \"content\": [{\"weird\": 1}]}}, {\"reasoningContent\": {}}]}}, \"stopReason\": \"end_turn\", \"usage\": {\"inputTokens\": 3, \"outputTokens\": 2, \"totalTokens\": 5}}"
+  }
+}

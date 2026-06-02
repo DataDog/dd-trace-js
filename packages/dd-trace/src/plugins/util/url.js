@@ -2,8 +2,6 @@
 
 const { URL } = require('url')
 
-const log = require('../../log')
-
 const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
@@ -40,7 +38,7 @@ function getProtocol (req) {
 /**
  * Obfuscate query string
  *
- * @param {{ queryStringObfuscation: boolean | RegExp }} config
+ * @param {object} config
  * @param {string} url
  * @returns {string} obfuscated URL
  */
@@ -60,38 +58,6 @@ function obfuscateQs (config, url) {
   qs = qs.replace(queryStringObfuscation, '<redacted>')
 
   return `${path}?${qs}`
-}
-
-/**
- * Normalize a user-supplied `queryStringObfuscation` value into the shape
- * {@link obfuscateQs} expects (`false`, `true`, or a compiled `RegExp`).
- *
- * @param {{ queryStringObfuscation?: boolean | string }} config
- * @returns {boolean | RegExp}
- */
-function getQsObfuscator (config) {
-  const obfuscator = config.queryStringObfuscation
-
-  if (typeof obfuscator === 'boolean') {
-    return obfuscator
-  }
-
-  if (typeof obfuscator === 'string') {
-    if (obfuscator === '') return false
-    if (obfuscator === '.*') return true
-
-    try {
-      return new RegExp(obfuscator, 'gi')
-    } catch (error) {
-      log.error('Error compiling query string obfuscation regex', error)
-    }
-  }
-
-  if (Object.hasOwn(config, 'queryStringObfuscation')) {
-    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
-  }
-
-  return true
 }
 
 /**
@@ -173,7 +139,6 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
 module.exports = {
   extractURL,
   obfuscateQs,
-  getQsObfuscator,
   calculateHttpEndpoint,
   filterSensitiveInfoFromRepository,
   extractPathFromUrl, // test only

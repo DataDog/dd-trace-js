@@ -3,7 +3,7 @@
 <!-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -->
 
 <!-- PR title must follow Conventional Commits format: type(scope): description -->
-<!-- Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert -->
+<!-- Valid types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore, revert -->
 
 ### What does this PR do?
 <!-- A brief description of the change being made with this pull request. -->

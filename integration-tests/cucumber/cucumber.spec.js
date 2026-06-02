@@ -43,7 +43,6 @@ const {
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
@@ -93,6 +92,7 @@ function assertItrSkippingEnabledTags (events, expected) {
 }
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
 
@@ -105,7 +105,7 @@ const fileExtension = 'js'
 
 // TODO: add esm tests
 describe(`cucumber@${version} commonJS`, () => {
-  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+  if (!isLatestCucumberSupported && version === 'latest') return
 
   let cwd, receiver, childProcess, testOutput
 
@@ -458,9 +458,8 @@ describe(`cucumber@${version} commonJS`, () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
               metadataDicts.forEach(metadata => {
-                for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                  assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-                }
+                assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+                assert.ok(metadata['*'][TEST_COMMAND])
               })
 
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -480,14 +479,12 @@ describe(`cucumber@${version} commonJS`, () => {
               }
 
               assert.ok(testSessionEventContent.test_session_id)
-              assert.ok(testSessionEventContent.meta[TEST_COMMAND])
               assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
               assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
               assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
               assert.ok(testModuleEventContent.test_session_id)
               assert.ok(testModuleEventContent.test_module_id)
-              assert.ok(testModuleEventContent.meta[TEST_COMMAND])
               assert.ok(testModuleEventContent.meta[TEST_MODULE])
               assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
               assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
@@ -514,7 +511,6 @@ describe(`cucumber@${version} commonJS`, () => {
                   test_session_id: testSessionId,
                 },
               }) => {
-                assert.ok(meta[TEST_COMMAND])
                 assert.ok(meta[TEST_MODULE])
                 assert.ok(testSuiteId)
                 assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
@@ -550,7 +546,6 @@ describe(`cucumber@${version} commonJS`, () => {
                   test_session_id: testSessionId,
                 },
               }) => {
-                assert.ok(meta[TEST_COMMAND])
                 assert.ok(meta[TEST_MODULE])
                 assert.ok(testSuiteId)
                 assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
@@ -3452,7 +3447,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
             })
           })
 
