@@ -142,6 +142,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 - Files shall end with a single new line at the end
 - Use destructuring for better code readability
 - Line length is capped at 120 characters
+- Avoid abbreviations. Use short expressive variable, method, and function names
 - Comments only for non-obvious intent, trade-offs, or constraints the code can't carry. Don't narrate what the diff already shows.
 
 ### Linting & Naming
@@ -204,6 +205,7 @@ Separate groups with empty line, sort alphabetically within each:
 - Don't use `Object.keys(obj).length` as an emptiness probe — it allocates the keys array. Track presence with a boolean at the assignment site, probe a known key (`obj.knownField !== undefined`), or return `undefined` when there's nothing to report.
 - Fold gate + payload into one pass when the gate's question and the work share a computation. Stringify once and gate on `result.length` beats `Object.keys(dd).length === 0` then later `JSON.stringify(dd)`.
 - Cache compiled regexes and parsed values at module load; never compile per-call.
+- Prefer one-time data transformations (e.g., at file load time) over call-site transformations later.
 - Order short-circuit chains by `frequency × cheapness`: the cheap common case first, the expensive rare case last. A `value === null` check outside an enclosing `typeof === 'object'` arm pays the null comparison on every primitive — move it inside.
 
 **Verifying perf-motivated changes.** A rewrite justified by speed (`for` replacing `.map()`, hand-inlined helper, `new Array(n)` + indexed assignment over `.map()`) needs a one-file microbenchmark before it lands. Warm up for ~1 s, time ≥5 trials of each implementation, then re-run in a fresh shell to confirm the numbers reproduce. Decide: **equal** (within ~±2 %) → keep the more readable one; **marginal** (~5 %) → justify the trade-off in the commit body; **real** (≥10 %, reproducible) → keep, and put the numbers in the commit body. Throw the benchmark file away once the decision lands, or graduate it to `benchmark/sirun/` if it has lasting value.
@@ -309,6 +311,12 @@ cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<name>/s
 
 Edit `src/index.js`, create `test/index.spec.js`, then register in:
 `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`
+
+Validate basic plugin structure with:
+
+```bash
+./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
+```
 
 ## Pull Requests and CI
 
