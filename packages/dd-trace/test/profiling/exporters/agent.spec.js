@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { format } = require('node:util')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
@@ -318,14 +319,22 @@ describe('exporters/agent', function () {
         doneLogs = resolve
       })
 
-      function onMessage (message) {
+      let index = 0
+      function onMessage (...args) {
         const expected = expectedLogs[index++]
-        assert.match(typeof message === 'function' ? message() : message, expected)
+        const message = typeof args[0] === 'function' ? args[0]() : format(...args)
+        assert.match(message, expected)
         if (index >= expectedLogs.length) doneLogs()
       }
 
-      let index = 0
-      const exporter = newAgentExporter({ url, logger: { debug: onMessage, warn: onMessage } })
+      const logStub = { debug: onMessage, warn: onMessage, error: () => {}, info: () => {} }
+      const { AgentExporter: AgentExporterStubbed } = proxyquire(
+        '../../../src/profiling/exporters/agent',
+        { '../../exporters/common/docker': docker, http, '../../log': logStub }
+      )
+      const exporter = new AgentExporterStubbed({
+        url, uploadTimeout: 100, env: ENV, service: SERVICE, version: APP_VERSION, host: HOST,
+      })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
@@ -354,7 +363,7 @@ describe('exporters/agent', function () {
     })
 
     it('should not retry on 4xx errors', async function () {
-      const exporter = newAgentExporter({ url, logger: { debug: () => {}, warn: () => {} } })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }

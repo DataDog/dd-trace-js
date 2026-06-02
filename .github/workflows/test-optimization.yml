@@ -285,7 +285,41 @@ jobs:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
+  selenium-image:
+    name: Ensure Selenium Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Determine image tag
+        id: image
+        run: |
+          DOCKER_HASH=$(sha256sum .github/selenium/Dockerfile | cut -c1-8)
+          IMAGE="ghcr.io/datadog/dd-trace-js/selenium-tools:${DOCKER_HASH}"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Ensure image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "Image ${IMAGE} already exists, skipping build"
+          else
+            docker build -t "${IMAGE}" .github/selenium
+            docker push "${IMAGE}"
+          fi
+
   integration-selenium:
+    needs: selenium-image
     strategy:
       fail-fast: false
       matrix:
@@ -293,6 +327,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    container:
+      image: ${{ needs.selenium-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -304,24 +343,11 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
-      - name: Install Google Chrome
-        run: |
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          if [ $? -ne 0 ]; then echo "Failed to add Google key"; exit 1; fi
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          if [ $? -ne 0 ]; then echo "Failed to install Google Chrome"; exit 1; fi
-      - name: Install ChromeDriver
-        run: |
-          export CHROME_VERSION=$(google-chrome --version)
-          CHROME_DRIVER_DOWNLOAD_URL=$(node --experimental-fetch scripts/get-chrome-driver-download-url.js)
-          wget -q "$CHROME_DRIVER_DOWNLOAD_URL"
-          if [ $? -ne 0 ]; then echo "Failed to download ChromeDriver"; exit 1; fi
-          unzip chromedriver-linux64.zip
-          sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
-          sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
+      - name: Configure Git safe directory
+        # The Selenium job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: yarn test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
@@ -345,6 +371,7 @@ jobs:
         spec:
           - cypress-reporting
           - cypress-itr
+          - cypress-tia-code-coverage
           - cypress-efd
           - cypress-atr
           - cypress-test-management
@@ -384,14 +411,20 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      # We cache Cypress binaries for fixed versions (6.7.0, 12.0.0, 14.5.4) but not for "latest"
-      # as that changes frequently and would have a low cache hit rate
+      - name: Resolve Cypress version
+        id: cypress-version
+        run: |
+          if [ "${{ matrix.cypress-version }}" = "latest" ]; then
+            RESOLVED=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies.cypress")
+          else
+            RESOLVED="${{ matrix.cypress-version }}"
+          fi
+          echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
       - name: Cache Cypress binary
-        if: matrix.cypress-version != 'latest'
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/Cypress
-          key: cypress-binary-${{ matrix.cypress-version }}
+          key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
       - run: yarn config set ignore-engines true
       - run: yarn test:integration:cypress:coverage --ignore-engines
         env:

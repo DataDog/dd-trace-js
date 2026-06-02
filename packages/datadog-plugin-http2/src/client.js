@@ -9,12 +9,9 @@ const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
-const { calculateHttpEndpoint, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
-const HTTP_URL = tags.HTTP_URL
-const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -33,35 +30,27 @@ class Http2ClientPlugin extends ClientPlugin {
   bindStart (message) {
     const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
-    const rawPath = headers[HTTP2_HEADER_PATH] || '/'
-    const [pathname, pathWithQuery] = splitPathAndQuery(rawPath)
+    const path = headers[HTTP2_HEADER_PATH] || '/'
+    const pathname = path.split(/[?#]/)[0]
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-    const origin = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
-    const uri = `${origin}${pathname}`
-    const httpUrl = pathname === pathWithQuery
-      ? uri
-      : obfuscateQs(this.config, `${origin}${pathWithQuery}`)
+    const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
     const allowed = this.config.filter(uri)
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
-    const meta = {
-      [COMPONENT]: this.constructor.id,
-      [SPAN_KIND]: CLIENT,
-      'resource.name': method,
-      'span.type': 'http',
-      'http.method': method,
-      [HTTP_URL]: httpUrl,
-      'out.host': sessionDetails.host,
-    }
-    if (this.config.resourceRenamingEnabled) {
-      meta[HTTP_ENDPOINT] = calculateHttpEndpoint(pathname)
-    }
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails }),
-      meta,
+      meta: {
+        [COMPONENT]: this.constructor.id,
+        [SPAN_KIND]: CLIENT,
+        'resource.name': method,
+        'span.type': 'http',
+        'http.method': method,
+        'http.url': uri,
+        'out.host': sessionDetails.host,
+      },
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
       },
@@ -74,7 +63,7 @@ class Http2ClientPlugin extends ClientPlugin {
 
     addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
 
-    if (!hasAmazonSignature(headers, rawPath)) {
+    if (!hasAmazonSignature(headers, path)) {
       this.tracer.inject(span, HTTP_HEADERS, headers)
     }
 
@@ -190,32 +179,13 @@ function normalizeConfig (config) {
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(config)
   const headers = getHeaders(config)
-  const queryStringObfuscation = getQsObfuscator(config)
 
   return {
     ...config,
     validateStatus,
     filter,
     headers,
-    queryStringObfuscation,
   }
-}
-
-/**
- * Split a raw HTTP/2 `:path` header into the path-only segment (for
- * `http.endpoint` and filters) and the path-plus-query segment (for the
- * `http.url` tag). Fragments are dropped from both.
- *
- * @param {string} rawPath
- * @returns {[string, string]} `[path, pathWithQuery]`
- */
-function splitPathAndQuery (rawPath) {
-  const fragmentIndex = rawPath.indexOf('#')
-  const pathWithQuery = fragmentIndex === -1 ? rawPath : rawPath.slice(0, fragmentIndex)
-  const queryIndex = pathWithQuery.indexOf('?')
-  const path = queryIndex === -1 ? pathWithQuery : pathWithQuery.slice(0, queryIndex)
-
-  return [path, pathWithQuery]
 }
 
 function getFilter (config) {

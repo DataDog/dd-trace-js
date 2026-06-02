@@ -230,6 +230,7 @@ interface Plugins {
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
@@ -245,6 +246,7 @@ interface Plugins {
   "cypress": tracer.plugins.cypress;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
+  "electron": tracer.plugins.electron;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -278,6 +280,7 @@ interface Plugins {
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
@@ -861,6 +864,21 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Configuration for span enrichment with feature flag evaluation data.
+         */
+        spanEnrichment?: {
+          /**
+           * Whether to enable span enrichment with feature flag data.
+           * When enabled, feature flag evaluation metadata is attached to APM spans.
+           * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED environment variable.
+           *
+           * @default false
+           * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
       }
     };
 
@@ -2007,6 +2025,20 @@ declare namespace tracer {
     interface Instrumentation extends Integration, Analyzable {}
 
     /** @hidden */
+    interface DatabaseInstrumentation extends Instrumentation {
+      /**
+       * Truncate the resource name (e.g. the query) to the given length.
+       * When set to `true`, truncates to 5000 characters (matching the
+       * Datadog agent's default). When set to a number, truncates to that
+       * many characters. This can help prevent large queries from blocking
+       * the event loop during trace encoding.
+       *
+       * @default false
+       */
+      truncate?: boolean | number;
+    }
+
+    /** @hidden */
     interface Http extends Instrumentation {
       /**
        * List of URLs/paths that should be instrumented.
@@ -2111,8 +2143,7 @@ declare namespace tracer {
       middleware?: boolean;
 
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url` on both
-       * inbound (server) and outbound (client) HTTP spans.
+       * Whether (or how) to obfuscate querystring values in `http.url`.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2191,8 +2222,7 @@ declare namespace tracer {
        */
       validateStatus?: (code: number) => boolean;
       /**
-       * Whether (or how) to obfuscate querystring values in `http.url` on both
-       * inbound (server) and outbound (client) HTTP spans.
+       * Whether (or how) to obfuscate querystring values in `http.url`.
        *
        * - `true`: obfuscate all values
        * - `false`: disable obfuscation
@@ -2228,7 +2258,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Prisma extends Instrumentation {}
+    interface Prisma extends DatabaseInstrumentation {}
 
     /** @hidden */
     interface PrismaClient extends Prisma {}
@@ -2349,6 +2379,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * @azure/cosmos module
+     */
+    interface azure_cosmos extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * @azure/event-hubs module
      */
     interface azure_event_hubs extends Integration {}
@@ -2452,6 +2488,26 @@ declare namespace tracer {
          */
         query?: (span?: Span, params?: TransportRequestParams) => any;
       };
+    }
+
+    /**
+     * This plugin automatically instruments the
+     * [electron](https://github.com/electron/electron) module.
+     */
+    interface electron extends Instrumentation {
+      /**
+       * Whether to enable instrumentation of ipc spans
+       *
+       * @default true
+       */
+      ipc?: boolean;
+
+      /**
+       * Whether to enable instrumentation of net spans
+       *
+       * @default true
+       */
+      net?: boolean;
     }
 
     /**
@@ -2944,6 +3000,13 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@nats-io/transport-node](https://github.com/nats-io/nats.js) and
+     * [@nats-io/nats-core](https://github.com/nats-io/nats.js) modules.
+     */
+    interface nats extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [net](https://nodejs.org/api/net.html) module.
      */
     interface net extends Instrumentation {}
@@ -3011,7 +3074,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [pg](https://node-postgres.com/) module.
      */
-    interface pg extends Instrumentation {
+    interface pg extends DatabaseInstrumentation {
       /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
@@ -3756,6 +3819,11 @@ declare namespace tracer {
     }
 
     interface LLMObservabilitySpan {
+      /**
+       * The span kind
+       */
+      kind: spanKind,
+
       /**
        * The input content associated with the span.
        */

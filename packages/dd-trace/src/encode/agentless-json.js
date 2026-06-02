@@ -86,10 +86,12 @@ class AgentlessJSONEncoder {
   /**
    * @param {object} writer - Writer instance with a flush() method, called when the buffer exceeds the soft limit
    * @param {object} [metadata] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
+   * @param {number} [softLimit] - Estimated payload-size threshold that triggers an early flush. Defaults to 8 MiB.
    */
-  constructor (writer, metadata = {}) {
+  constructor (writer, metadata = {}, softLimit = SOFT_LIMIT) {
     this._writer = writer
     this._metadata = metadata
+    this._softLimit = softLimit
     this._reset()
   }
 
@@ -134,7 +136,7 @@ class AgentlessJSONEncoder {
       log.error('All %d span(s) in trace failed to encode. Entire trace dropped.', trace.length)
     }
 
-    if (this._estimatedSize > SOFT_LIMIT) {
+    if (this._estimatedSize > this._softLimit) {
       log.debug('Buffer went over soft limit, flushing')
       try {
         this._writer.flush()
