@@ -894,6 +894,170 @@ function createGarbage (count = 50) {
   })
 })
 
+// Shared with loadOtlpRuntimeMetricsTestModule — GC tests need the same observer stub.
+class FakePerformanceObserverForOtlp {
+  constructor (callback) {
+    this.callback = callback
+    FakePerformanceObserverForOtlp.instances.push(this)
+  }
+
+  observe () {}
+  disconnect () {}
+}
+FakePerformanceObserverForOtlp.instances = []
+
+/**
+ * Loads otlp_runtime_metrics with a mock meter for unit tests.
+ * @param {{ monitorEventLoopDelay?: () => unknown }} [overrides]
+ * @returns {{
+ *   otlpMetrics: object,
+ *   createdInstruments: Record<string, object>,
+ *   callbacks: Record<string, Function[]>,
+ *   records: Record<string, unknown[]>,
+ *   batchCallbacks: Array<{ cb: Function, observables: object[] }>,
+ *   fireBatchCallbacks: () => Map<object, Array<{ v: number, a: object }>>,
+ *   fakeMetricsClient: object,
+ * }}
+ */
+function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
+  const createdInstruments = {}
+  const callbacks = {}
+  const records = {}
+  const batchCallbacks = []
+  const statsdCalls = []
+  FakePerformanceObserverForOtlp.instances = []
+
+  function makeFactory (type) {
+    return (name, opts) => {
+      const instrument = {
+        name,
+        type,
+        opts,
+        addCallback (cb) {
+          if (!callbacks[name]) callbacks[name] = []
+          callbacks[name].push(cb)
+        },
+        removeCallback (cb) {
+          const list = callbacks[name]
+          if (!list) return
+          const idx = list.indexOf(cb)
+          if (idx !== -1) list.splice(idx, 1)
+        },
+        record (value, attrs) {
+          if (!records[name]) records[name] = []
+          records[name].push({ v: value, a: attrs })
+        },
+      }
+      createdInstruments[name] = instrument
+      return instrument
+    }
+  }
+
+  const mockMeter = {
+    createObservableGauge: makeFactory('gauge'),
+    createObservableUpDownCounter: makeFactory('updowncounter'),
+    createObservableCounter: makeFactory('observable-counter'),
+    createHistogram: makeFactory('histogram'),
+    addBatchObservableCallback (cb, observables) {
+      batchCallbacks.push({ cb, observables })
+    },
+    removeBatchObservableCallback (cb) {
+      const idx = batchCallbacks.findIndex(r => r.cb === cb)
+      if (idx !== -1) batchCallbacks.splice(idx, 1)
+    },
+  }
+
+  const realPerfHooks = require('node:perf_hooks')
+
+  const fakeMetricsClient = {
+    boolean (name, value, tag) { statsdCalls.push(['boolean', name, value, tag]) },
+    histogram (name, value, tag) { statsdCalls.push(['histogram', name, value, tag]) },
+    count (name, count, tag, monotonic) { statsdCalls.push(['count', name, count, tag, monotonic]) },
+    gauge (name, value, tag) { statsdCalls.push(['gauge', name, value, tag]) },
+    flush () {},
+  }
+
+  const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
+
+  const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+    '@opentelemetry/api': {
+      metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
+    },
+    '../log': { debug () {}, error () {} },
+    'node:perf_hooks': {
+      performance: realPerfHooks.performance,
+      monitorEventLoopDelay,
+      PerformanceObserver: FakePerformanceObserverForOtlp,
+      constants: realPerfHooks.constants,
+    },
+    './client': {
+      createMetricsClient: () => fakeMetricsClient,
+    },
+  })
+
+  function fireBatchCallbacks () {
+    const observed = new Map()
+    for (const { cb, observables } of batchCallbacks) {
+      const allowed = new Set(observables)
+      cb({
+        observe: (instrument, value, attrs = {}) => {
+          if (!allowed.has(instrument)) return
+          if (!observed.has(instrument)) observed.set(instrument, [])
+          observed.get(instrument).push({ v: value, a: attrs })
+        },
+      })
+    }
+    return observed
+  }
+
+  return {
+    otlpMetrics,
+    createdInstruments,
+    callbacks,
+    records,
+    batchCallbacks,
+    fireBatchCallbacks,
+    fakeMetricsClient,
+    statsdCalls,
+  }
+}
+
+/**
+ * @param {{ count?: number, countAfterReset?: number, minNs?: number, maxNs?: number,
+ *   meanNs?: number, stddevNs?: number, p50Ns?: number, p90Ns?: number, p99Ns?: number }} opts
+ */
+function makeFakeEventLoopDelayHistogram (opts = {}) {
+  const minNs = opts.minNs ?? 4e6
+  const maxNs = opts.maxNs ?? 8e6
+  const meanNs = opts.meanNs ?? 6e6
+  const stddevNs = opts.stddevNs ?? 1e6
+  const p50Ns = opts.p50Ns ?? 5e6
+  const p90Ns = opts.p90Ns ?? 7e6
+  const p99Ns = opts.p99Ns ?? 7.9e6
+  let count = opts.count ?? 5
+  let resetCalls = 0
+  return {
+    min: minNs,
+    max: maxNs,
+    mean: meanNs,
+    stddev: stddevNs,
+    percentile (p) {
+      if (p === 50) return p50Ns
+      if (p === 90) return p90Ns
+      if (p === 99) return p99Ns
+      return 0
+    },
+    enable () {},
+    disable () {},
+    get count () { return count },
+    reset () {
+      resetCalls++
+      count = opts.countAfterReset ?? 0
+    },
+    getResetCallCount () { return resetCalls },
+  }
+}
+
 // OTel-native runtime metrics path. Names/types/units come from
 // open-telemetry/semantic-conventions: model/{v8js,nodejs}/metrics.yaml.
 describe('otlp_runtime_metrics', () => {
@@ -916,115 +1080,24 @@ describe('otlp_runtime_metrics', () => {
     'nodejs.eventloop.utilization': { type: 'gauge', unit: '1' },
   }
 
-  // Captures the GC observer instance so tests can fire fake entries instead of waiting on real GC.
-  class FakePerformanceObserver {
-    constructor (callback) {
-      this.callback = callback
-      FakePerformanceObserver.instances.push(this)
-    }
-
-    observe () {}
-    disconnect () {}
-  }
-  FakePerformanceObserver.instances = []
-
   let otlpMetrics
   let createdInstruments
   let callbacks
   let records
   let batchCallbacks
   let statsdCalls
+  let fireBatchCallbacks
 
   beforeEach(() => {
-    createdInstruments = {}
-    callbacks = {}
-    records = {}
-    batchCallbacks = []
-    statsdCalls = []
-    FakePerformanceObserver.instances = []
-
-    function makeFactory (type) {
-      return (name, opts) => {
-        const instrument = {
-          name,
-          type,
-          opts,
-          addCallback (cb) {
-            if (!callbacks[name]) callbacks[name] = []
-            callbacks[name].push(cb)
-          },
-          removeCallback (cb) {
-            const list = callbacks[name]
-            if (!list) return
-            const idx = list.indexOf(cb)
-            if (idx !== -1) list.splice(idx, 1)
-          },
-          record (value, attrs) {
-            if (!records[name]) records[name] = []
-            records[name].push({ v: value, a: attrs })
-          },
-        }
-        createdInstruments[name] = instrument
-        return instrument
-      }
-    }
-
-    const mockMeter = {
-      createObservableGauge: makeFactory('gauge'),
-      createObservableUpDownCounter: makeFactory('updowncounter'),
-      createObservableCounter: makeFactory('observable-counter'),
-      createHistogram: makeFactory('histogram'),
-      addBatchObservableCallback (cb, observables) {
-        batchCallbacks.push({ cb, observables })
-      },
-      removeBatchObservableCallback (cb) {
-        const idx = batchCallbacks.findIndex(r => r.cb === cb)
-        if (idx !== -1) batchCallbacks.splice(idx, 1)
-      },
-    }
-
-    const realPerfHooks = require('node:perf_hooks')
-
-    const fakeMetricsClient = {
-      boolean (name, value, tag) { statsdCalls.push(['boolean', name, value, tag]) },
-      histogram (name, value, tag) { statsdCalls.push(['histogram', name, value, tag]) },
-      count (name, count, tag, monotonic) { statsdCalls.push(['count', name, count, tag, monotonic]) },
-      gauge (name, value, tag) { statsdCalls.push(['gauge', name, value, tag]) },
-      flush () {},
-    }
-
-    otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
-      '@opentelemetry/api': {
-        metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
-      },
-      '../log': { debug () {}, error () {} },
-      'node:perf_hooks': {
-        performance: realPerfHooks.performance,
-        monitorEventLoopDelay: realPerfHooks.monitorEventLoopDelay,
-        PerformanceObserver: FakePerformanceObserver,
-        constants: realPerfHooks.constants,
-      },
-      './client': {
-        createMetricsClient: () => fakeMetricsClient,
-      },
-    })
+    const ctx = loadOtlpRuntimeMetricsTestModule()
+    otlpMetrics = ctx.otlpMetrics
+    createdInstruments = ctx.createdInstruments
+    callbacks = ctx.callbacks
+    records = ctx.records
+    batchCallbacks = ctx.batchCallbacks
+    statsdCalls = ctx.statsdCalls
+    fireBatchCallbacks = ctx.fireBatchCallbacks
   })
-
-  // Drives every registered batch callback and returns a Map<instrument, [{v, a}]>.
-  function fireBatchCallbacks () {
-    const observed = new Map()
-    for (const { cb, observables } of batchCallbacks) {
-      const allowed = new Set(observables)
-      cb({
-        observe: (instrument, value, attrs = {}) => {
-          if (!allowed.has(instrument)) return
-          if (!observed.has(instrument)) observed.set(instrument, [])
-          observed.get(instrument).push({ v: value, a: attrs })
-        },
-      })
-    }
-    return observed
-  }
 
   afterEach(() => {
     otlpMetrics.stop()
@@ -1033,13 +1106,16 @@ describe('otlp_runtime_metrics', () => {
   const BATCH_OBSERVED = new Set([
     'v8js.memory.heap.used', 'v8js.memory.heap.limit',
     'v8js.memory.heap.space.available_size', 'v8js.memory.heap.space.physical_size', 'v8js.memory.heap.space.size',
+    'nodejs.eventloop.delay.min', 'nodejs.eventloop.delay.max', 'nodejs.eventloop.delay.mean',
+    'nodejs.eventloop.delay.stddev', 'nodejs.eventloop.delay.p50', 'nodejs.eventloop.delay.p90',
+    'nodejs.eventloop.delay.p99',
   ])
 
   it('registers all OTel-native metrics with spec-correct types and units', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
 
     assert.deepStrictEqual(Object.keys(createdInstruments).sort(), Object.keys(SPEC).sort())
-    assert.strictEqual(batchCallbacks.length, 1, 'heap stats should register exactly one batch callback')
+    assert.strictEqual(batchCallbacks.length, 2, 'heap and event-loop delay stats each register one batch callback')
 
     for (const [name, { type, unit }] of Object.entries(SPEC)) {
       const inst = createdInstruments[name]
@@ -1083,14 +1159,6 @@ describe('otlp_runtime_metrics', () => {
     })
     assert.deepStrictEqual(eluTimePoints.map(e => e.state).sort(), ['active', 'idle'])
 
-    for (const name of [
-      'nodejs.eventloop.delay.min', 'nodejs.eventloop.delay.max', 'nodejs.eventloop.delay.mean',
-    ]) {
-      const points = []
-      callbacks[name][0]({ observe: v => points.push(v) })
-      assert.strictEqual(typeof points[0], 'number', `${name} should record a numeric value`)
-    }
-
     const resourceCounts = []
     callbacks['v8js.resource.active'][0]({
       observe: (v, a) => resourceCounts.push({ v, type: a?.['v8js.resource.type'] }),
@@ -1100,12 +1168,75 @@ describe('otlp_runtime_metrics', () => {
       'every v8js.resource.active observation should have a positive count and a type attribute')
   })
 
+  it('event loop delay batch skips when histogram has fewer than 5 samples', () => {
+    const fakeH = makeFakeEventLoopDelayHistogram({ count: 4 })
+    const ctx = loadOtlpRuntimeMetricsTestModule({
+      monitorEventLoopDelay: () => fakeH,
+    })
+    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    const observed = ctx.fireBatchCallbacks()
+    assert.ok(!observed.has(ctx.createdInstruments['nodejs.eventloop.delay.min']),
+      'delay gauges should not emit when count < 5')
+    assert.strictEqual(fakeH.getResetCallCount(), 0, 'histogram reset should not run when skipping')
+    ctx.otlpMetrics.stop()
+  })
+
+  it('event loop delay batch observes nanoseconds as seconds then resets once', () => {
+    const fakeH = makeFakeEventLoopDelayHistogram({
+      count: 5,
+      minNs: 10e6,
+      maxNs: 20e6,
+      meanNs: 15e6,
+      stddevNs: 2e6,
+      p50Ns: 14e6,
+      p90Ns: 18e6,
+      p99Ns: 19.5e6,
+    })
+    const ctx = loadOtlpRuntimeMetricsTestModule({
+      monitorEventLoopDelay: () => fakeH,
+    })
+    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    const observed = ctx.fireBatchCallbacks()
+
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.min']) ?? []).map(e => e.v),
+      [0.01],
+      'min should convert ns to seconds')
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.max']) ?? []).map(e => e.v),
+      [0.02],
+      'max should convert ns to seconds')
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.mean']) ?? []).map(e => e.v),
+      [0.015],
+      'mean should convert ns to seconds')
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.stddev']) ?? []).map(e => e.v),
+      [0.002],
+      'stddev should convert ns to seconds')
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.p50']) ?? []).map(e => e.v),
+      [0.014],
+      'p50 should convert ns to seconds')
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.p90']) ?? []).map(e => e.v),
+      [0.018],
+      'p90 should convert ns to seconds')
+    assert.deepStrictEqual(
+      (observed.get(ctx.createdInstruments['nodejs.eventloop.delay.p99']) ?? []).map(e => e.v),
+      [0.0195],
+      'p99 should convert ns to seconds')
+
+    assert.strictEqual(fakeH.getResetCallCount(), 1, 'histogram should reset once after emit')
+    ctx.otlpMetrics.stop()
+  })
+
   it('records v8js.gc.duration in seconds with mapped v8js.gc.type attribute', () => {
     const { constants: perfConstants } = require('node:perf_hooks')
     otlpMetrics.start({ runtimeMetrics: { gc: true } })
 
-    assert.strictEqual(FakePerformanceObserver.instances.length, 1, 'GC observer should be installed')
-    const observer = FakePerformanceObserver.instances[0]
+    assert.strictEqual(FakePerformanceObserverForOtlp.instances.length, 1, 'GC observer should be installed')
+    const observer = FakePerformanceObserverForOtlp.instances[0]
 
     // Covers every value of v8js.gc.type plus an unknown kind that should be dropped.
     // kind=2 is V8 MinorMarkSweep (Node 20+) — V8-internal, not in perf_hooks.constants.
@@ -1132,7 +1263,7 @@ describe('otlp_runtime_metrics', () => {
   it('skips gc.duration when runtimeMetrics.gc is false', () => {
     otlpMetrics.start({ runtimeMetrics: { gc: false } })
     assert.ok(!createdInstruments['v8js.gc.duration'], 'gc.duration should not be created when disabled')
-    assert.strictEqual(FakePerformanceObserver.instances.length, 0, 'no GC observer should be installed')
+    assert.strictEqual(FakePerformanceObserverForOtlp.instances.length, 0, 'no GC observer should be installed')
   })
 
   it('fully unwinds partial initialization when an instrument factory throws', () => {
@@ -1233,15 +1364,11 @@ describe('OTLP runtime metrics — pipeline flow', () => {
   const SUM_MONOTONIC = new Set([
     'nodejs.eventloop.time',
   ])
+  // nodejs.eventloop.delay.* need >=5 histogram samples before emitting; not deterministic in this
+  // pipeline. Gauge wire shape is covered by v8js.resource.active / nodejs.eventloop.utilization;
+  // delay batch logic is covered in the mock describe with a fake histogram.
   const GAUGE_METRICS = new Set([
     'v8js.resource.active',
-    'nodejs.eventloop.delay.min',
-    'nodejs.eventloop.delay.max',
-    'nodejs.eventloop.delay.mean',
-    'nodejs.eventloop.delay.stddev',
-    'nodejs.eventloop.delay.p50',
-    'nodejs.eventloop.delay.p90',
-    'nodejs.eventloop.delay.p99',
     'nodejs.eventloop.utilization',
   ])
   const OBSERVABLE_EXPECTED = [...SUM_NONMONOTONIC, ...SUM_MONOTONIC, ...GAUGE_METRICS].sort()

@@ -120,14 +120,29 @@ module.exports = {
     }, activeResource)
 
     // Spec wants nodejs.eventloop.delay.* in seconds; perf_hooks gives nanoseconds.
+    // Match @opentelemetry/instrumentation-runtime-node EventLoopDelayCollector: one batch
+    // callback, guard on sample count, emit, then reset so each interval is independent.
     if (trackEventLoop) {
-      defineEventLoopDelay('nodejs.eventloop.delay.min', 'Event loop minimum delay.', h => h.min)
-      defineEventLoopDelay('nodejs.eventloop.delay.max', 'Event loop maximum delay.', h => h.max)
-      defineEventLoopDelay('nodejs.eventloop.delay.mean', 'Event loop mean delay.', h => h.mean)
-      defineEventLoopDelay('nodejs.eventloop.delay.stddev', 'Event loop standard deviation delay.', h => h.stddev)
-      defineEventLoopDelay('nodejs.eventloop.delay.p50', 'Event loop 50th percentile delay.', h => h.percentile(50))
-      defineEventLoopDelay('nodejs.eventloop.delay.p90', 'Event loop 90th percentile delay.', h => h.percentile(90))
-      defineEventLoopDelay('nodejs.eventloop.delay.p99', 'Event loop 99th percentile delay.', h => h.percentile(99))
+      const delayMin = createDelayGauge('nodejs.eventloop.delay.min', 'Event loop minimum delay.')
+      const delayMax = createDelayGauge('nodejs.eventloop.delay.max', 'Event loop maximum delay.')
+      const delayMean = createDelayGauge('nodejs.eventloop.delay.mean', 'Event loop mean delay.')
+      const delayStddev = createDelayGauge('nodejs.eventloop.delay.stddev', 'Event loop standard deviation delay.')
+      const delayP50 = createDelayGauge('nodejs.eventloop.delay.p50', 'Event loop 50th percentile delay.')
+      const delayP90 = createDelayGauge('nodejs.eventloop.delay.p90', 'Event loop 90th percentile delay.')
+      const delayP99 = createDelayGauge('nodejs.eventloop.delay.p99', 'Event loop 99th percentile delay.')
+
+      registerBatchCallback((result) => {
+        const h = eventLoopHistogram
+        if (!h || h.count < 5) return
+        result.observe(delayMin, toSeconds(h.min))
+        result.observe(delayMax, toSeconds(h.max))
+        result.observe(delayMean, toSeconds(h.mean))
+        result.observe(delayStddev, toSeconds(h.stddev))
+        result.observe(delayP50, toSeconds(h.percentile(50)))
+        result.observe(delayP90, toSeconds(h.percentile(90)))
+        result.observe(delayP99, toSeconds(h.percentile(99)))
+        h.reset()
+      }, [delayMin, delayMax, delayMean, delayStddev, delayP50, delayP90, delayP99])
 
       if (performance.eventLoopUtilization) {
         // Baseline so the first observation isn't 1.0.
@@ -262,11 +277,17 @@ function createHeapInstrument (name, description) {
 /**
  * @param {string} name
  * @param {string} description
- * @param {(histogram: import('node:perf_hooks').IntervalHistogram) => number} getValue
+ * @returns {object}
  */
-function defineEventLoopDelay (name, description, getValue) {
-  const gauge = meter.createObservableGauge(name, { unit: 's', description })
-  registerCallback((result) => {
-    if (eventLoopHistogram) result.observe(getValue(eventLoopHistogram) / 1e9)
-  }, gauge)
+function createDelayGauge (name, description) {
+  return meter.createObservableGauge(name, { unit: 's', description })
+}
+
+/**
+ * @param {number} ns
+ * @returns {number}
+ */
+function toSeconds (ns) {
+  const v = ns / 1e9
+  return Number.isNaN(v) ? 0 : v
 }
