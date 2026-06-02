@@ -6,15 +6,18 @@ const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datas
 const { extractQueueMetadata, isEmpty } = require('../util')
 
 /**
- * @typedef {object} ParsedSqsBody
- * @property {string} [detail-type] - EventBridge envelope marker; AWS sets it on
- *   every `PutEvents` delivery, so it distinguishes an EventBridge event from an
- *   arbitrary user payload.
- * @property {{ _datadog?: Record<string, string> }} [detail] - EventBridge custom
- *   event payload; the producer injects `_datadog` here via `Entries[i].Detail`.
- * @property {string} [Type] - `'Notification'` for SNS -> SQS deliveries.
- * @property {string} [Message] - SNS notification payload; may itself be a
- *   stringified EventBridge envelope (EventBridge -> SNS -> SQS).
+ * Shape of a JSON-parsed SQS message body across the delivery types the
+ * consumer extracts from: `detail-type`/`detail` mark an EventBridge envelope
+ * (the producer injects `_datadog` into `detail` via `Entries[i].Detail`);
+ * `Type`/`Message` mark an SNS `Notification`, whose `Message` may itself be a
+ * stringified EventBridge envelope.
+ *
+ * @typedef {{
+ *   'detail-type'?: string,
+ *   detail?: { _datadog?: Record<string, string> },
+ *   Type?: string,
+ *   Message?: string
+ * }} ParsedSqsBody
  */
 
 /**
