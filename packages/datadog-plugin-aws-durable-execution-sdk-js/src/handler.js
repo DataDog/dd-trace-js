@@ -69,7 +69,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       durableContext: undefined,
       firstExecutionSpanId: span.context?.()?.toSpanId?.(),
       invocationEvent: event,
-      savePromise: null,
+      savePromise: undefined,
       saved: false,
       span,
       tracer: this._tracer,
@@ -121,7 +121,7 @@ function finishOpenChildSpans (executeSpan) {
 
 function maybeSaveCheckpoint (state) {
   if (state.saved || state.savePromise) return state.savePromise
-  if (!state.tracer || !state.span || !state.durableContext) return null
+  if (!state.tracer || !state.span || !state.durableContext) return
 
   state.savePromise = saveTraceContextCheckpointIfUpdated(
     state.tracer,
@@ -133,7 +133,7 @@ function maybeSaveCheckpoint (state) {
     // Best-effort — never break customer workloads.
   }).finally(() => {
     state.saved = true
-    state.savePromise = null
+    state.savePromise = undefined
   })
 
   return state.savePromise

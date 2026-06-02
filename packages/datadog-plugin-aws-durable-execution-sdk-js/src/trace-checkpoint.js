@@ -62,15 +62,15 @@ function overrideParentId (headers, parentId) {
 /**
  * Find the checkpoint with the highest N for _datadog_{N} in the event's operations.
  * @param {unknown} event
- * @returns {{ checkpointNumber: number, operation: object } | null}
+ * @returns {{ checkpointNumber: number, operation: object } | undefined}
  */
-function findLastCheckpointOrNull (event) {
-  if (!event || typeof event !== 'object') return null
+function findLastCheckpoint (event) {
+  if (!event || typeof event !== 'object') return
 
   const operations = event.InitialExecutionState?.Operations
-  if (!Array.isArray(operations)) return null
+  if (!Array.isArray(operations)) return
 
-  let highest = null
+  let highest
   for (const op of operations) {
     const name = op?.Name
     if (typeof name !== 'string' || !name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
@@ -89,17 +89,16 @@ function findLastCheckpointOrNull (event) {
 /**
  * Parse the JSON payload from a checkpoint STEP operation's Payload or StepDetails.Result.
  * @param {object} op
- * @returns {Record<string, string> | null}
+ * @returns {Record<string, string> | undefined}
  */
 function parseCheckpointPayload (op) {
   try {
     const raw = op?.Payload ?? op?.StepDetails?.Result
-    if (!raw || typeof raw !== 'string') return null
+    if (!raw || typeof raw !== 'string') return
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed : null
+    return parsed && typeof parsed === 'object' ? parsed : undefined
   } catch {
     log.debug('Failed to parse checkpoint payload')
-    return null
   }
 }
 
@@ -183,7 +182,7 @@ async function saveTraceContextCheckpointIfUpdated (
     const currentHeaders = injectHeaders(tracer, span)
     if (!currentHeaders || Object.keys(currentHeaders).length === 0) return
 
-    const latest = findLastCheckpointOrNull(event)
+    const latest = findLastCheckpoint(event)
 
     let newNumber
     if (latest) {
