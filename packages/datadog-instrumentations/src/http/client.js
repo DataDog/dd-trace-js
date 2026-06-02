@@ -292,12 +292,7 @@ function patch (http, methodName) {
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
-      try {
-        return urlToOptions(new url.URL(inputURL))
-      } catch {
-        // eslint-disable-next-line n/no-deprecated-api
-        return url.parse(inputURL)
-      }
+      return urlToOptions(new url.URL(inputURL))
     } else if (inputURL instanceof url.URL) {
       return urlToOptions(inputURL)
     } else {
