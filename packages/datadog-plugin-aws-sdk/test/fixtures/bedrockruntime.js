@@ -299,6 +299,46 @@ bedrockruntime.modelConfig = {
   maxTokens,
 }
 
+const converseUserPrompt = 'Explain the concept of distributed tracing in a simple way'
+const converseSystemPrompt = 'You are an expert swe that is to use the tool fetch_concept'
+bedrockruntime.converseRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+  systemPrompt: converseSystemPrompt,
+  userPrompt: converseUserPrompt,
+  request: {
+    system: [{ text: converseSystemPrompt }],
+    messages: [{ role: 'user', content: [{ text: converseUserPrompt }] }],
+    inferenceConfig: { temperature, maxTokens },
+    toolConfig: {
+      tools: [{
+        toolSpec: {
+          name: 'fetch_concept',
+          description: 'Fetch an expert explanation for a concept',
+          inputSchema: {
+            json: {
+              type: 'object',
+              properties: { concept: { type: 'string', description: 'The concept to explain' } },
+              required: ['concept'],
+            },
+          },
+        },
+      }],
+    },
+  },
+  response: {
+    role: 'assistant',
+    stopReason: 'tool_use',
+    toolCall: { name: 'fetch_concept', arguments: { concept: 'distributed tracing' } },
+    inputTokens: 364,
+    outputTokens: 55,
+  },
+  streamedResponse: {
+    inputTokens: 364,
+    outputTokens: 41,
+  },
+}
+
 bedrockruntime.cacheWriteRequest = {
   provider: PROVIDER.ANTHROPIC,
   modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
@@ -362,6 +402,76 @@ bedrockruntime.cacheReadRequest = {
     text: 'The capital of Italy is Rome (Roma in Italian',
   },
   outputRole: 'assistant',
+}
+
+// Multi-turn Converse(Stream) request: the history carries a prior toolUse and
+// the toolResult fed back to the model, and the model then streams a plain-text
+// answer. One realistic flow that exercises both the toolResult content-block
+// parsing (on input) and the stream text-delta accumulation (on output).
+const converseToolResultSystemPrompt = 'Use the tool result to answer the question in one short sentence.'
+const converseToolResultToolUseId = 'tooluse_fetch_concept_1'
+bedrockruntime.converseToolResultRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+  systemPrompt: converseToolResultSystemPrompt,
+  userPrompt: 'Explain distributed tracing',
+  toolUseId: converseToolResultToolUseId,
+  toolResultText: 'Distributed tracing tracks requests across services.{"source":"docs"}',
+  request: {
+    system: [{ text: converseToolResultSystemPrompt }],
+    messages: [
+      { role: 'user', content: [{ text: 'Explain distributed tracing' }] },
+      {
+        role: 'assistant',
+        content: [{
+          toolUse: { toolUseId: converseToolResultToolUseId, name: 'fetch_concept', input: { concept: 'tracing' } },
+        }],
+      },
+      {
+        role: 'user',
+        content: [{
+          toolResult: {
+            toolUseId: converseToolResultToolUseId,
+            content: [{ text: 'Distributed tracing tracks requests across services.' }, { json: { source: 'docs' } }],
+          },
+        }],
+      },
+    ],
+    inferenceConfig: { temperature, maxTokens },
+    toolConfig: {
+      tools: [{
+        toolSpec: {
+          name: 'fetch_concept',
+          description: 'Fetch an expert explanation for a concept',
+          inputSchema: {
+            json: {
+              type: 'object',
+              properties: { concept: { type: 'string', description: 'The concept to explain' } },
+              required: ['concept'],
+            },
+          },
+        },
+      }],
+    },
+  },
+}
+
+bedrockruntime.converseUnsupportedBlocksRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+  userPrompt: 'hi',
+  request: {
+    messages: [{ role: 'user', content: [{ text: 'hi' }] }],
+    inferenceConfig: { temperature, maxTokens },
+  },
+  response: {
+    stopReason: 'end_turn',
+    inputTokens: 3,
+    outputTokens: 2,
+    toolResultId: 'tr-1',
+    unsupportedToolResult: '[Unsupported content type(s): weird]',
+    unsupportedContent: '[Unsupported content type: reasoningContent]',
+  },
 }
 
 module.exports = bedrockruntime
