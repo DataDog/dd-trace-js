@@ -72,7 +72,7 @@ function sampleRequest (req, res, record = false) {
   const resolved = resolveSamplingKey(req, res)
   if (!resolved) return SamplingDecision.SKIP
 
-  if (resolved.route === null) {
+  if (record && resolved.route === null) {
     if (resolved.status === 404 || isBlocked(res)) return SamplingDecision.SKIP
     return SamplingDecision.MISSING_ROUTE
   }
@@ -123,14 +123,10 @@ function getRouteOrEndpoint (context, statusCode) {
     return paths.join('')
   }
 
-  // No router involvement; fall back to the http.endpoint tag (skipping 404s, which legitimately
-  // have no endpoint).
-  if (statusCode !== 404) {
-    const endpoint = context?.span?.context()?.getTag('http.endpoint')
-    if (endpoint) {
-      return endpoint
-    }
-  }
+  if (statusCode === 404) return null
+
+  const endpoint = context?.span?.context()?.getTag?.('http.endpoint')
+  if (endpoint) return endpoint
 
   return null
 }
