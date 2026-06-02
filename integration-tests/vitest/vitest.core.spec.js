@@ -58,7 +58,7 @@ const FLAKY_UNNECESSARY_RETRY_RESOURCE =
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3'] : ['1.6.0', 'latest']
+const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
