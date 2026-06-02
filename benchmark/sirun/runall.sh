@@ -77,16 +77,23 @@ for D in "${DIRS[@]}"; do
   cd ..
 done
 
+# Auto-shard from the variant count and available cores: each shard pins one variant
+# per core, so the suite needs ceil(BENCH_COUNT / cores) shards. The CI matrix supplies
+# SPLITS shards; fail with the exact number to configure rather than silently dropping
+# variants once the suite outgrows the matrix.
+SHARDS_NEEDED=$(( (BENCH_COUNT + TOTAL_CPU_CORES - 1) / TOTAL_CPU_CORES ))
+if [[ ${SPLITS} -lt ${SHARDS_NEEDED} ]]; then
+  echo "${BENCH_COUNT} variants on ${TOTAL_CPU_CORES} cores need ${SHARDS_NEEDED} shards, but SPLITS=${SPLITS}." >&2
+  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks.yml to ${SHARDS_NEEDED}." >&2
+  exit 1
+fi
+
+# Balance variants evenly across all configured shards; guaranteed <= cores each by the check above.
 GROUP_SIZE=$(($(($BENCH_COUNT+$SPLITS-1))/$SPLITS)) # round up
 
 BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
-
-if [[ ${GROUP_SIZE} -gt ${TOTAL_CPU_CORES} ]]; then
-  echo "Group size ${GROUP_SIZE} exceeds available CPU cores (${TOTAL_CPU_CORES} from nproc)"
-  exit 1
-fi
 
 for D in "${DIRS[@]}"; do
   cd "${D}"
