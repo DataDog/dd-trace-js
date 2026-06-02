@@ -66,7 +66,7 @@ ipcRenderer.invoke = (channel, ...args) => {
   const traceId = generateHexId()
   const spanId = generateHexId()
   const startTime = Date.now()
-  const rumContext = getRumContext?.()
+  const rumContext = getRumContext?.(startTime)
   const carrier = makeCarrier(traceId, spanId)
 
   return originalInvoke(channel, ...args, carrier).then(
@@ -99,7 +99,7 @@ ipcRenderer.on = (channel, listener) => {
       : generateHexId()
     const spanId = generateHexId()
     const startTime = Date.now()
-    const rumContext = getRumContext?.()
+    const rumContext = getRumContext?.(startTime)
 
     const finish = (endTime) =>
       reportSpan({ type: 'renderer.receive', channel, traceId, spanId, parentSpanId, startTime, endTime, pid: process.pid, rumContext })
@@ -137,9 +137,9 @@ const bridge = {
   },
   /**
    * Called by the browser-sdk (or app code) to register a callback that returns
-   * the current RUM context (view.id, action.id) as a JSON string.
+   * the RUM context (view.id, action.id) active at the given start time as a JSON string.
    * The preload calls this callback synchronously at IPC interception time.
-   * @param {() => string} fn
+   * @param {(startTime: number) => string} fn
    */
   registerRumContextProvider (fn) {
     getRumContext = fn
