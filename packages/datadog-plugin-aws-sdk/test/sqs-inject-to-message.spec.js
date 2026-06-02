@@ -454,6 +454,45 @@ describe('Sqs plugin responseExtract', () => {
     assert.strictEqual(result.datadogContext, undefined)
     assert.strictEqual(result.bodyChecked, true)
   })
+
+  // Precedence: MessageAttributes are checked before the EventBridge body path.
+  // The body here is a syntactically valid EventBridge envelope, but because
+  // `MessageAttributes._datadog` is present the body is never consulted — which
+  // is also what avoids a wasted parse on the common SNS->SQS receive.
+  it('prefers MessageAttributes over the EventBridge body when both are present', () => {
+    const extractCalls = []
+    const plugin = buildPlugin({
+      extract: (format, attrs) => {
+        extractCalls.push(attrs)
+        return 'message-attribute-context'
+      },
+    })
+
+    const eventBridgeEnvelope = {
+      'detail-type': 'orderPlaced',
+      detail: { _datadog: { 'x-datadog-trace-id': 'from-body' } },
+    }
+
+    const result = plugin.responseExtract(
+      { QueueUrl },
+      'receiveMessage',
+      {
+        Messages: [{
+          Body: JSON.stringify(eventBridgeEnvelope),
+          MessageAttributes: {
+            _datadog: {
+              DataType: 'String',
+              StringValue: JSON.stringify({ 'x-datadog-trace-id': 'from-attrs' }),
+            },
+          },
+        }],
+      }
+    )
+
+    assert.strictEqual(result.datadogContext, 'message-attribute-context')
+    // extract is called exactly once, with the MessageAttributes context only.
+    assert.deepStrictEqual(extractCalls, [{ 'x-datadog-trace-id': 'from-attrs' }])
+  })
 })
 
 describe('Sqs plugin responseExtractDSMContext', () => {
