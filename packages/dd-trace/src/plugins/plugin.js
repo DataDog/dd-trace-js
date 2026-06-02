@@ -6,6 +6,8 @@ const dc = require('dc-polyfill')
 const logger = require('../log')
 const { storage } = require('../../../datadog-core')
 
+const legacyStorage = storage('legacy')
+
 /**
  * Base class for all Datadog plugins.
  *
@@ -28,8 +30,7 @@ class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
-      const store = storage('legacy').getStore()
-      if (!store || !store.noop) {
+      if (!legacyStorage.getHandle()?.noop) {
         handler(message, name)
       }
     }
@@ -50,20 +51,20 @@ class StoreBinding {
   constructor (event, transform) {
     this._channel = dc.channel(event)
     this._transform = data => {
-      const store = storage('legacy').getStore()
+      const handle = legacyStorage.getHandle()
 
-      return !store || !store.noop || (data && Object.hasOwn(data, 'currentStore'))
+      return !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
         ? transform(data)
-        : store
+        : legacyStorage.getStore()
     }
   }
 
   enable () {
-    this._channel.bindStore(storage('legacy'), this._transform)
+    this._channel.bindStore(legacyStorage, this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(storage('legacy'))
+    this._channel.unbindStore(legacyStorage)
   }
 }
 
@@ -102,24 +103,21 @@ module.exports = class Plugin {
    * @returns {void}
    */
   enter (span, store) {
-    store = store || storage('legacy').getStore()
-    storage('legacy').enterWith({ ...store, span })
+    store = store || legacyStorage.getStore()
+    legacyStorage.enterWith({ ...store, span })
   }
 
   /**
    * Subscribe to a diagnostic channel with automatic error handling and enable/disable lifecycle.
    *
    * @param {string} channelName Diagnostic channel name.
-   * @param {(...args: unknown[]) => unknown} handler Handler invoked on messages.
+   * @param {(message: unknown, name: string) => unknown} handler Handler invoked on messages.
    * @returns {void}
    */
   addSub (channelName, handler) {
-    /**
-     * @type {typeof handler}
-     */
-    const wrappedHandler = (...args) => {
+    const wrappedHandler = (message, name) => {
       try {
-        return handler.apply(this, args)
+        return handler.call(this, message, name)
       } catch (error) {
         logger.error('Error in plugin handler:', error)
         logger.info('Disabling plugin: %s', this.constructor.name)
@@ -147,12 +145,12 @@ module.exports = class Plugin {
    * @returns {void}
    */
   addError (error) {
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
 
     if (!store || !store.span) return
 
     const span = /** @type {import('../opentracing/span')} */ (store.span)
-    if (!span._spanContext._tags.error) {
+    if (!span.context().getTag('error')) {
       span.setTag('error', error || 1)
     }
   }

@@ -68,7 +68,7 @@ jobs:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   tracing-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     permissions:
       id-token: write
     steps:

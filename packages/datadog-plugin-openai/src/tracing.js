@@ -158,7 +158,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const span = store?.span
     if (!span) return
 
-    const error = !!span.context()._tags.error
+    const error = !!span.context().getTag('error')
 
     let headers, body, method, path
     if (!error) {
@@ -172,7 +172,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       headers = Object.fromEntries(headers)
     }
 
-    const resource = span._spanContext._tags['resource.name']
+    const resource = span.context().getTag('resource.name')
     const normalizedMethodName = store.normalizedMethodName
 
     body = coerceResponseBody(body, normalizedMethodName)

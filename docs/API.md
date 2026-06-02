@@ -82,6 +82,7 @@ tracer.use('pg', {
 <h5 id="mongoose"></h5>
 <h5 id="mysql"></h5>
 <h5 id="mysql2"></h5>
+<h5 id="nats"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
@@ -166,6 +167,7 @@ tracer.use('pg', {
 * [mongoose](./interfaces/export_.plugins.mongoose.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
+* [nats](./interfaces/export_.plugins.nats.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)

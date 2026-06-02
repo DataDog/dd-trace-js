@@ -52,7 +52,6 @@ const {
   TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_SUITE,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
@@ -128,7 +127,6 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const suiteTags = {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
     [TEST_MODULE]: testFramework,
   }
 
@@ -174,7 +172,7 @@ module.exports = class CiPlugin extends Plugin {
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, requestErrorTags })
+        onDone({ err, libraryConfig, repositoryRoot: this.repositoryRoot, requestErrorTags })
       })
     })
 
@@ -186,15 +184,22 @@ module.exports = class CiPlugin extends Plugin {
       if (!this.tracer._exporter?.getSkippableSuites) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
-        if (err) {
-          log.error('Skippable suites could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
-        } else {
-          this.itrCorrelationId = itrCorrelationId
+      this.tracer._exporter.getSkippableSuites(
+        {
+          ...this.testConfiguration,
+          isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
+        },
+        (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
+          if (err) {
+            log.error('Skippable suites could not be fetched. %s', err.message)
+            this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
+          } else {
+            this.itrCorrelationId = itrCorrelationId
+            this.skippableSuitesCoverage = skippableSuitesCoverage
+          }
+          onDone({ err, skippableSuites, itrCorrelationId, skippableSuitesCoverage })
         }
-        onDone({ err, skippableSuites, itrCorrelationId })
-      })
+      )
     })
 
     this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir }) => {
@@ -213,12 +218,7 @@ module.exports = class CiPlugin extends Plugin {
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
+      const metadataTags = { '*': { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName } }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {
         this.tracer._exporter.addMetadataTags(metadataTags)
@@ -255,7 +255,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      const testCommand = this.command
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
@@ -615,7 +615,7 @@ module.exports = class CiPlugin extends Plugin {
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-        [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+        [TEST_COMMAND]: testSuiteSpan.context().getTag(TEST_COMMAND),
         [TEST_MODULE]: this.constructor.id,
         ...getSessionRequestErrorTags(this.testSessionSpan),
       }
@@ -808,7 +808,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   getTestTelemetryTags (testSpan) {
-    const activeSpanTags = testSpan.context()._tags
+    const activeSpanTags = testSpan.context().getTags()
     return {
       hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
       isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,

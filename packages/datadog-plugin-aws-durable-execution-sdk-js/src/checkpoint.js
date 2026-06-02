@@ -12,7 +12,7 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
     if (data?.Action !== 'RETRY' || !data.Error) return
 
     const span = this.activeSpan
-    if (!span || span._spanContext?._tags?.error) return
+    if (!span || span.context().getTag('error')) return
 
     const { ErrorMessage, ErrorType, StackTrace } = data.Error
     span.setTag('error', 1)

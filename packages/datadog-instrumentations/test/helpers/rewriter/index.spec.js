@@ -109,7 +109,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Async',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_iterator_async',
         },
@@ -121,7 +122,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Async',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_iterator_async_super',
         },
@@ -158,7 +160,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Iterator',
+            kind: 'Sync',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_generator',
         },
@@ -170,7 +173,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Iterator',
+            kind: 'Sync',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_generator_super',
         },
@@ -182,7 +186,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             methodName: 'test',
-            kind: 'Iterator',
+            kind: 'Sync',
+            returnKind: 'Iterator',
             className: 'B',
           },
           channelName: 'trace_generator_super_bound',
@@ -195,7 +200,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
           },
           channelName: 'trace_generator_async',
         },
@@ -207,7 +213,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
           },
           channelName: 'trace_generator_async_super',
         },
@@ -265,6 +272,28 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'Async',
+          },
+          channelName: 'trace_promise_async_end',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end.js',
+          },
+          astQuery: 'ReturnStatement > CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+          channelName: 'trace_promise_async_end',
+          transform: 'waitForAsyncEnd',
+        },
+        {
+          module: {
             name: 'test-esm',
             versionRange: '>=0.1',
             filePath: 'pregel-class.js',
@@ -272,9 +301,10 @@ describe('check-require-cache', () => {
           functionQuery: {
             methodName: 'stream',
             className: 'Pregel',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
           },
           channelName: 'pregel_stream',
-          transform: 'traceAsyncIterator',
         },
       ],
     })
@@ -531,8 +561,42 @@ describe('check-require-cache', () => {
     assert.ok(subs.start.called)
   })
 
+  it('should wait for an asyncEnd promise when configured', async () => {
+    const { test } = compileFile('trace-promise-async-end')
+    const steps = []
+
+    subs = {
+      asyncEnd (ctx) {
+        steps.push('asyncEnd')
+        ctx.asyncEndPromise = new Promise(resolve => {
+          setImmediate(() => {
+            steps.push('asyncEndPromise')
+            resolve()
+          })
+        })
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end')
+    ch.subscribe(subs)
+
+    const resultPromise = test().then(result => {
+      steps.push('resolved')
+      return result
+    })
+
+    await Promise.resolve()
+
+    assert.deepStrictEqual(steps, ['asyncEnd'])
+
+    const result = await resultPromise
+
+    assert.equal(result, 'result')
+    assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndPromise', 'resolved'])
+  })
+
   it('should use import when rewriting esm modules', () => {
-    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-generator-async.js')
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
 
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, 'module')
@@ -542,11 +606,7 @@ describe('check-require-cache', () => {
     assert.doesNotMatch(content, /require\("/)
   })
 
-  // Covers the local `traceAsyncIterator` transform shape used by the langgraph
-  // integration. Goes through `addTransform`, which the iterator-transform path
-  // unique to dd-trace uses, not the vendored orchestrion transform that the
-  // `kind: 'AsyncIterator'` test above happens to hit.
-  it('should rewrite ESM modules without injecting require() for the traceAsyncIterator transform', async () => {
+  it('should rewrite ESM modules with returnKind: AsyncIterator without injecting require()', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
     const source = readFileSync(filename, 'utf8')
 

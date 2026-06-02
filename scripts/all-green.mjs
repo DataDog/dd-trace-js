@@ -47,6 +47,10 @@ const pollingRetryConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
 const retriedRunIds = new Set()
+// Runs where reRunWorkflowFailedJobs returned 403 — GitHub says no failed jobs
+// exist, meaning the run's failure conclusion is stale (e.g. a job that failed
+// due to a GitHub infrastructure error auto-recovered). Treat them as passed.
+const staleFailureRunIds = new Set()
 
 // ETag cache for the workflow-runs poll. GitHub returns 304 Not Modified when
 // the response is unchanged, and 304 responses don't count against the rate
@@ -96,7 +100,8 @@ async function pollUntilDone () {
   const retryFailed = runs.filter(r =>
     r.status === 'completed' &&
     failureConclusions.has(r.conclusion) &&
-    retriedRunIds.has(r.id)
+    retriedRunIds.has(r.id) &&
+    !staleFailureRunIds.has(r.id)
   )
 
   if (retryFailed.length > 0) {
@@ -112,18 +117,18 @@ async function pollUntilDone () {
     !retriedRunIds.has(r.id)
   )
 
-  if (toRetry.length > 0) {
-    await rerunFailedWorkflows(toRetry)
-    for (const run of toRetry) retriedRunIds.add(run.id)
-    runsCache = undefined
-  }
-
   const pending = runs.filter(r => r.status !== 'completed').length
   if (pending === 0 && toRetry.length === 0) return { runs, done: true }
 
   retries++
 
   if (RETRIES && retries > RETRIES) return { runs, done: false }
+
+  if (toRetry.length > 0) {
+    await rerunFailedWorkflows(toRetry)
+    for (const run of toRetry) retriedRunIds.add(run.id)
+    runsCache = undefined
+  }
 
   console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
   await setTimeout(POLLING_INTERVAL * 60_000)
@@ -133,12 +138,25 @@ async function pollUntilDone () {
 
 async function rerunFailedWorkflows (workflowRuns) {
   await Promise.all(
-    workflowRuns.map(workflowRun => {
+    workflowRuns.map(async workflowRun => {
       console.log(`Rerunning ${workflowRun.conclusion} workflow run ${workflowRun.id} (${workflowRun.name}).`)
-      if (workflowRun.conclusion === 'cancelled') {
-        return octokit.rest.actions.reRunWorkflow({ owner, repo, run_id: workflowRun.id })
+      try {
+        await octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
+      } catch (err) {
+        if (err.status === 403) {
+          const jobs = await octokit.paginate(octokit.rest.actions.listJobsForWorkflowRun, {
+            owner, repo, run_id: workflowRun.id, filter: 'latest', per_page: 100,
+          })
+          const hasFailedJobs = jobs.some(j => failureConclusions.has(j.conclusion))
+          if (!hasFailedJobs) {
+            const { id, name } = workflowRun
+            console.log(`Workflow run ${id} (${name}) has no failed jobs — stale conclusion, treating as passed.`)
+            staleFailureRunIds.add(workflowRun.id)
+            return
+          }
+        }
+        throw err
       }
-      return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
     })
   )
 }
@@ -160,6 +178,18 @@ async function rerunOnStartup () {
   }
 }
 
+async function cancelRunningWorkflows (runs) {
+  const running = runs.filter(r => r.status !== 'completed')
+  if (running.length === 0) return
+  console.log(`Cancelling ${running.length} still-running workflow(s).`)
+  await Promise.all(
+    running.map(run => {
+      console.log(`Cancelling workflow run ${run.id} (${run.name}).`)
+      return octokit.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id })
+    })
+  )
+}
+
 async function checkAllGreen () {
   await rerunOnStartup()
 
@@ -169,11 +199,14 @@ async function checkAllGreen () {
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
+    await cancelRunningWorkflows(runs)
     process.exitCode = 1
     return
   }
 
-  const failedRuns = runs.filter(r => failureConclusions.has(r.conclusion))
+  const failedRuns = runs.filter(r =>
+    failureConclusions.has(r.conclusion) && !staleFailureRunIds.has(r.id)
+  )
 
   if (failedRuns.length === 0) {
     console.log('All jobs were successful.')

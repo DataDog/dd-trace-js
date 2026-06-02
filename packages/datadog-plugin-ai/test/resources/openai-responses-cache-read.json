@@ -1,0 +1,33 @@
+{
+  "id": "resp_abc123def456",
+  "object": "response",
+  "created_at": 1779284000,
+  "status": "completed",
+  "model": "gpt-4o-mini-2024-07-18",
+  "incomplete_details": null,
+  "output": [
+    {
+      "type": "message",
+      "id": "msg_abc123",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Datadog LLM Observability provides end-to-end visibility.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 4448,
+    "input_tokens_details": {
+      "cached_tokens": 4425
+    },
+    "output_tokens": 44,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    }
+  }
+}

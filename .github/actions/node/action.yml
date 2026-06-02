@@ -8,15 +8,16 @@ inputs:
 runs:
   using: composite
   steps:
-    # Retry once on failure to work around actions/cache#1754, an open bug where
-    # @actions/cache silently exits non-zero on Windows during cache restore (no
-    # error output), failing whichever step triggered the restore — setup-node,
-    # setup-bun, or our node-version-cache.
+    # Retry once on failure to work around transient runner issues (e.g. flaky
+    # setup-node or setup-bun network calls).
     - id: attempt
       uses: ./.github/actions/node/setup
       continue-on-error: true
       with:
         version: ${{ inputs.version }}
+    - if: steps.attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 60
     - if: steps.attempt.outcome == 'failure'
       uses: ./.github/actions/node/setup
       with:
