@@ -8,7 +8,6 @@ const { getCompileToRegexp } = require('./path-to-regexp')
 const {
   getRouterMountPaths,
   joinPath,
-  getLayerMatchers,
   setLayerMatchers,
   isAppMounted,
   setRouterMountPath,
@@ -42,34 +41,47 @@ function createWrapRouterMethod (name, compile) {
   const nextChannel = channel(`apm:${name}:middleware:next`)
   const routeAddedChannel = channel(`apm:${name}:route:added`)
 
-  function wrapLayerHandle (layer, original) {
-    original._name = original._name || layer.name
+  function wrapLayerHandle (layer, original, matchers) {
+    // Resolve `name` once at wrap time: cached on the original for any code
+    // that reads `_name`, captured in the closure so the per-call body avoids
+    // the property-lookup / `||` fallback.
+    const name = original._name || layer.name || original.name
+    original._name = name
 
-    return shimmer.wrapFunction(original, original => function (...args) {
-      if (!enterChannel.hasSubscribers) return original.apply(this, args)
-
-      const matchers = getLayerMatchers(layer)
-      const lastIndex = args.length - 1
-      const name = original._name || original.name
-      const req = args[args.length > 3 ? 1 : 0]
-      const next = args[lastIndex]
-
-      if (typeof next === 'function') {
-        args[lastIndex] = wrapNext(req, next)
+    // Wrap-time matcher analysis. The single-pattern case yields a constant
+    // route; only multi-pattern stacks need a per-request layer.path match.
+    let captureRoute
+    let needMultiMatch = false
+    if (matchers.length !== 0 && !isFastStar(layer, matchers) && !isFastSlash(layer, matchers)) {
+      if (matchers.length === 1) {
+        captureRoute = matchers[0].path
+      } else {
+        needMultiMatch = true
       }
+    }
 
-      let route
+    // Split by arity: router only ever dispatches 3-arg request handlers
+    // through `Layer.handleRequest` and 4-arg error handlers through
+    // `Layer.handleError`. Specialising lets the per-call body use named
+    // parameters and `.call`, avoiding the rest-spread Array allocation that
+    // the unified shape forced on every middleware invocation.
+    return original.length === 4
+      ? shimmer.wrapFunction(original, errorHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
+      : shimmer.wrapFunction(original, requestHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
+  }
 
-      if (matchers?.length && !isFastStar(layer, matchers) && !isFastSlash(layer, matchers)) {
-        if (matchers.length === 1) {
-          // The host already matched this layer; the lone pattern is the route.
-          route = matchers[0].path
-        } else {
-          for (const matcher of matchers) {
-            if (matcher.regex?.test(layer.path)) {
-              route = matcher.path
-              break
-            }
+  function requestHandlerLayerWrap (layer, name, captureRoute, needMultiMatch, matchers) {
+    return original => function (req, res, next) {
+      if (!enterChannel.hasSubscribers) return original.call(this, req, res, next)
+
+      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
+
+      let route = captureRoute
+      if (needMultiMatch) {
+        for (const matcher of matchers) {
+          if (matcher.regex?.test(layer.path)) {
+            route = matcher.path
+            break
           }
         }
       }
@@ -77,7 +89,7 @@ function createWrapRouterMethod (name, compile) {
       enterChannel.publish({ name, req, route, layer })
 
       try {
-        return original.apply(this, args)
+        return original.call(this, req, res, wrappedNext)
       } catch (error) {
         errorChannel.publish({ req, error })
         nextChannel.publish({ req })
@@ -87,15 +99,47 @@ function createWrapRouterMethod (name, compile) {
       } finally {
         exitChannel.publish({ req })
       }
-    })
+    }
+  }
+
+  function errorHandlerLayerWrap (layer, name, captureRoute, needMultiMatch, matchers) {
+    return original => function (error, req, res, next) {
+      if (!enterChannel.hasSubscribers) return original.call(this, error, req, res, next)
+
+      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
+
+      let route = captureRoute
+      if (needMultiMatch) {
+        for (const matcher of matchers) {
+          if (matcher.regex?.test(layer.path)) {
+            route = matcher.path
+            break
+          }
+        }
+      }
+
+      enterChannel.publish({ name, req, route, layer })
+
+      try {
+        return original.call(this, error, req, res, wrappedNext)
+      } catch (caught) {
+        errorChannel.publish({ req, error: caught })
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
+
+        throw caught
+      } finally {
+        exitChannel.publish({ req })
+      }
+    }
   }
 
   function wrapStack (layers, matchers) {
     for (const layer of layers) {
       if (layer.__handle) { // express-async-errors
-        layer.__handle = wrapLayerHandle(layer, layer.__handle)
+        layer.__handle = wrapLayerHandle(layer, layer.__handle, matchers)
       } else {
-        layer.handle = wrapLayerHandle(layer, layer.handle)
+        layer.handle = wrapLayerHandle(layer, layer.handle, matchers)
       }
 
       setLayerMatchers(layer, matchers)
@@ -258,15 +302,15 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
 
       shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
         return function wrappedHandle (req, res, next) {
-          const abortController = new AbortController()
-
           if (queryParserReadCh.hasSubscribers && req) {
+            const abortController = new AbortController()
+
             queryParserReadCh.publish({ req, res, query: req.query, abortController })
 
             if (abortController.signal.aborted) return
           }
 
-          return originalHandle.apply(this, arguments)
+          return originalHandle.call(this, req, res, next)
         }
       })
 

@@ -255,9 +255,16 @@ function buildAutofixMessage (firstArg, sourceCode) {
   const rhsText = sourceCode.getText(firstArg.right)
 
   // A backtick anywhere in an operand would break the template literal we're synthesising — bail
-  // rather than try to escape it. The same goes for backslashes that could fall just before a
-  // `${` boundary.
+  // rather than try to escape it.
   if (lhsText.includes('`') || rhsText.includes('`')) return null
+
+  // For literal operands, the source text is embedded verbatim into the template's static
+  // segments — so any `${` inside it (e.g. `'${expected}'` or `'foo\${x}'`) would turn into an
+  // unintended interpolation, which at best changes the message and at worst throws a
+  // `ReferenceError` before `assert.ok` runs. Non-literal operands are wrapped in `${...}` and
+  // are expression text, so they don't need this check.
+  if (firstArg.left.type === 'Literal' && lhsText.includes('${')) return null
+  if (firstArg.right.type === 'Literal' && rhsText.includes('${')) return null
 
   const lhsPart = firstArg.left.type === 'Literal' ? lhsText : '${' + lhsText + '}'
   const rhsPart = firstArg.right.type === 'Literal' ? rhsText : '${' + rhsText + '}'

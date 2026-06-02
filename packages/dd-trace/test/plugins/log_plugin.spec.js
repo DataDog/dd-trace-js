@@ -10,6 +10,7 @@ const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const LogPlugin = require('../../src/plugins/log_plugin')
+const { buildLogHolder, messageProxy } = require('../../src/plugins/log_injection')
 const Tracer = require('../../src/tracer')
 const getConfig = require('../../src/config')
 
@@ -17,6 +18,15 @@ const testLogChannel = channel('apm:test:log')
 
 class TestLog extends LogPlugin {
   static id = 'test'
+
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:test:log', (arg) => {
+      const logHolder = buildLogHolder(this.tracer)
+      if (!logHolder) return
+      arg.message = messageProxy(arg.message, logHolder)
+    })
+  }
 }
 
 const config = {

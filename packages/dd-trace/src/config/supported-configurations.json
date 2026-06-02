@@ -640,7 +640,9 @@
         "configurationNames": [
           "dbmPropagationMode"
         ],
-        "default": "disabled"
+        "default": "disabled",
+        "allowed": "disabled|service|full|dynamic_service",
+        "transform": "toLowerCase"
       }
     ],
     "DD_DOGSTATSD_HOST": [
@@ -769,6 +771,16 @@
         "type": "boolean",
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.flaggingProvider.spanEnrichment.enabled"
         ],
         "default": "false"
       }
@@ -1778,13 +1790,6 @@
         "type": "boolean",
         "default": "true",
         "internalPropertyName": "isTestManagementEnabled"
-      }
-    ],
-    "DD_TEST_TIA_KEEP_COV_CONFIG": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false"
       }
     ],
     "DD_TEST_SESSION_NAME": [
@@ -3192,6 +3197,13 @@
       }
     ],
     "DD_TRACE_NATIVE_SPAN_EVENTS": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_NATS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

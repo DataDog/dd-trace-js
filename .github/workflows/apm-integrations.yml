@@ -852,6 +852,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -869,6 +871,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   mongoose:
     runs-on: ubuntu-latest
@@ -885,6 +889,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: newest-maintenance-lts
 
   multer:
     runs-on: ubuntu-latest
@@ -930,6 +936,22 @@ jobs:
     env:
       PLUGINS: mysql2
       SERVICES: mysql2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+
+  nats:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      nats:
+        image: nats@sha256:7f430e429d0a90444b38bd40ab7812fd3afcc49a51f6b03a931f9becd5aeb280 # 2.14.1
+        ports:
+          - 4222:4222
+    env:
+      PLUGINS: nats
+      SERVICES: nats
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
@@ -1282,10 +1304,8 @@ jobs:
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:

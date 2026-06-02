@@ -48,6 +48,8 @@ function createSpan (parent) {
       something: 98764389,
       afloaty: 203987465.756754,
     },
+    getTag (key) { return this._tags[key] },
+    getTags () { return this._tags },
   }
   const span = {
     context: () => context,

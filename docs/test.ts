@@ -375,6 +375,7 @@ tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
+tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
