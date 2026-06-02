@@ -28,14 +28,10 @@ class EventBridge extends BaseAwsSdkPlugin {
    * Detail must be a valid JSON string
    * Max size per event is 256kb (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevent-size.html)
    *
-   * By default only the first entry receives the trace context, mirroring
-   * SQS `sendMessageBatch`. Set `batchPropagationEnabled` (plugin config or
-   * `DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED`) to inject into
-   * every entry in the batch.
-   *
-   * Each entry is a distinct message: it carries the same trace context but,
-   * when DSM is enabled, its own Data Streams pathway checkpoint, so the
-   * `_datadog` payload is built per entry rather than shared.
+   * Injects only the first entry by default (like SQS `sendMessageBatch`); set
+   * `batchPropagationEnabled` (or `DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED`)
+   * for the whole batch. `_datadog` is built per entry since each carries its own
+   * DSM pathway when DSM is enabled.
    */
   requestInject (span, request) {
     if (request.operation !== 'putEvents' || !request.params?.Entries?.length) {
@@ -45,8 +41,7 @@ class EventBridge extends BaseAwsSdkPlugin {
     const batchPropagationEnabled = this.config?.batchPropagationEnabled
 
     for (let i = 0; i < request.params.Entries.length; i++) {
-      // Inject only into the first entry by default; opt in to the rest of
-      // the batch via `batchPropagationEnabled`.
+      // First entry only by default; the rest require batchPropagationEnabled.
       if (i > 0 && !batchPropagationEnabled) break
 
       const entry = request.params.Entries[i]
@@ -84,13 +79,12 @@ class EventBridge extends BaseAwsSdkPlugin {
   }
 
   /**
-   * Record a Data Streams `direction:out` checkpoint for a single PutEvents
-   * entry. The DSM "topic" is the target event bus (the routing destination),
-   * defaulting to `default` when the entry omits `EventBusName`.
+   * Records a Data Streams `direction:out` checkpoint for one PutEvents entry.
+   * The DSM topic is the target event bus (`EventBusName`, default `default`).
    *
    * @param {import('../../../..').Span} span
    * @param {{ Detail?: string, EventBusName?: string }} entry
-   * @returns {object | undefined} The pathway context to encode, if any.
+   * @returns {object | undefined}
    */
   setDSMCheckpoint (span, entry) {
     const eventBusName = entry.EventBusName ?? 'default'
