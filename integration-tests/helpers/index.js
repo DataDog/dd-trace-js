@@ -629,6 +629,9 @@ async function createSandbox (
 
   if (isGitRepo) {
     execHelper('git init', { cwd: folder })
+    // These sandboxes are removed right after tests, so disable detached Git maintenance in them.
+    execHelper('git config gc.auto 0', { cwd: folder })
+    execHelper('git config maintenance.auto false', { cwd: folder })
     await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     execHelper('git config user.email "john@doe.com"', { cwd: folder })
     execHelper('git config user.name "John Doe"', { cwd: folder })
@@ -638,6 +641,9 @@ async function createSandbox (
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
     if (!existsSync(localRemotePath)) {
       execHelper(`git init --bare ${localRemotePath}`)
+      // Keep the temporary bare remote from starting detached maintenance during local pushes.
+      execHelper(`git --git-dir=${localRemotePath} config gc.auto 0`)
+      execHelper(`git --git-dir=${localRemotePath} config maintenance.auto false`)
     }
 
     execHelper('git add -A', { cwd: folder })
