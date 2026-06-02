@@ -293,11 +293,11 @@ function patch (http, methodName) {
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
       return urlToOptions(new url.URL(inputURL))
-    } else if (inputURL instanceof url.URL) {
-      return urlToOptions(inputURL)
-    } else {
-      return inputURL
     }
+    if (inputURL instanceof url.URL) {
+      return urlToOptions(inputURL)
+    }
+    return inputURL
   }
 
   function urlToOptions (url) {
