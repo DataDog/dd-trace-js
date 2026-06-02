@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -112,7 +113,6 @@ class NativeWallProfiler {
   #customLabelKeys
   #endpointCollectionEnabled = false
   #flushIntervalMillis = 0
-  #logger
   #mapper
   #pprof
   #samplingIntervalMicros = 0
@@ -136,7 +136,6 @@ class NativeWallProfiler {
     this.#cpuProfilingEnabled = !!options.cpuProfilingEnabled
     this.#endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this.#flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
-    this.#logger = options.logger
     // TODO: Remove default value. It is only used in testing.
     this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000
     this.#telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
@@ -348,7 +347,7 @@ class NativeWallProfiler {
   #reportV8bug (maybeBug) {
     const tag = `v8_profiler_bug_workaround_enabled:${this.#v8ProfilerBugWorkaroundEnabled}`
     const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
-    this.#logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    log.warn('Wall profiler: %sv8 profiler stuck event loop detected.', maybeBug ? 'possible ' : '')
     // report as runtime metric (can be removed in the future when telemetry is mature)
     runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
     // report as telemetry metric

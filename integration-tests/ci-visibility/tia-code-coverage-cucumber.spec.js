@@ -31,6 +31,7 @@ const LINE_PCT_RE = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
 const CUCUMBER_COMMAND = './node_modules/nyc/bin/nyc.js --all ' +
   `--include '${FIXTURE_ROOT}/src/**' -r=text-summary node ./node_modules/.bin/cucumber-js ${FEATURE_FILES}`
 const MINIMUM_SUPPORTED_CUCUMBER_VERSION = '10.0.0'
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const CUCUMBER_VERSION_CONFIGS = [
   {
@@ -77,7 +78,7 @@ function getSubdirectoryCucumberCommand (cwd) {
 
 function describeCucumberVersion (cucumberVersion, dependencies) {
   describe(`TIA code coverage cucumber@${cucumberVersion}`, function () {
-    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && cucumberVersion === 'latest') return
+    if (!isLatestCucumberSupported && cucumberVersion === 'latest') return
 
     let cwd
     let childProcess
