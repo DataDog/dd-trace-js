@@ -22,7 +22,7 @@ describe('API Security domain', () => {
 
       web = {
         root: sinon.stub().returns({
-          context: () => ({ _tags: { component: 'express' } }),
+          context: () => ({ _tags: { component: 'express' }, getTag: (key) => ({ component: 'express' })[key] }),
         }),
       }
 
@@ -98,7 +98,7 @@ describe('API Security domain', () => {
 
     it('passes through the framework component tag (normalization is the telemetry layer concern)', () => {
       web.root.returns({
-        context: () => ({ _tags: { component: 'Next JS' } }),
+        context: () => ({ _tags: { component: 'Next JS' }, getTag: (key) => ({ component: 'Next JS' })[key] }),
       })
 
       apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: { '_dd.appsec.s.req.body': [] } })

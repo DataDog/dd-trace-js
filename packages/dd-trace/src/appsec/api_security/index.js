@@ -36,7 +36,7 @@ function reportRequest (req, res, samplingDecision, wafResult) {
 }
 
 function getFramework (req) {
-  return web.root(req)?.context()?._tags?.component
+  return web.root(req)?.context()?.getTag?.('component')
 }
 
 function hasSchemaAttributes (attributes) {
