@@ -25,6 +25,7 @@
     "@smithy/smithy-client": "4.13.5",
     "aws-sdk": "2.1693.0",
     "axios": "1.16.1",
+    "esbuild": "^0.28.0",
     "express": "4.22.2",
     "knex": "3.2.10",
     "koa": "3.2.1",

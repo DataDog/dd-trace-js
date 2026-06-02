@@ -127,6 +127,12 @@ esbuildVersions.forEach((version) => {
         })
       })
 
+      it('keeps __filename, __dirname, and relative requires working in a minified instrumented module', () => {
+        execSync('node ./build-and-test-esm-minify-globals.mjs', {
+          timeout,
+        })
+      })
+
       it('should not override existing js banner', () => {
         execSync('node ./build-and-run.esm-unrelated-js-banner.mjs', {
           timeout,
