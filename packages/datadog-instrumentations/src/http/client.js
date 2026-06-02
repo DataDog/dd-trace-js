@@ -101,15 +101,24 @@ function evaluateResponseBodyCollection (res, responseBodyCollection) {
   }
 
   const declaredContentLength = parseContentLength(res.headers?.['content-length'])
+
+  const evaluationResult = { collect: true, reason: undefined }
+
   if (declaredContentLength == null || declaredContentLength === 0) {
-    return { collect: false, reason: 'content_length_missing' }
+    evaluationResult.collect = false
+    evaluationResult.reason = 'content_length_missing'
+
+    return evaluationResult
   }
 
   if (declaredContentLength > maxBytes) {
-    return { collect: false, reason: 'content_length_too_big' }
+    evaluationResult.collect = false
+    evaluationResult.reason = 'content_length_too_big'
+
+    return evaluationResult
   }
 
-  return { collect: true }
+  return evaluationResult
 }
 
 /**

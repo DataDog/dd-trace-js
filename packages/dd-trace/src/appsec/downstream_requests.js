@@ -19,8 +19,6 @@ const SUPPORTED_RESPONSE_BODY_MIME_TYPES = new Set([
   'application/x-www-form-urlencoded',
 ])
 
-const DEFAULT_MAX_DOWNSTREAM_BODY_BYTES = 10 * 1024 * 1024
-
 const RESPONSE_BODY_IGNORED_METRIC_SUFFIX = {
   content_type_invalid: 'content_type_invalid',
   content_length_missing: 'content_length_missing',
@@ -232,7 +230,7 @@ function incrementDownstreamAnalysisCount (req) {
  */
 function getResponseBodyCollectionConfig () {
   return {
-    maxBytes: config?.appsec?.apiSecurity?.maxDownstreamBodyBytes ?? DEFAULT_MAX_DOWNSTREAM_BODY_BYTES,
+    maxBytes: config?.appsec.apiSecurity.maxDownstreamBodyBytes,
     supportedMimeTypes: SUPPORTED_RESPONSE_BODY_MIME_TYPES,
   }
 }
