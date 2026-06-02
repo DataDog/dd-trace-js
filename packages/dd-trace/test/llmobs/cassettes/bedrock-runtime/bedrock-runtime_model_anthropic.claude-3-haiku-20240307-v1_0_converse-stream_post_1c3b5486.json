@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-3-haiku-20240307-v1:0/converse-stream",
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "515",
+      "User-Agent": "aws-sdk-js/3.971.0 ua/2.1 os/darwin#25.3.0 lang/js md/nodejs#22.22.0 api/bedrock-runtime#3.971.0 m/N,E,g",
+      "Connection": "keep-alive"
+    },
+    "body": "{\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Explain the concept of distributed tracing in a simple way\"}]}],\"system\":[{\"text\":\"You are an expert swe that is to use the tool fetch_concept\"}],\"inferenceConfig\":{\"maxTokens\":512,\"temperature\":0.5},\"toolConfig\":{\"tools\":[{\"toolSpec\":{\"name\":\"fetch_concept\",\"inputSchema\":{\"json\":{\"type\":\"object\",\"properties\":{\"concept\":{\"type\":\"string\",\"description\":\"The concept to explain\"}},\"required\":[\"concept\"]}},\"description\":\"Fetch an expert explanation for a concept\"}}]}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Thu, 23 Apr 2026 09:17:49 GMT",
+      "Content-Type": "application/vnd.amazon.eventstream",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "x-amzn-RequestId": "3dd52a1a-fd8e-4dcc-b527-303bb61d67e5"
+    },
+    "body": "base64:AAAApwAAAFIiQKw3CzpldmVudC10eXBlBwAMbWVzc2FnZVN0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUCIsInJvbGUiOiJhc3Npc3RhbnQife5dZ08AAAD1AAAAVxD5xBMLOmV2ZW50LXR5cGUHABFjb250ZW50QmxvY2tTdGFydA06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1diIsInN0YXJ0Ijp7InRvb2xVc2UiOnsibmFtZSI6ImZldGNoX2NvbmNlcHQiLCJ0b29sVXNlSWQiOiJ0b29sdXNlX01XTUZIb2NjSWdKbExwVFd0V2g2QTkifX19EQEGlgAAAK0AAABXGJpAGQs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjAsImRlbHRhIjp7InRvb2xVc2UiOnsiaW5wdXQiOiIifX0sInAiOiJhYmNkZWZnIn1YIIC3AAAA5wAAAFcK2QDxCzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidG9vbFVzZSI6eyJpbnB1dCI6IntcImNvIn19LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWjAxMjM0NTY3In0X5fZaAAAA3gAAAFem6NoGCzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidG9vbFVzZSI6eyJpbnB1dCI6Im5jZXB0XCI6In19LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVFVWIn1a8BbYAAAA6AAAAFeIiZcgCzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidG9vbFVzZSI6eyJpbnB1dCI6IiBcImRpc3RyaWJ1In19LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWjAxMiJ9guXLXwAAANQAAABX7FjCpws6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjAsImRlbHRhIjp7InRvb2xVc2UiOnsiaW5wdXQiOiJ0ZWQgdHJhY2luZ1wifSJ9fSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGIn3hEFTjAAAAqAAAAFanff//CzpldmVudC10eXBlBwAQY29udGVudEJsb2NrU3RvcA06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKIn0cNhiXAAAAkAAAAFGoSJkbCzpldmVudC10eXBlBwALbWVzc2FnZVN0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJwIjoiYWJjZGVmZ2hpamtsbW5vIiwic3RvcFJlYXNvbiI6InRvb2xfdXNlIn3VJ0qSAAABAgAAAE5F2jM7CzpldmVudC10eXBlBwAIbWV0YWRhdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJtZXRyaWNzIjp7ImxhdGVuY3lNcyI6NTQyfSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFEiLCJ1c2FnZSI6eyJpbnB1dFRva2VucyI6MzY0LCJvdXRwdXRUb2tlbnMiOjQxLCJzZXJ2ZXJUb29sVXNhZ2UiOnt9LCJ0b3RhbFRva2VucyI6NDA1fX04wCk7"
+  }
+}
