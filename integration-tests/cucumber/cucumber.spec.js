@@ -92,6 +92,7 @@ function assertItrSkippingEnabledTags (events, expected) {
 }
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
 
@@ -104,7 +105,7 @@ const fileExtension = 'js'
 
 // TODO: add esm tests
 describe(`cucumber@${version} commonJS`, () => {
-  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+  if (!isLatestCucumberSupported && version === 'latest') return
 
   let cwd, receiver, childProcess, testOutput
 
