@@ -41,13 +41,9 @@ function getDatadogOnlyPropagator (tracer) {
  */
 function injectHeaders (tracer, span) {
   const headers = {}
-  try {
-    const propagator = getDatadogOnlyPropagator(tracer)
-    const ctx = typeof span?.context === 'function' ? span.context() : span
-    propagator.inject(ctx, headers)
-  } catch (e) {
-    log.debug('Failed to inject trace context', e)
-  }
+  const propagator = getDatadogOnlyPropagator(tracer)
+  const ctx = typeof span?.context === 'function' ? span.context() : span
+  propagator.inject(ctx, headers)
   return headers
 }
 
