@@ -13,6 +13,7 @@ describe('NativeExporter', () => {
   let config
   let prioritySampler
   let nativeSpans
+  let logError
   let clock
 
   beforeEach(() => {
@@ -25,19 +26,21 @@ describe('NativeExporter', () => {
 
     prioritySampler = {
       sample: sinon.stub(),
+      update: sinon.stub(),
     }
 
     nativeSpans = {
       flushChangeQueue: sinon.stub(),
-      flushSpans: sinon.stub().resolves('OK'),
+      flushSpans: sinon.stub().resolves('unchanged'),
       freeSlots: sinon.stub(),
       setAgentUrl: sinon.stub(),
     }
 
+    logError = sinon.stub()
     NativeExporter = proxyquire('../../src/exporters/native', {
       '../../log': {
         warn: sinon.stub(),
-        error: sinon.stub(),
+        error: logError,
       },
     })
   })
@@ -304,7 +307,7 @@ describe('NativeExporter', () => {
       let rejectSend
       nativeSpans.flushSpans
         .onFirstCall().callsFake(() => new Promise((_resolve, reject) => { rejectSend = reject }))
-        .onSecondCall().resolves('OK')
+        .onSecondCall().resolves('unchanged')
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -339,7 +342,7 @@ describe('NativeExporter', () => {
 
       // Settle the in-flight send so afterEach's clock.restore() doesn't
       // leak an unhandled-rejection warning across tests.
-      resolveSend('OK')
+      resolveSend('unchanged')
     })
 
     it('should re-flush queued spans after in-flight settles', async () => {
@@ -347,7 +350,7 @@ describe('NativeExporter', () => {
       let resolveSend
       nativeSpans.flushSpans
         .onFirstCall().callsFake(() => new Promise(resolve => { resolveSend = resolve }))
-        .onSecondCall().resolves('OK')
+        .onSecondCall().resolves('unchanged')
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -355,7 +358,7 @@ describe('NativeExporter', () => {
       exporter.flush()
       assert.strictEqual(exporter._pendingSpans.length, 1)
 
-      resolveSend('OK')
+      resolveSend('unchanged')
       // Drain the .then chain on the first send and the chained re-flush.
       await clock.tickAsync(0)
       await clock.tickAsync(0)
@@ -384,6 +387,62 @@ describe('NativeExporter', () => {
       // to the host promise queue via tickAsync.
       await clock.tickAsync(0)
 
+      sinon.assert.called(nativeSpans.freeSlots)
+    })
+  })
+
+  describe('agent sampling rates', () => {
+    beforeEach(() => {
+      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+    })
+
+    it('forwards rate_by_service from the agent response to the priority sampler', async () => {
+      const rates = { 'service:web,env:prod': 0.5, 'service:db,env:prod': 0.1 }
+      nativeSpans.flushSpans.resolves(JSON.stringify({ rate_by_service: rates }))
+
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnceWithExactly(prioritySampler.update, rates)
+    })
+
+    it('does not update rates for sentinel responses (unchanged / no spans / empty)', async () => {
+      // The native layer resolves 'unchanged' when the rates payload-version
+      // header matches the previous flush, 'no spans to flush' when nothing
+      // was sent, and these carry no body to parse. None should touch the
+      // sampler or log an error.
+      for (const sentinel of ['unchanged', 'no spans to flush', '']) {
+        nativeSpans.flushSpans.resolves(sentinel)
+        exporter.export([createMockSpan(1n)])
+        exporter.flush()
+        await clock.tickAsync(0)
+      }
+
+      sinon.assert.notCalled(prioritySampler.update)
+      sinon.assert.notCalled(logError)
+    })
+
+    it('does not update rates when the response body omits rate_by_service', async () => {
+      nativeSpans.flushSpans.resolves(JSON.stringify({ something_else: true }))
+
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      await clock.tickAsync(0)
+
+      sinon.assert.notCalled(prioritySampler.update)
+    })
+
+    it('swallows malformed JSON in the response without disrupting the flush', async () => {
+      nativeSpans.flushSpans.resolves('this is not json')
+
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      await clock.tickAsync(0)
+
+      // No throw, sampler untouched, error logged, and slots still freed.
+      sinon.assert.notCalled(prioritySampler.update)
+      sinon.assert.calledOnce(logError)
       sinon.assert.called(nativeSpans.freeSlots)
     })
   })

@@ -145,9 +145,13 @@ class NativeExporter {
     // prepared chunks don't accumulate faster than they can be sent, which
     // would cause unbounded memory growth proportional to total requests.
     this._nativeSpans.flushSpans(slots, firstIsLocalRoot)
-      .then(() => {
+      .then((response) => {
         this.#flushInFlight = false
         this._nativeSpans.freeSlots(slots)
+        // The agent's response carries per-service sampling rates. Feed them
+        // back into the priority sampler so adaptive (agent-driven) sampling
+        // works in native mode, matching the legacy AgentWriter behaviour.
+        this.#updateSamplingRates(response)
         if (!this.#firstFlushSent) {
           this.#firstFlushSent = true
           firstFlushChannel.publish()
@@ -169,6 +173,34 @@ class NativeExporter {
       })
     this.#flushInFlight = true
     done()
+  }
+
+  /**
+   * Feed agent-reported sampling rates back into the priority sampler.
+   *
+   * The native `sendPreparedChunk` resolves with the agent's response body:
+   * `'unchanged'` when the rates have not changed since the last flush (the
+   * agent negotiates this via the rates payload-version header), otherwise the
+   * raw JSON body containing `rate_by_service`. Parse the latter and forward
+   * the rate map to the priority sampler. Errors are swallowed (logged) so a
+   * malformed response never disrupts the flush cycle.
+   *
+   * @param {string} response - Resolved value from `flushSpans`
+   */
+  #updateSamplingRates (response) {
+    // No body to parse: rates unchanged, or nothing was sent this cycle.
+    if (!response || response === 'unchanged' || response === 'no spans to flush') {
+      return
+    }
+
+    try {
+      const { rate_by_service: rateByService } = JSON.parse(response)
+      if (rateByService) {
+        this._prioritySampler.update(rateByService)
+      }
+    } catch (err) {
+      log.error('Error updating priority sampler rates from native response:', err)
+    }
   }
 
   /**
