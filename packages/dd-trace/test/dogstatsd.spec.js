@@ -132,6 +132,7 @@ describe('dogstatsd', () => {
       lookup: dns.lookup,
       port: 8125,
       tags: [],
+      telemetry: true,
       ...options,
     })
   }
@@ -146,6 +147,313 @@ describe('dogstatsd', () => {
       runtimeMetricsRuntimeId: false,
     })
   }
+
+  function stubUdpSend (callback) {
+    udp4.send = sinon.stub().callsFake((buffer, offset, length, port, address, cb) => {
+      callback?.(undefined, buffer, cb)
+    })
+    udp6.send = sinon.stub().callsFake((buffer, offset, length, port, address, cb) => {
+      callback?.(undefined, buffer, cb)
+    })
+  }
+
+  describe('client telemetry', () => {
+    beforeEach(() => {
+      stubUdpSend((err, buffer, callback) => {
+        callback?.(err)
+      })
+    })
+
+    it('sendTelemetry() is a no-op when telemetry is disabled', () => {
+      client = createDogStatsDClient({ telemetry: false })
+
+      client.recordMetric('c')
+      client.gauge('test.avg', 1)
+      client.flush()
+      client.sendTelemetry()
+
+      sinon.assert.calledOnce(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g\n')
+    })
+
+    it('sendTelemetry() emits client self-telemetry metrics over UDP', () => {
+      client = createDogStatsDClient()
+
+      client.recordMetric('c')
+      client.recordMetric('c')
+      client.recordMetric('g')
+      client.recordMetric('d')
+      client.recordMetric('h')
+      client.gauge('test.avg', 1)
+      client.flush()
+      client.sendTelemetry()
+
+      sinon.assert.calledTwice(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g\n')
+
+      const telemetry = udp4.send.secondCall.args[0].toString()
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:5\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:2\|c\|.*metrics_type:count/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:gauge/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:distribution/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:histogram/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_dropped:0\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_sent:1\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_dropped:0\|c[|#\n]/)
+    })
+
+    it('sendTelemetry() resets counters after each flush', () => {
+      client = createDogStatsDClient()
+
+      client.recordMetric('c')
+      client.gauge('test.avg', 1)
+      client.flush()
+      client.sendTelemetry()
+      // Call again explicitly to check that we reset counters
+      client.sendTelemetry()
+
+      sinon.assert.calledThrice(udp4.send)
+
+      const thirdSend = udp4.send.thirdCall.args[0].toString()
+      assert.match(thirdSend, /datadog\.dogstatsd\.client\.metrics:0\|c[|#\n]/)
+      assert.match(thirdSend, /datadog\.dogstatsd\.client\.metrics_by_type:0\|c\|.*metrics_type:count/)
+      assert.match(thirdSend, /datadog\.dogstatsd\.client\.bytes_sent:0\|c[|#\n]/)
+      assert.match(thirdSend, /datadog\.dogstatsd\.client\.packets_sent:0\|c[|#\n]/)
+    })
+
+    it('sendTelemetry() reports UDP bytes_dropped and packets_dropped after send failure', () => {
+      stubUdpSend((err, buffer, callback) => {
+        callback?.(new Error('send failed'))
+      })
+
+      client = createDogStatsDClient()
+      client.gauge('test.avg', 1)
+      client.flush()
+      client.sendTelemetry()
+
+      sinon.assert.calledTwice(udp4.send)
+
+      const telemetry = udp4.send.secondCall.args[0].toString()
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_dropped:13\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_dropped:1\|c[|#\n]/)
+    })
+
+    it('sendTelemetry() reports dropped metrics when DNS lookup fails', () => {
+      client = createDogStatsDClient({ host: 'invalid' })
+      client.gauge('test.avg', 1)
+      client.flush()
+
+      sinon.assert.notCalled(udp4.send)
+
+      client._host = '127.0.0.1'
+      client._family = 4
+      client.sendTelemetry()
+
+      sinon.assert.calledOnce(udp4.send)
+
+      const telemetry = udp4.send.firstCall.args[0].toString()
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_dropped:13\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_dropped:1\|c[|#\n]/)
+    })
+
+    it('sendTelemetry() reports HTTP bytes_sent and packets_sent after a successful flush', (done) => {
+      const payloads = []
+
+      assertData = () => {
+        payloads.push(Buffer.concat(httpData).toString())
+        httpData.length = 0
+
+        if (payloads.length === 1) {
+          client.sendTelemetry()
+          return
+        }
+
+        try {
+          const telemetry = payloads[1]
+          assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c[|#\n]/)
+          assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_sent:1\|c[|#\n]/)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+      client.gauge('test.avg', 1)
+      client.flush()
+    })
+
+    it('sendTelemetry() uses a separate buffer from user metrics over HTTP', (done) => {
+      const payloads = []
+
+      assertData = () => {
+        payloads.push(Buffer.concat(httpData).toString())
+        httpData.length = 0
+
+        if (payloads.length === 1) {
+          client.sendTelemetry()
+          return
+        }
+
+        try {
+          assert.strictEqual(payloads[0], 'test.avg:1|g\n')
+          assert.match(payloads[1], /datadog\.dogstatsd\.client\.metrics:/)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+      client.gauge('test.avg', 1)
+      client.flush()
+    })
+
+    it('sendTelemetry() does not count its own HTTP delivery in client counters', (done) => {
+      const payloads = []
+
+      assertData = () => {
+        payloads.push(Buffer.concat(httpData).toString())
+        httpData.length = 0
+
+        if (payloads.length === 1) {
+          client.sendTelemetry()
+          return
+        }
+
+        if (payloads.length === 2) {
+          client.sendTelemetry()
+          return
+        }
+
+        try {
+          assert.match(payloads[1], /datadog\.dogstatsd\.client\.bytes_sent:13\|c[|#\n]/)
+          assert.match(payloads[2], /datadog\.dogstatsd\.client\.bytes_sent:0\|c[|#\n]/)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+      client.gauge('test.avg', 1)
+      client.flush()
+    })
+
+    it('sendTelemetry() does not count its own UDP delivery in client counters', () => {
+      client = createDogStatsDClient()
+
+      client.gauge('test.avg', 1)
+      client.flush()
+      client.sendTelemetry()
+      client.sendTelemetry()
+
+      sinon.assert.calledThrice(udp4.send)
+
+      const firstTelemetry = udp4.send.secondCall.args[0].toString()
+      const secondTelemetry = udp4.send.thirdCall.args[0].toString()
+      assert.match(firstTelemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c[|#\n]/)
+      assert.match(secondTelemetry, /datadog\.dogstatsd\.client\.bytes_sent:0\|c[|#\n]/)
+    })
+
+    it('sendTelemetry() does not count telemetry lines in datadog.dogstatsd.client.metrics', () => {
+      client = createDogStatsDClient()
+
+      client.gauge('test.avg', 1)
+      client.flush()
+      client.sendTelemetry()
+
+      sinon.assert.calledTwice(udp4.send)
+
+      const telemetry = udp4.send.secondCall.args[0].toString()
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:0\|c[|#\n]/)
+    })
+
+    it('sendTelemetry() reports bytes_sent after HTTP fails over to UDP', (done) => {
+      statusCode = 404
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+        host: '127.0.0.1',
+      })
+      client.gauge('test.avg', 1)
+      client.flush()
+
+      setTimeout(() => {
+        try {
+          sinon.assert.calledOnce(udp4.send)
+          assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g\n')
+
+          client.sendTelemetry()
+
+          const telemetry = udp4.send.secondCall.args[0].toString()
+          assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c[|#\n]/)
+          assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_sent:1\|c[|#\n]/)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }, 50)
+    })
+
+    it('sendTelemetry() reports bytes_dropped after HTTP fails over to UDP and send fails', (done) => {
+      stubUdpSend((err, buffer, callback) => {
+        callback?.(new Error('send failed'))
+      })
+
+      statusCode = 404
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+        host: '127.0.0.1',
+      })
+      client.gauge('test.avg', 1)
+      client.flush()
+
+      setTimeout(() => {
+        try {
+          sinon.assert.calledOnce(udp4.send)
+
+          client.sendTelemetry()
+
+          const telemetry = udp4.send.secondCall.args[0].toString()
+          assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_dropped:13\|c[|#\n]/)
+          assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_dropped:1\|c[|#\n]/)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }, 50)
+    })
+
+    it('MetricsAggregationClient flush emits telemetry with metric counts from aggregated APIs', () => {
+      client = createDogStatsDClient()
+      const aggregator = new MetricsAggregationClient(client)
+
+      aggregator.increment('test.count', 1)
+      aggregator.increment('test.count', 1)
+      aggregator.gauge('test.gauge', 5)
+      aggregator.distribution('test.dist', 3)
+      aggregator.histogram('test.hist', 7)
+      aggregator.flush()
+
+      sinon.assert.calledTwice(udp4.send)
+
+      const telemetry = udp4.send.secondCall.args[0].toString()
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:5\|c[|#\n]/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:2\|c\|.*metrics_type:count/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:gauge/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:distribution/)
+      assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:histogram/)
+    })
+  })
 
   it('should send gauges', () => {
     client = createDogStatsDClient()
@@ -690,18 +998,44 @@ describe('dogstatsd', () => {
     let aggregator
     let gaugeCalls
     let incrementCalls
+    let sendTelemetry
+    let recordMetric
 
     beforeEach(() => {
       gaugeCalls = []
       incrementCalls = []
+      sendTelemetry = sinon.spy()
+      recordMetric = sinon.spy()
       const inner = {
         gauge: (name, value, tags) => gaugeCalls.push([name, value, tags?.slice()]),
         increment: (name, value, tags) => incrementCalls.push([name, value, tags?.slice()]),
-        distribution: () => {},
-        histogram: () => {},
-        flush: () => {},
+        distribution: () => { },
+        histogram: () => { },
+        flush: () => { },
+        sendTelemetry,
+        recordMetric,
       }
       aggregator = new MetricsAggregationClient(inner)
+    })
+
+    it('calls sendTelemetry on flush', () => {
+      aggregator.gauge('test.avg', 5)
+      aggregator.flush()
+
+      sinon.assert.calledOnce(sendTelemetry)
+    })
+
+    it('records metrics by type when APIs are used', () => {
+      aggregator.increment('test.count', 1)
+      aggregator.gauge('test.gauge', 2)
+      aggregator.distribution('test.dist', 3)
+      aggregator.histogram('test.hist', 4)
+
+      sinon.assert.callCount(recordMetric, 4)
+      sinon.assert.calledWith(recordMetric, 'c')
+      sinon.assert.calledWith(recordMetric, 'g')
+      sinon.assert.calledWith(recordMetric, 'd')
+      sinon.assert.calledWith(recordMetric, 'h')
     })
 
     it('emits a gauge once and then stays silent until it is set again', () => {

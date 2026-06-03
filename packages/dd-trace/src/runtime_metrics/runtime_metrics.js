@@ -48,7 +48,7 @@ module.exports = {
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
 
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    client = new MetricsAggregationClient(new DogStatsDClient({ ...clientConfig, telemetry: true }))
 
     if (trackGc) {
       startGCObserver()
