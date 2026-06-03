@@ -5,7 +5,8 @@
   "instructions": true,
   "variants": {
     "enabled-but-breakpoint-not-hit": {
-      "service": "node agent.js",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
@@ -16,7 +17,8 @@
       }
     },
     "line-probe-without-snapshot": {
-      "service": "node agent.js",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
@@ -27,7 +29,8 @@
       }
     },
     "line-probe-with-snapshot-default": {
-      "service": "node agent.js",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
@@ -40,7 +43,8 @@
       }
     },
     "line-probe-with-snapshot-minimal": {
-      "service": "node agent.js",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
