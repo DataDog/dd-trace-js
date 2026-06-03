@@ -108,7 +108,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
 // helpers
 
 /**
- * @param {{ depth: number, collapse: boolean }} config
+ * @param {{ depth: number, countListIndices: boolean }} config
  * @param {{ prev: object | undefined, key: string | number }} path
  */
 function shouldInstrument (config, path) {
@@ -116,7 +116,7 @@ function shouldInstrument (config, path) {
   if (depth < 0) return true
 
   let count = 0
-  if (config.collapse) {
+  if (config.countListIndices) {
     for (let curr = path; curr; curr = curr.prev) count += 1
   } else {
     for (let curr = path; curr; curr = curr.prev) {
