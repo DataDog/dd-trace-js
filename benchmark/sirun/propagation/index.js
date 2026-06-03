@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 
 const id = require('../../../packages/dd-trace/src/id')
 const SpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
@@ -61,7 +62,8 @@ const sanityInjected = {}
 propagator.inject(injectContext, sanityInjected)
 assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
 
-if (VARIANT === 'extract' || VARIANT === 'extract-baggage-ascii') {
+guard.loopStart()
+if (VARIANT === 'extract') {
   for (let iteration = 0; iteration < ITERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_ASCII)
   }
@@ -73,9 +75,5 @@ if (VARIANT === 'extract' || VARIANT === 'extract-baggage-ascii') {
   for (let iteration = 0; iteration < ITERATIONS; iteration++) {
     propagator.inject(injectContext, {})
   }
-} else if (VARIANT === 'extract-inject') {
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
-    const extracted = propagator.extract(EXTRACT_CARRIER_ASCII)
-    propagator.inject(extracted, {})
-  }
 }
+guard.done()
