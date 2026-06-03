@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "shell-string": {
-      "env": { "VARIANT": "shell-string", "ITERATIONS": "6000000" }
+      "env": { "VARIANT": "shell-string", "ITERATIONS": "4700000" }
     },
     "file-args": {
-      "env": { "VARIANT": "file-args", "ITERATIONS": "6000000" }
+      "env": { "VARIANT": "file-args", "ITERATIONS": "3750000" }
     }
   }
 }
