@@ -184,19 +184,15 @@ describe('EventBridge', () => {
 })
 
 /**
- * Bypass the plugin/diagnostic-channel wiring in `BaseAwsSdkPlugin`'s
- * constructor. `requestInject` reads `this.tracer.inject`,
- * `this.tracer.setCheckpoint`, `this.config`, and the static
- * `BaseAwsSdkPlugin.injectFieldIntoJsonObject`, so a hand-rolled stub is
- * enough to exercise the multi-entry and DSM behavior.
+ * `Object.create(EventBridge.prototype)` skips the heavy constructor wiring;
+ * `requestInject` only touches `this.tracer`, `this.config`, and the static
+ * `injectFieldIntoJsonObject`, so a hand-rolled stub suffices.
  *
  * @param {object} [options]
  * @param {boolean} [options.batchPropagationEnabled]
  * @param {boolean} [options.dsmEnabled]
  * @param {(span: unknown, format: string, info: object) => void} [options.inject]
  * @param {(tags: string[], span: unknown, payloadSize: number) => unknown} [options.setCheckpoint]
- *        Stand-in for `tracer.setCheckpoint`; returns the pathway context the
- *        test wants `DsmPathwayCodec.encode` to consume.
  * @returns {EventBridge}
  */
 function buildPluginUnit ({
@@ -315,8 +311,7 @@ describe('EventBridge requestInject batch propagation', () => {
       operation: 'putEvents',
       params: {
         Entries: [
-          // Not a `{...}` payload, so `injectFieldIntoJsonObject` takes the
-          // slow path and `JSON.parse` throws — the entry is left untouched.
+          // Non-`{...}` Detail: the parse throws, so the entry is left untouched.
           { Detail: 'not valid json' },
           { Detail: JSON.stringify({ order: 2 }) },
         ],
