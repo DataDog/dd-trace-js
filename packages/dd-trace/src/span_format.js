@@ -121,7 +121,9 @@ function extractSpanLinks (formattedSpan, span) {
       span_id: context.toSpanId(true),
     }
 
-    if (attributes && Object.keys(attributes).length > 0) {
+    // `_sanitizeAttributes` (addLink) leaves `attributes` undefined when empty,
+    // so a present value always has entries — no emptiness probe here.
+    if (attributes) {
       formattedLink.attributes = attributes
     }
     if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
