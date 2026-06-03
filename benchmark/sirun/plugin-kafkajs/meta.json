@@ -1,0 +1,19 @@
+{
+  "name": "plugin-kafkajs",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "small": {
+      "env": { "VARIANT": "small", "ITERATIONS": "8500000" }
+    },
+    "large": {
+      "env": { "VARIANT": "large", "ITERATIONS": "5500000" }
+    },
+    "mixed": {
+      "env": { "VARIANT": "mixed", "ITERATIONS": "7000000" }
+    }
+  }
+}
