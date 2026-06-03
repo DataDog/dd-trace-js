@@ -207,6 +207,12 @@ describe('client', () => {
         before(() => {
           http = require(httpSchema)
           url = `${httpSchema}://www.datadoghq.com`
+        })
+
+        beforeEach(() => {
+          responseFinishChannelCb = sinon.stub()
+          responseFinishChannel.subscribe(responseFinishChannelCb)
+
           responseBodyCollection = {
             maxBytes: 1024 * 1024,
             supportedMimeTypes: new Set([
@@ -215,11 +221,6 @@ describe('client', () => {
               'application/x-www-form-urlencoded',
             ]),
           }
-        })
-
-        beforeEach(() => {
-          responseFinishChannelCb = sinon.stub()
-          responseFinishChannel.subscribe(responseFinishChannelCb)
         })
 
         afterEach(() => {
