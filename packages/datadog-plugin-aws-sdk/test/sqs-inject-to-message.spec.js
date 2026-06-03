@@ -11,26 +11,18 @@ const Sqs = require('../src/services/sqs')
 const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/test-queue'
 
 /**
- * `Object.create(Sqs.prototype)` skips the heavy plugin/diagnostic-channel
- * wiring in `BaseAwsSdkPlugin`'s constructor. The methods under test only
- * read `this.tracer` and `this.config` and call `this.setDSMCheckpoint`, so
- * a hand-rolled stub is enough to exercise the inject-time ordering.
+ * `Object.create(Sqs.prototype)` skips the heavy constructor wiring in
+ * `BaseAwsSdkPlugin`; the methods under test only touch `this.tracer`,
+ * `this.config`, and `this.setDSMCheckpoint`, so a hand-rolled stub suffices.
+ * The options stub the corresponding `tracer` methods.
  *
  * @param {object} options
  * @param {boolean} [options.dsmEnabled]
  * @param {(span: unknown, format: string, info: object) => void} [options.inject]
- *        Stand-in for `tracer.inject` that may populate the trace context
- *        in `info`.
  * @param {(format: string, attrs: object) => unknown} [options.extract]
- *        Stand-in for `tracer.extract` used by `responseExtract`.
  * @param {(carrier: object) => void} [options.decodeDataStreamsContext]
- *        Stand-in for `tracer.decodeDataStreamsContext`, called by
- *        `responseExtractDSMContext` when a context carrier is found.
  * @param {(tags: string[], span: unknown, payloadSize: number) => unknown} [options.setCheckpoint]
- *        Stand-in for `tracer.setCheckpoint`, called once per message in
- *        `responseExtractDSMContext`.
- * @param {unknown} [options.dataStreamsContext]
- *        Value returned by the stubbed `setDSMCheckpoint`.
+ * @param {unknown} [options.dataStreamsContext] Value returned by stubbed `setDSMCheckpoint`.
  * @returns {Sqs & { dsmCalls: Array<{ datadog: object | undefined }> }}
  */
 function buildPlugin ({
@@ -324,9 +316,6 @@ describe('Sqs plugin responseExtract', () => {
     assert.strictEqual(result.bodyChecked, true)
   })
 
-  // EventBridge -> SQS: `PutEvents` to an SQS target delivers the full envelope
-  // as the body, so the producer's `_datadog` lands at `body.detail._datadog`.
-  // Recognised via the `detail-type` marker.
   it('extracts trace context from EventBridge body.detail._datadog (EventBridge to SQS)', () => {
     let receivedAttributes
     const plugin = buildPlugin({
@@ -367,9 +356,6 @@ describe('Sqs plugin responseExtract', () => {
     assert.strictEqual(result.bodyChecked, true)
   })
 
-  // EventBridge -> SNS -> SQS: fanned out via SNS, the envelope is a JSON string
-  // in the SNS `Notification`'s `Message`, so context is one level deeper at
-  // `JSON.parse(body.Message).detail._datadog`.
   it('extracts trace context from an EventBridge envelope wrapped in an SNS Notification', () => {
     let receivedAttributes
     const plugin = buildPlugin({
@@ -410,10 +396,7 @@ describe('Sqs plugin responseExtract', () => {
     assert.strictEqual(result.bodyChecked, true)
   })
 
-  // Precedence: MessageAttributes are checked before the EventBridge body path.
-  // The body here is a valid EventBridge envelope, but because
-  // `MessageAttributes._datadog` is present the body is never consulted — which
-  // is also what avoids a wasted parse on the common SNS->SQS receive.
+  // Both carriers present: MessageAttributes must win and the body is never consulted.
   it('prefers MessageAttributes over the EventBridge body when both are present', () => {
     const extractCalls = []
     const plugin = buildPlugin({
