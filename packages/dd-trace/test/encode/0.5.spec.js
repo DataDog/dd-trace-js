@@ -70,11 +70,12 @@ describe('encode 0.5', () => {
   })
 
   it('should encode span events', () => {
+    // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
     const topLevelEvents = [
-      { name: 'Something went so wrong', time_unix_nano: 1000000 },
+      { name: 'Something went so wrong', startTime: 1 },
       {
         name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-        time_unix_nano: 1633023102000000,
+        startTime: 1633023102,
         attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
       },
     ]

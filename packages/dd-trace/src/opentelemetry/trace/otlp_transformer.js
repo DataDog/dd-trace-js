@@ -4,6 +4,7 @@ const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
 const id = require('../../id')
+const { eventTimeNano } = require('../../encode/tags-processors')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -33,7 +34,7 @@ const TRACE_ID_128 = '_dd.p.tid'
  *
  * @typedef {object} DDSpanEvent
  * @property {string} name - Event name
- * @property {number} time_unix_nano - Event time in nanoseconds since epoch
+ * @property {number} startTime - Event start time in milliseconds (sub-ms precision)
  * @property {Record<string, string | number | boolean>} [attributes] - Event attributes
  *
  * @typedef {object} DDFormattedSpan
@@ -274,7 +275,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    */
   #transformEvent (event) {
     return {
-      timeUnixNano: event.time_unix_nano,
+      timeUnixNano: eventTimeNano(event),
       name: event.name || '',
       attributes: this.transformAttributes(event.attributes ?? {}),
       droppedAttributesCount: 0,
