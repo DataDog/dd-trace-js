@@ -6,84 +6,16 @@
   "iterations": 20,
   "instructions": true,
   "variants": {
-    "declared-baseline": {
+    "declared-wrap": {
       "env": {
-        "ENABLED": "false",
-        "FUNCTION_NAME": "declared"
-      }
-    },
-    "asyncdeclared-baseline": {
-      "env": {
-        "ENABLED": "false",
-        "FUNCTION_NAME": "asyncDeclared"
-      }
-    },
-    "arrow-baseline": {
-      "env": {
-        "ENABLED": "false",
-        "FUNCTION_NAME": "arrow"
-      }
-    },
-    "asyncarrow-baseline": {
-      "env": {
-        "ENABLED": "false",
-        "FUNCTION_NAME": "asyncArrow"
+        "WRAP_FUNCTION": "false",
+        "ITERATIONS": "1000000"
       }
     },
     "declared-wrapfn": {
       "env": {
-        "ENABLED": "true",
         "WRAP_FUNCTION": "true",
-        "FUNCTION_NAME": "declared"
-      }
-    },
-    "asyncdeclared-wrapfn": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "true",
-        "FUNCTION_NAME": "asyncDeclared"
-      }
-    },
-    "arrow-wrapfn": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "true",
-        "FUNCTION_NAME": "arrow"
-      }
-    },
-    "asyncarrow-wrapfn": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "true",
-        "FUNCTION_NAME": "asyncArrow"
-      }
-    },
-    "declared-wrap": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "false",
-        "FUNCTION_NAME": "declared"
-      }
-    },
-    "asyncdeclared-wrap": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "false",
-        "FUNCTION_NAME": "asyncDeclared"
-      }
-    },
-    "arrow-wrap": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "false",
-        "FUNCTION_NAME": "arrow"
-      }
-    },
-    "asyncarrow-wrap": {
-      "env": {
-        "ENABLED": "true",
-        "WRAP_FUNCTION": "false",
-        "FUNCTION_NAME": "asyncArrow"
+        "ITERATIONS": "1000000"
       }
     }
   }
