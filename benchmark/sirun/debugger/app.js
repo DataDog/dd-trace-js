@@ -29,7 +29,7 @@ function runWork () {
   for (let i = 0; i < ITERATIONS; i++) {
     doSomeWork(i)
   }
-  guard.done(Number(process.env.STARTUP_GUARD_MAX_SHARE) || 0.35)
+  guard.done(0.35)
 }
 
 function doSomeWork (n) {
