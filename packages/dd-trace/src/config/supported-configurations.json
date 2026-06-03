@@ -3310,10 +3310,10 @@
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
-          "traceMetricsEnabled"
+          "otlpTraceMetricsEnabled"
         ],
         "default": null,
-        "internalPropertyName": "traceMetricsEnabled"
+        "internalPropertyName": "otlpTraceMetricsEnabled"
       }
     ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [

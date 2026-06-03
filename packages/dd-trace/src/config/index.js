@@ -603,28 +603,7 @@ class Config extends ConfigBase {
     // trace export (OTEL_TRACES_EXPORTER=otlp) and OTel metrics export (DD_METRICS_OTEL_ENABLED)
     // are enabled.
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.otelMetricsEnabled === true
-    let traceMetricsEnabled = this.traceMetricsEnabled ?? autoTraceMetrics
-    // The OTLP metrics endpoint is reused for trace metrics and is used verbatim: it must include
-    // the /v1/metrics path. Prefer OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, then derive from the generic
-    // OTEL_EXPORTER_OTLP_ENDPOINT by appending the signal path.
-    let traceMetricsUrl = this.otelMetricsUrl
-    if (!traceMetricsUrl && this.OTEL_EXPORTER_OTLP_ENDPOINT) {
-      traceMetricsUrl = `${this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '')}/v1/metrics`
-    }
-    try {
-      // eslint-disable-next-line no-new
-      new URL(traceMetricsUrl)
-    } catch {
-      if (traceMetricsEnabled) {
-        log.warn('Invalid OTLP metrics endpoint %s, disabling OTLP trace metrics export', traceMetricsUrl)
-      }
-      traceMetricsEnabled = false
-    }
-    this.traceMetrics = {
-      enabled: traceMetricsEnabled,
-      url: traceMetricsUrl,
-      protocol: this.otelMetricsProtocol || 'http/json',
-    }
+    setAndTrack(this, 'otlpTraceMetricsEnabled', this.otlpTraceMetricsEnabled ?? autoTraceMetrics)
 
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
