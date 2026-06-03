@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, publishError } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:koa:middleware:enter')
 const exitChannel = channel('apm:koa:middleware:exit')
@@ -132,7 +132,7 @@ function fulfill (ctx, error) {
   const route = ctx.routePath
 
   if (error) {
-    errorChannel.publish({ req, error })
+    publishError(errorChannel, { req, error })
   }
 
   // TODO: make sure that the parent class cannot override this in `enter`

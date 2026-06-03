@@ -42,6 +42,28 @@ exports.tracingChannel = function (name) {
   return tc
 }
 
+let publishingError = false
+
+/**
+ * Publish on a public error channel, guarding against re-entrancy. A subscriber
+ * that re-enters a wrapped dispatch while handling the error would otherwise
+ * republish here and recurse until the stack overflows. Error publishes are
+ * never legitimately nested, so a single in-flight flag guards every channel
+ * without a per-channel lookup.
+ *
+ * @param {Channel} errorChannel
+ * @param {object} message
+ */
+exports.publishError = function publishError (errorChannel, message) {
+  if (publishingError) return
+  publishingError = true
+  try {
+    errorChannel.publish(message)
+  } finally {
+    publishingError = false
+  }
+}
+
 exports.getHooks = function getHooks (names) {
   names = [names].flat()
 
