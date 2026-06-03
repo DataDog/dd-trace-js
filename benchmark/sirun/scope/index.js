@@ -11,6 +11,21 @@ const {
 
 const count = Number(COUNT)
 
+// Build a span whose `_store` is a real legacy-storage handle, exactly as a span
+// created under an active parent captures one. activate() resolves the parent
+// store via `getStore(span._store)`; a plain-object handle misses the storage
+// WeakMap, so the per-hop parent-store copy never runs and the bench measures
+// only enterWith. The handle has to resolve to a populated store for the copy to
+// be exercised, so seed an active store first and capture its handle.
+function makeSpan () {
+  const { storage } = require('../../../packages/datadog-core')
+  const legacyStorage = storage('legacy')
+  legacyStorage.enterWith({ span: {} })
+  const span = { _store: legacyStorage.getHandle() }
+  assert.ok(legacyStorage.getStore(span._store), 'synthetic span handle does not resolve to a store')
+  return span
+}
+
 if (MODE === 'bind') {
   // scope.bind wraps a callback so it later runs inside a captured span context
   // -- the path every bound continuation, timer and event handler takes. Each
@@ -20,7 +35,7 @@ if (MODE === 'bind') {
   // the scope_enabled variant.
   const Scope = require('../../../packages/dd-trace/src/scope')
   const scope = new Scope()
-  const span = { _store: {} }
+  const span = makeSpan()
   let sink = 0
   const target = () => ++sink
 
@@ -45,7 +60,7 @@ if (MODE === 'bind') {
   if (SCOPE_ENABLED === 'true') {
     const Scope = require('../../../packages/dd-trace/src/scope')
     const scope = new Scope()
-    const span = { _store: {} }
+    const span = makeSpan()
     activate = (cb) => scope.activate(span, cb)
   } else {
     activate = (cb) => cb()
