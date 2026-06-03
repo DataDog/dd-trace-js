@@ -49,6 +49,7 @@
 /benchmark/sirun/plugin-pino/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-q/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-redis/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-ws/ @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
 /integration-tests/electron/ @DataDog/apm-idm-js
