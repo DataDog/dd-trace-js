@@ -442,6 +442,14 @@ describe('tagger', () => {
       })
     })
 
+    describe('setName', () => {
+      it('sets the _ml_obs.name tag on the span', () => {
+        tagger._register(span)
+        tagger.setName(span, 'my-span-name')
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.name'], 'my-span-name')
+      })
+    })
+
     describe('tagCostTags', () => {
       it('validates and sets cost tags', () => {
         tagger._register(span)
