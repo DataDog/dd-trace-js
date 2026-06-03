@@ -11,14 +11,16 @@ const asyncEndChannel = channel('apm:http2:client:request:asyncEnd')
 const errorChannel = channel('apm:http2:client:request:error')
 
 function createWrapEmit (ctx) {
-  return function wrapEmit (emit) {
-    return function (event, arg1) {
-      ctx.eventName = event
-      ctx.eventData = arg1
+  return function wrapEmit (originalEmit) {
+    // Named `emit`/arity-1 mirrors the request method so the per-request wrap
+    // skips its name/length rewrite.
+    return function emit (eventName) {
+      ctx.eventName = eventName
+      ctx.eventData = arguments[1]
 
       return asyncStartChannel.runStores(ctx, () => {
         try {
-          return emit.apply(this, arguments)
+          return Reflect.apply(originalEmit, this, arguments)
         } finally {
           asyncEndChannel.publish(ctx)
         }
@@ -29,14 +31,14 @@ function createWrapEmit (ctx) {
 
 function createWrapRequest (authority, options) {
   return function wrapRequest (request) {
-    return function (headers) {
-      if (!startChannel.hasSubscribers) return request.apply(this, arguments)
+    return function (...args) {
+      if (!startChannel.hasSubscribers) return Reflect.apply(request, this, args)
 
-      const ctx = { headers, authority, options }
+      const ctx = { headers: args[0], authority, options }
 
       return startChannel.runStores(ctx, () => {
         try {
-          const req = request.apply(this, arguments)
+          const req = Reflect.apply(request, this, args)
 
           shimmer.wrap(req, 'emit', createWrapEmit(ctx))
 
@@ -54,13 +56,14 @@ function createWrapRequest (authority, options) {
 }
 
 function wrapConnect (connect) {
-  return function (authority, options) {
+  return function (...args) {
+    const authority = args[0]
     if (connectChannel.hasSubscribers) {
       connectChannel.publish({ authority })
     }
-    const session = connect.apply(this, arguments)
+    const session = Reflect.apply(connect, this, args)
 
-    shimmer.wrap(session, 'request', createWrapRequest(authority, options))
+    shimmer.wrap(session, 'request', createWrapRequest(authority, args[1]))
 
     return session
   }
