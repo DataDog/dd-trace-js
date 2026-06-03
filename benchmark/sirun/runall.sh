@@ -190,10 +190,8 @@ if [[ "${SKIPPED_COUNT}" -gt 0 ]]; then
   echo "${SKIPPED_COUNT} benchmark variant(s) failed on the baseline source and were skipped:" >&2
   sed 's/^/  - /' "$SKIPPED_FILE" >&2
 
-  # A benchmark-only change is fine -- the skipped benchmark is the work. Any other
-  # source change leaves the A/B comparison incomplete, so fail and ask for the
-  # benchmark to land on its own first. Docs, CODEOWNERS, CI config and tests do
-  # not count as source here.
+  # We want to separate the source code change from a benchmark in case it is not
+  # possible to run the new benchmark on the baseline.
   NON_BENCH_SOURCE_CHANGED=""
   if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
     NON_BENCH_SOURCE_CHANGED="$(git -C /app/candidate diff --name-only "${COMMIT_SHA}..${CI_COMMIT_SHA}" \
