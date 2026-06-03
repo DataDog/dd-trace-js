@@ -178,7 +178,8 @@ describe('AgentlessJSONEncoder', () => {
     })
 
     it('should convert span_events to meta.events JSON string', () => {
-      data[0].span_events = [{ name: 'exception', attributes: { message: 'error' } }]
+      // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
+      data[0].span_events = [{ name: 'exception', startTime: 1, attributes: { message: 'error' } }]
 
       encoder.encode(data)
 
@@ -188,7 +189,10 @@ describe('AgentlessJSONEncoder', () => {
 
       assert.strictEqual(span.span_events, undefined)
       assert.strictEqual(typeof span.meta.events, 'string')
-      assert.deepStrictEqual(JSON.parse(span.meta.events), [{ name: 'exception', attributes: { message: 'error' } }])
+      assert.deepStrictEqual(
+        JSON.parse(span.meta.events),
+        [{ name: 'exception', time_unix_nano: 1000000, attributes: { message: 'error' } }]
+      )
     })
 
     it('should include meta_struct when present', () => {

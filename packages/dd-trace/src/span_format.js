@@ -48,9 +48,10 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {Array} links
  * @property {Array<SpanEvent> | undefined} span_events
  *
- * @typedef {object} SpanEvent
+ * @typedef {object} SpanEvent Raw span event as stored on the span; the encoder
+ *   layer derives `time_unix_nano` from `startTime` via `eventTimeNano`.
  * @property {string} name
- * @property {number} time_unix_nano
+ * @property {number} startTime Milliseconds with sub-millisecond precision.
  * @property {Record<string, string>} [attributes]
  */
 
@@ -88,7 +89,6 @@ function formatSpan (span) {
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
-    links: [],
     span_events: undefined,
   }
 }
@@ -121,7 +121,9 @@ function extractSpanLinks (formattedSpan, span) {
       span_id: context.toSpanId(true),
     }
 
-    if (attributes && Object.keys(attributes).length > 0) {
+    // `_sanitizeAttributes` (addLink) leaves `attributes` undefined when empty,
+    // so a present value always has entries — no emptiness probe here.
+    if (attributes) {
       formattedLink.attributes = attributes
     }
     if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
@@ -137,6 +139,12 @@ function extractSpanLinks (formattedSpan, span) {
 }
 
 /**
+ * Hand the raw `_events` array to the encoder layer instead of copying it into
+ * reshaped `{ name, time_unix_nano, attributes }` objects. Each encoder derives
+ * `time_unix_nano` from `event.startTime` via `eventTimeNano` and drops empty
+ * attribute objects itself, so the per-event allocation here is pure waste on
+ * every event-bearing span.
+ *
  * @param {FormattedSpan} formattedSpan
  * @param {import('./opentracing/span')} span
  */
@@ -144,13 +152,7 @@ function extractSpanEvents (formattedSpan, span) {
   if (!span._events?.length) {
     return
   }
-  formattedSpan.span_events = span._events.map(event => {
-    return {
-      name: event.name,
-      time_unix_nano: Math.round(event.startTime * 1e6),
-      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
-    }
-  })
+  formattedSpan.span_events = span._events
 }
 
 function extractTags (formattedSpan, span) {
@@ -168,7 +170,7 @@ function extractTags (formattedSpan, span) {
     metrics[MEASURED] = 1
   }
 
-  const tracerService = span.tracer()._service.toLowerCase()
+  const tracerService = span.tracer().serviceLower
   if (tags['service.name']?.toLowerCase() !== tracerService) {
     span.setTag(BASE_SERVICE, tracerService)
 
