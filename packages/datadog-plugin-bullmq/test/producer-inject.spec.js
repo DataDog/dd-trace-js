@@ -264,4 +264,50 @@ describe('bullmq producer telemetry metadata injection', () => {
     assert.deepStrictEqual(instance.bindStart(ctx), ctx.currentStore)
     sinon.assert.notCalled(instance.shouldInstrument)
   })
+
+  it('FlowProducerAdd.shouldInstrument calls producerFilter with flow fields and returns its result', () => {
+    const [,, FlowProducerAddPlugin] = plugins
+    const producerFilter = sinon.stub().returns(true)
+    const instance = Object.create(FlowProducerAddPlugin.prototype)
+    instance.config = { producerFilter }
+    const flow = { name: 'my-job', data: { id: 1 }, opts: { delay: 100 }, queueName: 'my-queue' }
+
+    assert.strictEqual(instance.shouldInstrument({ arguments: [flow] }), true)
+    sinon.assert.calledOnceWithExactly(producerFilter, {
+      name: 'my-job',
+      data: { id: 1 },
+      opts: { delay: 100 },
+      queueName: 'my-queue',
+    })
+  })
+
+  it('FlowProducerAdd.shouldInstrument returns false when producerFilter rejects the flow', () => {
+    const [,, FlowProducerAddPlugin] = plugins
+    const producerFilter = sinon.stub().returns(false)
+    const instance = Object.create(FlowProducerAddPlugin.prototype)
+    instance.config = { producerFilter }
+
+    assert.strictEqual(instance.shouldInstrument({ arguments: [{ name: 'skip', queueName: 'q' }] }), false)
+  })
+
+  it('FlowProducerAdd.shouldInstrument passes undefined fields when flow argument is absent', () => {
+    const [,, FlowProducerAddPlugin] = plugins
+    const producerFilter = sinon.stub().returns(true)
+    const instance = Object.create(FlowProducerAddPlugin.prototype)
+    instance.config = { producerFilter }
+
+    instance.shouldInstrument({ arguments: [undefined] })
+    sinon.assert.calledOnceWithExactly(producerFilter, {
+      name: undefined,
+      data: undefined,
+      opts: undefined,
+      queueName: undefined,
+    })
+  })
+
+  it('BaseBullmqProducerPlugin.shouldInstrument throws when not overridden by subclass', () => {
+    const [QueueAddPlugin] = plugins
+    const baseShouldInstrument = Object.getPrototypeOf(QueueAddPlugin.prototype).shouldInstrument
+    assert.throws(() => baseShouldInstrument.call({}), /shouldInstrument must be implemented by subclass/)
+  })
 })
