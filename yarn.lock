@@ -190,7 +190,7 @@
     "@babel/helper-string-parser" "^7.29.7"
     "@babel/helper-validator-identifier" "^7.29.7"
 
-"@datadog/flagging-core@^1.2.1":
+"@datadog/flagging-core@1.2.1":
   version "1.2.1"
   resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-1.2.1.tgz#1bb2d1ecfd749033ed2570eccc8fb0697b8adfac"
   integrity sha512-qeDkki9fFlqyoZBrn7tneT6pZ04EKKvf3xxisYw1a74zbJihvQui/ARUsjXCurRpzpFqGGTJw/oz+HnXaKhcdw==
@@ -224,12 +224,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@1.2.1":
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-1.2.1.tgz#762b39e486f9d04e0219058b1b9b4202004cf091"
-  integrity sha512-iY32juuL2w07vOlrTG1Y1U0y3ehyvRxuwzJvaLqjmQE8jj2L3o2SRm2UwgmLnzh6JWzMfNxbfs66KvOmPja7dQ==
+"@datadog/openfeature-node-server@2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.0.0.tgz#94e787f0bb0b1b0c87e728ad760950c0ea5f3328"
+  integrity sha512-Ummu/Bd7ZJpCCNdFnZUt/JI+L1+8OMK53+MyIXbS7dCt4JXWWwelbpzSGqmC2jWbWQ/mTo4hEfnFw3kYOINbXA==
   dependencies:
-    "@datadog/flagging-core" "^1.2.1"
+    "@datadog/flagging-core" "1.2.1"
 
 "@datadog/pprof@5.14.4":
   version "5.14.4"
