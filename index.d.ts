@@ -19,6 +19,12 @@ interface Tracer extends opentracing.Tracer {
 
   /**
    * Starts and returns a new Span representing a logical unit of work.
+   *
+   * The returned span is not activated on the current scope. Spans created
+   * while it is open — via {@link Tracer.trace} or auto-instrumentation — only
+   * nest under it when it is the active span, so wrap the work in
+   * {@link Scope.activate} (or use {@link Tracer.trace}) when child spans
+   * should descend from it.
    * @param {string} name The name of the operation.
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
