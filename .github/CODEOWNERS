@@ -47,6 +47,7 @@
 /benchmark/sirun/plugin-kafkajs/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-mongodb-core/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-pg/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pino/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-q/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-redis/ @DataDog/apm-idm-js
