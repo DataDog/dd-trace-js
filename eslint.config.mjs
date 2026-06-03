@@ -655,6 +655,7 @@ export default [
       'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
       'packages/datadog-plugin-openai/test/no-init.js',
       'packages/dd-trace/test/custom-metrics-app.js',
+      'packages/datadog-plugin-aws-durable-execution-sdk-js/test/integration-test/server.mjs',
       'packages/datadog-plugin-fastify/test/integration-test/helper.mjs',
       'packages/datadog-plugin-light-my-request/test/integration-test/server.mjs',
     ],
