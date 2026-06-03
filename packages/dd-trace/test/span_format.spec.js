@@ -624,6 +624,18 @@ describe('spanFormat', () => {
       assert.ok(!Object.hasOwn(trace.meta, 'resource.name'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
     })
 
+    it('omits tags whose value is undefined from meta and metrics', () => {
+      // resolveServiceSource clears a speculative tag by assigning undefined
+      // (rather than deleting, which would push _tags into dictionary mode);
+      // a cleared key stays in Object.keys but must not be emitted.
+      spanContext._tags['foo.bar'] = undefined
+
+      trace = spanFormat(span)
+
+      assert.ok(!Object.hasOwn(trace.meta, 'foo.bar'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+      assert.ok(!Object.hasOwn(trace.metrics, 'foo.bar'), `Available keys: ${inspect(Object.keys(trace.metrics))}`)
+    })
+
     it('should extract numeric tags as metrics', () => {
       spanContext._tags = { metric: 50 }
 
