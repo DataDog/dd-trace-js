@@ -37,6 +37,9 @@
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
+/.agents/skills/apm-integrations/ @DataDog/apm-idm-js
+/.claude/skills/apm-integrations @DataDog/apm-idm-js
+
 /benchmark/sirun/child_process/ @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
@@ -160,6 +163,10 @@
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
+/.agents/skills/llmobs-integration/ @DataDog/ml-observability
+/.agents/skills/llmobs-testing/ @DataDog/ml-observability
+/.claude/skills/llmobs-integration @DataDog/ml-observability
+/.claude/skills/llmobs-testing @DataDog/ml-observability
 /benchmark/sirun/llmobs/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
