@@ -11,12 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
-env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-
 jobs:
   unit:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / unit (node-${{ matrix.version }})
@@ -91,18 +89,20 @@ jobs:
 
   windows:
     name: ${{ github.workflow }} / windows
-    runs-on: windows-latest
+    runs-on: windows-2022
     permissions:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node
         with:
-          cache: "true"
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
+      - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-windows

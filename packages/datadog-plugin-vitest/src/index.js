@@ -15,7 +15,7 @@ const {
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
-  TEST_LEVEL_EVENT_TYPES,
+  TEST_COMMAND,
   TEST_SESSION_NAME,
   TEST_SOURCE_START,
   TEST_IS_NEW,
@@ -55,6 +55,16 @@ class VitestPlugin extends CiPlugin {
     super(...args)
 
     this.taskToFinishTime = new WeakMap()
+
+    this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
+      const testSessionSpanContext = this.testSessionSpan?.context()
+      const testModuleSpanContext = this.testModuleSpan?.context()
+      onDone({
+        testSessionId: testSessionSpanContext?.toTraceId(),
+        testModuleId: testModuleSpanContext?.toSpanId(),
+        testCommand: this.command,
+      })
+    })
 
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
       // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
@@ -213,12 +223,15 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
@@ -234,6 +247,7 @@ class VitestPlugin extends CiPlugin {
       hasFailedAllRetries,
       attemptToFixFailed,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (!span) {
         return
@@ -261,6 +275,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       if (duration) {
         span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
@@ -292,31 +309,25 @@ class VitestPlugin extends CiPlugin {
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
-      // TODO: Handle case where the command is not set
-      this.command = this._tracerConfig.DD_CIVISIBILITY_TEST_COMMAND
+      const testCommand = ctx.testCommand || 'vitest run'
+      const { testSessionId, testModuleId } = ctx
+      this.command = testCommand
       this.frameworkVersion = frameworkVersion
-      const testSessionSpanContext = this.tracer.extract('text_map', {
-        // TODO: Handle case where the session ID or module ID is not set
-        'x-datadog-trace-id': this._tracerConfig.DD_CIVISIBILITY_TEST_SESSION_ID,
-        'x-datadog-parent-id': this._tracerConfig.DD_CIVISIBILITY_TEST_MODULE_ID,
-      })
+      const testSessionSpanContext = testSessionId && testModuleId
+        ? this.tracer.extract('text_map', {
+          'x-datadog-trace-id': testSessionId,
+          'x-datadog-parent-id': testModuleId,
+        })
+        : undefined
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
       if (this.tracer._exporter.addMetadataTags) {
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
-        metadataTags.test = {
-          ...metadataTags.test,
-          ...libraryCapabilitiesTags,
-        }
-        this.tracer._exporter.addMetadataTags(metadataTags)
+        this.tracer._exporter.addMetadataTags({
+          '*': { [TEST_COMMAND]: testCommand, [TEST_SESSION_NAME]: testSessionName },
+          test: getLibraryCapabilitiesTags(this.constructor.id),
+        })
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 
@@ -41,7 +42,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -76,7 +77,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '87654321876543211234567812345678')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -96,7 +97,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '4e2a9c1573d240b1a3b7e3c1d4c2f9a7')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -116,7 +117,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -136,9 +137,18 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
+    })
+
+    it('should not assign dd when no span, service, env, or version is set', () => {
+      propagator = new LogPropagator({})
+      const carrier = {}
+
+      propagator.inject(null, carrier)
+
+      assert.strictEqual(carrier.dd, undefined)
     })
   })
 

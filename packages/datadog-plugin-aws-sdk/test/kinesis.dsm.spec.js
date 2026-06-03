@@ -6,20 +6,19 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Kinesis', function () {
   this.timeout(10000)
   setup()
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let AWS
     let kinesis
     let tracer
@@ -157,7 +156,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 1)
+          assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -175,7 +174,7 @@ describe('Kinesis', function () {
               })
             }
           }, { timeoutMs: 10000 })
-          assert.ok(statsPointsReceived >= 2)
+          assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -233,7 +232,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 3)
+          assert.ok(statsPointsReceived >= 3, `Expected ${statsPointsReceived} >= 3`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 

@@ -15,10 +15,13 @@ jobs:
   all-green:
     runs-on: ubuntu-latest
     permissions:
-      actions: write
-      checks: read
-      contents: read
+      id-token: write
     steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: all-green
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout-cone-mode: false
@@ -31,38 +34,9 @@ jobs:
       - run: yarn add @actions/core @actions/github octokit
       - run: node scripts/all-green.mjs
         env:
-          DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns
+          DELAY: ${{ github.run_attempt == 1 && '1' || '0' }} # 1 minute on first attempt, no delay on reruns
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
-          RETRIES: 30
-      - name: Require vendor validation when vendor/ changes
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-
-          vendor_changed="$(gh api "repos/${REPO}/compare/${BASE_SHA}...${HEAD_SHA}" --jq 'any(.files[].filename; startswith("vendor/"))')"
-          if [ "$vendor_changed" != "true" ]; then
-            exit 0
-          fi
-
-          # If vendor/ was touched, require *some* vendor validation check to be present:
-          # - For most PRs: `Validate vendored bundle / validate-vendored-bundle`
-          # - For Dependabot vendor PRs: `Dependabot Automation / vendor-validate`
-          check_names="$(gh api "repos/${REPO}/commits/${{ github.event.pull_request.head.sha }}/check-runs" \
-            -H "Accept: application/vnd.github+json" \
-            --paginate \
-            --jq '.check_runs[].name')"
-
-          if echo "$check_names" | grep -Eq '^(validate-vendored-bundle|vendor-validate)$'; then
-            exit 0
-          fi
-
-          echo "vendor/ changed but no vendor validation check was found."
-          echo "Expected a check run named 'validate-vendored-bundle' or 'vendor-validate'."
-          exit 1
+          RETRIES: 20

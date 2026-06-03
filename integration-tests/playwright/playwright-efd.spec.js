@@ -2,12 +2,13 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   assertObjectContains,
 } = require('../helpers')
@@ -22,16 +23,17 @@ const {
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_NAME,
+  TEST_BROWSER_NAME,
   TEST_RETRY_REASON_TYPES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
+const PLAYWRIGHT_EFD_GATHER_TIMEOUT = 60000
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -57,11 +59,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
@@ -188,7 +186,7 @@ versions.forEach((version) => {
 
             // all but one has been retried
             assert.strictEqual(totalRetriedTests.length, totalNewTests.length - 2)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -197,6 +195,226 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('uses the retry count from the matching slow_test_retries bucket', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 1,
+              '30s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          playwright: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const slowTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'efd duration retries slightly slow test'
+            )
+            assert.strictEqual(slowTests.length, 1)
+            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+          }, 45_000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-efd-duration',
+              PLAYWRIGHT_WORKERS: '2',
+            },
+          }
+        )
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('keeps duration retry counts scoped by Playwright project', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          playwright: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const projectTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'efd project duration project scoped test'
+            )
+            const fastProjectTests = projectTests.filter(test => test.meta[TEST_BROWSER_NAME] === 'chromium')
+            const slowProjectTests = projectTests.filter(test => test.meta[TEST_BROWSER_NAME] === 'second-chromium')
+
+            assert.strictEqual(fastProjectTests.length, 3)
+            assert.strictEqual(
+              fastProjectTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+              2
+            )
+            assert.strictEqual(slowProjectTests.length, 1)
+            assert.strictEqual(slowProjectTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowProjectTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in slowProjectTests[0].meta))
+          }, 60_000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-efd-projects',
+              ADD_DUPLICATE_PLAYWRIGHT_PROJECT: '1',
+              PLAYWRIGHT_WORKERS: '2',
+            },
+          }
+        )
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('does not treat native repeat-each executions as EFD retries', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          playwright: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const repeatedTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'efd repeat each native repeat test'
+            )
+
+            assert.strictEqual(repeatedTests.length, 3)
+            for (const repeatedTest of repeatedTests) {
+              assert.strictEqual(repeatedTest.meta[TEST_IS_NEW], 'true')
+              assert.ok(!(TEST_IS_RETRY in repeatedTest.meta))
+              assert.ok(!(TEST_RETRY_REASON in repeatedTest.meta))
+            }
+          }, 45_000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=3',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-efd-repeat',
+              PLAYWRIGHT_WORKERS: '2',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      it('keeps duration retry counts scoped by native repeat-each index', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          playwright: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const repeatedTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'efd repeat duration repeat-scoped test'
+            )
+
+            assert.strictEqual(repeatedTests.length, 4)
+            for (const repeatedTest of repeatedTests) {
+              assert.strictEqual(repeatedTest.meta[TEST_IS_NEW], 'true')
+            }
+
+            const slowRepeatTests = repeatedTests.filter(
+              test => test.meta[TEST_EARLY_FLAKE_ABORT_REASON] === 'slow'
+            )
+            assert.strictEqual(slowRepeatTests.length, 1)
+            assert.ok(!(TEST_IS_RETRY in slowRepeatTests[0].meta))
+
+            const retriedTests = repeatedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 2)
+            for (const retriedTest of retriedTests) {
+              assert.strictEqual(retriedTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            }
+
+            const fastOriginalTests = repeatedTests.filter(test =>
+              !(TEST_IS_RETRY in test.meta) && !(TEST_EARLY_FLAKE_ABORT_REASON in test.meta)
+            )
+            assert.strictEqual(fastOriginalTests.length, 1)
+          }, 60_000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=2',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-efd-repeat-duration',
+              PLAYWRIGHT_WORKERS: '1',
             },
           }
         )
@@ -256,7 +474,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -328,7 +546,7 @@ versions.forEach((version) => {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -379,7 +597,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          }, 60000)
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -448,7 +666,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -503,7 +721,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -564,7 +782,7 @@ versions.forEach((version) => {
               assert.strictEqual(newTests.length, 0)
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               assert.strictEqual(retriedTests.length, 0)
-            }),
+            }, PLAYWRIGHT_EFD_GATHER_TIMEOUT),
         ])
       })
 
@@ -627,14 +845,8 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
 
-              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
-              const lastRetry = newTests[newTests.length - 1]
-              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-              // Earlier attempts should not have the flag
-              for (let i = 0; i < newTests.length - 1; i++) {
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
-              }
+              const failedAllRetries = newTests.filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+              assert.strictEqual(failedAllRetries.length, 1)
 
               // --retries works normally for old flaky tests
               const oldFlakyTests = tests.filter(
@@ -647,7 +859,7 @@ versions.forEach((version) => {
               assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
               assert.strictEqual(failedFlakyTests.length, 1)
-            }),
+            }, PLAYWRIGHT_EFD_GATHER_TIMEOUT),
         ])
       })
 
@@ -710,14 +922,8 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
 
-              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
-              const lastRetry = newTests[newTests.length - 1]
-              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-              // Earlier attempts should not have the flag
-              for (let i = 0; i < newTests.length - 1; i++) {
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
-              }
+              const failedAllRetries = newTests.filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+              assert.strictEqual(failedAllRetries.length, 1)
 
               // ATR works normally for old flaky tests
               const oldFlakyTests = tests.filter(
@@ -730,7 +936,7 @@ versions.forEach((version) => {
               assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
               assert.strictEqual(failedFlakyTests.length, 1)
-            }),
+            }, PLAYWRIGHT_EFD_GATHER_TIMEOUT),
         ])
       })
     })

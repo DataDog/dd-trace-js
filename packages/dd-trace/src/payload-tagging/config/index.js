@@ -30,8 +30,8 @@ function getSDKRules (sdk, requestInput, responseInput) {
  * Appends input rules to all supported SDKs and returns a structure mapping SDK
  * names to per-service rules.
  *
- * @param {string[]} [requestInput=[]]
- * @param {string[]} [responseInput=[]]
+ * @param {string[]} [requestInput]
+ * @param {string[]} [responseInput]
  * @returns {Record<string, SDKRules>}
  */
 function appendRules (requestInput = [], responseInput = []) {

@@ -21,7 +21,7 @@ describe('Plugin', () => {
     withVersions('memcached', 'memcached', version => {
       afterEach(() => {
         memcached?.end()
-        agent.close({ ritmReset: false })
+        agent.close()
       })
 
       describe('without configuration', () => {
@@ -141,7 +141,7 @@ describe('Plugin', () => {
           memcached.get('test', err => err && done(err))
         })
 
-        it('should support redundancy', done => {
+        it('should support redundancy', function (done) {
           memcached = new Memcached({
             'localhost:11211': 1,
             'other:11211': 1,
@@ -152,21 +152,21 @@ describe('Plugin', () => {
 
           try {
             memcached.del('test', err => err && done(err))
-
-            agent
-              .assertFirstTraceSpan({
-                meta: {
-                  'out.host': 'localhost',
-                  'network.destination.port': '11211',
-                  component: 'memcached',
-                },
-              })
-              .then(done)
-              .catch(done)
-          } catch (e) {
+          } catch {
             // Bug in memcached will throw. Skip test when this happens.
-            done()
+            this.skip()
           }
+
+          agent
+            .assertFirstTraceSpan({
+              meta: {
+                'out.host': 'localhost',
+                'network.destination.port': '11211',
+                component: 'memcached',
+              },
+            })
+            .then(done)
+            .catch(done)
         })
 
         withNamingSchema(
@@ -198,7 +198,6 @@ describe('Plugin', () => {
         describe('enabling command', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
-            agent.wipe()
             await agent.load('memcached', { service: 'custom' })
             Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
             memcached = new Memcached('localhost:11211', { retries: 0 })
@@ -225,7 +224,6 @@ describe('Plugin', () => {
         describe('disabling command', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'false'
-            agent.wipe()
             await agent.load('memcached', { service: 'custom' })
             Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
             memcached = new Memcached('localhost:11211', { retries: 0 })

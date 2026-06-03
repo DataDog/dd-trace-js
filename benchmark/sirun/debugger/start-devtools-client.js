@@ -1,6 +1,9 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+
+// Entry point normally primes this; bench imports src directly.
+globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const getConfig = require('../../../packages/dd-trace/src/config')
 const { start } = require('../../../packages/dd-trace/src/debugger')
@@ -33,3 +36,5 @@ const rc = {
 }
 
 start(config, rc)
+
+assert.ok(globalThis[Symbol.for('dd-trace')].utilTypes, 'debugger.start did not populate utilTypes')

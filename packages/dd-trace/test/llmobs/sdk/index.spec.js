@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -10,9 +11,9 @@ const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
-const agent = require('../../plugins/agent')
 const { removeDestroyHandler } = require('../util')
 
 const injectCh = channel('dd-trace:span:inject')
@@ -24,14 +25,10 @@ describe('sdk', () => {
   let tracer
   let clock
 
-  before(() => {
-    tracer = require('../../../../dd-trace')
-    tracer.init({
+  before(async () => {
+    tracer = await agent.load(null, [], {
       service: 'service',
-      llmobs: {
-        mlApp: 'mlApp',
-        agentlessEnabled: false,
-      },
+      llmobs: { mlApp: 'mlApp', agentlessEnabled: false },
     })
     llmobs = tracer.llmobs
 
@@ -72,10 +69,10 @@ describe('sdk', () => {
     removeDestroyHandler()
   })
 
-  after(() => {
+  after(async () => {
     sinon.restore()
     llmobsModule.disable()
-    agent.wipe() // clear the require cache
+    await agent.close()
   })
 
   describe('enabled', () => {
@@ -183,7 +180,8 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
-            assert.ok(LLMObsTagger.tagMap.get(span) == null)
+            const tag = LLMObsTagger.tagMap.get(span)
+            assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
             span.setTag('k', 'v')
             cb()
           })
@@ -315,11 +313,11 @@ describe('sdk', () => {
           tracer.trace('apmRootSpan', apmRootSpan => {
             apmTraceId = apmRootSpan.context().toTraceId(true)
             llmobs.trace('workflow', llmobsSpan1 => {
-              traceId1 = llmobsSpan1.context()._tags['_ml_obs.trace_id']
+              traceId1 = llmobsSpan1.context().getTag('_ml_obs.trace_id')
             })
 
             llmobs.trace('workflow', llmobsSpan2 => {
-              traceId2 = llmobsSpan2.context()._tags['_ml_obs.trace_id']
+              traceId2 = llmobsSpan2.context().getTag('_ml_obs.trace_id')
             })
           })
 
@@ -430,7 +428,8 @@ describe('sdk', () => {
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
-            assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
+            const tag = LLMObsTagger.tagMap.get(llmobs._active())
+            assert.ok(tag == null, `Expected no LLMObs tag for active span, got ${inspect(tag)}`)
           })
 
           fn(1)
@@ -608,7 +607,7 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            assert.ok(err == null)
+            assert.ok(err == null, `Expected ${err} == null`)
             assert.strictEqual(res, 'output')
           })
 
@@ -690,7 +689,7 @@ describe('sdk', () => {
             workflowSpan = _workflow
             tracer.trace('apmOperation', () => {
               myWrappedLlm('input', (err, res) => {
-                assert.ok(err == null)
+                assert.ok(err == null, `Expected ${err} == null`)
                 assert.strictEqual(res, 'output')
                 llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
                   taskSpan = _task
@@ -725,7 +724,7 @@ describe('sdk', () => {
           const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
             const span = llmobs._active()
 
-            const traceId = span.context()._tags['_ml_obs.trace_id']
+            const traceId = span.context().getTag('_ml_obs.trace_id')
             assert.ok(traceId)
             assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
@@ -913,8 +912,8 @@ describe('sdk', () => {
       tracer.trace('test', span => {
         assert.throws(() => llmobs.annotate(span, {}))
 
-        // no span in registry, should not throw
-        assert.ok(LLMObsTagger.tagMap.get(span) == null)
+        const tag = LLMObsTagger.tagMap.get(span)
+        assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
       })
     })
 
@@ -1064,6 +1063,127 @@ describe('sdk', () => {
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.tags': tags,
+        })
+      })
+    })
+
+    it('annotates costTags if present', () => {
+      const tags = { team: 'ml', feature: 'chatbot', debug_id: 'abc' }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags, costTags: ['team', 'feature'] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': tags,
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+        })
+      })
+    })
+
+    it('dedupes costTags across annotations', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({
+          tags: { team: 'ml', feature: 'chatbot' },
+          costTags: ['team', 'feature', 'team'],
+        })
+        llmobs.annotate({
+          tags: { project: 'alpha' },
+          costTags: ['feature', 'project'],
+        })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml', feature: 'chatbot', project: 'alpha' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature', 'project'],
+        })
+      })
+    })
+
+    it('skips invalid costTags entries', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: ['team', 'missing', 123] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+        })
+      })
+    })
+
+    it('rejects non-array costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: 'team' })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('does not set costTags for an empty list', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: [] })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('ignores null costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: null })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+  })
+
+  describe('annotationContext', () => {
+    it('applies costTags to spans created in the context', () => {
+      llmobs.annotationContext({ tags: { team: 'ml', feature: 'chatbot' }, costTags: ['team', 'feature'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml', feature: 'chatbot' },
+            '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+          })
+        })
+      })
+    })
+
+    it('does not retain costTags for tags added after the span starts', () => {
+      llmobs.annotationContext({ costTags: ['team'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          llmobs.annotate({ tags: { team: 'ml' } })
+
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml' },
+          })
         })
       })
     })
@@ -1498,7 +1618,7 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      assert.strictEqual(carrier['x-datadog-tags'], `,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      assert.strictEqual(carrier['x-datadog-tags'], `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
     })
   })
 })

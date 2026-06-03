@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -41,8 +42,8 @@ describe('EvalMetricsHook', () => {
     })
   })
 
-  function makeConfig (otelMetricsEnabled = true) {
-    return { otelMetricsEnabled }
+  function makeConfig (DD_METRICS_OTEL_ENABLED = true) {
+    return { DD_METRICS_OTEL_ENABLED }
   }
 
   function hookContext (flagKey = 'flag') {
@@ -142,7 +143,7 @@ describe('EvalMetricsHook', () => {
       metrics.finally(hookContext(), evalDetails())
 
       const [, attributes] = mockCounter.add.firstCall.args
-      assert.ok(!Object.hasOwn(attributes, 'error.type'))
+      assert.ok(!Object.hasOwn(attributes, 'error.type'), `Available keys: ${inspect(Object.keys(attributes))}`)
     })
 
     it('should include allocation_key when set', () => {
@@ -166,7 +167,10 @@ describe('EvalMetricsHook', () => {
       metrics.finally(hookContext(), evalDetails())
 
       const [, attributes] = mockCounter.add.firstCall.args
-      assert.ok(!Object.hasOwn(attributes, 'feature_flag.result.allocation_key'))
+      assert.ok(
+        !Object.hasOwn(attributes, 'feature_flag.result.allocation_key'),
+        `Available keys: ${inspect(Object.keys(attributes))}`
+      )
     })
 
     it('should omit allocation_key when flagMetadata is empty', () => {
@@ -174,7 +178,10 @@ describe('EvalMetricsHook', () => {
       metrics.finally(hookContext(), evalDetails({ flagMetadata: {} }))
 
       const [, attributes] = mockCounter.add.firstCall.args
-      assert.ok(!Object.hasOwn(attributes, 'feature_flag.result.allocation_key'))
+      assert.ok(
+        !Object.hasOwn(attributes, 'feature_flag.result.allocation_key'),
+        `Available keys: ${inspect(Object.keys(attributes))}`
+      )
     })
 
     it('should skip when OTel api throws', () => {

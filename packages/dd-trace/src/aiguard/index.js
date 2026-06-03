@@ -3,6 +3,7 @@
 const log = require('../log')
 const { incomingHttpRequestStart, aiguardChannel } = require('./channels')
 const AIGuard = require('./sdk')
+const { SOURCE_AUTO, INTEGRATION_NONE } = require('./tags')
 
 let isEnabled = false
 let aiguard
@@ -43,7 +44,7 @@ function disable () {
 /**
  * Handles channel messages with pre-converted messages.
  *
- * @param {{messages: Array<object>, resolve: Function, reject: Function}} ctx
+ * @param {{messages: Array<object>, integration?: string, resolve: Function, reject: Function}} ctx
  */
 function onEvaluate (ctx) {
   if (!ctx.messages?.length) {
@@ -51,7 +52,8 @@ function onEvaluate (ctx) {
     return
   }
 
-  aiguard.evaluate(ctx.messages, { block })
+  const opts = { block, source: SOURCE_AUTO, integration: ctx.integration || INTEGRATION_NONE }
+  aiguard.evaluate(ctx.messages, opts)
     .then(() => {
       ctx.resolve()
     })

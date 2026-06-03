@@ -30,7 +30,7 @@ const COUNTER_UNIT = '{evaluation}'
  * If counter creation fails (e.g. the OTel API is not yet available), the call
  * is silently skipped and retried on the next `finally()` invocation.
  *
- * When `config.otelMetricsEnabled` is false, `finally()` is always a no-op.
+ * When `config.DD_METRICS_OTEL_ENABLED` is false, `finally()` is always a no-op.
  */
 class EvalMetricsHook {
   #enabled = false
@@ -40,7 +40,7 @@ class EvalMetricsHook {
    * @param {import('../config')} config - Tracer configuration object
    */
   constructor (config) {
-    this.#enabled = config.otelMetricsEnabled === true
+    this.#enabled = config.DD_METRICS_OTEL_ENABLED === true
   }
 
   /**

@@ -1,5 +1,7 @@
 'use strict'
 
+const { setImmediate } = require('node:timers/promises')
+
 const graphql = require('../../../versions/graphql').get()
 
 const Human = new graphql.GraphQLObjectType({
@@ -8,9 +10,8 @@ const Human = new graphql.GraphQLObjectType({
     name: {
       type: graphql.GraphQLString,
       async resolve (obj, args) {
-        const name = await Promise.resolve('test')
-
-        return name
+        await setImmediate()
+        return 'test'
       },
     },
     address: {
@@ -20,25 +21,22 @@ const Human = new graphql.GraphQLObjectType({
           civicNumber: {
             type: graphql.GraphQLString,
             async resolve () {
-              const civicNumber = await Promise.resolve('123')
-
-              return civicNumber
+              await setImmediate()
+              return '123'
             },
           },
           street: {
             type: graphql.GraphQLString,
             async resolve () {
-              const street = await Promise.resolve('foo street')
-
-              return street
+              await setImmediate()
+              return 'foo street'
             },
           },
         },
       }),
       async resolve (obj, args) {
-        const address = await Promise.resolve({})
-
-        return address
+        await setImmediate()
+        return {}
       },
     },
     pets: {
@@ -48,25 +46,22 @@ const Human = new graphql.GraphQLObjectType({
           type: {
             type: graphql.GraphQLString,
             async resolve (obj, args) {
-              const type = await Promise.resolve('dog')
-
-              return type
+              await setImmediate()
+              return 'dog'
             },
           },
           name: {
             type: graphql.GraphQLString,
             async resolve (obj, args) {
-              const name = await Promise.resolve('foo bar')
-
-              return name
+              await setImmediate()
+              return 'foo bar'
             },
           },
           owner: {
             type: Human,
             async resolve (obj, args) {
-              const owner = await Promise.resolve({})
-
-              return owner
+              await setImmediate()
+              return {}
             },
           },
           colours: {
@@ -76,31 +71,28 @@ const Human = new graphql.GraphQLObjectType({
                 code: {
                   type: graphql.GraphQLString,
                   async resolve (obj, args) {
-                    const code = await Promise.resolve('#ffffff')
-
-                    return code
+                    await setImmediate()
+                    return '#ffffff'
                   },
                 },
               },
             })),
             async resolve (obj, args) {
-              const colours = await Promise.resolve([{}, {}])
-
-              return colours
+              await setImmediate()
+              return [{}, {}]
             },
           },
         }),
       }))),
       async resolve (obj, args) {
+        await setImmediate()
         const promises = []
 
         for (let i = 0; i < 20; i++) {
-          promises.push(await Promise.resolve({}))
+          promises.push(Promise.resolve({}))
         }
 
-        const pets = await Promise.all(promises)
-
-        return pets
+        return Promise.all(promises)
       },
     },
   },
@@ -113,15 +105,14 @@ const schema = new graphql.GraphQLSchema({
       friends: {
         type: new graphql.GraphQLList(Human),
         async resolve (obj, args) {
+          await setImmediate()
           const promises = []
 
           for (let i = 0; i < 20; i++) {
-            promises.push(await Promise.resolve({}))
+            promises.push(Promise.resolve({}))
           }
 
-          const friends = await Promise.all(promises)
-
-          return friends
+          return Promise.all(promises)
         },
       },
     },

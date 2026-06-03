@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -92,7 +93,7 @@ describe('Plugin', () => {
 
       after(() => {
         authStub.restore()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('generateContent', () => {
@@ -111,7 +112,7 @@ describe('Plugin', () => {
           const { response } = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }],
           })
-          assert.ok(Object.hasOwn(response, 'candidates'))
+          assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
           await checkTraces
         })
@@ -123,7 +124,7 @@ describe('Plugin', () => {
 
           const { response } = await model.generateContent('Hello, how are you?')
 
-          assert.ok(Object.hasOwn(response, 'candidates'))
+          assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
           await checkTraces
         })
@@ -161,17 +162,20 @@ describe('Plugin', () => {
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
 
           // check that response is a promise
-          assert.ok(response && typeof response.then === 'function')
+          assert.ok(
+            response && typeof response.then === 'function',
+            `Expected a thenable, got: ${inspect(response)}`
+          )
 
           const promState = await promiseState(response)
           assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
 
           for await (const chunk of stream) {
-            assert.ok(Object.hasOwn(chunk, 'candidates'))
+            assert.ok(Object.hasOwn(chunk, 'candidates'), `Available keys: ${inspect(Object.keys(chunk))}`)
           }
 
           const result = await response
-          assert.ok(Object.hasOwn(result, 'candidates'))
+          assert.ok(Object.hasOwn(result, 'candidates'), `Available keys: ${inspect(Object.keys(result))}`)
 
           await checkTraces
         })
@@ -199,7 +203,7 @@ describe('Plugin', () => {
             })
             const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
 
-            assert.ok(Object.hasOwn(response, 'candidates'))
+            assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
             await checkTraces
           })
@@ -212,7 +216,7 @@ describe('Plugin', () => {
             const chat = model.startChat({})
             const { response } = await chat.sendMessage('Hello, how are you?')
 
-            assert.ok(Object.hasOwn(response, 'candidates'))
+            assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
             await checkTraces
           })
@@ -225,7 +229,7 @@ describe('Plugin', () => {
             const chat = model.startChat({})
             const { response } = await chat.sendMessage(['Hello, how are you?', 'What should I do today?'])
 
-            assert.ok(Object.hasOwn(response, 'candidates'))
+            assert.ok(Object.hasOwn(response, 'candidates'), `Available keys: ${inspect(Object.keys(response))}`)
 
             await checkTraces
           })
@@ -248,17 +252,20 @@ describe('Plugin', () => {
             const { stream, response } = await chat.sendMessageStream('Hello, how are you?')
 
             // check that response is a promise
-            assert.ok(response && typeof response.then === 'function')
+            assert.ok(
+              response && typeof response.then === 'function',
+              `Expected a thenable, got: ${inspect(response)}`
+            )
 
             const promState = await promiseState(response)
             assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
 
             for await (const chunk of stream) {
-              assert.ok(Object.hasOwn(chunk, 'candidates'))
+              assert.ok(Object.hasOwn(chunk, 'candidates'), `Available keys: ${inspect(Object.keys(chunk))}`)
             }
 
             const result = await response
-            assert.ok(Object.hasOwn(result, 'candidates'))
+            assert.ok(Object.hasOwn(result, 'candidates'), `Available keys: ${inspect(Object.keys(result))}`)
 
             await checkTraces
           })

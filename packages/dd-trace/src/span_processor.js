@@ -25,7 +25,7 @@ class SpanProcessor {
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
 
-    this._processTags = config.propagateProcessTags?.enabled
+    this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
   }
@@ -156,10 +156,6 @@ class SpanProcessor {
           log.error('Span finished in one trace but was started in another trace: %s', span)
         }
       }
-    }
-
-    for (const span of trace.finished) {
-      span.context()._tags = {}
     }
 
     trace.started = active

@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 # TODO: upstream jobs
@@ -32,11 +31,24 @@ jobs:
           - name: npm
             install: npm install
           - name: pnpm
-            install: pnpm add
+            install: >-
+              pnpm
+              --allow-build=@datadog/native-appsec
+              --allow-build=@datadog/native-iast-taint-tracking
+              --allow-build=@datadog/native-metrics
+              --allow-build=@datadog/pprof
+              --allow-build=dd-trace
+              add
           - name: yarn
             install: yarn add
           - name: yarn-berry
-            install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
+            install: >-
+              (command -v corepack >/dev/null 2>&1 || npm install -g corepack)
+              && yarn set version stable
+              && yarn config set nodeLinker node-modules
+              && yarn config set enableScripts true
+              && yarn config set --json npmPreapprovedPackages '["@datadog/*"]'
+              && yarn add
           - name: bun
             install: bun add --linker=hoisted
     runs-on: ubuntu-latest
@@ -138,6 +150,31 @@ jobs:
         with:
           flags: platform-integration-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  crashtracking:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / crashtracking (node-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      # Disable core dumps since crashtracking tests intentionally abort
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
+      - run: yarn test:integration:crashtracking
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

@@ -19,7 +19,7 @@ class DatadogStorage extends AsyncLocalStorage {
    * @override
    */
   enterWith (store) {
-    const handle = {}
+    const handle = { noop: store?.noop }
     stores.set(handle, store)
     super.enterWith(handle)
   }

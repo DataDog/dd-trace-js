@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -23,6 +24,7 @@ describe('RemoteConfig', () => {
   let config
   let rc
   let tagger
+  let getGitMetadata
 
   before(() => {
     require('../../src/process-tags').initialize()
@@ -50,6 +52,8 @@ describe('RemoteConfig', () => {
 
     extraServices = []
 
+    getGitMetadata = sinon.stub().returns({ commitSHA: undefined, repositoryUrl: undefined })
+
     RemoteConfig = proxyquire('../../src/remote_config', {
       '../../../../vendor/dist/crypto-randomuuid': uuid,
       './scheduler': Scheduler,
@@ -57,6 +61,7 @@ describe('RemoteConfig', () => {
       '../exporters/common/request': request,
       '../log': log,
       '../tagger': tagger,
+      '../git_metadata': getGitMetadata,
       '../service-naming/extra-services': {
         getExtraServices: () => extraServices,
       },
@@ -138,22 +143,36 @@ describe('RemoteConfig', () => {
     assert.ok(Array.isArray(clientTracer.process_tags), 'process_tags should be an array')
 
     // Verify expected process tag keys are present
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')))
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')))
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')))
-    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')))
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
 
     // Verify entrypoint.type has expected value
-    assert.ok(clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'))
+    assert.ok(
+      clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'),
+      `Got: ${inspect(clientTracer.process_tags)}`
+    )
   })
 
   it('should add git metadata to tags if present', () => {
-    const configWithGit = {
-      ...config,
-      repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
+    getGitMetadata.returns({
       commitSHA: '1234567890',
-    }
-    const rc = new RemoteConfig(configWithGit)
+      repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
+    })
+    const rc = new RemoteConfig(config)
     assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
       'runtime-id:runtimeId',
       'git.repository_url:https://github.com/DataDog/dd-trace-js',

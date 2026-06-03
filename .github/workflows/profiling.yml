@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
@@ -77,19 +76,69 @@ jobs:
 
   windows:
     name: ${{ github.workflow }} / windows
-    runs-on: windows-latest
+    runs-on: windows-2022
     permissions:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node
         with:
-          cache: "true"
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
+      - uses: ./.github/actions/install
+      # Enable Windows Error Reporting LocalDumps for node.exe so __fastfail /
+      # RaiseFailFastException crashes (e.g. STATUS_STACK_BUFFER_OVERRUN /
+      # 0xC0000409) — which bypass V8 and process.report — still produce a
+      # minidump. See PROF-14469.
+      - name: Enable WER LocalDumps for node.exe
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP 'windows-crash-dumps'
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe'
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name DumpFolder      -Type ExpandString -Value $dumpDir
+          # DumpType=0 means "use CustomDumpFlags". Flags chosen for diagnosing native-binding
+          # teardown crashes (PROF-14469) without including heap memory:
+          #   0x0001 MiniDumpWithDataSegs        — module .data segments (V8/libc globals)
+          #   0x0004 MiniDumpWithHandleData      — process handle table
+          #   0x0020 MiniDumpWithUnloadedModules — modules unloaded before the crash
+          #   0x1000 MiniDumpWithThreadInfo      — per-thread CPU/start-address/affinity
+          Set-ItemProperty -Path $key -Name DumpType        -Type DWord        -Value 0
+          Set-ItemProperty -Path $key -Name CustomDumpFlags -Type DWord        -Value 0x1025
+          Set-ItemProperty -Path $key -Name DumpCount       -Type DWord        -Value 20
+          "WER_DUMP_DIR=$dumpDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # Defense-in-depth: blank known-sensitive env vars before tests so that
+      # if any of them ever do end up in the test process env (today they
+      # don't, but it's one workflow edit away), they cannot reach a published
+      # minidump artifact via module data segments or static state.
+      - name: Scrub sensitive env before tests
+        shell: pwsh
+        run: |
+          @(
+            'DD_API_KEY',
+            'DD_APP_KEY',
+            'DD_APPLICATION_KEY',
+            'GITHUB_TOKEN',
+            'NODE_AUTH_TOKEN',
+            'NPM_TOKEN'
+          ) | ForEach-Object { "$_=" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
+      # Upload any WER minidumps that landed during this job, even on
+      # mocha-retry-recovered success — those are exactly the flake signatures
+      # we want to inspect.
+      - name: Upload Windows crash dumps
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-crash-dumps-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.WER_DUMP_DIR }}/*.dmp
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-windows

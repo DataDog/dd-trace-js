@@ -174,8 +174,9 @@ describe('input message http requests', function () {
     sinon.assert.calledOnce(request)
     const opts = getRequestOptions(request)
     assert.strictEqual(opts.method, 'POST')
-    assert.ok(
-      opts.path.startsWith('/debugger/v2/input?ddtags='),
+    assert.match(
+      opts.path,
+      /^\/debugger\/v2\/input\?ddtags=/,
       `Expected path to start with /debugger/v2/input?ddtags= but got ${opts.path}`
     )
 
@@ -212,12 +213,18 @@ describe('input message http requests', function () {
     sinon.assert.calledTwice(requestWith404)
 
     const firstCallOpts = requestWith404.getCall(0).args[1]
-    assert.ok(firstCallOpts.path.startsWith('/debugger/v2/input?ddtags='),
-      `First call should use v2 endpoint but got ${firstCallOpts.path}`)
+    assert.match(
+      firstCallOpts.path,
+      /^\/debugger\/v2\/input\?ddtags=/,
+      `First call should use v2 endpoint but got ${firstCallOpts.path}`
+    )
 
     const secondCallOpts = requestWith404.getCall(1).args[1]
-    assert.ok(secondCallOpts.path.startsWith('/debugger/v1/diagnostics?ddtags='),
-      `Second call should fallback to diagnostics endpoint but got ${secondCallOpts.path}`)
+    assert.match(
+      secondCallOpts.path,
+      /^\/debugger\/v1\/diagnostics\?ddtags=/,
+      `Second call should fallback to diagnostics endpoint but got ${secondCallOpts.path}`
+    )
 
     // Verify config was updated to diagnostics
     assert.strictEqual(configStub.inputPath, '/debugger/v1/diagnostics')
@@ -263,10 +270,33 @@ describe('input message http requests', function () {
     sinon.assert.calledThrice(requestWith404)
 
     const thirdCallOpts = requestWith404.getCall(2).args[1]
-    assert.ok(thirdCallOpts.path.startsWith('/debugger/v1/diagnostics?ddtags='),
-      `Third call should stick with diagnostics endpoint but got ${thirdCallOpts.path}`)
+    assert.match(
+      thirdCallOpts.path,
+      /^\/debugger\/v1\/diagnostics\?ddtags=/,
+      `Third call should stick with diagnostics endpoint but got ${thirdCallOpts.path}`
+    )
 
     done()
+  })
+
+  it('should include process_tags at root level when provided', function () {
+    const processTags = 'entrypoint.name:banana,entrypoint.type:script'
+    send(message, logger, dd, snapshot, processTags)
+
+    const writtenJson = jsonBufferWrite.getCall(0).args[0]
+    const written = JSON.parse(writtenJson)
+
+    assert.strictEqual(written.process_tags, processTags)
+    assert.strictEqual(written.debugger.snapshot.process_tags, undefined)
+  })
+
+  it('should not include process_tags when not provided', function () {
+    send(message, logger, dd, snapshot)
+
+    const writtenJson = jsonBufferWrite.getCall(0).args[0]
+    const written = JSON.parse(writtenJson)
+
+    assert.strictEqual(written.process_tags, undefined)
   })
 
   describe('snapshot pruning', function () {

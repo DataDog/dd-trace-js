@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -9,7 +10,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 describe('TracerProxy', () => {
-  let Proxy
+  let ProxyClass
   let proxy
   let DatadogTracer
   let NoopTracer
@@ -157,7 +158,7 @@ describe('TracerProxy', () => {
       apmTracingEnabled: false,
       appsec: {},
       iast: {},
-      crashtracking: {},
+      DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true,
@@ -167,7 +168,6 @@ describe('TracerProxy', () => {
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
@@ -236,7 +236,7 @@ describe('TracerProxy', () => {
       './dogstatsd': NoopDogStatsDClient,
     })
 
-    Proxy = proxyquire('../src/proxy', {
+    ProxyClass = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
@@ -257,7 +257,7 @@ describe('TracerProxy', () => {
       './openfeature/flagging_provider': OpenFeatureProvider,
     })
 
-    proxy = new Proxy()
+    proxy = new ProxyClass()
   })
 
   describe('uninitialized', () => {
@@ -788,10 +788,14 @@ describe('TracerProxy', () => {
 
       describe('immutability', () => {
         it('should freeze every store handed out', () => {
-          assert.ok(Object.isFrozen(proxy.getAllBaggageItems()))
-          assert.ok(Object.isFrozen(proxy.setBaggageItem('key', 'value')))
-          assert.ok(Object.isFrozen(proxy.removeBaggageItem('key')))
-          assert.ok(Object.isFrozen(proxy.removeAllBaggageItems()))
+          const allItems = proxy.getAllBaggageItems()
+          assert.ok(Object.isFrozen(allItems), `Expected frozen, got ${inspect(allItems)}`)
+          const setItem = proxy.setBaggageItem('key', 'value')
+          assert.ok(Object.isFrozen(setItem), `Expected frozen, got ${inspect(setItem)}`)
+          const removeItem = proxy.removeBaggageItem('key')
+          assert.ok(Object.isFrozen(removeItem), `Expected frozen, got ${inspect(removeItem)}`)
+          const removeAll = proxy.removeAllBaggageItems()
+          assert.ok(Object.isFrozen(removeAll), `Expected frozen, got ${inspect(removeAll)}`)
         })
 
         it('should refuse mutation through the returned reference', () => {

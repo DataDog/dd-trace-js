@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -36,6 +37,9 @@ describe('debugger/index', () => {
           callback(null, { endpoints: ['/debugger/v2/input'] })
         }),
       },
+      './config': proxyquire('../../src/debugger/config', {
+        '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
+      }),
       worker_threads: {
         Worker,
         MessageChannel: class MessageChannel {
@@ -57,7 +61,6 @@ describe('debugger/index', () => {
     })
 
     config = {
-      commitSHA: 'test-sha',
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
@@ -65,7 +68,6 @@ describe('debugger/index', () => {
       hostname: 'test-host',
       logLevel: 'info',
       port: 8126,
-      repositoryUrl: 'https://github.com/test/repo',
       service: 'test-service',
       tags: {
         'runtime-id': 'test-runtime-id',
@@ -232,7 +234,7 @@ describe('debugger/index', () => {
         inputPath: '/debugger/v2/input',
         logLevel: 'info',
         port: 8126,
-        propagateProcessTags: undefined,
+        propagateProcessTags: { enabled: undefined },
         repositoryUrl: 'https://github.com/test/repo',
         runtimeId: 'test-runtime-id',
         service: 'test-service',
@@ -470,8 +472,11 @@ describe('debugger/index', () => {
       const error3 = ackCallback3.firstCall.args[0]
 
       assert.ok(error1 instanceof Error)
-      assert.ok(error1.message.includes('Dynamic Instrumentation worker thread exited unexpectedly'))
-      assert.ok(error1.message.includes('code 1'))
+      assert.ok(
+        error1.message.includes('Dynamic Instrumentation worker thread exited unexpectedly'),
+        `Got: ${inspect(error1.message)}`
+      )
+      assert.ok(error1.message.includes('code 1'), `Got: ${inspect(error1.message)}`)
 
       // All callbacks should receive the same error instance
       assert.strictEqual(error2, error1)

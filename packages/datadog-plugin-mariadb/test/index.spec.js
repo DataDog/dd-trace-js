@@ -21,10 +21,6 @@ describe('Plugin', () => {
     withVersions('mariadb', 'mariadb', range, version => {
       let tracer
 
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
-
       describe('without configuration - callbacks', () => {
         let mariadb
         let connection
@@ -32,12 +28,12 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb')
+          tracer = await agent.load('mariadb')
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
@@ -222,7 +218,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb')
+            tracer = await agent.load('mariadb')
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             connection = await mariadb.createConnection({
@@ -375,7 +371,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb')
+            tracer = await agent.load('mariadb')
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
             connection = await mariadb.createConnection({
               host: 'localhost',
@@ -413,12 +409,12 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb', { service: 'custom' })
+          tracer = await agent.load('mariadb', { service: 'custom' })
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
@@ -475,7 +471,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb', { service: 'custom' })
+            tracer = await agent.load('mariadb', { service: 'custom' })
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             connection = await mariadb.createConnection({
@@ -516,12 +512,12 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb', { service: serviceSpy })
+          tracer = await agent.load('mariadb', { service: serviceSpy })
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
@@ -582,7 +578,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb', { service: serviceSpy })
+            tracer = await agent.load('mariadb', { service: serviceSpy })
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             connection = await mariadb.createConnection({
@@ -629,12 +625,12 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!pool) return agent.close({ ritmReset: false }).then(done)
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb')
+          tracer = await agent.load('mariadb')
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           pool = mariadb.createPool({
@@ -701,7 +697,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb')
+            tracer = await agent.load('mariadb')
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             pool = mariadb.createPool({
@@ -762,12 +758,12 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!pool) return agent.close({ ritmReset: false }).then(done)
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load(['mariadb', 'net'])
+          tracer = await agent.load(['mariadb', 'net'])
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
         })
 
@@ -812,7 +808,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(async () => {
-            await agent.load(['mariadb', 'net'])
+            tracer = await agent.load(['mariadb', 'net'])
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
           })
 

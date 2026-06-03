@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -63,19 +64,17 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          tracer = require('../../dd-trace')
-
-          return agent.load(['microgateway-core', 'http'], [{}, { client: false }])
+        before(async () => {
+          tracer = await agent.load(['microgateway-core', 'http'], [{}, { client: false }])
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {
           Gateway = require(`../../../versions/microgateway-core@${version}`).get()
-          gateway = startGateway(() => done())
+          startGateway(() => done())
         })
 
         it('should do automatic instrumentation', done => {
@@ -182,7 +181,10 @@ describe('Plugin', () => {
 
         if (semver.intersects(version, '>=2.3.3')) {
           it('should re-expose any exports', () => {
-            assert.ok(typeof Gateway.Logging === 'object' && Gateway.Logging !== null)
+            assert.ok(
+              typeof Gateway.Logging === 'object' && Gateway.Logging !== null,
+              `Expected non-null object, got ${inspect(Gateway.Logging)}`
+            )
           })
         }
       })

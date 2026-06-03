@@ -6,6 +6,7 @@ const dns = require('node:dns')
 const { once } = require('node:events')
 const path = require('node:path')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
@@ -19,8 +20,8 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
 
-const GRPC_CLIENT_ERROR_STATUSES = defaults['grpc.client.error.statuses']
-const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']
+const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
+const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 describe('Config', () => {
   let log
@@ -53,7 +54,11 @@ describe('Config', () => {
   }
 
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-  const getConfig = (options) => {
+  const getConfig = (options, overrides = {}) => {
+    const {
+      ddMajor = DD_MAJOR,
+    } = overrides
+
     log = proxyquire('../../src/log', {})
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
@@ -64,6 +69,7 @@ describe('Config', () => {
       './supported-configurations.json': supportedConfigurations,
       '../log': log,
       './parsers': parsers,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })
     const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
@@ -77,6 +83,7 @@ describe('Config', () => {
       'node:fs': fs,
       './helper': configHelper,
       '../pkg': pkg,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
   }
 
@@ -125,7 +132,10 @@ describe('Config', () => {
       delete process.env.DATADOG_API_KEY
     })
 
-    it('should log deprecation warning for deprecated configurations', async () => {
+    const itLegacyAlias = DD_MAJOR < 6 ? it : it.skip
+    const itV6Filter = DD_MAJOR >= 6 ? it : it.skip
+
+    itLegacyAlias('should log deprecation warning for deprecated configurations', async () => {
       process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
       getEnvironmentVariables()
       const [warning] = await once(process, 'warning')
@@ -137,20 +147,111 @@ describe('Config', () => {
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
     })
 
-    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', async () => {
-      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
-      assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
-      const config = getConfig()
-      assert.strictEqual(config.runtimeMetricsRuntimeId, true)
-      assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
-      delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+    itLegacyAlias(
+      'should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED',
+      async () => {
+        process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+        assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+        const config = getConfig()
+        assert.strictEqual(config.runtimeMetricsRuntimeId, true)
+        assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
+        delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
 
-      const [warning] = await once(process, 'warning')
-      assert.strictEqual(warning.name, 'DeprecationWarning')
-      assert.match(
-        warning.message,
-        /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+        const [warning] = await once(process, 'warning')
+        assert.strictEqual(warning.name, 'DeprecationWarning')
+        assert.match(
+          warning.message,
+          /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+        )
+      })
+
+    // Load `helper.js` in isolation so a missing alias filter in helper.js cannot be masked by
+    // the same overrides applied from `defaults.js` against a shared module cache.
+    const loadFreshHelper = () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      return proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': fresh,
+      })
+    }
+
+    itV6Filter('drops the deprecated DD_PROFILING_EXPERIMENTAL_* aliases without rewriting them', () => {
+      const helper = loadFreshHelper()
+      const envs = helper.getEnvironmentVariables({
+        DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: 'true',
+        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 'true',
+      })
+      for (const canonical of [
+        'DD_PROFILING_CODEHOTSPOTS_ENABLED',
+        'DD_PROFILING_CPU_ENABLED',
+        'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED',
+        'DD_PROFILING_TIMELINE_ENABLED',
+      ]) {
+        assert.strictEqual(envs[canonical], undefined, `${canonical} should not be populated from a dropped alias`)
+      }
+    })
+
+    itV6Filter('drops the deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED alias', () => {
+      const helper = loadFreshHelper()
+      const envs = helper.getEnvironmentVariables({ DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED: 'true' })
+      assert.strictEqual(envs.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+    })
+
+    itV6Filter('rejects access to the dropped DD_PROFILING_EXPERIMENTAL_CPU_ENABLED key', () => {
+      const helper = loadFreshHelper()
+      assert.throws(
+        () => helper.getEnvironmentVariable('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'),
+        /Missing DD_PROFILING_EXPERIMENTAL_CPU_ENABLED env\/configuration in "supported-configurations.json" file./
       )
+    })
+
+    itV6Filter('applyMajorOverrides is idempotent on the same supportedConfigurations object', () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const supported = fresh.supportedConfigurations
+      assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
+      supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
+      applyMajorOverrides(supported, 6)
+      assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
+      const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
+      assert.ok(
+        !cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')),
+        `Got: ${inspect(cpuEntry.aliases)}`
+      )
+      assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
+      const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
+      assert.strictEqual(runtimeIdEntry.aliases, undefined)
+
+      const beforeKeyCount = Object.keys(supported).length
+      applyMajorOverrides(supported, 6)
+      assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
+    })
+
+    it('applyMajorOverrides is idempotent for v5 security controls', () => {
+      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const supported = fresh.supportedConfigurations
+      const iastEntry = supported.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
+
+      applyMajorOverrides(supported, 5)
+      applyMajorOverrides(supported, 5)
+
+      assert.deepStrictEqual(iastEntry.configurationNames, [
+        'iast.securityControlsConfiguration',
+        'experimental.iast.securityControlsConfiguration',
+      ])
+      assert.strictEqual(iastEntry.internalPropertyName, undefined)
+    })
+
+    it('loads v5 config repeatedly after security controls are restored', () => {
+      const firstConfig = getConfig(undefined, { ddMajor: 5 })
+      const secondConfig = getConfig(undefined, { ddMajor: 5 })
+
+      assert.strictEqual(firstConfig.iast.securityControlsConfiguration, undefined)
+      assert.strictEqual(secondConfig.iast.securityControlsConfiguration, undefined)
     })
 
     it('should pass through random envs', async () => {
@@ -165,10 +266,8 @@ describe('Config', () => {
   describe('property surface', () => {
     // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
     const INTERNAL_RUNTIME_PROPERTIES = [
-      'commitSHA',
       'debug',
       'isServiceNameInferred',
-      'repositoryUrl',
       'sampler',
       'stableConfig',
     ]
@@ -533,6 +632,20 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
+  it('should not disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is unset', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    delete process.env.DD_TRACE_AGENT_PROTOCOL_VERSION
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+  })
+
+  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+  })
+
   it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
     const config = getConfig()
@@ -560,7 +673,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: true,
-      appKey: undefined,
+      DD_APP_KEY: undefined,
       appsec: {
         apiSecurity: {
           enabled: true,
@@ -608,9 +721,7 @@ describe('Config', () => {
           },
         },
       },
-      crashtracking: {
-        enabled: true,
-      },
+      DD_CRASHTRACKING_ENABLED: true,
       debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
@@ -636,11 +747,9 @@ describe('Config', () => {
       },
       flushInterval: 2000,
       flushMinSpans: 1000,
-      heapSnapshot: {
-        count: 0,
-        destination: '',
-        interval: 3600,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 0,
+      DD_HEAP_SNAPSHOT_DESTINATION: '',
+      DD_HEAP_SNAPSHOT_INTERVAL: 3600,
       iast: {
         enabled: false,
         redactionEnabled: true,
@@ -652,11 +761,9 @@ describe('Config', () => {
         },
       },
       DD_INJECT_FORCE: false,
-      installSignature: {
-        id: undefined,
-        time: undefined,
-        type: undefined,
-      },
+      DD_INSTRUMENTATION_INSTALL_ID: undefined,
+      DD_INSTRUMENTATION_INSTALL_TIME: undefined,
+      DD_INSTRUMENTATION_INSTALL_TYPE: undefined,
       instrumentationSource: 'manual',
       DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
@@ -691,12 +798,12 @@ describe('Config', () => {
       spanRemoveIntegrationFromService: false,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'continue',
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
     })
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, [])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
-    assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
-    assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, GRPC_CLIENT_ERROR_STATUSES)
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
@@ -829,6 +936,7 @@ describe('Config', () => {
       { name: 'DD_SITE', value: 'datadoghq.com', origin: 'default' },
       { name: 'DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', value: 'v0', origin: 'default' },
       { name: 'DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_STARTUP_LOGS', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH', value: 512, origin: 'default' },
       { name: 'DD_TELEMETRY_DEBUG', value: false, origin: 'default' },
@@ -882,6 +990,24 @@ describe('Config', () => {
 
     assert.strictEqual(config.service, 'test')
     assert.strictEqual(config.tags.service, 'test')
+  })
+
+  it('should normalize the inferred service name from package.json', () => {
+    pkg.name = '@Scope/My-Service'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'scope/my-service')
+    assert.strictEqual(config.tags.service, 'scope/my-service')
+  })
+
+  it('should fall back to "node" when the inferred service name normalizes to empty', () => {
+    pkg.name = '@@@'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.service, 'node')
+    assert.strictEqual(config.tags.service, 'node')
   })
 
   it('should initialize from the default version', () => {
@@ -1021,7 +1147,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       apmTracingEnabled: false,
-      appKey: 'myAppKey',
+      DD_APP_KEY: 'myAppKey',
       appsec: {
         apiSecurity: {
           enabled: true,
@@ -1071,9 +1197,7 @@ describe('Config', () => {
           },
         },
       },
-      crashtracking: {
-        enabled: false,
-      },
+      DD_CRASHTRACKING_ENABLED: false,
       debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
@@ -1100,11 +1224,9 @@ describe('Config', () => {
         exporter: 'log',
       },
       hostname: 'agent',
-      heapSnapshot: {
-        count: 1,
-        destination: '/tmp',
-        interval: 1800,
-      },
+      DD_HEAP_SNAPSHOT_COUNT: 1,
+      DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
+      DD_HEAP_SNAPSHOT_INTERVAL: 1800,
       iast: {
         dbRowsToTaint: 2,
         deduplicationEnabled: false,
@@ -1155,16 +1277,15 @@ describe('Config', () => {
       },
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'restart',
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart',
       tracing: true,
       version: '1.0.0',
     })
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(
-      config.installSignature,
-      { id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', type: 'k8s_single_step', time: '1703188212' }
-    )
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_ID, '68e75c48-57ca-4a12-adfc-575c4b05fcbe')
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TYPE, 'k8s_single_step')
+    assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TIME, '1703188212')
     assert.deepStrictEqual(config.peerServiceMapping, { c: 'cc', d: 'dd' })
     assert.deepStrictEqual(config.sampler, {
       sampleRate: 0.5,
@@ -1421,7 +1542,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking.enabled, true)
+    assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
   })
 
   it('should disable crash tracking for SSI when configured', () => {
@@ -1430,7 +1551,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking.enabled, false)
+    assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
   })
 
   it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
@@ -1500,22 +1621,22 @@ describe('Config', () => {
         },
         exporter: 'log',
         enableGetRumData: true,
-        iast: {
-          dbRowsToTaint: 2,
-          deduplicationEnabled: false,
-          enabled: true,
-          maxConcurrentRequests: 4,
-          maxContextOperations: 5,
-          redactionEnabled: false,
-          redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-          requestSampling: 50,
-          securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
-          stackTrace: {
-            enabled: false,
-          },
-          telemetryVerbosity: 'DEBUG',
+      },
+      iast: {
+        dbRowsToTaint: 2,
+        deduplicationEnabled: false,
+        enabled: true,
+        maxConcurrentRequests: 4,
+        maxContextOperations: 5,
+        redactionEnabled: false,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        requestSampling: 50,
+        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        stackTrace: {
+          enabled: false,
         },
+        telemetryVerbosity: 'DEBUG',
       },
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -1685,21 +1806,25 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
-    assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
+    assert.ok(Object.hasOwn(config.tags, 'runtime-id'), `Available keys: ${inspect(Object.keys(config.tags))}`)
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
-
     if (DD_MAJOR < 6) {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
       sinon.assert.calledOnce(log.warn)
     } else {
-      sinon.assert.calledTwice(log.warn)
+      // In v6 `experimental.b3` is no longer parsed, so the calculated push doesn't fire and the
+      // propagation styles stay at the explicit input (`tracePropagationStyle: { inject: ['datadog'], ... }`).
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
+      sinon.assert.calledThrice(log.warn)
       sinon.assert.calledWithExactly(
         log.warn,
         'Unknown option %s with value %o',
-        'experimental.iast.securityControlsConfiguration',
+        'iast.securityControlsConfiguration',
         'SANITIZER:CODE_INJECTION:sanitizer.js:method',
       )
+      sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'experimental.b3', true)
     }
     sinon.assert.calledWithExactly(log.warn, 'Unknown option %s with value %o', 'enabled', false)
 
@@ -1827,6 +1952,20 @@ describe('Config', () => {
     })
   })
 
+  it('should accept legacy "b3 single header" propagation style', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'B3 single header'
+
+    const config = getConfig()
+
+    if (DD_MAJOR < 6) {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
+    } else {
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+    }
+  })
+
   it('should prioritize specific propagation style over shared propagation style env vars', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
@@ -1844,10 +1983,12 @@ describe('Config', () => {
       { name: 'DD_TRACE_PROPAGATION_STYLE_INJECT', value: 'datadog', origin: 'calculated' },
     ].sort(comparator))
 
+    const configEntries = updateConfig.getCall(0).args[0]
     assert.ok(
-      !updateConfig.getCall(0).args[0].some(entry => {
+      !configEntries.some(entry => {
         return entry.name === 'DD_TRACE_PROPAGATION_STYLE_EXTRACT' && entry.origin === 'calculated'
-      })
+      }),
+      `Got: ${inspect(configEntries)}`
     )
   })
 
@@ -1869,24 +2010,24 @@ describe('Config', () => {
 
     let config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [3, 13, 400, 401, 402, 403])
 
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '1'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '1'
 
     config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [1])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [1])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [1])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [1])
 
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '2,10,13-15'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '2,10,13-15'
 
     config = getConfig()
 
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [2, 10, 13, 14, 15])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [2, 10, 13, 14, 15])
+    assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, [2, 10, 13, 14, 15])
+    assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, [2, 10, 13, 14, 15])
   })
 
   context('peer service tagging', () => {
@@ -2259,7 +2400,7 @@ describe('Config', () => {
     assert.strictEqual(config.url.toString(), 'https://agent2:6218/')
   })
 
-  it('should give priority to non-experimental options', () => {
+  ;(DD_MAJOR < 6 ? it : it.skip)('should give priority to non-experimental options', () => {
     const config = getConfig({
       appsec: {
         apiSecurity: {
@@ -2407,6 +2548,61 @@ describe('Config', () => {
       },
       telemetryVerbosity: 'DEBUG',
     })
+  })
+
+  ;(DD_MAJOR < 6 ? it.skip : it)(
+    'should drop the experimental.appsec programmatic shape in v6 (bare and nested)',
+    () => {
+      const config = getConfig({
+        experimental: {
+          appsec: {
+            enabled: true,
+            rateLimit: 42,
+            rules: 'some-rules.json',
+            standalone: { enabled: true },
+          },
+        },
+      })
+
+      assert.strictEqual(config.appsec.enabled, undefined)
+      assert.strictEqual(config.appsec.rateLimit, 100)
+      assert.strictEqual(config.appsec.rules, undefined)
+      assert.strictEqual(config.apmTracingEnabled, true)
+
+      sinon.assert.calledWith(
+        log.warn,
+        'Unknown option %s with value %o',
+        'experimental.appsec',
+        sinon.match({ enabled: true, rateLimit: 42 })
+      )
+    }
+  )
+
+  ;(DD_MAJOR < 6 ? it.skip : it)('should drop the bare experimental.appsec boolean alias in v6', () => {
+    const config = getConfig({
+      experimental: { appsec: true },
+    })
+
+    assert.strictEqual(config.appsec.enabled, undefined)
+    sinon.assert.calledWith(log.warn, 'Unknown option %s with value %o', 'experimental.appsec', true)
+  })
+
+  ;(DD_MAJOR < 6 ? it.skip : it)('should drop the ingestion programmatic shape in v6', () => {
+    const config = getConfig({
+      ingestion: {
+        sampleRate: 0.5,
+        rateLimit: 500,
+      },
+    })
+
+    assert.strictEqual(config.sampleRate, undefined)
+    assert.strictEqual(config.rateLimit, 100)
+    sinon.assert.calledWith(
+      log.warn,
+      'Unknown option %s with value %o',
+      'ingestion',
+      sinon.match({ sampleRate: 0.5, rateLimit: 500 })
+    )
   })
 
   it('should give priority to the options especially url', () => {
@@ -2735,13 +2931,41 @@ describe('Config', () => {
 
   it('should ignore invalid iast.requestSampling', () => {
     const config = getConfig({
-      experimental: {
-        iast: {
-          requestSampling: 105,
-        },
+      iast: {
+        requestSampling: 105,
       },
     })
     assert.strictEqual(config.iast.requestSampling, 30)
+  })
+
+  describe('experimental.iast alias gate', () => {
+    // v5 keeps the `experimental.iast.*` aliases for backports; v6 strips both
+    // bare and nested forms so user-supplied objects do not leak into
+    // `iast.enabled` via the bare alias.
+    for (const { name, iast, v5Field, v5Value } of [
+      { name: 'bare alias as boolean', iast: true, v5Field: 'enabled', v5Value: true },
+      { name: '.enabled nested key', iast: { enabled: false }, v5Field: 'enabled', v5Value: false },
+      { name: '.requestSampling nested key', iast: { requestSampling: 50 }, v5Field: 'requestSampling', v5Value: 50 },
+    ]) {
+      it(`v5 keeps experimental.iast (${name})`, () => {
+        const config = getConfig({ experimental: { iast } }, { ddMajor: 5 })
+        assert.strictEqual(config.iast[v5Field], v5Value)
+        sinon.assert.notCalled(log.warn)
+      })
+
+      it(`v6 rejects experimental.iast (${name}) as Unknown option`, () => {
+        const config = getConfig({ experimental: { iast } }, { ddMajor: 6 })
+        assert.strictEqual(config.iast.enabled, false)
+        assert.strictEqual(config.iast.requestSampling, 30)
+        sinon.assert.calledOnce(log.warn)
+        sinon.assert.calledWithExactly(
+          log.warn,
+          'Unknown option %s with value %o',
+          'experimental.iast',
+          iast,
+        )
+      })
+    }
   })
 
   it('should load span sampling rules from json file', () => {
@@ -3119,118 +3343,6 @@ describe('Config', () => {
     })
   })
 
-  context('sci embedding', () => {
-    const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
-    const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
-    const DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties')
-    const DD_GIT_FOLDER_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder')
-    let ddTags
-    beforeEach(() => {
-      ddTags = process.env.DD_TAGS
-    })
-    afterEach(() => {
-      delete process.env.DD_GIT_PROPERTIES_FILE
-      delete process.env.DD_GIT_COMMIT_SHA
-      delete process.env.DD_GIT_REPOSITORY_URL
-      delete process.env.DD_TRACE_GIT_METADATA_ENABLED
-      delete process.env.DD_GIT_FOLDER_PATH
-      process.env.DD_TAGS = ddTags
-    })
-    it('reads DD_GIT_* env vars', () => {
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('reads DD_GIT_* env vars and filters out user data', () => {
-      process.env.DD_GIT_REPOSITORY_URL = 'https://user:password@github.com/DataDog/dd-trace-js.git'
-      const config = getConfig({})
-      assert.strictEqual(config.repositoryUrl, 'https://github.com/DataDog/dd-trace-js.git')
-    })
-    it('reads DD_TAGS env var', () => {
-      process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`
-      process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('reads git.properties if it is available', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('does not crash if git.properties is not available', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-
-      // Should not throw
-      const config = getConfig({})
-      assert.ok(config !== null && typeof config === 'object' && !Array.isArray(config))
-    })
-    it('does not read git.properties if env vars are passed', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
-    })
-    it('still reads git.properties if one of the env vars is missing', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
-    })
-    it('reads git.properties and filters out credentials', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties.credentials')
-      const config = getConfig({})
-      assertObjectContains(config, {
-        commitSHA: '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d',
-        repositoryUrl: 'https://github.com/datadog/dd-trace-js',
-      })
-    })
-    it('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', () => {
-      process.env.DD_TRACE_GIT_METADATA_ENABLED = 'false'
-      const config = getConfig({})
-      assert.ok(!(Object.hasOwn(config, 'commitSHA')))
-      assert.ok(!(Object.hasOwn(config, 'repositoryUrl')))
-    })
-    it('reads .git/ folder if it is available', () => {
-      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
-      const config = getConfig({})
-      assertObjectContains(config, {
-        repositoryUrl: 'git@github.com:DataDog/dd-trace-js.git',
-        commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
-      })
-    })
-    it('does not crash if .git/ folder is not available', () => {
-      process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
-
-      // Should not throw
-      const config = getConfig({})
-      assert.ok(config !== null && typeof config === 'object' && !Array.isArray(config))
-    })
-    it('does not read .git/ folder if env vars are passed', () => {
-      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
-      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
-      const config = getConfig({})
-      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
-    })
-    it('still reads .git/ if one of the env vars is missing', () => {
-      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
-      process.env.DD_GIT_REPOSITORY_URL = 'git@github.com:DataDog/dummy-dd-trace-js.git'
-      const config = getConfig({})
-      assertObjectContains(config, {
-        commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
-        repositoryUrl: 'git@github.com:DataDog/dummy-dd-trace-js.git',
-      })
-    })
-  })
-
   context('llmobs config', () => {
     it('should disable llmobs by default', () => {
       const config = getConfig()
@@ -3411,16 +3523,41 @@ describe('Config', () => {
         request: undefined,
         response: undefined,
       })
-      assert.ok(!(Object.hasOwn(cloudPayloadTagging, 'rules')))
+      assert.ok(
+        !(Object.hasOwn(cloudPayloadTagging, 'rules')),
+        `Available keys: ${inspect(Object.keys(cloudPayloadTagging))}`
+      )
     })
   })
 
   context('standalone', () => {
-    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+    const itLegacyStandalone = DD_MAJOR < 6 ? it : it.skip
+    const itV6Standalone = DD_MAJOR < 6 ? it.skip : it
+
+    itLegacyStandalone('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
       const config = getConfig()
       assert.strictEqual(config.apmTracingEnabled, false)
+    })
+
+    itLegacyStandalone('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
+
+      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      assert.strictEqual(config.apmTracingEnabled, false)
+    })
+
+    itV6Standalone('should ignore legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED in v6', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+
+      const config = getConfig()
+      assert.strictEqual(config.apmTracingEnabled, true)
+    })
+
+    itV6Standalone('should ignore legacy experimental.appsec.standalone.enabled programmatic option in v6', () => {
+      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      assert.strictEqual(config.apmTracingEnabled, true)
     })
 
     it('should win DD_APM_TRACING_ENABLED', () => {
@@ -3431,19 +3568,12 @@ describe('Config', () => {
       assert.strictEqual(config.apmTracingEnabled, true)
     })
 
-    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
-
-      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
-      assert.strictEqual(config.apmTracingEnabled, false)
-    })
-
     it('should win apmTracingEnabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = getConfig({
         apmTracingEnabled: false,
-        experimental: { appsec: { standalone: { enabled: true } } },
+        ...DD_MAJOR < 6 && { experimental: { appsec: { standalone: { enabled: true } } } },
       })
       assert.strictEqual(config.apmTracingEnabled, false)
     })
@@ -3730,12 +3860,10 @@ apm_configuration_default:
       let config = getConfig()
       assertObjectContains(config, {
         apiKey: 'local-api-key',
-        appKey: 'local-app-key',
-        installSignature: {
-          id: 'local-install-id',
-          time: '1234567890',
-          type: 'local_install',
-        },
+        DD_APP_KEY: 'local-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'local-install-id',
+        DD_INSTRUMENTATION_INSTALL_TIME: '1234567890',
+        DD_INSTRUMENTATION_INSTALL_TYPE: 'local_install',
         cloudPayloadTagging: {
           request: [],
           maxDepth: 5,
@@ -3750,10 +3878,8 @@ apm_configuration_default:
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'env-api-key',
-        appKey: 'env-app-key',
-        installSignature: {
-          id: 'env-install-id',
-        },
+        DD_APP_KEY: 'env-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'env-install-id',
         cloudPayloadTagging: {
           maxDepth: 7,
         },
@@ -3782,12 +3908,10 @@ rules:
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'fleet-api-key',
-        appKey: 'fleet-app-key',
-        installSignature: {
-          id: 'fleet-install-id',
-          time: '9999999999',
-          type: 'fleet_install',
-        },
+        DD_APP_KEY: 'fleet-app-key',
+        DD_INSTRUMENTATION_INSTALL_ID: 'fleet-install-id',
+        DD_INSTRUMENTATION_INSTALL_TIME: '9999999999',
+        DD_INSTRUMENTATION_INSTALL_TYPE: 'fleet_install',
         cloudPayloadTagging: {
           request: undefined,
           response: [],
@@ -3903,7 +4027,7 @@ rules:
       assert.strictEqual(config.service, 'explicit-service')
     })
 
-    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy', () => {
+    it('should use NX_TASK_TARGET_PROJECT by default in v6', () => {
       const cases = ['false', '0', undefined]
 
       for (const ddIsNx of cases) {
@@ -3916,7 +4040,26 @@ rules:
         process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
         pkg.name = 'default-service'
 
-        const config = getConfig()
+        const config = getConfig(undefined, { ddMajor: 6 })
+
+        assert.strictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy in v5', () => {
+      const cases = ['false', '0', undefined]
+
+      for (const ddIsNx of cases) {
+        if (ddIsNx === undefined) {
+          delete process.env.DD_ENABLE_NX_SERVICE_NAME
+        } else {
+          process.env.DD_ENABLE_NX_SERVICE_NAME = ddIsNx
+        }
+
+        process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+        pkg.name = 'default-service'
+
+        const config = getConfig(undefined, { ddMajor: 5 })
 
         assert.strictEqual(config.service, 'default-service')
         assert.notStrictEqual(config.service, 'my-nx-project')
@@ -3943,24 +4086,41 @@ rules:
       }
     })
 
-    it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+    it('should fall back to "node" when NX_TASK_TARGET_PROJECT normalizes to empty', () => {
+      process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+      process.env.NX_TASK_TARGET_PROJECT = '@@@'
+      pkg.name = 'default-service'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.service, 'node')
+    })
+
+    it('should warn about v6 behavior change in v5 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
       delete process.env.DD_ENABLE_NX_SERVICE_NAME
       delete process.env.DD_SERVICE
       pkg.name = 'default-service'
 
-      getConfig()
+      getConfig(undefined, { ddMajor: 5 })
 
-      if (DD_MAJOR < 6) {
-        assert.strictEqual(log.warn.called, true)
-        const warningMessage = log.warn.args[0][0]
-        assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
-        assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
-        assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
-      } else {
-        // In v6+, no warning should be issued
-        assert.strictEqual(log.warn.called, false)
-      }
+      assert.strictEqual(log.warn.called, true)
+      const warningMessage = log.warn.args[0][0]
+      assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
+      assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
+      assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
+    })
+
+    it('should not warn in v6 when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      delete process.env.DD_ENABLE_NX_SERVICE_NAME
+      delete process.env.DD_SERVICE
+      pkg.name = 'default-service'
+
+      const config = getConfig(undefined, { ddMajor: 6 })
+
+      assert.strictEqual(config.service, 'my-nx-project')
+      assert.strictEqual(log.warn.called, false)
     })
 
     it('should not warn when DD_ENABLE_NX_SERVICE_NAME is explicitly set', () => {

@@ -62,12 +62,28 @@ function removeBaggageItem (keyToRemove) {
 }
 
 function removeAllBaggageItems () {
-  baggageStorage.enterWith(EMPTY_STORE)
+  // Skip `enterWith` (a real ALS frame switch) when the store is already
+  // the empty sentinel. Entry-point services without active baggage hit this
+  // on every extract.
+  const store = baggageStorage.getStore()
+  if (store !== undefined && store !== EMPTY_STORE) {
+    baggageStorage.enterWith(EMPTY_STORE)
+  }
   return EMPTY_STORE
+}
+
+/**
+ * @param {BaggageStore} items Frozen in place; do not mutate after.
+ */
+function setAllBaggageItems (items) {
+  Object.freeze(items)
+  baggageStorage.enterWith(items)
+  return items
 }
 
 module.exports = {
   setBaggageItem,
+  setAllBaggageItems,
   getBaggageItem,
   getAllBaggageItems,
   removeBaggageItem,

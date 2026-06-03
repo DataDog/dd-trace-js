@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { performance } = require('perf_hooks')
+const { inspect } = require('node:util')
 
 const api = require('@opentelemetry/api')
 const { describe, it } = require('mocha')
@@ -43,7 +44,7 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    assert.strictEqual(context._tags[SERVICE_NAME], tracer._tracer._service)
+    assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
     assert.strictEqual(context._hostname, tracer._hostname)
   })
 
@@ -234,14 +235,14 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    assert.strictEqual(context._tags[RESOURCE_NAME], 'name')
+    assert.strictEqual(context.getTag(RESOURCE_NAME), 'name')
   })
 
   it('should copy span kind to span.kind', () => {
     const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
 
     const context = span._ddSpan.context()
-    assert.strictEqual(context._tags[SPAN_KIND], kinds.CONSUMER)
+    assert.strictEqual(context.getTag(SPAN_KIND), kinds.CONSUMER)
   })
 
   it('should expose span context', () => {
@@ -290,35 +291,44 @@ describe('OTel Span', () => {
     assert.strictEqual(span.name, 'new name')
   })
 
+  it('updateName is a no-op after end()', () => {
+    const span = makeSpan('name')
+    span.end()
+
+    span.updateName('after end')
+
+    assert.strictEqual(span._ddSpan.context()._name, 'name')
+  })
+
   it('should set attributes', () => {
     const span = makeSpan('name')
 
-    const { _tags } = span._ddSpan.context()
+    const tags = span._ddSpan.context().getTags()
 
     span.setAttribute('foo', 'bar')
-    assert.strictEqual(_tags.foo, 'bar')
+    assert.strictEqual(tags.foo, 'bar')
 
     span.setAttributes({ baz: 'buz' })
-    assert.strictEqual(_tags.baz, 'buz')
+    assert.strictEqual(tags.baz, 'buz')
   })
 
   describe('should remap http.response.status_code', () => {
     it('should remap when setting attributes', () => {
       const span = makeSpan('name')
 
-      const { _tags } = span._ddSpan.context()
+      const tags = span._ddSpan.context().getTags()
 
       span.setAttributes({ 'http.response.status_code': 200 })
-      assert.strictEqual(_tags['http.status_code'], '200')
+      assert.strictEqual(tags['http.status_code'], '200')
     })
 
     it('should remap when setting singular attribute', () => {
       const span = makeSpan('name')
 
-      const { _tags } = span._ddSpan.context()
+      const tags = span._ddSpan.context().getTags()
 
       span.setAttribute('http.response.status_code', 200)
-      assert.strictEqual(_tags['http.status_code'], '200')
+      assert.strictEqual(tags['http.status_code'], '200')
     })
   })
 
@@ -357,7 +367,10 @@ describe('OTel Span', () => {
     span.end()
 
     const formatted = spanFormat(span._ddSpan)
-    assert.ok(Object.hasOwn(formatted.meta, '_dd.span_links'))
+    assert.ok(
+      Object.hasOwn(formatted.meta, '_dd.span_links'),
+      `Available keys: ${inspect(Object.keys(formatted.meta))}`
+    )
 
     const links = JSON.parse(formatted.meta['_dd.span_links'])
     assert.strictEqual(links.length, 1)
@@ -400,19 +413,19 @@ describe('OTel Span', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
     unset.setStatus({ code: 0, message: 'unset' })
-    assert.ok(!(ERROR_MESSAGE in unsetCtx._tags))
+    assert.ok(!unsetCtx.hasTag(ERROR_MESSAGE))
 
     const ok = makeSpan('name')
     const okCtx = ok._ddSpan.context()
     ok.setStatus({ code: 1, message: 'ok' })
-    assert.ok(!(ERROR_MESSAGE in okCtx._tags))
-    assert.ok(!(IGNORE_OTEL_ERROR in okCtx._tags))
+    assert.ok(!okCtx.hasTag(ERROR_MESSAGE))
+    assert.ok(!okCtx.hasTag(IGNORE_OTEL_ERROR))
 
     const error = makeSpan('name')
     const errorCtx = error._ddSpan.context()
     error.setStatus({ code: 2, message: 'error' })
-    assert.strictEqual(errorCtx._tags[ERROR_MESSAGE], 'error')
-    assert.strictEqual(errorCtx._tags[IGNORE_OTEL_ERROR], false)
+    assert.strictEqual(errorCtx.getTag(ERROR_MESSAGE), 'error')
+    assert.strictEqual(errorCtx.getTag(IGNORE_OTEL_ERROR), false)
   })
 
   it('should record exceptions', () => {
@@ -424,11 +437,11 @@ describe('OTel Span', () => {
     const datenow = Date.now()
     span.recordException(error, datenow)
 
-    const { _tags } = span._ddSpan.context()
-    assert.strictEqual(_tags[ERROR_TYPE], error.name)
-    assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
-    assert.strictEqual(_tags[ERROR_STACK], error.stack)
-    assert.strictEqual(_tags[IGNORE_OTEL_ERROR], true)
+    const tags = span._ddSpan.context().getTags()
+    assert.strictEqual(tags[ERROR_TYPE], error.name)
+    assert.strictEqual(tags[ERROR_MESSAGE], error.message)
+    assert.strictEqual(tags[ERROR_STACK], error.stack)
+    assert.strictEqual(tags[IGNORE_OTEL_ERROR], true)
 
     const events = span._ddSpan._events
     assert.strictEqual(events.length, 1)
@@ -456,7 +469,7 @@ describe('OTel Span', () => {
     // Keep the error set to 1
     formatted = spanFormat(span._ddSpan)
     assert.strictEqual(formatted.error, 1)
-    assert.ok(Object.hasOwn(formatted, 'meta'))
+    assert.ok(Object.hasOwn(formatted, 'meta'), `Available keys: ${inspect(Object.keys(formatted))}`)
     assert.strictEqual(formatted.meta['error.message'], 'foobar')
   })
 
@@ -476,10 +489,10 @@ describe('OTel Span', () => {
     const error = new TestError()
     span.recordException(error)
 
-    const { _tags } = span._ddSpan.context()
-    assert.strictEqual(_tags[ERROR_TYPE], error.name)
-    assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
-    assert.strictEqual(_tags[ERROR_STACK], error.stack)
+    const tags = span._ddSpan.context().getTags()
+    assert.strictEqual(tags[ERROR_TYPE], error.name)
+    assert.strictEqual(tags[ERROR_MESSAGE], error.message)
+    assert.strictEqual(tags[ERROR_STACK], error.stack)
 
     const events = span._ddSpan._events
     assert.strictEqual(events.length, 1)
@@ -498,10 +511,67 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
     span.end()
 
-    const { _tags } = span._ddSpan.context()
+    const tags = span._ddSpan.context().getTags()
 
     span.setStatus({ code: 2, message: 'error' })
-    assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
+    assert.ok(
+      !(ERROR_MESSAGE in tags) || tags[ERROR_MESSAGE] !== 'error',
+      `Got ${ERROR_MESSAGE}: ${inspect(tags[ERROR_MESSAGE])}`
+    )
+  })
+
+  describe('setStatus precedence (OTel spec)', () => {
+    it('OK locks the status against subsequent ERROR and UNSET writes', () => {
+      const span = makeSpan('name')
+      const tags = span._ddSpan.context().getTags()
+
+      span.setStatus({ code: 1 })
+      span.setStatus({ code: 2, message: 'late error' })
+      span.setStatus({ code: 0, message: 'late unset' })
+
+      assert.ok(!(ERROR_MESSAGE in tags))
+    })
+
+    it('ERROR can be overridden by a later ERROR with a fresh message', () => {
+      const span = makeSpan('name')
+      const tags = span._ddSpan.context().getTags()
+
+      span.setStatus({ code: 2, message: 'first error' })
+      span.setStatus({ code: 2, message: 'second error' })
+
+      assert.strictEqual(tags[ERROR_MESSAGE], 'second error')
+    })
+
+    it('UNSET is always a no-op even before any successful write', () => {
+      const span = makeSpan('name')
+      const tags = span._ddSpan.context().getTags()
+
+      span.setStatus({ code: 0, message: 'ignored' })
+
+      assert.ok(!(ERROR_MESSAGE in tags))
+    })
+  })
+
+  it('mutation methods are all no-ops after end()', () => {
+    const span = makeSpan('name')
+    span.end()
+
+    span.setAttribute('after.end', 'no')
+    span.setAttributes({ 'after.end.batch': 'no' })
+    span.addLink({ context: { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), traceFlags: 1 } })
+    span.addLinks([{ context: { traceId: 'c'.repeat(32), spanId: 'd'.repeat(16) } }])
+    span.addSpanPointer('kind', 'd', 'hash')
+    span.addEvent('after.end.event')
+    span.recordException(new Error('after end'))
+    span.updateName('after end')
+
+    const tags = span._ddSpan.context().getTags()
+    assert.ok(!('after.end' in tags))
+    assert.ok(!('after.end.batch' in tags))
+    assert.ok(!(ERROR_MESSAGE in tags))
+    assert.ok(!(ERROR_TYPE in tags))
+    assert.strictEqual(span._ddSpan._links.length, 0)
+    assert.strictEqual(span._ddSpan._events.length, 0)
   })
 
   it('should mark ended and expose recording state', () => {
@@ -515,7 +585,7 @@ describe('OTel Span', () => {
 
     assert.strictEqual(span.ended, true)
     assert.strictEqual(span.isRecording(), false)
-    assert.ok(Object.hasOwn(span._ddSpan, '_duration'))
+    assert.ok(Object.hasOwn(span._ddSpan, '_duration'), `Available keys: ${inspect(Object.keys(span._ddSpan))}`)
   })
 
   it('should trigger span processor events', () => {
@@ -561,5 +631,24 @@ describe('OTel Span', () => {
       },
     }])
     assert.strictEqual(events2.length, 2)
+  })
+
+  it('addEvent normalizes hrTime and Date inputs without leaking array-indexed attributes', () => {
+    const span = makeSpan('time-inputs')
+    const hrTime = [1700000000, 500000000]
+    const hrTimeMs = hrTime[0] * 1e3 + hrTime[1] / 1e6
+    const date = new Date(1700000000000)
+
+    span.addEvent('hr-time-as-second-arg', hrTime)
+    span.addEvent('date-as-second-arg', date)
+    span.addEvent('attrs-and-hr-time', { code: 42 }, hrTime)
+
+    // Numeric startTime (not hrTime array) guarantees span_format's Math.round(startTime * 1e6)
+    // is finite; absent `attributes` key guarantees no { '0': s, '1': n } leak.
+    assert.deepStrictEqual(span._ddSpan._events, [
+      { name: 'hr-time-as-second-arg', startTime: hrTimeMs },
+      { name: 'date-as-second-arg', startTime: date.getTime() },
+      { name: 'attrs-and-hr-time', attributes: { code: 42 }, startTime: hrTimeMs },
+    ])
   })
 })

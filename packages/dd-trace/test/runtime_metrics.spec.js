@@ -212,6 +212,7 @@ function createGarbage (count = 50) {
             obj: {},
             invalid: 't{e*s#t5-:./',
           },
+          DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
           getOrigin: () => {
             return 'default'
           },
@@ -261,7 +262,7 @@ function createGarbage (count = 50) {
         })
 
         it('should include process tags when propagateProcessTags is enabled', function () {
-          config.propagateProcessTags = { enabled: true }
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -272,7 +273,7 @@ function createGarbage (count = 50) {
         })
 
         it('should not include process tags when propagateProcessTags is disabled', function () {
-          config.propagateProcessTags = { enabled: false }
+          config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = false
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -413,8 +414,8 @@ function createGarbage (count = 50) {
           // 1 hour even if a single metric is leaking it would get over
           // 64980 calls on its own without any other metric. A slightly lower
           // value is used here to be on the safer side.
-          assert.ok(client.gauge.callCount < 60000)
-          assert.ok(client.increment.callCount < 60000)
+          assert.ok(client.gauge.callCount < 60000, `Expected ${client.gauge.callCount} < 60000`)
+          assert.ok(client.increment.callCount < 60000, `Expected ${client.increment.callCount} < 60000`)
         })
 
         it('should handle configuration changes correctly', async () => {
@@ -427,7 +428,7 @@ function createGarbage (count = 50) {
 
           // Wait for event loop delay observer to trigger.
           let startTime = Date.now()
-          let waitTime = 60
+          const waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -453,7 +454,6 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           startTime = Date.now()
-          waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -649,7 +649,7 @@ function createGarbage (count = 50) {
           const heapUsed = heapUsedCalls[0].args[1]
           const heapTotal = heapTotalCalls[0].args[1]
 
-          assert(heapUsed <= heapTotal)
+          assert(heapUsed <= heapTotal, `Expected ${heapUsed} <= ${heapTotal}`)
         })
       })
 

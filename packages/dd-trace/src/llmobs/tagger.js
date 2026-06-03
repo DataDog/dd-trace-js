@@ -12,7 +12,9 @@ const {
   INPUT_DOCUMENTS,
   OUTPUT_VALUE,
   METADATA,
+  COST_TAGS,
   METRICS,
+  TOOL_DEFINITIONS,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
@@ -41,6 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -94,6 +97,13 @@ class LLMObsTagger {
 
     this._register(span)
 
+    // When the registering span sits below an OTel `gen_ai.*` ancestor, use
+    // that ancestor as the parent_id fallback and suppress the bridge
+    // parent_id tag so the indexer doesn't invert the trace.
+    const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
+
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null })
+
     this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
@@ -110,6 +120,7 @@ class LLMObsTagger {
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
 
@@ -119,6 +130,11 @@ class LLMObsTagger {
     // apply annotation context tags
     const tags = annotationContext?.tags
     if (tags) this.tagSpanTags(span, tags)
+
+    // apply after tags so only keys present at span start are accepted.
+    if (annotationContext?.costTags != null) {
+      this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
+    }
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
@@ -157,6 +173,14 @@ class LLMObsTagger {
   tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
+  }
+
+  tagToolDefinitions (span, toolDefinitions) {
+    if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    } else {
+      this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
+    }
   }
 
   tagMetadata (span, metadata) {
@@ -222,6 +246,32 @@ class LLMObsTagger {
       Object.assign(currentTags, tags)
     } else {
       this._setTag(span, TAGS, tags)
+    }
+  }
+
+  /**
+   * Validates and tags cost tag keys on an LLMObs span. Cost tag references are validated against
+   * the span's already-applied tags, which are read from the registry.
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} costTags Raw user-provided cost tags; validated here.
+   * @param {'annotate' | 'annotation_context'} source
+   */
+  tagCostTags (span, costTags, source) {
+    const spanTags = registry.get(span)?.[TAGS] || {}
+    const validatedCostTags = validateCostTags(span, costTags, source, spanTags)
+    if (!validatedCostTags.length) return
+
+    // Might consider switching to a `Set` if per-span cost tag cardinality grows large enough that
+    // this `.includes`/`.push` merge becomes a hot spot
+    const currentCostTags = registry.get(span)?.[COST_TAGS]
+    if (currentCostTags) {
+      for (const costTag of validatedCostTags) {
+        if (!currentCostTags.includes(costTag)) {
+          currentCostTags.push(costTag)
+        }
+      }
+    } else {
+      this._setTag(span, COST_TAGS, validatedCostTags)
     }
   }
 

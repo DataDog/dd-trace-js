@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -112,7 +113,6 @@ class NativeWallProfiler {
   #customLabelKeys
   #endpointCollectionEnabled = false
   #flushIntervalMillis = 0
-  #logger
   #mapper
   #pprof
   #samplingIntervalMicros = 0
@@ -136,7 +136,6 @@ class NativeWallProfiler {
     this.#cpuProfilingEnabled = !!options.cpuProfilingEnabled
     this.#endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this.#flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
-    this.#logger = options.logger
     // TODO: Remove default value. It is only used in testing.
     this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000
     this.#telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
@@ -223,7 +222,7 @@ class NativeWallProfiler {
       asyncContextsLiveGauge.mark(totalAsyncContextCount)
       asyncContextsUsedGauge.mark(usedAsyncContextCount)
     }, this.#telemetryHeartbeatIntervalMillis)
-    this._contextCountGaugeUpdater.unref()
+    this._contextCountGaugeUpdater.unref?.()
   }
 
   #enter () {
@@ -247,6 +246,7 @@ class NativeWallProfiler {
     // context -- we simply can't tell which one it might've been across all
     // possible async context frames.
     if (this.#asyncContextFrameEnabled) {
+      const current = this.#pprof.time.getContext()
       if (this.#customLabelsActive) {
         // Custom labels may be active in this async context. The current CPED
         // context could be a 2-element array [profilingContext, customLabels].
@@ -254,7 +254,6 @@ class NativeWallProfiler {
         // This flag is monotonic (once set, stays true) because async
         // continuations from runWithLabels can fire at any time after the
         // synchronous runWithLabels call has returned.
-        const current = this.#pprof.time.getContext()
         if (Array.isArray(current)) {
           if (current[0] !== sampleContext) {
             this.#pprof.time.setContext([sampleContext, current[1]])
@@ -262,7 +261,13 @@ class NativeWallProfiler {
         } else if (current !== sampleContext) {
           this.#pprof.time.setContext(sampleContext)
         }
-      } else {
+      // Every setContext() call in ACF mode allocates a fresh contextHolder
+      // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
+      // profiler. Skip the call if the CPED already holds this sampleContext,
+      // which is the common case when the same span is repeatedly activated:
+      // #getProfilingContext caches profilingContext on span[ProfilingContext],
+      // so identity comparison short-circuits.
+      } else if (current !== sampleContext) {
         this.#pprof.time.setContext(sampleContext)
       }
     } else {
@@ -294,7 +299,7 @@ class NativeWallProfiler {
 
       let webTags
       if (this.#endpointCollectionEnabled) {
-        const tags = context._tags
+        const tags = context.getTags()
         if (isWebServerSpan(tags)) {
           webTags = tags
         } else {
@@ -317,11 +322,10 @@ class NativeWallProfiler {
   }
 
   #setNewContext () {
-    this.#pprof.time.setContext(
-      this._currentContext = {
-        ref: {},
-      }
-    )
+    this._currentContext = {
+      ref: {},
+    }
+    this.#pprof.time.setContext(this._currentContext)
   }
 
   #spanFinished (span) {
@@ -334,7 +338,7 @@ class NativeWallProfiler {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
     if (profilingContext === undefined || profilingContext.webTags !== undefined) return
-    const tags = span.context()._tags
+    const tags = span.context().getTags()
     if (isWebServerSpan(tags)) {
       profilingContext.webTags = tags
     }
@@ -343,7 +347,7 @@ class NativeWallProfiler {
   #reportV8bug (maybeBug) {
     const tag = `v8_profiler_bug_workaround_enabled:${this.#v8ProfilerBugWorkaroundEnabled}`
     const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
-    this.#logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    log.warn('Wall profiler: %sv8 profiler stuck event loop detected.', maybeBug ? 'possible ' : '')
     // report as runtime metric (can be removed in the future when telemetry is mature)
     runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
     // report as telemetry metric

@@ -163,12 +163,14 @@ function getProducts (config) {
  * @param {import('../config/config-base')} config
  */
 function getInstallSignature (config) {
-  const { installSignature: sig } = config
-  if (sig && (sig.id || sig.time || sig.type)) {
+  const id = config.DD_INSTRUMENTATION_INSTALL_ID
+  const time = config.DD_INSTRUMENTATION_INSTALL_TIME
+  const type = config.DD_INSTRUMENTATION_INSTALL_TYPE
+  if (id || time || type) {
     return {
-      install_id: sig.id,
-      install_time: sig.time,
-      install_type: sig.type,
+      install_id: id,
+      install_time: time,
+      install_type: type,
     }
   }
 }
@@ -289,7 +291,7 @@ function heartbeat (config, application) {
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
-  }, config.telemetry.heartbeatInterval).unref()
+  }, config.telemetry.heartbeatInterval).unref?.()
 }
 
 /** @param {import('../config/config-base')} config */
@@ -305,7 +307,7 @@ function extendedHeartbeat (config) {
       heartbeatFailedDependencies = []
     }
     sendData(config, application, host, 'app-extended-heartbeat', appPayload)
-  }, config.telemetry.extendedHeartbeatInterval).unref()
+  }, config.telemetry.extendedHeartbeatInterval).unref?.()
 }
 
 /**

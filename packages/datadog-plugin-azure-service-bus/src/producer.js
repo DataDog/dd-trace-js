@@ -56,7 +56,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
           const contexts = spanContexts.get(messages)
           if (contexts) {
             for (const spanContext of contexts) {
-              span.addLink(spanContext)
+              span.addLink({ context: spanContext })
             }
           }
         }

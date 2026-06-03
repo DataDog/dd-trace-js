@@ -19,7 +19,7 @@ const { channel } = require('./instrument')
  *
  * @param {string} prefix
  * @param {object} [options]
- * @param {boolean} [options.captureResult=false] set `ctx.result` to the callback's first
+ * @param {boolean} [options.captureResult] set `ctx.result` to the callback's first
  *   non-error argument before publishing `:finish`. Plugins that tag spans from the call's
  *   return value (e.g. the DNS lookup plugin) rely on this.
  * @returns {(buildContext: (thisArg: unknown, args: IArguments) => object | undefined) =>
@@ -32,20 +32,20 @@ function createCallbackInstrumentor (prefix, { captureResult = false } = {}) {
 
   return function instrument (buildContext) {
     return function wrap (fn) {
-      return function () {
-        const lastIndex = arguments.length - 1
-        const cb = arguments[lastIndex]
+      return function (...args) {
+        const lastIndex = args.length - 1
+        const cb = args[lastIndex]
         if (!startCh.hasSubscribers || typeof cb !== 'function') {
-          return fn.apply(this, arguments)
+          return fn.apply(this, args)
         }
 
-        const ctx = buildContext(this, arguments)
+        const ctx = buildContext(this, args)
         if (ctx === undefined) {
-          return fn.apply(this, arguments)
+          return fn.apply(this, args)
         }
 
         return startCh.runStores(ctx, () => {
-          arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (error, ...rest) {
+          args[lastIndex] = shimmer.wrapCallback(cb, cb => function (error, ...rest) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)
@@ -57,7 +57,7 @@ function createCallbackInstrumentor (prefix, { captureResult = false } = {}) {
           })
 
           try {
-            return fn.apply(this, arguments)
+            return fn.apply(this, args)
           } catch (error) {
             void error.stack // trigger getting the stack at the original throwing point
             ctx.error = error

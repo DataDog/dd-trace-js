@@ -32,41 +32,41 @@ addHook({
   versions: ['>=2'],
   file: 'lib/knex-builder/Knex.js',
 }, Knex => {
-  shimmer.wrap(Knex.Client.prototype, 'raw', raw => function () {
+  shimmer.wrap(Knex.Client.prototype, 'raw', raw => function (...args) {
     if (!startRawQueryCh.hasSubscribers) {
-      return raw.apply(this, arguments)
+      return raw.apply(this, args)
     }
 
-    const sql = arguments[0]
+    const sql = args[0]
 
     // Skip query done by Knex to get the value used for undefined
     if (sql === 'DEFAULT') {
-      return raw.apply(this, arguments)
+      return raw.apply(this, args)
     }
 
     const context = { sql, dialect: this.dialect }
     return startRawQueryCh.runStores(context, () => {
-      const rawResult = raw.apply(this, arguments)
-      shimmer.wrap(rawResult, 'then', originalThen => function () {
+      const rawResult = raw.apply(this, args)
+      shimmer.wrap(rawResult, 'then', originalThen => function (...args) {
         return rawQuerySubscribes.runStores(context, () => {
-          arguments[0] = wrapCallbackWithFinish(arguments[0], finish, context)
-          if (arguments[1]) arguments[1] = wrapCallbackWithFinish(arguments[1], finish, context)
+          args[0] = wrapCallbackWithFinish(args[0], finish, context)
+          if (args[1]) args[1] = wrapCallbackWithFinish(args[1], finish, context)
 
-          const originalThenResult = originalThen.apply(this, arguments)
+          const originalThenResult = originalThen.apply(this, args)
 
-          shimmer.wrap(originalThenResult, 'catch', originalCatch => function () {
-            arguments[0] = wrapCallbackWithFinish(arguments[0], finish, context)
-            return originalCatch.apply(this, arguments)
+          shimmer.wrap(originalThenResult, 'catch', originalCatch => function (...args) {
+            args[0] = wrapCallbackWithFinish(args[0], finish, context)
+            return originalCatch.apply(this, args)
           })
 
           return originalThenResult
         })
       })
 
-      shimmer.wrap(rawResult, 'asCallback', originalAsCallback => function () {
+      shimmer.wrap(rawResult, 'asCallback', originalAsCallback => function (...args) {
         return rawQuerySubscribes.runStores(context, () => {
-          arguments[0] = wrapCallbackWithFinish(arguments[0], finish, context)
-          return originalAsCallback.apply(this, arguments)
+          args[0] = wrapCallbackWithFinish(args[0], finish, context)
+          return originalAsCallback.apply(this, args)
         })
       })
 
@@ -80,7 +80,7 @@ addHook({
 function wrapCallbackWithFinish (callback, finish, context) {
   if (typeof callback !== 'function') return callback
 
-  return shimmer.wrapFunction(callback, callback => function () {
-    finish(context, () => callback.apply(this, arguments))
+  return shimmer.wrapFunction(callback, callback => function (...args) {
+    finish(context, () => callback.apply(this, args))
   })
 }

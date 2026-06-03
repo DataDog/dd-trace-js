@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -69,8 +70,8 @@ describe('Tracer', () => {
 
       tracer.trace('name', options, span => {
         assert.ok(span instanceof Span)
-        assertObjectContains(span.context()._tags, options.tags)
-        assertObjectContains(span.context()._tags, {
+        assertObjectContains(span.context().getTags(), options.tags)
+        assertObjectContains(span.context().getTags(), {
           [SERVICE_NAME]: 'service',
           [RESOURCE_NAME]: 'resource',
           [SPAN_TYPE]: 'type',
@@ -152,7 +153,7 @@ describe('Tracer', () => {
       try {
         tracer.trace('name', {}, _span => {
           span = _span
-          tags = span.context()._tags
+          tags = span.context().getTags()
           sinon.spy(span, 'finish')
           throw new Error('boom')
         })
@@ -192,7 +193,7 @@ describe('Tracer', () => {
 
         tracer.trace('name', {}, (_span, _done) => {
           span = _span
-          tags = span.context()._tags
+          tags = span.context().getTags()
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -241,7 +242,7 @@ describe('Tracer', () => {
         tracer
           .trace('name', {}, _span => {
             span = _span
-            tags = span.context()._tags
+            tags = span.context().getTags()
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
@@ -294,7 +295,7 @@ describe('Tracer', () => {
       tracer.trace('getRumData', {}, () => {
         const data = tracer.getRumData()
         const time = Date.now()
-        const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
+        const re = /<meta name="dd-trace-id" content="(\w+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
         const [, traceId, traceTime] = re.exec(data)
         const span = tracer.scope().active().context()
         assert.strictEqual(traceId, span.toTraceId())
@@ -399,6 +400,51 @@ describe('Tracer', () => {
       sinon.assert.calledWith(tracer.trace, 'name', {
         tags: { sometag: 'somevalue', invocations: 2 },
       })
+    })
+  })
+
+  describe('service discovery warning', () => {
+    const WARNING = 'Could not store tracer configuration for service discovery'
+    const log = require('../src/log')
+    let warnSpy
+    let originalLogLevel
+    let originalDebug
+
+    beforeEach(() => {
+      warnSpy = sinon.spy(console, 'warn')
+      originalLogLevel = process.env.DD_TRACE_LOG_LEVEL
+      originalDebug = process.env.DD_TRACE_DEBUG
+      process.env.DD_TRACE_DEBUG = 'true'
+    })
+
+    afterEach(() => {
+      warnSpy.restore()
+      if (originalLogLevel === undefined) delete process.env.DD_TRACE_LOG_LEVEL
+      else process.env.DD_TRACE_LOG_LEVEL = originalLogLevel
+      if (originalDebug === undefined) delete process.env.DD_TRACE_DEBUG
+      else process.env.DD_TRACE_DEBUG = originalDebug
+      log.configure({})
+    })
+
+    function countWarningsAtLevel (level) {
+      process.env.DD_TRACE_LOG_LEVEL = level
+      log.configure({})
+      const PatchedTracer = proxyquire('../src/tracer', {
+        './tracer_metadata': () => undefined,
+      })
+      // eslint-disable-next-line no-new
+      new PatchedTracer(getConfig({ service: 'service' }))
+      return warnSpy.getCalls().filter(c => c.firstArg.includes(WARNING)).length
+    }
+
+    it('should not log the service discovery warning when log level is error', () => {
+      assert.strictEqual(countWarningsAtLevel('error'), 0,
+        'expected service discovery warning to be suppressed at log level error')
+    })
+
+    it('should log the service discovery warning when log level allows warnings', () => {
+      assert.ok(countWarningsAtLevel('warn') >= 1,
+        'expected service discovery warning to be emitted at log level warn')
     })
   })
 })

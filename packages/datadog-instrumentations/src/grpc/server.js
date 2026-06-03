@@ -49,9 +49,9 @@ function wrapHandler (func, name) {
         }
 
         shimmer.wrap(call, 'emit', emit => {
-          return function () {
+          return function (...args) {
             return emitChannel.runStores(ctx, () => {
-              return emit.apply(this, arguments)
+              return emit.apply(this, args)
             })
           }
         })

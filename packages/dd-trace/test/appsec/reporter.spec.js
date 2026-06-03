@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
@@ -41,11 +42,17 @@ describe('reporter', () => {
       setPriority: sinon.stub(),
     }
 
+    const spanTags = {}
+    const spanContext = {
+      _tags: spanTags,
+      getTags () { return this._tags },
+      getTag (key) { return this._tags[key] },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags },
+    }
     span = {
       _prioritySampler: prioritySampler,
-      context: sinon.stub().returns({
-        _tags: {},
-      }),
+      context: sinon.stub().returns(spanContext),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
       keep: sinon.stub(),
@@ -84,7 +91,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      assert.ok(Object.keys(result).length === 0)
+      assert.strictEqual(Object.keys(result).length, 0)
     })
 
     it('should filter and format headers from passlist', () => {
@@ -665,7 +672,10 @@ describe('reporter', () => {
           const { truncated, value: truncatedRequestBody } = Reporter.truncateRequestBody(requestBody)
 
           assert.strictEqual(truncated, true)
-          assert.ok(Object.hasOwn(truncatedRequestBody, 'str'))
+          assert.ok(
+            Object.hasOwn(truncatedRequestBody, 'str'),
+            `Available keys: ${inspect(Object.keys(truncatedRequestBody))}`
+          )
           assert.strictEqual(truncatedRequestBody.str.length, 4096)
           assert.strictEqual(objectDepth(truncatedRequestBody.nestedObj), 19)
           assert.strictEqual(Object.keys(truncatedRequestBody.objectWithLotsOfNodes).length, 256)
@@ -881,7 +891,8 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       sinon.assert.calledOnceWithExactly(web.root, req)
-      sinon.assert.calledWithExactly(span.addTags, { a: 1, b: 2 })
+      sinon.assert.calledWith(span.setTag.firstCall, 'a', 1)
+      sinon.assert.calledWith(span.setTag.secondCall, 'b', 2)
       assert.strictEqual(Reporter.metricsQueue.size, 0)
     })
 
@@ -920,7 +931,52 @@ describe('reporter', () => {
       })
     })
 
-    it('should add http response data inside request span', () => {
+    it('should always add content-type and content-length response headers when no event is triggered', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+        },
+      }
+      const res = {
+        getHeaders: () => {
+          return {
+            'content-type': 'text/html',
+            'content-length': '137',
+            'content-encoding': 'gzip',
+            'cache-control': 'no-cache',
+          }
+        },
+      }
+
+      Reporter.finishRequest(req, res)
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
+        'http.request.headers.user-agent': 'arachni',
+        'http.response.headers.content-type': 'text/html',
+        'http.response.headers.content-length': '137',
+      })
+    })
+
+    it('should add mandatory response headers from storedResponseHeaders when no event is triggered', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+        },
+      }
+      const storedResponseHeaders = {
+        'content-type': 'application/json',
+        'content-length': '137',
+      }
+
+      Reporter.finishRequest(req, undefined, storedResponseHeaders)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
+        'http.request.headers.user-agent': 'arachni',
+        'http.response.headers.content-type': 'application/json',
+        'http.response.headers.content-length': '137',
+      })
+    })
+
+    it('should add http response data inside request span when appsec event is triggered', () => {
       const req = {
         route: {
           path: '/path/:param',
@@ -946,28 +1002,6 @@ describe('reporter', () => {
 
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-cloud-trace-context': 'd',
-        'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42',
-      })
-    })
-
-    it('should add http response data inside request span without endpoint', () => {
-      const req = {}
-      const res = {
-        getHeaders: () => {
-          return {
-            'content-type': 'application/json',
-            'content-length': '42',
-          }
-        },
-      }
-
-      span.context()._tags['appsec.event'] = 'true'
-
-      Reporter.finishRequest(req, res)
-      sinon.assert.calledOnceWithExactly(web.root, req)
-
-      sinon.assert.calledWithExactly(span.addTags, {
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
       })

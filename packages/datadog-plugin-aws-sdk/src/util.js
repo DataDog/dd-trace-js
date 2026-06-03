@@ -143,9 +143,31 @@ const extractQueueMetadata = queueURL => {
   return { queueName, arn }
 }
 
+/**
+ * Returns true when `obj` has no own enumerable properties. The
+ * `for-in` loop with an early return is the only allocation-free shape
+ * for this check; benchmarks pin it as 1.3-1.4x faster than
+ * `Object.keys(obj).length === 0` across small / medium / large
+ * objects, and this is the hot path on every AWS messaging send.
+ *
+ * Callers in this package only pass plain objects they construct
+ * locally, so prototype-enumerable keys are not a concern here. Do not
+ * reuse this helper on caller-supplied objects without revisiting that
+ * assumption.
+ *
+ * @param {object} obj
+ * @returns {boolean}
+ */
+const isEmpty = obj => {
+  // eslint-disable-next-line no-unreachable-loop
+  for (const _ in obj) return false
+  return true
+}
+
 module.exports = {
   generatePointerHash,
   encodeValue,
   extractPrimaryKeys,
   extractQueueMetadata,
+  isEmpty,
 }

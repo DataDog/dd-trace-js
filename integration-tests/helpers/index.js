@@ -3,7 +3,7 @@
 const assert = require('assert')
 const childProcess = require('child_process')
 const { exec, execSync, fork, spawn } = childProcess
-const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
+const { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
 const { builtinModules } = require('module')
@@ -46,7 +46,7 @@ const defaultStopProcTimeoutMs = 2_000
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
-  assert(proc.pid !== undefined, 'Process PID is not available')
+  assert.notStrictEqual(proc.pid, undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
@@ -162,9 +162,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     }
 
     // Validate result metadata is present and has valid values
-    assert(typeof actualMetadata.result === 'string', 'result should be a string')
-    assert(typeof actualMetadata.result_class === 'string', 'result_class should be a string')
-    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
+    assert.strictEqual(typeof actualMetadata.result, 'string')
+    assert.strictEqual(typeof actualMetadata.result_class, 'string')
+    assert.strictEqual(typeof actualMetadata.result_reason, 'string')
     assert(actualMetadata.result, 'result field should be present')
     assert(actualMetadata.result_class, 'result_class field should be present')
     assert(actualMetadata.result_reason, 'result_reason field should be present')
@@ -277,8 +277,8 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
- * @param {NodeJS.Signals} [options.signal='SIGTERM'] - Signal to send before escalating.
- * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
+ * @param {NodeJS.Signals} [options.signal] - Signal to send before escalating. Defaults to `SIGTERM`.
+ * @param {number} [options.timeoutMs] - Max wait per signal in milliseconds. Defaults to the stop-proc timeout.
  * @returns {Promise<void>}
  */
 async function stopProc (proc, options = {}) {
@@ -305,6 +305,27 @@ async function stopProc (proc, options = {}) {
   if (!exitedAfterSigkill) {
     throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
   }
+}
+
+/**
+ * Tear down a Test Optimization integration fixture between tests.
+ *
+ * Awaits each step so the next test starts from a clean slate — letting the
+ * previous child outlive `afterEach` leaks sockets and file descriptors that
+ * the next Cypress / Playwright run then races against.
+ *
+ * @param {object} env
+ * @param {childProcess.ChildProcess} [env.childProcess] - Test child to stop.
+ * @param {import('http').Server} [env.webAppServer] - Web fixture server to close.
+ * @param {FakeAgent} [env.receiver] - Fake agent / intake to stop.
+ * @returns {Promise<void>}
+ */
+async function stopCiVisTestEnv ({ childProcess, webAppServer, receiver }) {
+  await stopProc(childProcess)
+  if (webAppServer?.listening) {
+    await /** @type {Promise<void>} */ (new Promise((resolve) => webAppServer.close(() => resolve())))
+  }
+  await receiver?.stop()
 }
 
 /**
@@ -534,7 +555,7 @@ async function createSandbox (
 
     const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
 
-    assert(match !== null, `Invalid dependency format: ${dep}`)
+    assert.notStrictEqual(match, null, `Invalid dependency format: ${dep}`)
 
     const name = match[1]
     const range = match[3] || ''
@@ -608,6 +629,9 @@ async function createSandbox (
 
   if (isGitRepo) {
     execHelper('git init', { cwd: folder })
+    // These sandboxes are removed right after tests, so disable detached Git maintenance in them.
+    execHelper('git config gc.auto 0', { cwd: folder })
+    execHelper('git config maintenance.auto false', { cwd: folder })
     await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     execHelper('git config user.email "john@doe.com"', { cwd: folder })
     execHelper('git config user.name "John Doe"', { cwd: folder })
@@ -617,6 +641,9 @@ async function createSandbox (
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
     if (!existsSync(localRemotePath)) {
       execHelper(`git init --bare ${localRemotePath}`)
+      // Keep the temporary bare remote from starting detached maintenance during local pushes.
+      execHelper(`git --git-dir=${localRemotePath} config gc.auto 0`)
+      execHelper(`git --git-dir=${localRemotePath} config maintenance.auto false`)
     }
 
     execHelper('git add -A', { cwd: folder })
@@ -878,7 +905,7 @@ function warmCypressBinary (cwd) {
   return new Promise(resolve => {
     childProcess.exec('./node_modules/.bin/cypress run --spec __ddwarmup_no_match__.cy.js', {
       cwd,
-      timeout: 80_000,
+      timeout: 180_000,
       env: { ...process.env, NODE_OPTIONS: '' },
     }, () => resolve())
   })
@@ -994,6 +1021,24 @@ function useEnv (env) {
 }
 
 /**
+ * @param {string} cwd
+ */
+function installPlaywrightChromium (cwd) {
+  const { NODE_OPTIONS, ...env } = process.env
+  const { PLAYWRIGHT_BROWSERS_PATH } = env
+
+  if (
+    PLAYWRIGHT_BROWSERS_PATH &&
+    existsSync(PLAYWRIGHT_BROWSERS_PATH) &&
+    readdirSync(PLAYWRIGHT_BROWSERS_PATH).length > 0
+  ) {
+    return
+  }
+
+  execSync('npx playwright install chromium', { cwd, env, stdio: 'inherit' })
+}
+
+/**
  * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
@@ -1069,7 +1114,7 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     } else if (useMatchers && val === ANY_NUMBER) {
       assert.strictEqual(typeof actual[key], 'number', `Expected ${key} to be a number but got ${typeof actual[key]}`)
     } else if (useMatchers && val === ANY_VALUE) {
-      assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
+      assert.notStrictEqual(actual[key], undefined, `Expected ${key} to be present but it was undefined`)
     } else if (val !== null && typeof val === 'object') {
       assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
@@ -1112,6 +1157,28 @@ function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
 }
 
+/**
+ * Recursively `Object.freeze` an object plus everything reachable from it. Use
+ * in tests when an instrumentation contract says "we won't mutate this": any
+ * accidental write to the value or its nested structures throws synchronously
+ * under strict mode, so the test fails at the offending assignment instead of
+ * far downstream via deep-equality.
+ *
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze (value) {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value
+  }
+  Object.freeze(value)
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze(value[key])
+  }
+  return value
+}
+
 module.exports = {
   ANY_NUMBER,
   ANY_STRING,
@@ -1120,7 +1187,9 @@ module.exports = {
   hookFile,
   assertObjectContains,
   assertUUID,
+  deepFreeze,
   stopProc,
+  stopCiVisTestEnv,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,
@@ -1135,6 +1204,7 @@ module.exports = {
   spawnPluginIntegrationTestProcAndExpectExit,
   useEnv,
   setShouldKill,
+  installPlaywrightChromium,
   sandboxCwd,
   useSandbox,
   varySandbox,

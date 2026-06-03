@@ -18,7 +18,7 @@ describe('PropagationHashManager', () => {
 
   describe('configure', () => {
     it('should store the configuration', () => {
-      const config = { propagateProcessTags: { enabled: true } }
+      const config = { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true }
       propagationHash.configure(config)
       assert.strictEqual(propagationHash.isEnabled(), true)
     })
@@ -35,19 +35,19 @@ describe('PropagationHashManager', () => {
     })
 
     it('should return false when propagateProcessTags is disabled', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: false } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
       assert.strictEqual(propagationHash.isEnabled(), false)
     })
 
     it('should return true when propagateProcessTags is enabled', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
       assert.strictEqual(propagationHash.isEnabled(), true)
     })
   })
 
   describe('updateContainerTagsHash', () => {
     it('should update the container tags hash', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
       propagationHash.updateContainerTagsHash('container123')
 
       const hash1 = propagationHash.getHash()
@@ -60,7 +60,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should not recompute hash if container tags are the same', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
       propagationHash.updateContainerTagsHash('container123')
 
       const hash1 = propagationHash.getHash()
@@ -75,7 +75,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should handle null container tags hash', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
       propagationHash.updateContainerTagsHash(null)
 
       const hash = propagationHash.getHash()
@@ -85,12 +85,12 @@ describe('PropagationHashManager', () => {
 
   describe('getHash', () => {
     it('should return null when feature is disabled', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: false } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
       assert.strictEqual(propagationHash.getHash(), null)
     })
 
     it('should compute and cache hash from process tags only', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hash = propagationHash.getHash()
       assert.ok(hash, 'Hash should be computed')
@@ -102,7 +102,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should compute hash from process tags + container tags', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashWithoutContainer = propagationHash.getHash()
       propagationHash.updateContainerTagsHash('container123')
@@ -116,12 +116,12 @@ describe('PropagationHashManager', () => {
 
   describe('getHashString', () => {
     it('should return null when feature is disabled', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: false } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
       assert.strictEqual(propagationHash.getHashString(), null)
     })
 
     it('should return hex string representation of hash', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashString = propagationHash.getHashString()
       assert.ok(hashString, 'Hash string should exist')
@@ -130,7 +130,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should cache the hex string representation', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashString1 = propagationHash.getHashString()
       const hashString2 = propagationHash.getHashString()
@@ -139,7 +139,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should recompute hex string when hash changes', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashString1 = propagationHash.getHashString()
       propagationHash.updateContainerTagsHash('container123')
@@ -149,7 +149,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should match BigInt toString(16)', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hash = propagationHash.getHash()
       const hashString = propagationHash.getHashString()
@@ -160,12 +160,12 @@ describe('PropagationHashManager', () => {
 
   describe('getHashBase64', () => {
     it('should return null when feature is disabled', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: false } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
       assert.strictEqual(propagationHash.getHashBase64(), null)
     })
 
     it('should return base64 string representation of hash', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashBase64 = propagationHash.getHashBase64()
       assert.ok(hashBase64, 'Hash base64 should exist')
@@ -174,7 +174,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should cache the base64 string representation', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashBase64First = propagationHash.getHashBase64()
       const hashBase64Second = propagationHash.getHashBase64()
@@ -183,7 +183,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should recompute base64 string when hash changes', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashBase64First = propagationHash.getHashBase64()
       propagationHash.updateContainerTagsHash('container123')
@@ -193,7 +193,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should be convertible back to BigInt', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hash = propagationHash.getHash()
       const hashBase64 = propagationHash.getHashBase64()
@@ -206,7 +206,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should produce 8-byte base64 string', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hashBase64 = propagationHash.getHashBase64()
       const buffer = Buffer.from(hashBase64, 'base64')
@@ -217,7 +217,7 @@ describe('PropagationHashManager', () => {
 
   describe('cache invalidation', () => {
     it('should invalidate cache when container tags change', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       const hash1 = propagationHash.getHash()
       const hashString1 = propagationHash.getHashString()
@@ -235,7 +235,7 @@ describe('PropagationHashManager', () => {
     })
 
     it('should not invalidate cache if container tags are unchanged', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
       propagationHash.updateContainerTagsHash('container123')
       const hash1 = propagationHash.getHash()
@@ -249,7 +249,7 @@ describe('PropagationHashManager', () => {
 
   describe('edge cases', () => {
     it('should handle empty container tags', () => {
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
       propagationHash.updateContainerTagsHash('')
 
       const hash = propagationHash.getHash()
@@ -259,7 +259,7 @@ describe('PropagationHashManager', () => {
     it('should return null for empty input when both process tags and container tags are empty', () => {
       // This test would require mocking process-tags module to return empty string
       // For now, we assume process tags always have some value
-      propagationHash.configure({ propagateProcessTags: { enabled: true } })
+      propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
       const hash = propagationHash.getHash()
       assert.ok(hash, 'Hash should be computed from process tags')
     })

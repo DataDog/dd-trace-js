@@ -16,9 +16,7 @@ const sampleResponse = {
 }
 
 const handler = async (_event, _context) => {
-  const response = sampleResponse
-
-  return response
+  return sampleResponse
 }
 
 const callbackHandler = (_event, _context, callback) => {
@@ -31,15 +29,13 @@ const timeoutHandler = async (...args) => {
   await _tracer.trace('self.sleepy', () => {
     return sleep(50)
   })
-  const response = sampleResponse
-
-  return response
+  return sampleResponse
 }
 
 const finishSpansEarlyTimeoutHandler = async (...args) => {
   const response = sampleResponse
 
-  // mimick closing spans early
+  // Mimic closing spans early
   const currentSpan = _tracer.scope().active()
   currentSpan.finish()
 
@@ -50,9 +46,7 @@ const finishSpansEarlyTimeoutHandler = async (...args) => {
 }
 
 const swappedArgsHandler = async (event, _, context) => {
-  const response = sampleResponse
-
-  return response
+  return sampleResponse
 }
 
 const errorHandler = async (_event, _context) => {
@@ -71,19 +65,8 @@ const errorHandler = async (_event, _context) => {
  */
 const authorizerHandler = async (event) => {
   // Simulate a simple authorizer that returns an IAM policy
-  return {
-    principalId: 'user123',
-    policyDocument: {
-      Version: '2012-10-17',
-      Statement: [
-        {
-          Action: 'execute-api:Invoke',
-          Effect: 'Allow',
-          Resource: event.methodArn || '*',
-        },
-      ],
-    },
-  }
+  await sleep(1)
+  return authorizerHandlerSync(event)
 }
 
 /**

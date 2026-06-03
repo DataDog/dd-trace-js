@@ -7,10 +7,10 @@ const { after, before, describe, it } = require('mocha')
 
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./s3-naming')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -28,7 +28,7 @@ describe('Plugin', () => {
   describe('aws-sdk (s3)', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let s3
       let tracer
@@ -40,7 +40,8 @@ describe('Plugin', () => {
           return agent.load('aws-sdk')
         })
 
-        before(done => {
+        before(function (done) {
+          this.timeout(10_000)
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
 
@@ -57,7 +58,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await resetLocalStackS3()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withPeerService(

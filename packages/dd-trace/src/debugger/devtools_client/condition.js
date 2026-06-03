@@ -6,7 +6,7 @@ module.exports = {
   templateRequiresEvaluation,
 }
 
-const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
+const identifierRegex = /^(@[\w$]+|[a-zA-Z_$][\w$]*)$/
 
 // The following identifiers have purposefully not been included in this list:
 // - The reserved words `this` and `super` as they can have valid use cases as `ref` values
@@ -99,14 +99,11 @@ function compile (node) {
       ? `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
       : `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
   } else if (type === 'ref') {
-    if (value === '@it') {
-      return '$dd_it'
-    } else if (value === '@key') {
-      return '$dd_key'
-    } else if (value === '@value') {
-      return '$dd_value'
+    const refValue = assertIdentifier(value)
+    if (refValue.startsWith('@')) {
+      return `$dd_${refValue.slice(1)}`
     }
-    return assertIdentifier(value)
+    return refValue
   } else if (Array.isArray(value)) {
     const args = value.map(compile)
     switch (type) {

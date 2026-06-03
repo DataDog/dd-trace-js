@@ -5,6 +5,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { IS_SERVERLESS } = require('../serverless')
+const { isEmpty } = require('../util')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -128,7 +129,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   }
 
   if (typeof body === 'object') {
-    if (isEmptyObject(body)) return
+    if (isEmpty(body)) return
     analyzedBodies.add(body)
   }
 
@@ -149,7 +150,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (isEmptyObject(cookies)) return
+  if (isEmpty(cookies)) return
   analyzedCookies.add(cookies)
 
   const results = waf.run({
@@ -180,12 +181,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     }
   }
 
-  const requestHeaders = { ...req.headers }
-  delete requestHeaders.cookie
-
   const persistent = {
     [addresses.HTTP_INCOMING_URL]: req.url,
-    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
+    [addresses.HTTP_INCOMING_HEADERS]: copyHeadersOmitting(req.headers, 'cookie'),
     [addresses.HTTP_INCOMING_METHOD]: req.method,
   }
 
@@ -204,7 +202,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   // we need to keep this to support other body parsers
   if (req.body !== undefined && req.body !== null) {
     if (typeof req.body === 'object') {
-      if (!isEmptyObject(req.body) && !analyzedBodies.has(req.body)) {
+      if (!isEmpty(req.body) && !analyzedBodies.has(req.body)) {
         persistent[addresses.HTTP_INCOMING_BODY] = req.body
       }
     } else {
@@ -216,7 +214,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (
     req.cookies !== null &&
     typeof req.cookies === 'object' &&
-    !isEmptyObject(req.cookies) &&
+    !isEmpty(req.cookies) &&
     !analyzedCookies.has(req.cookies)
   ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
@@ -227,7 +225,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (
     query !== null &&
     typeof query === 'object' &&
-    !isEmptyObject(query)
+    !isEmpty(query)
   ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
@@ -239,7 +237,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  if (!isEmptyObject(persistent)) {
+  if (!isEmpty(persistent)) {
     waf.run({ persistent }, req)
   }
 
@@ -291,7 +289,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
   if (isSdkCalled) return
 
   const results = waf.run({
@@ -313,7 +311,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (isEmptyObject(query)) return
+  if (isEmpty(query)) return
 
   const results = waf.run({
     persistent: {
@@ -328,7 +326,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!params || typeof params !== 'object' || isEmptyObject(params)) return
+  if (!params || typeof params !== 'object' || isEmpty(params)) return
 
   const results = waf.run({
     persistent: {
@@ -352,8 +350,15 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (!isEmptyObject(responseHeaders)) {
-    storedResponseHeaders.set(req, responseHeaders)
+  // Normalize header names to lowercase so downstream consumers see the same shape
+  // regardless of how the caller wrote them.
+  const normalizedResponseHeaders = {}
+  for (const [key, value] of Object.entries(responseHeaders)) {
+    normalizedResponseHeaders[key.toLowerCase()] = value
+  }
+
+  if (!isEmpty(normalizedResponseHeaders)) {
+    storedResponseHeaders.set(req, normalizedResponseHeaders)
   }
 
   // TODO: do not call waf if inside block()
@@ -375,13 +380,10 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  responseHeaders = { ...responseHeaders }
-  delete responseHeaders['set-cookie']
-
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders,
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
     },
   }, req)
 
@@ -540,14 +542,16 @@ function disable () {
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
 }
 
-// this is faster than Object.keys().length === 0
-function isEmptyObject (obj) {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) {
-    return false
+/**
+ * @param {Record<string, unknown>} src
+ * @param {string} omit
+ */
+function copyHeadersOmitting (src, omit) {
+  const filtered = {}
+  for (const key of Object.keys(src)) {
+    if (key !== omit) filtered[key] = src[key]
   }
-
-  return true
+  return filtered
 }
 
 module.exports = {

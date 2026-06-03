@@ -1,6 +1,7 @@
 variables:
   MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
+  SLS_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "5.0"
@@ -67,18 +68,10 @@ check-big-regressions:
 
 benchmark:
   extends: .benchmarks
+  # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
+  # one, change the other — otherwise variants get silently skipped.
   parallel:
     matrix:
-      - MAJOR_VERSION: 18
-        GROUP: 1
-      - MAJOR_VERSION: 18
-        GROUP: 2
-      - MAJOR_VERSION: 18
-        GROUP: 3
-      - MAJOR_VERSION: 18
-        GROUP: 4
-      - MAJOR_VERSION: 18
-        GROUP: 5
       - MAJOR_VERSION: 20
         GROUP: 1
       - MAJOR_VERSION: 20
@@ -89,6 +82,8 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 20
         GROUP: 5
+      - MAJOR_VERSION: 20
+        GROUP: 6
       - MAJOR_VERSION: 22
         GROUP: 1
       - MAJOR_VERSION: 22
@@ -99,6 +94,8 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 22
         GROUP: 5
+      - MAJOR_VERSION: 22
+        GROUP: 6
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -109,8 +106,10 @@ benchmark:
         GROUP: 4
       - MAJOR_VERSION: 24
         GROUP: 5
+      - MAJOR_VERSION: 24
+        GROUP: 6
   variables:
-    SPLITS: 5
+    SPLITS: 6
 
 benchmark-serverless:
   stage: benchmarks
@@ -124,7 +123,7 @@ benchmark-serverless:
   needs:
     - benchmark-serverless-trigger
   script:
-    - curl -OL "binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
+    - curl -OL "https://binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
     - mv "authanywhere-linux-amd64" /bin/authanywhere
     - chmod +x /bin/authanywhere
     - BTI_CI_API_TOKEN=$(authanywhere --audience rapid-devex-ci)
@@ -142,16 +141,10 @@ benchmark-serverless-trigger:
   rules:
     - if: $CI_COMMIT_BRANCH == 'master'
       interruptible: false
-
-    # don't run on merges to release branches ("vN.x" where N is any integer)
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^v\d+\.x$/'
-      when: never
-    # don't run on pushes to release branches
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^v\d+\.x$/'
-      when: never
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
+    branch: $SLS_CI_BRANCH
     strategy: depend
   allow_failure: true
   variables:
@@ -164,3 +157,6 @@ benchmark-serverless-trigger:
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_GITLAB_USER_LOGIN: $GITLAB_USER_LOGIN
     UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
+    # only available on Merge Requests
+    UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"

@@ -13,14 +13,14 @@ const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes already-converted AI guard style messages to the AIGuard channel.
+ * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
  *
- * @param {Array<object>} messages - AI guard style messages to evaluate
+ * @param {Array<object>} messages - AI-style messages to evaluate.
  * @returns {Promise<void>}
  */
-function publishToAIGuard (messages) {
+function publishEvaluation (messages) {
   return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, resolve, reject })
+    aiguardChannel.publish({ messages, integration: 'ai', resolve, reject })
   })
 }
 
@@ -47,10 +47,11 @@ function wrapModelWithAIGuard (model) {
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([publishEvaluation(inputMessages), originalResult])
           .then(([, result]) => {
             if (!result.content?.length) return result
-            return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
+            const outputMessages = buildOutputMessages(inputMessages, result.content)
+            return publishEvaluation(outputMessages)
               .then(() => result)
           })
       }
@@ -70,7 +71,7 @@ function wrapModelWithAIGuard (model) {
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([publishEvaluation(inputMessages), originalResult])
           .then(([, result]) => {
             const chunks = []
             const reader = result.stream.getReader()
@@ -89,7 +90,7 @@ function wrapModelWithAIGuard (model) {
               const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
 
               const evaluate = content.length
-                ? publishToAIGuard(buildOutputMessages(inputMessages, content))
+                ? publishEvaluation(buildOutputMessages(inputMessages, content))
                 : Promise.resolve()
 
               return evaluate.then(() => {
@@ -119,17 +120,17 @@ function wrapTracer (tracer) {
   tracers.add(tracer)
 
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
-    return function () {
-      const name = arguments[0]
-      const options = arguments.length > 2 ? (arguments[1] ?? {}) : {} // startActiveSpan(name, fn)
-      const cb = arguments[arguments.length - 1]
+    return function (...args) {
+      const name = args[0]
+      const options = args.length > 2 ? (args[1] ?? {}) : {} // startActiveSpan(name, fn)
+      const cb = args[args.length - 1]
 
       const ctx = {
         name,
         attributes: options.attributes ?? {},
       }
 
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
+      args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
           // the below is necessary in the case that the span is vercel ai's noopSpan.
           // while we don't want to patch the noopSpan more than once, we do want to treat each as a
@@ -138,9 +139,9 @@ function wrapTracer (tracer) {
           const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
 
           shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function () {
+            return function (...args) {
               vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, arguments)
+              return spanEnd.apply(this, args)
             }
           })
 
@@ -164,7 +165,7 @@ function wrapTracer (tracer) {
       })
 
       return vercelAiTracingChannel.start.runStores(ctx, () => {
-        const result = startActiveSpan.apply(this, arguments)
+        const result = startActiveSpan.apply(this, args)
         vercelAiTracingChannel.end.publish(ctx)
         return result
       })

@@ -2,9 +2,11 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
@@ -25,11 +27,19 @@ function findSpan (traces, predicate) {
   return undefined
 }
 
+function closeWsServer (server) {
+  if (!server) return
+  for (const ws of server.clients) {
+    ws.terminate()
+  }
+  return new Promise(resolve => server.close(resolve))
+}
+
 describe('Plugin', () => {
   let WebSocket
   let wsServer
   let connectionReceived
-  let clientPort = 6015
+  let clientPort
   let client
   let messageReceived
   let route
@@ -37,7 +47,10 @@ describe('Plugin', () => {
   describe('ws', () => {
     withVersions('ws', 'ws', '>=8.0.0', version => {
       describe('regression tests', () => {
-        before(async () => {
+        let regressionServer
+        let regressionSocket
+
+        beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'some',
             traceWebsocketMessagesEnabled: true,
@@ -45,41 +58,52 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
         })
 
+        afterEach(() => {
+          regressionSocket?.terminate()
+          regressionSocket = undefined
+        })
+
+        afterEach(async () => {
+          await closeWsServer(regressionServer)
+        })
+
+        afterEach(() => {
+          regressionServer = undefined
+        })
+
+        afterEach(async () => {
+          await agent.close()
+        })
+
         it('should not crash when sending on a socket without spanContext', async () => {
-          const server = new WebSocket.Server({ port: 16015 })
-          const connectionPromise = once(server, 'connection')
+          regressionServer = new WebSocket.Server({ port: 0 })
+          await once(regressionServer, 'listening')
+          const { port } = regressionServer.address()
+          const connectionPromise = once(regressionServer, 'connection')
 
-          const socket = new WebSocket('ws://localhost:16015')
+          regressionSocket = new WebSocket(`ws://localhost:${port}`)
           const [serverSocket] = await connectionPromise
-          await once(socket, 'open')
+          await once(regressionSocket, 'open')
 
-          assert.strictEqual(socket.spanContext, undefined)
+          assert.strictEqual(regressionSocket.spanContext, undefined)
 
           const messagePromise = once(serverSocket, 'message')
           await new Promise((resolve, reject) => {
-            socket.send('test message', {}, (err) => err ? reject(err) : resolve())
+            regressionSocket.send('test message', {}, (err) => err ? reject(err) : resolve())
           })
           await messagePromise
-
-          socket.close()
-          await once(socket, 'close')
-          server.close()
         })
 
         it('should emit original error in case close is called before connection is established', async () => {
-          const socket = new WebSocket('wss://localhost:12345')
+          regressionSocket = new WebSocket('wss://localhost:12345')
 
-          const errorPromise = once(socket, 'error')
-          socket.close()
+          const errorPromise = once(regressionSocket, 'error')
+          regressionSocket.close()
 
           const error = await errorPromise
 
           // Some versions emit an array with an error, some directly emit the error
           assert.strictEqual(error?.[0]?.message, 'WebSocket was closed before the connection was established')
-        })
-
-        after(async () => {
-          await agent.close({ ritmReset: false, wipe: true })
         })
       })
 
@@ -99,17 +123,27 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
+        })
+
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
         })
 
         afterEach(async () => {
-          clientPort++
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          await agent.close()
         })
 
         it('should not retain the connection span during socket setup', async () => {
-          const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
           let resolve
           const promise = new Promise((_resolve) => {
             resolve = _resolve
@@ -124,6 +158,7 @@ describe('Plugin', () => {
           // Trigger setSocket
           const newClient = new WebSocket(`ws://localhost:${clientPort}/test`)
           newClient.on('open', () => newClient.close())
+          newClient.on('error', () => {})
 
           const store = await promise
 
@@ -291,7 +326,7 @@ describe('Plugin', () => {
                   }
                 }
               }
-              assert.ok(sendCount > 0)
+              assert.ok(sendCount > 0, `Expected ${sendCount} > 0`)
             })
           })
         })
@@ -367,7 +402,7 @@ describe('Plugin', () => {
           const messageHandled = new Promise((resolve, reject) => {
             wsServer.on('connection', (ws) => {
               ws.on('message', (data) => {
-                assert.ok(Buffer.isBuffer(data))
+                assert.ok(Buffer.isBuffer(data), `Expected Buffer, got ${inspect(data)}`)
                 assert.strictEqual(data.toString(), payload.toString())
                 resolve()
               })
@@ -417,7 +452,7 @@ describe('Plugin', () => {
             }
 
             assert.strictEqual(receiveCount, 0)
-            assert.ok(sendCount > 0)
+            assert.ok(sendCount > 0, `Expected ${sendCount} > 0`)
           }))
         })
 
@@ -451,13 +486,24 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
+        })
+
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
         })
 
         afterEach(async () => {
-          clientPort++
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          await agent.close()
         })
 
         it('should work with custom service configuration', () => {
@@ -558,13 +604,23 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
         })
 
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+        })
+
         afterEach(async () => {
-          clientPort++
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          await agent.close()
         })
 
         it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
@@ -602,13 +658,24 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
+        })
+
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
         })
 
         afterEach(async () => {
-          clientPort++
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          await agent.close()
         })
 
         it('should not inherit sampling decisions from root trace', () => {
@@ -693,8 +760,9 @@ describe('Plugin', () => {
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
-          wsServer = new WebSocket.Server({ port: clientPort })
+          wsServer = new WebSocket.Server({ port: 0 })
           await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
 
           parentHeaders = {}
           tracer.trace('test.parent', parentSpan => {
@@ -702,9 +770,19 @@ describe('Plugin', () => {
           })
         })
 
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+        })
+
         afterEach(async () => {
-          clientPort++
-          await agent.close({ ritmReset: false, wipe: true })
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          await agent.close()
         })
 
         it('should add span pointers to producer spans', async () => {
@@ -743,7 +821,7 @@ describe('Plugin', () => {
             didFindPointerLink = true
 
             const { attributes } = pointerLink
-            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'), `Available keys: ${inspect(Object.keys(attributes))}`)
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
             assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
             assert.strictEqual(attributes['ptr.hash'].length, 57)
@@ -789,7 +867,7 @@ describe('Plugin', () => {
             didFindPointerLink = true
 
             const { attributes } = pointerLink
-            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'), `Available keys: ${inspect(Object.keys(attributes))}`)
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
             assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
             assert.strictEqual(attributes['ptr.hash'].length, 57)

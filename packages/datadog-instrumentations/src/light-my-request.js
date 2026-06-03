@@ -69,8 +69,8 @@ function wrapDispatchFunc (dispatchFunc) {
     // Also wrap end() as fallback
     const originalEnd = res.end
     if (originalEnd) {
-      res.end = function wrappedEnd () {
-        const result = originalEnd.apply(this, arguments)
+      res.end = function wrappedEnd (...args) {
+        const result = originalEnd.apply(this, args)
         // Trigger finish if events don't fire
         setImmediate(onFinish)
         return result

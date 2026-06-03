@@ -2,6 +2,17 @@
 
 require('./mocha-hooks')
 
+if (process.env.CI) {
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+  const reportDir = path.join(os.tmpdir(), 'node-reports')
+  fs.mkdirSync(reportDir, { recursive: true })
+  process.report.reportOnFatalError = true
+  process.report.reportOnUncaughtException = true
+  process.report.directory = reportDir
+}
+
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.
@@ -37,6 +48,17 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 // Lower max listeners to notice when we add too many listeners early.
 // Override per-test, if absolutely necessary.
 require('events').defaultMaxListeners = 6
+
+// Patch timer unref() to always return null, simulating Electron behavior
+// where unref() does not return the timer. Ensures code uses unref?.() not unref().
+const _t = setTimeout(() => {}, 0)
+const _TimeoutProto = Object.getPrototypeOf(_t)
+clearTimeout(_t)
+const _origUnref = _TimeoutProto.unref
+_TimeoutProto.unref = function () {
+  _origUnref.call(this)
+  return null
+}
 
 // Warnings that should not be thrown
 const warningExceptions = new Set([

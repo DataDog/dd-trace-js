@@ -10,22 +10,20 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
-const { getValueFromEnvSources } = require('../config/helper')
-const { isTrue } = require('../util')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
+const { DD_MAJOR } = require('../../../../version')
 const SpanContext = require('./span_context')
 
 const dateNow = Date.now
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING'))
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS'))
-
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')
+let OTEL_ENABLED = false
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
@@ -36,6 +34,25 @@ const integrationCounters = {
 const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
+
+// Module-scope so we don't allocate a fresh recursive closure on every
+// `addLink` / `addEvent`.
+/**
+ * @param {Record<string, string>} out
+ * @param {string} key
+ * @param {unknown} value
+ */
+function addArrayOrScalarAttribute (out, key, value) {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
+    }
+  } else if (ALLOWED.has(typeof value)) {
+    out[key] = typeof value === 'string' ? value : String(value)
+  } else {
+    log.warn('Dropping span link attribute. It is not of an allowed type')
+  }
+}
 
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
@@ -55,15 +72,22 @@ function getIntegrationCounter (event, integration) {
 }
 
 class DatadogSpan {
+  #parentTracer
+
   constructor (tracer, processor, prioritySampler, fields, debug) {
+    OTEL_ENABLED = tracer._config.DD_TRACE_OTEL_ENABLED
+
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // TODO(BridgeAR): Investigate why this is causing a performance regression
+    // Stay on `Object.assign({}, src)` for backportability: V8 12+ (Node 22 /
+    // 24) inlines `{ ...src }` and beats `Object.assign` here, but on V8 10.2
+    // / 11.3 (Node 18 / 20) the spread takes a generic runtime path and slows
+    // `spans-finish-*` by ~140%. Revisit once those LTS lines drop.
     // eslint-disable-next-line prefer-object-spread
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
-    this._parentTracer = tracer
+    this.#parentTracer = tracer
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
@@ -82,7 +106,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    this._spanContext._tags = tags
+    Object.assign(this._spanContext.getTags(), tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -94,7 +118,7 @@ class DatadogSpan {
       attributes: this._sanitizeAttributes(link.attributes),
     })) ?? []
 
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
       runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
 
@@ -104,16 +128,8 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
 
-    // Nullish operator is used here because both `tracer` and `tracer._config`
-    // can be null and there are tests passing invalid values to the `Span`
-    // constructor which still succeed today. Part of the problem is that `Span`
-    // stores only the tracer and not the config, so anything that needs the
-    // config has to read it from the tracer stored on the span, including
-    // even `Span` itself in this case.
-    //
-    // TODO: Refactor Tracer/Span + tests to avoid having to do nullish checks.
-    if (tracer?._config?.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
-      require('../spanleak').addSpan(this, operationName)
+    if (tracer._config.DD_TRACE_SPAN_LEAK_DEBUG > 0) {
+      require('../spanleak').addSpan(this)
     }
 
     if (startCh.hasSubscribers) {
@@ -124,7 +140,7 @@ class DatadogSpan {
   [util.inspect.custom] () {
     return {
       ...this,
-      _parentTracer: `[${this._parentTracer.constructor.name}]`,
+      parentTracer: `[${this.#parentTracer.constructor.name}]`,
       _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
       _processor: `[${this._processor.constructor.name}]`,
     }
@@ -132,7 +148,7 @@ class DatadogSpan {
 
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name'] || ''
+    const resourceName = spanContext.getTag('resource.name') || ''
     const resource = resourceName.length > 100
       ? `${resourceName.slice(0, 97)}...`
       : resourceName
@@ -140,7 +156,7 @@ class DatadogSpan {
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
-      service: spanContext._tags['service.name'],
+      service: spanContext.getTag('service.name'),
       name: spanContext._name,
       resource,
     })
@@ -156,7 +172,7 @@ class DatadogSpan {
   }
 
   tracer () {
-    return this._parentTracer
+    return this.#parentTracer
   }
 
   setOperationName (name) {
@@ -186,12 +202,52 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    this._spanContext.setTag(key, value)
+
+    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    // v6 hot path: `Object.assign` straight onto the live tag map. The
+    // string and array shapes never appeared in the public TypeScript
+    // surface, and no internal v6 caller passes one (see MIGRATING.md).
+    // v5 still accepts both via `tagger.add` for `config.tags` /
+    // `options.tags` callers that pass `'key:val,key:val'` strings.
+    const tags = this._spanContext.getTags()
+    let mayChangeSamplingPriority
+
+    if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
+      Object.assign(tags, keyValueMap)
+      mayChangeSamplingPriority =
+        MANUAL_KEEP in keyValueMap ||
+        MANUAL_DROP in keyValueMap ||
+        SAMPLING_PRIORITY in keyValueMap
+    } else {
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
+        tagger.add(tags, keyValueMap)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
+      }
+    }
+
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
@@ -202,8 +258,9 @@ class DatadogSpan {
   logEvent () {}
 
   addLink (link, attrs) {
-    // TODO: Remove this once we remove addLink(context, attrs) in v6.0.0
-    if (link instanceof SpanContext) {
+    // v5 still accepts the legacy `addLink(spanContext, attrs)` shape; v6 only takes
+    // `addLink({ context, attributes })`.
+    if (DD_MAJOR < 6 && link instanceof SpanContext) {
       link = { context: link, attributes: attrs ?? {} }
     }
 
@@ -254,14 +311,16 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext.getTag('service.name')) {
       log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
-    this._spanContext._tags['_dd.integration'] = this._integrationName
+    this._spanContext.setTag('_dd.integration', this._integrationName)
 
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+    resolveServiceSource(this, this.#parentTracer._service)
+
+    if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
       runtimeMetrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
       runtimeMetrics.increment('runtime.node.spans.finished')
@@ -274,7 +333,11 @@ class DatadogSpan {
       finishedRegistry.register(this, this._name)
     }
 
-    finishTime = Number.parseFloat(finishTime) || this._getTime()
+    // Dominant call site is `span.finish()` with no argument; skip the
+    // `Number.parseFloat` round-trip for the undefined case.
+    finishTime = finishTime === undefined
+      ? this._getTime()
+      : (Number.parseFloat(finishTime) || this._getTime())
 
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
@@ -283,38 +346,29 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
+  /**
+   * @param {Record<string, unknown>} [attributes]
+   */
   _sanitizeAttributes (attributes = {}) {
-    const sanitizedAttributes = {}
-
-    const addArrayOrScalarAttributes = (key, maybeArray) => {
-      if (Array.isArray(maybeArray)) {
-        for (const subkey in maybeArray) {
-          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
-        }
-      } else {
-        const maybeScalar = maybeArray
-        if (ALLOWED.has(typeof maybeScalar)) {
-          // Wrap the value as a string if it's not already a string
-          sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
-        } else {
-          log.warn('Dropping span link attribute. It is not of an allowed type')
-        }
-      }
+    /** @type {Record<string, string>} */
+    const out = {}
+    for (const key of Object.keys(attributes)) {
+      addArrayOrScalarAttribute(out, key, attributes[key])
     }
-
-    for (const [key, value] of Object.entries(attributes)) {
-      addArrayOrScalarAttributes(key, value)
-    }
-    return sanitizedAttributes
+    return out
   }
 
+  /**
+   * @param {Record<string, unknown>} [attributes]
+   */
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
-    for (const [key, value] of Object.entries(attributes)) {
+    for (const key of Object.keys(attributes)) {
+      const value = attributes[key]
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subvalue of Object.values(value)) {
+        for (const subvalue of value) {
           if (ALLOWED.has(typeof subvalue)) {
             newArray.push(subvalue)
           } else {
@@ -336,7 +390,8 @@ class DatadogSpan {
     let startTime
 
     let baggage = {}
-    if (parent && parent._isRemote && this._parentTracer?._config?.tracePropagationBehaviorExtract !== 'continue') {
+    const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+    if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
       parent = null
     }
@@ -375,7 +430,7 @@ class DatadogSpan {
           .padEnd(16, '0')
       }
 
-      if (this._parentTracer?._config?.tracePropagationBehaviorExtract === 'restart') {
+      if (propagationBehavior === 'restart') {
         spanContext._baggageItems = baggage
       }
     }
@@ -395,16 +450,6 @@ class DatadogSpan {
 
     return startTime + now() - ticks
   }
-
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
-
-    if (tagsUpdateCh.hasSubscribers) {
-      tagsUpdateCh.publish(this)
-    }
-  }
 }
 
 function createRegistry (type) {
@@ -412,6 +457,10 @@ function createRegistry (type) {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)
     runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
   })
+}
+
+function isSamplingPriorityTag (key) {
+  return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
 }
 
 module.exports = DatadogSpan

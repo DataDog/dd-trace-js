@@ -32,6 +32,7 @@ Temporary Items
 # Logs
 logs
 *.log
+node-*-junit.xml
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -49,6 +50,8 @@ lib-cov
 coverage/
 !integration-tests/coverage/
 !integration-tests/coverage/**
+!.github/actions/coverage/
+!.github/actions/coverage/**
 *.lcov
 
 # nyc test coverage
@@ -135,6 +138,7 @@ packages/dd-trace/test/plugins/versions/yarn.lock
 !packages/dd-trace/**/telemetry/logs
 packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules
 !vendor/package-lock.json
+!benchmark/sirun/startup/everything-fixture/package-lock.json
 vendor.patch
 __azurite_db_queue__.json
 __azurite_db_queue_extent__.json

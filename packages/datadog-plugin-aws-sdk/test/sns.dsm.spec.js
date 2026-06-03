@@ -10,15 +10,14 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let sns
     let sqs
     let subParams
@@ -120,7 +119,7 @@ describe('Sns', function () {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false, wipe: true })
+        return agent.close()
       })
 
       afterEach(() => {
@@ -200,7 +199,7 @@ describe('Sns', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 1)
+          assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }).then(done, done)
 
@@ -220,9 +219,9 @@ describe('Sns', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 2)
+          assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
-        }).then(done, done)
+        }, { timeoutMs: 2000 }).then(done, done)
 
         sns.subscribe(subParams, () => {
           sns.publish({ TopicArn, Message: 'message DSM' }, () => {
@@ -258,7 +257,7 @@ describe('Sns', function () {
                 })
               }
             })
-            assert.ok(statsPointsReceived >= 3)
+            assert.ok(statsPointsReceived >= 3, `Expected ${statsPointsReceived} >= 3`)
             assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
           }, { timeoutMs: 2000 }).then(done, done)
 

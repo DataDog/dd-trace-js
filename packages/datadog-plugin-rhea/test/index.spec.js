@@ -22,7 +22,7 @@ describe('Plugin', () => {
       return agent.load('rhea')
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {
@@ -125,7 +125,7 @@ describe('Plugin', () => {
                   })
                 }
               }, { timeoutMs: 2000 })
-              assert.ok(((statsPointsReceived) >= (1)))
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
             }).then(done, done)
 
@@ -143,7 +143,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(((statsPointsReceived) >= (2)))
+              assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
             }, { timeoutMs: 2000 }).then(done, done)
 
@@ -455,9 +455,9 @@ describe('Plugin', () => {
                 const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
                 const onTransfer = Session.prototype.on_transfer
                 const error = new Error('this is an error')
-                Session.prototype.on_transfer = function onTransferWrapped () {
+                Session.prototype.on_transfer = function onTransferWrapped (...args) {
                   try {
-                    return onTransfer.apply(this, arguments)
+                    return onTransfer.apply(this, args)
                   } catch (e) {
                     // this is just to prevent mocha from crashing
                   }

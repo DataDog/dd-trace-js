@@ -4,6 +4,8 @@
 const { performance } = require('perf_hooks')
 const dateNow = Date.now
 
+const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
+const satisfies = require('../../../vendor/dist/semifies')
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -24,20 +26,26 @@ const {
   TEST_MODULE,
   TEST_SOURCE_START,
   finishAllTraceSpans,
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  mergeCoverage,
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestSessionName,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -51,17 +59,28 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getSessionRequestErrorTags,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  getSessionItrSkippingEnabledTags,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
+  getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { RESOURCE_NAME } = require('../../../ext/tags')
+const getConfig = require('../../dd-trace/src/config')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -106,6 +125,7 @@ const {
 } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
+let hasWarnedDeprecatedCypressVersion = false
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -132,6 +152,20 @@ function getCypressVersion (details) {
     return details.config.version
   }
   return ''
+}
+
+function warnDeprecatedCypressVersion (version) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedCypressVersion || !version || !satisfies(version, '<12.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedCypressVersion = true
+  // console.warn does not seem to work reliably in Cypress, so use console.log instead.
+  // eslint-disable-next-line no-console
+  console.log(
+    'WARNING: dd-trace support for Cypress<12.0.0 is deprecated' +
+    ' and will not be supported in dd-trace v6. Please upgrade Cypress to >=12.0.0.'
+  )
 }
 
 function getRootDir (details) {
@@ -173,13 +207,17 @@ function getSkippableTests (tracer, testConfiguration) {
     if (!tracer._tracer._exporter?.getSkippableSuites) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
-      resolve({
-        err,
-        skippableTests,
-        correlationId,
-      })
-    })
+    tracer._tracer._exporter.getSkippableSuites(
+      testConfiguration,
+      (err, skippableTests, correlationId, skippableTestsCoverage) => {
+        resolve({
+          err,
+          skippableTests,
+          correlationId,
+          skippableTestsCoverage,
+        })
+      }
+    )
   })
 }
 
@@ -245,6 +283,36 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
+function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatus, preferIndexedMatch = false) {
+  let matchingTestByIndex
+  let matchingTestByStatus
+  let matchingTestIndex = 0
+
+  for (const cypressTest of cypressTests) {
+    if (cypressTest.title.join(' ') !== testName) {
+      continue
+    }
+
+    if (matchingTestIndex === attemptIndex) {
+      matchingTestByIndex = cypressTest
+    }
+    matchingTestIndex++
+
+    if (!matchingTestByStatus && CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === testStatus) {
+      matchingTestByStatus = cypressTest
+    }
+  }
+
+  return preferIndexedMatch
+    ? matchingTestByIndex || matchingTestByStatus
+    : matchingTestByStatus || matchingTestByIndex
+}
+
+function isCypressHookFailure (cypressTest) {
+  return CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === 'fail' &&
+    /\bhook\b/.test(String(cypressTest.displayError || ''))
+}
+
 const FINAL_STATUS_RETRY_KIND = {
   none: 'none',
   atr: 'atr',
@@ -278,9 +346,8 @@ function getFinalStatus ({
   isQuarantined,
   isDisabled,
 }) {
-  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
-  // the final status of its last execution should be reported as 'skip'.
-  if (isQuarantined || isDisabled || status === 'skip') {
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (status === 'skip' || (retryKind !== FINAL_STATUS_RETRY_KIND.atf && (isQuarantined || isDisabled))) {
     return 'skip'
   }
 
@@ -303,16 +370,26 @@ class CypressPlugin {
 
   finishedTestsByFile = {}
   testStatuses = {}
+  hasLibraryConfiguration = false
+  isItrEnabled = false
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
+  isCoverageReportUploadEnabled = false
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
+  isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionSlowTestRetries = {}
+  efdRetryCountByTest = {}
+  efdSlowAbortedTests = {}
+  earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
+  skippableTestsCoverage = {}
+  testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
   unskippableSuites = []
@@ -322,6 +399,8 @@ class CypressPlugin {
   isImpactedTestsEnabled = false
   modifiedFiles = []
   newTestsWithDynamicNames = new Set()
+  attemptToFixExecutions = new Map()
+  loggedAttemptToFixTests = new Set()
 
   constructor () {
     const {
@@ -374,16 +453,26 @@ class CypressPlugin {
     this._isInit = false
     this.finishedTestsByFile = {}
     this.testStatuses = {}
+    this.hasLibraryConfiguration = false
+    this.isItrEnabled = false
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
+    this.isCoverageReportUploadEnabled = false
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
     this.isEarlyFlakeDetectionEnabled = false
+    this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
+    this.earlyFlakeDetectionSlowTestRetries = {}
+    this.efdRetryCountByTest = {}
+    this.efdSlowAbortedTests = {}
+    this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
+    this.skippableTestsCoverage = {}
+    this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
     this.unskippableSuites = []
@@ -394,6 +483,8 @@ class CypressPlugin {
     this.testManagementTests = undefined
     this.isImpactedTestsEnabled = false
     this.modifiedFiles = []
+    this.attemptToFixExecutions = new Map()
+    this.loggedAttemptToFixTests = new Set()
     this.activeTestSpan = null
     this.testSuiteSpan = null
     this.testModuleSpan = null
@@ -421,6 +512,117 @@ class CypressPlugin {
     return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
+  /**
+   * Returns the directory used to normalize coverage file names.
+   *
+   * @returns {string}
+   */
+  getCoverageRootDir () {
+    return this.repositoryRoot || this.rootDir || process.cwd()
+  }
+
+  /**
+   * Returns whether the backend supplied skipped-test coverage data.
+   *
+   * @returns {boolean}
+   */
+  hasSkippableTestsCoverage () {
+    return !!(this.skippableTestsCoverage &&
+      typeof this.skippableTestsCoverage === 'object' &&
+      Object.keys(this.skippableTestsCoverage).length > 0)
+  }
+
+  /**
+   * Returns whether skipped test coverage should be backfilled into the session coverage map.
+   *
+   * @returns {boolean}
+   */
+  shouldBackfillSkippedCoverage () {
+    return this.isItrEnabled &&
+      this.isCoverageReportUploadEnabled &&
+      this.isTestsSkipped &&
+      this.hasSkippableTestsCoverage()
+  }
+
+  /**
+   * Adds a test's Istanbul coverage to the aggregated session coverage map.
+   *
+   * @param {object} coverage
+   * @returns {void}
+   */
+  addTestSessionCoverage (coverage) {
+    mergeCoverage(coverage, this.testSessionCoverageMap)
+  }
+
+  /**
+   * Applies backend skipped-test coverage to the aggregated session coverage map.
+   *
+   * @returns {boolean}
+   */
+  applySkippedCoverageToTestSessionCoverage () {
+    if (!this.shouldBackfillSkippedCoverage()) {
+      return false
+    }
+
+    return applySkippedCoverageToCoverage(
+      this.testSessionCoverageMap,
+      this.skippableTestsCoverage,
+      this.getCoverageRootDir()
+    )
+  }
+
+  /**
+   * Calculates the total session code coverage percentage when product rules allow reporting it.
+   *
+   * @param {boolean} hasBackfilledCoverage
+   * @returns {number | undefined}
+   */
+  getTestCodeCoverageLinesTotal (hasBackfilledCoverage) {
+    if (!this.testSessionCoverageMap.files().length || (this.isTestsSkipped && !hasBackfilledCoverage)) {
+      return
+    }
+
+    return getTestCoverageLinesPercentage(this.testSessionCoverageMap, undefined, this.getCoverageRootDir())
+  }
+
+  /**
+   * Returns repository-relative executable-line coverage files for the test session.
+   *
+   * @returns {Array<{ filename: string, bitmap: Buffer }>}
+   */
+  getTestSessionCoverageFiles () {
+    return getRelativeCoverageFiles(
+      getExecutableFilesFromCoverage(this.testSessionCoverageMap),
+      this.getCoverageRootDir()
+    )
+  }
+
+  /**
+   * Uploads executable-line coverage for the test session when backend configuration enables it.
+   *
+   * @returns {void}
+   */
+  reportTestSessionCoverage () {
+    const exporter = this.tracer._tracer._exporter
+    if (
+      !this.testSessionSpan ||
+      !this.isCoverageReportUploadEnabled ||
+      !exporter?.exportCoverage
+    ) {
+      return
+    }
+
+    const files = this.getTestSessionCoverageFiles()
+    if (!files.length) {
+      return
+    }
+
+    exporter.exportCoverage({
+      sessionId: this.testSessionSpan.context()._traceId,
+      files,
+    })
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
@@ -429,11 +631,11 @@ class CypressPlugin {
     this._isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
+    warnDeprecatedCypressVersion(cypressConfig.version)
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
-    const envFlushWait = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'))
-    this.rumFlushWaitMillis = Number.isFinite(envFlushWait) ? envFlushWait : undefined
+    this.rumFlushWaitMillis = getConfig().DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -449,16 +651,21 @@ class CypressPlugin {
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
           this._pendingRequestErrorTags.push({
-            tag: DD_CI_LIBRARY_CONFIGURATION_ERROR,
+            tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
             value: 'true',
           })
         } else {
+          this.hasLibraryConfiguration = true
           const {
             libraryConfig: {
+              isItrEnabled,
               isSuitesSkippingEnabled,
               isCodeCoverageEnabled,
+              isCoverageReportUploadEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
+              earlyFlakeDetectionSlowTestRetries,
+              earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
               isKnownTestsEnabled,
@@ -467,10 +674,14 @@ class CypressPlugin {
               isImpactedTestsEnabled,
             },
           } = libraryConfigurationResponse
+          this.isItrEnabled = isItrEnabled
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
+          this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
+          this.earlyFlakeDetectionFaultyThreshold = earlyFlakeDetectionFaultyThreshold
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
@@ -511,9 +722,76 @@ class CypressPlugin {
     return { isAttemptToFix, isDisabled, isQuarantined }
   }
 
+  /**
+   * Returns how many EFD retries must be scheduled before the first duration is known.
+   *
+   * @returns {number}
+   */
+  getConfiguredEfdRetryCount () {
+    const { earlyFlakeDetectionSlowTestRetries } = this
+    if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
+      return this.earlyFlakeDetectionNumRetries
+    }
+    return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  }
+
+  /**
+   * Returns the selected EFD retry count for a test, or the scheduling count if it has not run yet.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @returns {number}
+   */
+  getEfdRetryCountForTest (testSuite, testName) {
+    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
+    if (!testSuiteRetries || testSuiteRetries[testName] === undefined) {
+      return this.getConfiguredEfdRetryCount()
+    }
+    return testSuiteRetries[testName]
+  }
+
+  /**
+   * Stores the selected EFD retry count for a test after its first execution duration is known.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @param {number | undefined} duration
+   * @returns {number}
+   */
+  setEfdRetryCountForTest (testSuite, testName, duration) {
+    if (!this.efdRetryCountByTest[testSuite]) {
+      this.efdRetryCountByTest[testSuite] = {}
+    }
+    const retryCount = getEfdRetryCount(duration ?? 0, this.earlyFlakeDetectionSlowTestRetries)
+    this.efdRetryCountByTest[testSuite][testName] = retryCount
+    if (retryCount === 0) {
+      if (!this.efdSlowAbortedTests[testSuite]) {
+        this.efdSlowAbortedTests[testSuite] = {}
+      }
+      this.efdSlowAbortedTests[testSuite][testName] = true
+    }
+    return retryCount
+  }
+
+  /**
+   * Returns whether an EFD retry clone is beyond the selected retry count and should be discarded.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @param {number} efdRetryIndex
+   * @returns {boolean}
+   */
+  shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
+    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
+    return testSuiteRetries?.[testName] !== undefined && efdRetryIndex > testSuiteRetries[testName]
+  }
+
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
-    const testSuiteSpanMetadata =
-      getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
+    const testSuiteSpanMetadata = {
+      ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
+      ...this.getSessionRequestErrorTags(),
+      ...this.getSessionItrSkippingEnabledTags(),
+    }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
@@ -541,7 +819,6 @@ class CypressPlugin {
 
   getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
     const testSuiteTags = {
-      [TEST_COMMAND]: this.command,
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
     }
     if (this.testSuiteSpan) {
@@ -566,6 +843,7 @@ class CypressPlugin {
     if (testSourceFile) {
       testSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
     }
+    Object.assign(testSpanMetadata, this.getSessionItrSkippingEnabledTags())
 
     const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
     if (codeOwners) {
@@ -615,6 +893,15 @@ class CypressPlugin {
     return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
+  /**
+   * Returns ITR skipping-enabled tags from the test session span for propagation to child events.
+   *
+   * @returns {Record<string, string>}
+   */
+  getSessionItrSkippingEnabledTags () {
+    return getSessionItrSkippingEnabledTags(this.testSessionSpan)
+  }
+
   ciVisEvent (name, testLevel, tags = {}) {
     incrementCountMetric(name, {
       testLevel,
@@ -633,18 +920,32 @@ class CypressPlugin {
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
+    const {
+      knownTestsResponse,
+      testManagementTestsResponse,
+      skippableSuitesResponse: skippableTestsRequestResponse,
+    } = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: this.isKnownTestsEnabled,
+      isTestManagementTestsEnabled: this.isTestManagementTestsEnabled,
+      isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
+      getKnownTests: () => getKnownTests(this.tracer, this.testConfiguration),
+      getTestManagementTests: () => getTestManagementTests(this.tracer, this.testConfiguration),
+      getSkippableSuites: () => getSkippableTests(this.tracer, {
+        ...this.testConfiguration,
+        isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
+      }),
+    })
+
     if (this.isKnownTestsEnabled) {
-      const knownTestsResponse = await getKnownTests(
-        this.tracer,
-        this.testConfiguration
-      )
-      if (knownTestsResponse.err) {
-        log.error('Cypress known tests response error', knownTestsResponse.err)
+      const currentKnownTestsResponse = knownTestsResponse || await getKnownTests(this.tracer, this.testConfiguration)
+      if (currentKnownTestsResponse.err) {
+        log.error('Cypress known tests response error', currentKnownTestsResponse.err)
+        this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, value: 'true' })
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        if (knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]) {
-          this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        if (currentKnownTestsResponse.knownTests?.[TEST_FRAMEWORK_NAME]) {
+          this.knownTestsByTestSuite = currentKnownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
         } else {
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
@@ -652,31 +953,51 @@ class CypressPlugin {
       }
     }
 
-    if (this.isSuitesSkippingEnabled) {
-      const skippableTestsResponse = await getSkippableTests(
-        this.tracer,
-        this.testConfiguration
+    if (this.isKnownTestsEnabled && details.specs) {
+      const testSuites = details.specs.map(({ relative }) => relative)
+      const isFaulty = getIsFaultyEarlyFlakeDetection(
+        testSuites,
+        this.knownTestsByTestSuite,
+        this.earlyFlakeDetectionFaultyThreshold
       )
+      if (isFaulty) {
+        log.warn('New test detection is disabled because the number of new test files is too high.')
+        this.isEarlyFlakeDetectionEnabled = false
+        this.isEarlyFlakeDetectionFaulty = true
+        this.isKnownTestsEnabled = false
+      }
+    }
+
+    if (this.isSuitesSkippingEnabled) {
+      const skippableTestsResponse =
+        skippableTestsRequestResponse || await getSkippableTests(this.tracer, {
+          ...this.testConfiguration,
+          isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
+        })
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
+        this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, value: 'true' })
       } else {
-        const { skippableTests, correlationId } = skippableTestsResponse
+        const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
+        this.skippableTestsCoverage = skippableTestsCoverage || {}
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
     }
 
     if (this.isTestManagementTestsEnabled) {
-      const testManagementTestsResponse = await getTestManagementTests(
-        this.tracer,
-        this.testConfiguration
-      )
-      if (testManagementTestsResponse.err) {
-        log.error('Cypress test management tests response error', testManagementTestsResponse.err)
+      const currentTestManagementTestsResponse =
+        testManagementTestsResponse || await getTestManagementTests(this.tracer, this.testConfiguration)
+      if (currentTestManagementTestsResponse.err) {
+        log.error('Cypress test management tests response error', currentTestManagementTestsResponse.err)
+        this._pendingRequestErrorTags.push({
+          tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+          value: 'true',
+        })
         this.isTestManagementTestsEnabled = false
       } else {
-        this.testManagementTests = testManagementTestsResponse.testManagementTests
+        this.testManagementTests = currentTestManagementTestsResponse.testManagementTests
       }
     }
 
@@ -709,6 +1030,9 @@ class CypressPlugin {
     if (this.isEarlyFlakeDetectionEnabled) {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
+    if (this.isEarlyFlakeDetectionFaulty) {
+      testSessionSpanMetadata[TEST_EARLY_FLAKE_ABORT_REASON] = 'faulty'
+    }
 
     const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
 
@@ -719,15 +1043,9 @@ class CypressPlugin {
     )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
+      const metadataTags = { '*': { [TEST_COMMAND]: this.command, [TEST_SESSION_NAME]: testSessionName } }
       const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)
       metadataTags.test = {
-        ...metadataTags.test,
         ...libraryCapabilitiesTags,
       }
 
@@ -767,6 +1085,11 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    if (this.hasLibraryConfiguration) {
+      const skippingEnabled = this.isSuitesSkippingEnabled ? 'true' : 'false'
+      this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+      this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+    }
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
 
     return details
@@ -779,6 +1102,9 @@ class CypressPlugin {
     }
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = getSessionStatus(suiteStats)
+      const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
+      const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
+
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
 
@@ -789,6 +1115,7 @@ class CypressPlugin {
           isSuitesSkipped: this.isTestsSkipped,
           isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
           isCodeCoverageEnabled: this.isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
           skippingType: 'test',
           skippingCount: this.skippedTests.length,
           hasForcedToRunSuites: this.hasForcedToRunSuites,
@@ -796,11 +1123,16 @@ class CypressPlugin {
         }
       )
 
+      this.reportTestSessionCoverage()
+
       if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
-      logDynamicNamesWarning(this.newTestsWithDynamicNames)
+      logTestOptimizationSummary({
+        attemptToFixExecutions: this.attemptToFixExecutions,
+        newTestsWithDynamicNames: this.newTestsWithDynamicNames,
+      })
 
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -808,7 +1140,7 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       incrementCountMetric(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!getConfig().DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       finishAllTraceSpans(this.testSessionSpan)
@@ -909,17 +1241,25 @@ class CypressPlugin {
 
     for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
-        // TODO: there could be multiple if there have been retries!
-        // potentially we need to match the test status!
-        const cypressTest = cypressTests.find(test => test.title.join(' ') === testName)
+        // We can check if this is the last attempt regardless of the retry mechanism
+        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
+        const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
+        const cypressTest = isDatadogManagedAttempt
+          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus, isLastAttempt) ||
+            cypressTests.find(test => test.title.join(' ') === testName)
+          : cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
           continue
         }
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
-        let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
-        if (cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
+        const shouldUseCapturedStatus = isDatadogManagedAttempt && !(isLastAttempt && isCypressHookFailure(cypressTest))
+        let cypressTestStatus = shouldUseCapturedStatus
+          ? finishedTest.testStatus
+          : CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        if (!finishedTest.isEfdManagedTest && !finishedTest.isAttemptToFix &&
+          cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&
@@ -936,15 +1276,21 @@ class CypressPlugin {
             }
           }
         }
+        if (finishedTest.isEfdManagedTest && finishedTest.testStatus !== 'skip' && cypressTestStatus === 'skip') {
+          cypressTestStatus = finishedTest.testStatus
+        }
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
         }
-        // Update test status - but NOT for quarantined tests where we intentionally
+        // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
-        if (cypressTestStatus !== finishedTest.testStatus && !isQuarantinedTest) {
+        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
+        if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
+          if (finishedTest.isAttemptToFix && cypressTestStatus === 'fail') {
+            finishedTest.testSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+          }
         }
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
@@ -964,10 +1310,8 @@ class CypressPlugin {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
         }
 
-        // We can check if this is the last attempt regardless of the retry mechanism
-        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         if (isLastAttempt) {
-          const testSpanTags = finishedTest.testSpan.context()._tags
+          const testSpanTags = finishedTest.testSpan.context().getTags()
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
@@ -1017,7 +1361,8 @@ class CypressPlugin {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries,
+          earlyFlakeDetectionNumRetries: this.getConfiguredEfdRetryCount(),
+          earlyFlakeDetectionSlowTestRetries: this.earlyFlakeDetectionSlowTestRetries,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
@@ -1029,14 +1374,14 @@ class CypressPlugin {
           rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
-        if (this.testSuiteSpan) {
-          return suitePayload
-        }
-        this.testSuiteSpan = this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
+        this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {
-        const { testName, testSuite } = test
+        const { testName, testSuite, isEfdRetry, efdRetryIndex } = test
+        if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
+          return { shouldSkip: true, shouldDiscard: true }
+        }
         const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
@@ -1048,6 +1393,10 @@ class CypressPlugin {
           this.skippedTests.push(test)
           this.isTestsSkipped = true
           return { shouldSkip: true }
+        }
+
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(testSuite, testName, this.loggedAttemptToFixTests)
         }
 
         // For disabled tests (not attemptToFix), skip them
@@ -1070,7 +1419,7 @@ class CypressPlugin {
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
-      'dd:afterEach': ({ test, coverage }) => {
+      'dd:afterEach': ({ test, coverage, commands }) => {
         if (!this.activeTestSpan) {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
@@ -1089,13 +1438,22 @@ class CypressPlugin {
           isEfdRetry,
           isAttemptToFix,
           isModified,
+          duration,
           isQuarantined: isQuarantinedFromSupport,
+          isDisabled: isDisabledFromSupport,
         } = test
+        if (coverage && (this.isCodeCoverageEnabled || this.isCoverageReportUploadEnabled)) {
+          this.addTestSessionCoverage(coverage)
+        }
+
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
-          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
-            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
-          )
+          const coverageFiles = getCoveredFilesFromCoverage(coverage)
+          const relativeCoverageFiles = getRelativeCoverageFiles(coverageFiles, this.getCoverageRootDir())
+          if (testSuiteAbsolutePath) {
+            relativeCoverageFiles.push({
+              filename: getTestSuitePath(testSuiteAbsolutePath, this.getCoverageRootDir()),
+            })
+          }
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }
@@ -1109,7 +1467,19 @@ class CypressPlugin {
           }
           this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
-        const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+        const isEfdManagedTest = (isNew || isModified) && this.isEarlyFlakeDetectionEnabled && !isAttemptToFix
+        let testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+        let didAbortSlowEfdRetries = false
+        if (isEfdManagedTest && !isEfdRetry && this.efdRetryCountByTest[testSuite]?.[testName] === undefined) {
+          const retryCount = this.setEfdRetryCountForTest(testSuite, testName, duration)
+          if (retryCount === 0) {
+            didAbortSlowEfdRetries = true
+            this.activeTestSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'slow')
+          }
+        }
+        if (didAbortSlowEfdRetries && testStatus === 'skip' && !error && duration > 0) {
+          testStatus = 'pass'
+        }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
         // Save the test status to know if it has passed all retries
@@ -1119,6 +1489,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
+        const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
@@ -1171,9 +1542,10 @@ class CypressPlugin {
           }
         }
         // Check if all EFD retries failed
-        if ((isNew || isModified) && this.earlyFlakeDetectionNumRetries > 0) {
-          const isLastEfdAttempt = testStatuses.length === this.earlyFlakeDetectionNumRetries + 1
-          if (isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+        if (isEfdManagedTest) {
+          const efdRetryCount = this.getEfdRetryCountForTest(testSuite, testName)
+          const isLastEfdAttempt = testStatuses.length === efdRetryCount + 1
+          if (efdRetryCount > 0 && isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
             this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
           }
         }
@@ -1194,6 +1566,13 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
+          recordAttemptToFixExecution(this.attemptToFixExecutions, {
+            testSuite,
+            testName,
+            status: testStatus,
+            isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+            isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+          })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
@@ -1207,6 +1586,34 @@ class CypressPlugin {
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
+        if (isDisabledFromSupport) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+        }
+
+        if (Array.isArray(commands) && commands.length > 0) {
+          for (const command of commands) {
+            const { startTime, endTime } = command
+            if (typeof startTime !== 'number' || typeof endTime !== 'number' || endTime < startTime) {
+              continue
+            }
+            const stepSpan = this.tracer.startSpan('cypress.step', {
+              childOf: this.activeTestSpan,
+              startTime,
+              tags: {
+                [COMPONENT]: 'cypress',
+                'cypress.command': command.name,
+                [RESOURCE_NAME]: command.name,
+              },
+            })
+            if (command.error) {
+              const errorObj = new Error(command.error.message || String(command.error))
+              if (command.error.name) errorObj.name = command.error.name
+              if (command.error.stack) errorObj.stack = command.error.stack
+              stepSpan.setTag('error', errorObj)
+            }
+            stepSpan.finish(endTime)
+          }
+        }
 
         const finishedTest = {
           testName,
@@ -1214,6 +1621,7 @@ class CypressPlugin {
           finishTime: this._now(),
           testSpan: this.activeTestSpan,
           isEfdRetry,
+          isEfdManagedTest,
           isAttemptToFix,
         }
         if (this.finishedTestsByFile[testSuite]) {
@@ -1222,13 +1630,12 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
-        const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
-          isQuarantined: isQuarantinedFromSupport,
+          isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           isModified,
           isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })
