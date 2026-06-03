@@ -51,16 +51,7 @@
   resolved "https://registry.yarnpkg.com/@actions/io/-/io-3.0.2.tgz#6f89b27a159d109836d983efa283997c23b92284"
   integrity sha512-nRBchcMM+QK1pdjO7/idu86rbJI5YHUKCvKs0KxnSYbVe3F51UfGxuZX4Qy/fWlp6l7gWFwIkrOzN+oUK03kfw==
 
-"@babel/code-frame@^7.29.0":
-  version "7.29.0"
-  resolved "https://registry.yarnpkg.com/@babel/code-frame/-/code-frame-7.29.0.tgz#7cd7a59f15b3cc0dcd803038f7792712a7d0b15c"
-  integrity sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==
-  dependencies:
-    "@babel/helper-validator-identifier" "^7.28.5"
-    js-tokens "^4.0.0"
-    picocolors "^1.1.1"
-
-"@babel/code-frame@^7.29.7":
+"@babel/code-frame@^7.29.0", "@babel/code-frame@^7.29.7":
   version "7.29.7"
   resolved "https://registry.yarnpkg.com/@babel/code-frame/-/code-frame-7.29.7.tgz#f2fbbfea87c44a21590ec515b778b2c26d8866e7"
   integrity sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==
@@ -144,12 +135,7 @@
   resolved "https://registry.yarnpkg.com/@babel/helper-string-parser/-/helper-string-parser-7.29.7.tgz#7f0871d99824d23137d60f86fcf6130fd5a1b51f"
   integrity sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==
 
-"@babel/helper-validator-identifier@^7.28.5":
-  version "7.28.5"
-  resolved "https://registry.yarnpkg.com/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz#010b6938fab7cb7df74aa2bbc06aa503b8fe5fb4"
-  integrity sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q==
-
-"@babel/helper-validator-identifier@^7.29.7":
+"@babel/helper-validator-identifier@^7.28.5", "@babel/helper-validator-identifier@^7.29.7":
   version "7.29.7"
   resolved "https://registry.yarnpkg.com/@babel/helper-validator-identifier/-/helper-validator-identifier-7.29.7.tgz#bd87084ced0c796ec46bda492de6e83d29e89fc2"
   integrity sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==
@@ -167,14 +153,7 @@
     "@babel/template" "^7.29.7"
     "@babel/types" "^7.29.7"
 
-"@babel/parser@^7.23.9", "@babel/parser@^7.29.0":
-  version "7.29.0"
-  resolved "https://registry.yarnpkg.com/@babel/parser/-/parser-7.29.0.tgz#669ef345add7d057e92b7ed15f0bac07611831b6"
-  integrity sha512-IyDgFV5GeDUVX4YdF/3CPULtVGSXXMLh1xVIgdCgxApktqnQV0r7/8Nqthg+8YLGaAtdyIlo2qIdZrbCv4+7ww==
-  dependencies:
-    "@babel/types" "^7.29.0"
-
-"@babel/parser@^7.29.7":
+"@babel/parser@^7.23.9", "@babel/parser@^7.29.0", "@babel/parser@^7.29.7":
   version "7.29.7"
   resolved "https://registry.yarnpkg.com/@babel/parser/-/parser-7.29.7.tgz#837b87387cbf5ec5530cb634b3c622f68edb9334"
   integrity sha512-hnORnjP/1P/zFEndoeX+n+t1RwWRJiJpM/jO7FW32Kn9r5+sJB2JWOdYo4L6k78j15eCwY3Gm/7364B1EMwtNg==
