@@ -79,12 +79,6 @@ class DatadogSpan {
 
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // Stay on `Object.assign({}, src)` for backportability: V8 12+ (Node 22 /
-    // 24) inlines `{ ...src }` and beats `Object.assign` here, but on V8 10.2
-    // / 11.3 (Node 18 / 20) the spread takes a generic runtime path and slows
-    // `spans-finish-*` by ~140%. Revisit once those LTS lines drop.
-    // eslint-disable-next-line prefer-object-spread
-    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this.#parentTracer = tracer
@@ -106,7 +100,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    Object.assign(this._spanContext.getTags(), tags)
+    Object.assign(this._spanContext.getTags(), fields.tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -389,7 +383,7 @@ class DatadogSpan {
     let spanContext
     let startTime
 
-    let baggage = {}
+    let baggage
     const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
@@ -431,7 +425,7 @@ class DatadogSpan {
       }
 
       if (propagationBehavior === 'restart') {
-        spanContext._baggageItems = baggage
+        spanContext._baggageItems = baggage ?? {}
       }
     }
 
