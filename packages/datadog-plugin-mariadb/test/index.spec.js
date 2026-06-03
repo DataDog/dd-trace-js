@@ -7,6 +7,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const semver = require('semver')
+const ddpv = require('mocha/package.json').version
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -747,6 +748,283 @@ describe('Plugin', () => {
                 })
               })
             })
+          })
+        })
+      }
+
+      if (semver.intersects(version, '<3')) {
+        describe('v2 connection metadata from connOpts', () => {
+          let connection
+          let mariadb
+
+          afterEach((done) => {
+            if (!connection) return agent.close({ ritmReset: false }).then(done)
+            connection.end(() => {
+              agent.close({ ritmReset: false }).then(done)
+            })
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb')
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+
+            connection = mariadb.createConnection({
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+
+            await new Promise((resolve, reject) => {
+              connection.connect(err => err ? reject(err) : resolve())
+            })
+          })
+
+          it('should include host, user, and database tags sourced from connOpts', done => {
+            agent.assertFirstTraceSpan({
+              meta: {
+                'db.user': 'root',
+                'db.name': 'db',
+                'out.host': 'localhost',
+              },
+            }, { spanResourceMatch: /SELECT 1/ })
+              .then(done)
+              .catch(done)
+
+            connection.query('SELECT 1', () => {})
+          })
+        })
+
+        describe('v2 pool getConnection', () => {
+          let pool
+          let mariadb
+
+          afterEach((done) => {
+            if (!pool) return agent.close({ ritmReset: false }).then(done)
+            pool.end(() => {
+              agent.close({ ritmReset: false }).then(done)
+            })
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb')
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+
+            pool = mariadb.createPool({
+              connectionLimit: 1,
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+          })
+
+          it('should propagate pool metadata to queries via getConnection', done => {
+            pool.getConnection((err, conn) => {
+              if (err) return done(err)
+
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.name': 'db',
+                  'db.user': 'root',
+                  'out.host': 'localhost',
+                },
+              }, { spanResourceMatch: /SELECT 1/ })
+                .then(done)
+                .catch(done)
+
+              conn.query('SELECT 1', () => {
+                conn.end()
+              })
+            })
+          })
+        })
+      }
+
+      describe('with DBM propagation enabled in service mode', () => {
+        let connection
+        let mariadb
+
+        afterEach((done) => {
+          if (!connection) return agent.close({ ritmReset: false }).then(done)
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          tracer = await agent.load('mariadb', { dbmPropagationMode: 'service', service: 'serviced' })
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+
+          connection = mariadb.createConnection({
+            host: 'localhost',
+            user: 'root',
+            database: 'db',
+          })
+
+          await new Promise((resolve, reject) => {
+            connection.connect(err => err ? reject(err) : resolve())
+          })
+        })
+
+        it('should inject a DBM comment into the query SQL', done => {
+          const query = connection.query('SELECT 1 + 1 AS solution', (err) => {
+            if (err) return done(err)
+            try {
+              assert.match(query.sql, new RegExp(
+                `^/\\*dddb='db',dddbs='serviced',dde='tester',ddh='localhost',ddps='test',ddpv='${ddpv}'\\*/`
+              ))
+            } catch (e) {
+              return done(e)
+            }
+            done()
+          })
+        })
+
+        it('should not change the span resource when DBM propagation is enabled', done => {
+          agent.assertFirstTraceSpan(
+            { resource: 'SELECT 1 + 1 AS solution' },
+            { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ }
+          )
+            .then(done)
+            .catch(done)
+
+          connection.query('SELECT 1 + 1 AS solution', () => {})
+        })
+      })
+
+      describe('with DBM propagation enabled in full mode', () => {
+        let connection
+        let mariadb
+
+        afterEach((done) => {
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+
+          if (!connection) return agent.close({ ritmReset: false }).then(done)
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          tracer = await agent.load('mariadb', { dbmPropagationMode: 'full', service: 'post' })
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+
+          connection = mariadb.createConnection({
+            host: 'localhost',
+            user: 'root',
+            database: 'db',
+          })
+
+          await new Promise((resolve, reject) => {
+            connection.connect(err => err ? reject(err) : resolve())
+          })
+        })
+
+        it('should inject a traceparent comment into the query SQL', done => {
+          let queryText = ''
+
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            assert.match(queryText, new RegExp(
+              `traceparent='00-${traceId}-${spanId}-01'\\*\\/ SELECT 1 \\+ 1 AS solution$`
+            ))
+          }).then(done, done)
+
+          const query = connection.query('SELECT 1 + 1 AS solution', () => {
+            queryText = query.sql
+          })
+        })
+
+        it('should set _dd.dbm_trace_injected on the span in full mode', done => {
+          agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].meta['_dd.dbm_trace_injected'], 'true')
+          }).then(done, done)
+
+          connection.query('SELECT 1 + 1 AS solution', () => {})
+        })
+      })
+
+      describe('with a connection pool and getConnection - callbacks', () => {
+        let pool
+        let mariadb
+
+        afterEach((done) => {
+          if (!pool) return agent.close({ ritmReset: false }).then(done)
+          pool.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          tracer = await agent.load('mariadb')
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+
+          pool = mariadb.createPool({
+            connectionLimit: 1,
+            host: 'localhost',
+            user: 'root',
+            database: 'db',
+          })
+        })
+
+        it('should propagate pool connection metadata to queries via getConnection', done => {
+          pool.getConnection((err, conn) => {
+            if (err) return done(err)
+
+            agent.assertFirstTraceSpan({
+              meta: {
+                'db.name': 'db',
+                'db.user': 'root',
+                'out.host': 'localhost',
+              },
+            }, { spanResourceMatch: /SELECT 1/ })
+              .then(done)
+              .catch(done)
+
+            conn.query('SELECT 1', () => {
+              conn.end()
+            })
+          })
+        })
+      })
+
+      if (semver.intersects(version, '>=3')) {
+        describe('with a connection pool and getConnection - promises', () => {
+          let pool
+          let mariadb
+
+          afterEach(async () => {
+            if (pool) await pool.end()
+            await agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb')
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+
+            pool = mariadb.createPool({
+              connectionLimit: 1,
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+          })
+
+          it('should propagate pool connection metadata to queries via getConnection', async () => {
+            const conn = await pool.getConnection()
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.name': 'db',
+                  'db.user': 'root',
+                  'out.host': 'localhost',
+                },
+              }, { spanResourceMatch: /SELECT 1/ }),
+              conn.query('SELECT 1').finally(() => conn.end()),
+            ])
           })
         })
       }
