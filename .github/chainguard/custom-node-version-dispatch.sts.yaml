@@ -1,10 +1,11 @@
 issuer: https://token.actions.githubusercontent.com
 
-subject_pattern: repo:DataDog/dd-trace-js:ref:refs/heads/.*
+subject: repo:DataDog/dd-trace-js:ref:refs/heads/master
 
 claim_pattern:
   event_name: workflow_dispatch
-  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/custom-node-version-dispatch\.yml@refs/heads/.*
+  ref: refs/heads/master
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/custom-node-version-dispatch\.yml@refs/heads/master
 
 permissions:
   actions: write
