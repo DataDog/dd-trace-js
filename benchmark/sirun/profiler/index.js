@@ -23,7 +23,7 @@ assert.equal(tracer._profilerStarted, true, 'profiler.start did not return true'
 // to stay under the 60s upload period, so no profile is exported and no agent
 // is required.
 guard.loopStart()
-const ROUNDS = 64_000
+const ROUNDS = 32_000
 let sink = 0
 for (let round = 0; round < ROUNDS; round++) {
   for (let i = 0; i < 20_000; i++) {
