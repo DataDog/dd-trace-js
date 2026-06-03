@@ -134,13 +134,13 @@ module.exports = {
       registerBatchCallback((result) => {
         const h = eventLoopHistogram
         if (!h || h.count < 5) return
-        result.observe(delayMin, toSeconds(h.min))
-        result.observe(delayMax, toSeconds(h.max))
-        result.observe(delayMean, toSeconds(h.mean))
-        result.observe(delayStddev, toSeconds(h.stddev))
-        result.observe(delayP50, toSeconds(h.percentile(50)))
-        result.observe(delayP90, toSeconds(h.percentile(90)))
-        result.observe(delayP99, toSeconds(h.percentile(99)))
+        result.observe(delayMin, h.min / 1e9)
+        result.observe(delayMax, h.max / 1e9)
+        result.observe(delayMean, h.mean / 1e9)
+        result.observe(delayStddev, h.stddev / 1e9)
+        result.observe(delayP50, h.percentile(50) / 1e9)
+        result.observe(delayP90, h.percentile(90) / 1e9)
+        result.observe(delayP99, h.percentile(99) / 1e9)
         h.reset()
       }, [delayMin, delayMax, delayMean, delayStddev, delayP50, delayP90, delayP99])
 
@@ -281,13 +281,4 @@ function createHeapInstrument (name, description) {
  */
 function createDelayGauge (name, description) {
   return meter.createObservableGauge(name, { unit: 's', description })
-}
-
-/**
- * @param {number} ns
- * @returns {number}
- */
-function toSeconds (ns) {
-  const v = ns / 1e9
-  return Number.isNaN(v) ? 0 : v
 }
