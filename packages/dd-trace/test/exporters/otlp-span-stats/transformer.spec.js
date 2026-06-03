@@ -94,12 +94,14 @@ describe('OtlpStatsTransformer', () => {
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS).toString())
       const dp = payload.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
 
-      const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.stringValue]))
+      const attrMap = Object.fromEntries(
+        dp.attributes.map(a => [a.key, a.value.stringValue ?? a.value.intValue ?? a.value.boolValue])
+      )
       // resource → span.name; name → dd.operation.name
       assert.strictEqual(attrMap['span.name'], 'GET /foo')
       assert.strictEqual(attrMap['dd.operation.name'], 'test.op')
       assert.strictEqual(attrMap['dd.span.type'], 'web')
-      assert.strictEqual(attrMap['http.response.status_code'], '404')
+      assert.strictEqual(attrMap['http.response.status_code'], 404)
       assert.strictEqual(attrMap['http.request.method'], 'POST')
       assert.strictEqual(attrMap['http.route'], '/users/:id')
     })
@@ -125,6 +127,20 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dp.sum, 2)
     })
 
+    it('emits min, max and bucketCounts in seconds', () => {
+      const spans = [makeSpan({ duration: 1e9 }), makeSpan({ duration: 3e9 })] // 1s and 3s, same aggKey/cell
+      const drained = makeDrained(12340000000000, spans)
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS).toString())
+      const dp = payload.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
+
+      assert.strictEqual(dp.count, 2)
+      assert.strictEqual(dp.min, 1)
+      assert.strictEqual(dp.max, 3)
+      assert.strictEqual(dp.sum, 4)
+      assert.deepStrictEqual(dp.bucketCounts, [2])
+      assert.deepStrictEqual(dp.explicitBounds, [])
+    })
+
     it('emits ok-not-top-level data point with dd.top_level=false, no error attr', () => {
       const span = makeSpan() // not top-level, no error
       const drained = makeDrained(12340000000000, [span])
@@ -134,8 +150,8 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPoints.length, 1)
       const dp = dataPoints[0]
       const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.stringValue ?? a.value.boolValue]))
-      assert.strictEqual(attrMap['dd.top_level'], 'false')
-      assert.ok(!Object.prototype.hasOwnProperty.call(attrMap, 'error'), 'error attr should not be present on ok spans')
+      assert.strictEqual(attrMap['dd.top_level'], false)
+      assert.ok(!Object.hasOwn(attrMap, 'error'), 'error attr should not be present on ok spans')
       assert.strictEqual(dp.count, 1)
     })
 
@@ -148,8 +164,8 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPoints.length, 1)
       const dp = dataPoints[0]
       const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.stringValue ?? a.value.boolValue]))
-      assert.strictEqual(attrMap['dd.top_level'], 'true')
-      assert.ok(!Object.prototype.hasOwnProperty.call(attrMap, 'error'))
+      assert.strictEqual(attrMap['dd.top_level'], true)
+      assert.ok(!Object.hasOwn(attrMap, 'error'))
       assert.strictEqual(dp.count, 1)
     })
 
@@ -162,8 +178,8 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPoints.length, 1)
       const dp = dataPoints[0]
       const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.stringValue ?? a.value.boolValue]))
-      assert.strictEqual(attrMap['error'], 'true')
-      assert.strictEqual(attrMap['dd.top_level'], 'false')
+      assert.strictEqual(attrMap.error, true)
+      assert.strictEqual(attrMap['dd.top_level'], false)
       assert.strictEqual(dp.count, 1)
     })
 
@@ -176,17 +192,17 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPoints.length, 1)
       const dp = dataPoints[0]
       const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.stringValue ?? a.value.boolValue]))
-      assert.strictEqual(attrMap['error'], 'true')
-      assert.strictEqual(attrMap['dd.top_level'], 'true')
+      assert.strictEqual(attrMap.error, true)
+      assert.strictEqual(attrMap['dd.top_level'], true)
       assert.strictEqual(dp.count, 1)
     })
 
     it('emits all 4 data points for spans across all 4 cells', () => {
       const spans = [
-        makeSpan(),                               // ok, not top-level
-        makeTopLevelSpan(),                       // ok, top-level
-        makeSpan({ error: 1 }),                   // error, not top-level
-        makeTopLevelSpan({ error: 1 }),            // error, top-level
+        makeSpan(), // ok, not top-level
+        makeTopLevelSpan(), // ok, top-level
+        makeSpan({ error: 1 }), // error, not top-level
+        makeTopLevelSpan({ error: 1 }), // error, top-level
       ]
       const drained = makeDrained(12340000000000, spans)
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS).toString())
@@ -197,10 +213,10 @@ describe('OtlpStatsTransformer', () => {
 
     it('records correct counts per cell', () => {
       const spans = [
-        makeSpan(), makeSpan(),                            // 2 ok not-top-level
-        makeTopLevelSpan(), makeTopLevelSpan(),            // 2 ok top-level (same aggKey)
-        makeSpan({ error: 1 }),                           // 1 error not-top-level
-        makeTopLevelSpan({ error: 1 }),                   // 1 error top-level
+        makeSpan(), makeSpan(), // 2 ok not-top-level
+        makeTopLevelSpan(), makeTopLevelSpan(), // 2 ok top-level (same aggKey)
+        makeSpan({ error: 1 }), // 1 error not-top-level
+        makeTopLevelSpan({ error: 1 }), // 1 error top-level
       ]
       const drained = makeDrained(12340000000000, spans)
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS).toString())
@@ -208,19 +224,19 @@ describe('OtlpStatsTransformer', () => {
 
       const getCount = (errorVal, topLevelVal) => {
         const dp = dataPoints.find(d => {
-          const attrMap = Object.fromEntries(d.attributes.map(a => [a.key, a.value.stringValue]))
+          const attrMap = Object.fromEntries(d.attributes.map(a => [a.key, a.value.boolValue]))
           if (errorVal === undefined) {
-            return !attrMap.error && attrMap['dd.top_level'] === String(topLevelVal)
+            return attrMap.error === undefined && attrMap['dd.top_level'] === topLevelVal
           }
-          return attrMap.error === String(errorVal) && attrMap['dd.top_level'] === String(topLevelVal)
+          return attrMap.error === errorVal && attrMap['dd.top_level'] === topLevelVal
         })
         return dp?.count ?? 0
       }
 
-      assert.strictEqual(getCount(undefined, false), 2)  // ok, not top-level
-      assert.strictEqual(getCount(undefined, true), 2)   // ok, top-level
-      assert.strictEqual(getCount(true, false), 1)       // error, not top-level
-      assert.strictEqual(getCount(true, true), 1)        // error, top-level
+      assert.strictEqual(getCount(undefined, false), 2) // ok, not top-level
+      assert.strictEqual(getCount(undefined, true), 2) // ok, top-level
+      assert.strictEqual(getCount(true, false), 1) // error, not top-level
+      assert.strictEqual(getCount(true, true), 1) // error, top-level
     })
 
     it('omits data points with zero count', () => {
@@ -279,8 +295,8 @@ describe('OtlpStatsTransformer', () => {
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS).toString())
       const dp = payload.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
 
-      const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.stringValue]))
-      assert.strictEqual(attrMap['dd.synthetics'], 'true')
+      const attrMap = Object.fromEntries(dp.attributes.map(a => [a.key, a.value.boolValue ?? a.value.stringValue]))
+      assert.strictEqual(attrMap['dd.synthetics'], true)
     })
   })
 

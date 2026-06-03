@@ -7,9 +7,9 @@ const OtlpStatsTransformer = require('./transformer')
 /**
  * Exports span stats as OTLP metrics to a /v1/metrics endpoint.
  *
- * Runs alongside the existing Datadog /v0.6/stats exporter when
- * DD_TRACE_OTEL_METRICS_ENABLED=true (or auto-enabled when both
- * OTEL_TRACES_EXPORTER=otlp and OTEL_METRICS_EXPORTER=otlp are set).
+ * Mutually exclusive with the Datadog /v0.6/stats exporter: it is used when
+ * DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED=true (or auto-enabled when both
+ * OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED=true are set).
  *
  * @class OtlpStatsExporter
  * @augments OtlpHttpExporterBase

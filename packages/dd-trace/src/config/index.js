@@ -599,25 +599,31 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
-    // Compute traceMetrics config: client-side span stats exported as OTLP metrics.
-    // Auto-enabled when both OTEL trace and metrics exporters are configured.
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.OTEL_METRICS_EXPORTER === 'otlp'
-    const traceMetricsEnabled = this.traceMetricsEnabled ?? autoTraceMetrics
-    // Derive the metrics URL from the traces endpoint by swapping the signal path.
-    // Guard with try/catch: the endpoint may contain an unbracketed IPv6 host
-    // (e.g. http://::1:4318/v1/traces) which is not a valid URL.
-    let traceMetricsUrl = 'http://localhost:4318/v1/metrics'
+    // Auto-enabled (when DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED is unset) only when both OTLP
+    // trace export (OTEL_TRACES_EXPORTER=otlp) and OTel metrics export (DD_METRICS_OTEL_ENABLED)
+    // are enabled.
+    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.otelMetricsEnabled === true
+    let traceMetricsEnabled = this.traceMetricsEnabled ?? autoTraceMetrics
+    // The OTLP metrics endpoint is reused for trace metrics and is used verbatim: it must include
+    // the /v1/metrics path. Prefer OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, then derive from the generic
+    // OTEL_EXPORTER_OTLP_ENDPOINT by appending the signal path.
+    let traceMetricsUrl = this.otelMetricsUrl
+    if (!traceMetricsUrl && this.OTEL_EXPORTER_OTLP_ENDPOINT) {
+      traceMetricsUrl = `${this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '')}/v1/metrics`
+    }
     try {
-      const parsedTracesUrl = new URL(this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
-      parsedTracesUrl.pathname = '/v1/metrics'
-      traceMetricsUrl = parsedTracesUrl.toString()
+      // eslint-disable-next-line no-new
+      new URL(traceMetricsUrl)
     } catch {
-      // malformed endpoint — traceMetrics will be disabled anyway unless explicitly enabled
+      if (traceMetricsEnabled) {
+        log.warn('Invalid OTLP metrics endpoint %s, disabling OTLP trace metrics export', traceMetricsUrl)
+      }
+      traceMetricsEnabled = false
     }
     this.traceMetrics = {
       enabled: traceMetricsEnabled,
       url: traceMetricsUrl,
-      protocol: this.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || this.otelProtocol || 'http/protobuf',
+      protocol: this.otelMetricsProtocol || 'http/json',
     }
 
     if (process.platform === 'win32') {

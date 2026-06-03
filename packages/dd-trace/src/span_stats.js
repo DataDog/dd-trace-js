@@ -16,11 +16,42 @@ const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
+const { getEnvironmentVariable } = require('./config/helper')
 
 const {
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('./encode/tags-processors')
+
+/**
+ * @typedef {{ count: number, sum: number, min: number, max: number }} HistogramCell
+ */
+
+/**
+ * @returns {HistogramCell} An empty histogram accumulator.
+ */
+function emptyCell () {
+  return { count: 0, sum: 0, min: 0, max: 0 }
+}
+
+/**
+ * Records a duration into a histogram cell, tracking count, sum, min and max.
+ *
+ * @param {HistogramCell} cell
+ * @param {number} durationNs
+ * @returns {void}
+ */
+function recordCell (cell, durationNs) {
+  if (cell.count === 0) {
+    cell.min = durationNs
+    cell.max = durationNs
+  } else {
+    if (durationNs < cell.min) cell.min = durationNs
+    if (durationNs > cell.max) cell.max = durationNs
+  }
+  cell.count++
+  cell.sum += durationNs
+}
 
 class SpanAggStats {
   constructor (aggKey) {
@@ -35,6 +66,12 @@ class SpanAggStats {
     this.topLevelErrorDuration = 0
     this.okDistribution = new LogCollapsingLowestDenseDDSketch()
     this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.cells = {
+      okNotTopLevel: emptyCell(),
+      okTopLevel: emptyCell(),
+      errNotTopLevel: emptyCell(),
+      errTopLevel: emptyCell(),
+    }
   }
 
   record (span) {
@@ -56,8 +93,10 @@ class SpanAggStats {
         this.topLevelErrorDuration += durationNs
       }
       this.errorDistribution.accept(durationNs)
+      recordCell(isTopLevel ? this.cells.errTopLevel : this.cells.errNotTopLevel, durationNs)
     } else {
       this.okDistribution.accept(durationNs)
+      recordCell(isTopLevel ? this.cells.okTopLevel : this.cells.okNotTopLevel, durationNs)
     }
   }
 
@@ -159,6 +198,7 @@ class SpanStatsProcessor {
     tags,
     version: appVersion,
     traceMetrics,
+    reportHostname,
   } = {}) {
     this.exporter = new SpanStatsExporter({
       hostname,
@@ -166,6 +206,12 @@ class SpanStatsProcessor {
       tags,
       url,
     })
+    // Allow the flush interval to be overridden for testing (e.g. system tests force a short
+    // interval so client-computed stats are exported within the test window).
+    const intervalOverride = Number(getEnvironmentVariable('_DD_TRACE_STATS_WRITER_INTERVAL'))
+    if (Number.isFinite(intervalOverride) && intervalOverride > 0) {
+      interval = intervalOverride
+    }
     this.interval = interval
     this.bucketSizeNs = interval * 1e9
     this.buckets = new TimeBuckets()
@@ -178,7 +224,7 @@ class SpanStatsProcessor {
 
     if (traceMetrics?.enabled) {
       const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
-      const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags)
+      const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags, reportHostname)
       this.otlpExporter = new OtlpStatsExporter(traceMetrics.url, traceMetrics.protocol, resourceAttributes)
     }
 
@@ -257,16 +303,18 @@ class SpanStatsProcessor {
  * @param {string|undefined} env
  * @param {string|undefined} appVersion
  * @param {object} tags
+ * @param {boolean|undefined} reportHostname Whether DD_TRACE_REPORT_HOSTNAME is enabled.
  * @returns {import('@opentelemetry/api').Attributes}
  */
-function buildResourceAttributes (service, env, appVersion, tags) {
-  const attrs = {
-    'host.name': os.hostname(),
-  }
+function buildResourceAttributes (service, env, appVersion, tags, reportHostname) {
+  const attrs = {}
   if (service) attrs['service.name'] = service
   if (env) attrs['deployment.environment.name'] = env
   if (appVersion) attrs['service.version'] = appVersion
   if (tags?.['runtime-id']) attrs['dd.runtime_id'] = tags['runtime-id']
+  // Only report host.name when DD_TRACE_REPORT_HOSTNAME is enabled, matching the other OTLP
+  // signals (metrics/logs). DD_HOSTNAME is not supported in dd-trace-js, so use os.hostname().
+  if (reportHostname) attrs['host.name'] = os.hostname()
   return attrs
 }
 
