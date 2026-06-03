@@ -27,8 +27,6 @@ variables:
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "2.0"
   MD_REPORT_ONLY_CHANGES: "1"
-  # Set to the dd-trace-js benchmarks dashboard URL to add a link in the PR comment.
-  BENCHMARK_DASHBOARD_URL: ""
 
 .benchmarks:
   stage: benchmarks
