@@ -6,7 +6,7 @@ const { debugChannel, errorChannel } = require('../../../packages/dd-trace/src/l
 const log = require('../../../packages/dd-trace/src/log')
 
 const { WITH_LEVEL = 'debug' } = process.env
-const COUNT = Number(process.env.COUNT) || 800_000
+const COUNT = 800_000
 
 // Override the default console-backed logger to isolate dispatch + filtering cost.
 log.configure({
