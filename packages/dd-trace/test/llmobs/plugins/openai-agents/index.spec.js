@@ -22,9 +22,9 @@ describe('integrations', () => {
     let agent
     let toolErrorAgent
 
-    withVersions('openai-agents', '@openai/agents-core', (version) => {
+    withVersions('openai-agents', '@openai/agents', (version) => {
       before(() => {
-        agentsCore = require(`../../../../../../versions/@openai/agents-core@${version}`).get()
+        agentsCore = require(`../../../../../../versions/@openai/agents@${version}`).get()
 
         const { OpenAIResponsesModel } =
           require(`../../../../../../versions/@openai/agents-openai@${version}`).get()

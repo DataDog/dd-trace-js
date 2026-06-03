@@ -27,7 +27,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @nats-io/nats-core,nats,3.0.0,3.4.0,True
 @nats-io/transport-node,nats,3.0.0,3.4.0,True
 @node-redis/client,redis,1.0.0,1.0.6,True
-@openai/agents-core,openai-agents,0.7.0,0.11.8,True
+@openai/agents,openai-agents,0.7.0,0.11.8,True
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True
 @redis/client,redis,1.1.0,5.12.1,True
