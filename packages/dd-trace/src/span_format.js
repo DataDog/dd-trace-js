@@ -190,6 +190,9 @@ function extractRootTags (formattedSpan, span) {
   addTag({}, formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
   addTag({}, formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
   addTag({}, formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+  // BUG: only the local root is tagged top-level. A child whose parent is in a different service is
+  // also a service-entry (top-level) span and should be tagged here for client-side stats to be
+  // correct (fails test_otlp_trace_metrics FR06.3).
   addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 

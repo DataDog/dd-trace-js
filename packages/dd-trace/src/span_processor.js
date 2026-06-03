@@ -17,7 +17,7 @@ class SpanProcessor {
     this._killAll = false
 
     // TODO: This should already have been calculated in `config.js`.
-    if ((config.stats?.enabled || config.traceMetrics?.enabled) && !config.appsec?.standalone?.enabled) {
+    if ((config.stats?.enabled || config.otlpTraceMetricsEnabled) && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config)
     }
@@ -66,6 +66,9 @@ class SpanProcessor {
         }
       }
 
+      // BUG: when client-side stats are computed (this._stats), sampled-out (p0) traces are still
+      // exported here instead of being dropped, since the stats already account for them
+      // (fails test_otlp_trace_metrics FR09.1).
       if (formatted.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
       }

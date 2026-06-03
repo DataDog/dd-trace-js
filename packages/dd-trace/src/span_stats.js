@@ -197,7 +197,9 @@ class SpanStatsProcessor {
     service,
     tags,
     version: appVersion,
-    traceMetrics,
+    otlpTraceMetricsEnabled,
+    otelMetricsUrl,
+    otelMetricsProtocol,
     reportHostname,
   } = {}) {
     this.exporter = new SpanStatsExporter({
@@ -222,10 +224,11 @@ class SpanStatsProcessor {
     this.sequence = 0
     this.version = appVersion
 
-    if (traceMetrics?.enabled) {
+    if (otlpTraceMetricsEnabled) {
       const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
+      const protocol = otelMetricsProtocol || 'http/json'
       const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags, reportHostname)
-      this.otlpExporter = new OtlpStatsExporter(traceMetrics.url, traceMetrics.protocol, resourceAttributes)
+      this.otlpExporter = new OtlpStatsExporter(otelMetricsUrl, protocol, resourceAttributes)
     }
 
     if (this.enabled || this.otlpExporter) {
@@ -237,8 +240,6 @@ class SpanStatsProcessor {
   onInterval () {
     const drained = this._drainBuckets()
 
-    // XOR: OTLP stats export and DD-native stats export are mutually exclusive.
-    // When the OTLP exporter is active, suppress the /v0.6/stats path to avoid double-counting.
     if (this.enabled && !this.otlpExporter) {
       this.exporter.export({
         Hostname: this.hostname,
