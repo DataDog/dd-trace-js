@@ -108,76 +108,21 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       const endNano = isJson ? String(endTimeNs) : endTimeNs
 
       for (const aggStats of bucket.values()) {
-        const { aggKey, hits, errors, topLevelHits, topLevelErrors, duration, errorDuration,
-          topLevelDuration, topLevelErrorDuration } = aggStats
-        const baseAttrs = this.#buildAttributes(aggKey, isJson)
+        const { aggKey, cells } = aggStats
+        const baseAttrs = this.#buildAttributes(aggKey)
 
-        // Derive the 4 cells of the (ok/error) × (not-top-level/top-level) matrix.
-        const okNotTopLevel = hits - errors - (topLevelHits - topLevelErrors)
-        const okTopLevel = topLevelHits - topLevelErrors
-        const errNotTopLevel = errors - topLevelErrors
-        const errTopLevel = topLevelErrors
-
-        const okNotTopLevelDur = (duration - errorDuration) - (topLevelDuration - topLevelErrorDuration)
-        const okTopLevelDur = topLevelDuration - topLevelErrorDuration
-        const errNotTopLevelDur = errorDuration - topLevelErrorDuration
-        const errTopLevelDur = topLevelErrorDuration
-
-        if (okNotTopLevel > 0) {
-          durationPoints.push({
-            attributes: [...baseAttrs, this.#boolAttr('dd.top_level', false, isJson)],
-            startTimeUnixNano: startNano,
-            timeUnixNano: endNano,
-            count: okNotTopLevel,
-            sum: okNotTopLevelDur / NS_PER_S,
-            bucketCounts: [],
-            explicitBounds: [],
-          })
-        }
-
-        if (okTopLevel > 0) {
-          durationPoints.push({
-            attributes: [...baseAttrs, this.#boolAttr('dd.top_level', true, isJson)],
-            startTimeUnixNano: startNano,
-            timeUnixNano: endNano,
-            count: okTopLevel,
-            sum: okTopLevelDur / NS_PER_S,
-            bucketCounts: [],
-            explicitBounds: [],
-          })
-        }
-
-        if (errNotTopLevel > 0) {
-          durationPoints.push({
-            attributes: [
-              ...baseAttrs,
-              this.#boolAttr('error', true, isJson),
-              this.#boolAttr('dd.top_level', false, isJson),
-            ],
-            startTimeUnixNano: startNano,
-            timeUnixNano: endNano,
-            count: errNotTopLevel,
-            sum: errNotTopLevelDur / NS_PER_S,
-            bucketCounts: [],
-            explicitBounds: [],
-          })
-        }
-
-        if (errTopLevel > 0) {
-          durationPoints.push({
-            attributes: [
-              ...baseAttrs,
-              this.#boolAttr('error', true, isJson),
-              this.#boolAttr('dd.top_level', true, isJson),
-            ],
-            startTimeUnixNano: startNano,
-            timeUnixNano: endNano,
-            count: errTopLevel,
-            sum: errTopLevelDur / NS_PER_S,
-            bucketCounts: [],
-            explicitBounds: [],
-          })
-        }
+        this.#pushPoint(durationPoints, cells.okNotTopLevel, startNano, endNano, [
+          ...baseAttrs, this.#boolAttr('dd.top_level', false),
+        ])
+        this.#pushPoint(durationPoints, cells.okTopLevel, startNano, endNano, [
+          ...baseAttrs, this.#boolAttr('dd.top_level', true),
+        ])
+        this.#pushPoint(durationPoints, cells.errNotTopLevel, startNano, endNano, [
+          ...baseAttrs, this.#boolAttr('error', true), this.#boolAttr('dd.top_level', false),
+        ])
+        this.#pushPoint(durationPoints, cells.errTopLevel, startNano, endNano, [
+          ...baseAttrs, this.#boolAttr('error', true), this.#boolAttr('dd.top_level', true),
+        ])
       }
     }
 
@@ -196,13 +141,39 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Builds OTLP data point attributes from an aggregation key.
+   * Appends a histogram data point for a non-empty cell. Durations are converted from
+   * nanoseconds to seconds. A single (unbounded) bucket holds the full count.
+   *
+   * @param {object[]} points
+   * @param {import('../../span_stats').HistogramCell} cell
+   * @param {string|number} startNano
+   * @param {string|number} endNano
+   * @param {object[]} attributes
+   * @returns {void}
+   */
+  #pushPoint (points, cell, startNano, endNano, attributes) {
+    if (!cell || cell.count === 0) return
+    points.push({
+      attributes,
+      startTimeUnixNano: startNano,
+      timeUnixNano: endNano,
+      count: cell.count,
+      sum: cell.sum / NS_PER_S,
+      min: cell.min / NS_PER_S,
+      max: cell.max / NS_PER_S,
+      bucketCounts: [cell.count],
+      explicitBounds: [],
+    })
+  }
+
+  /**
+   * Builds OTLP data point attributes from an aggregation key. Values are emitted with their
+   * native OTLP types (e.g. the HTTP status code as an int, synthetics as a bool).
    *
    * @param {import('../../span_stats').SpanAggKey} aggKey
-   * @param {boolean} isJson
    * @returns {object[]}
    */
-  #buildAttributes (aggKey, isJson) {
+  #buildAttributes (aggKey) {
     const raw = {
       'span.name': aggKey.resource,
       'dd.operation.name': aggKey.name,
@@ -210,23 +181,19 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       'dd.synthetics': aggKey.synthetics,
     }
 
-    if (aggKey.statusCode) raw['http.response.status_code'] = aggKey.statusCode
+    if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
 
-    return isJson ? this.attributesToJson(raw) : this.transformAttributes(raw)
+    return this.transformAttributes(raw)
   }
 
   /**
    * @param {string} key
    * @param {boolean} value
-   * @param {boolean} isJson
    * @returns {object}
    */
-  #boolAttr (key, value, isJson) {
-    if (isJson) {
-      return { key, value: { stringValue: String(value) } }
-    }
+  #boolAttr (key, value) {
     return { key, value: { boolValue: value } }
   }
 }
