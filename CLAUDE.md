@@ -1,12 +1,1 @@
-# CLAUDE.md
-
-@AGENTS.md
-
-Claude Code reads `CLAUDE.md`, not `AGENTS.md`, and only follows the
-`@path/to/file` import syntax — plain Markdown links are not expanded. The
-import above keeps both filenames discoverable without duplicating the
-project rules: the body lives in `AGENTS.md`, and other tools that already
-read `AGENTS.md` are unaffected.
-
-No symlink, to prevent two context copies being loaded by tooling. Claude Code only
-reads `CLAUDE.md` and follows the import syntax; Markdown links are not expanded. 
+See @AGENTS.md
