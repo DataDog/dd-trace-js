@@ -69,6 +69,7 @@ describe('spanFormat', () => {
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
         _service: 'test',
+        serviceLower: 'test',
       }),
       setTag: sinon.stub(),
       _startTime: 1500000000000.123,
@@ -344,6 +345,14 @@ describe('spanFormat', () => {
 
       it('should infer the tag when no changes occur', () => {
         span.context()._tags['service.name'] = 'test'
+
+        trace = spanFormat(span)
+
+        sinon.assert.notCalled(span.setTag)
+      })
+
+      it('should treat a case-only service difference as no change', () => {
+        span.context()._tags['service.name'] = 'TEST'
 
         trace = spanFormat(span)
 

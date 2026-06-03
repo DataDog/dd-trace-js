@@ -168,7 +168,7 @@ function extractTags (formattedSpan, span) {
     metrics[MEASURED] = 1
   }
 
-  const tracerService = span.tracer()._service.toLowerCase()
+  const tracerService = span.tracer().serviceLower
   if (tags['service.name']?.toLowerCase() !== tracerService) {
     span.setTag(BASE_SERVICE, tracerService)
 
