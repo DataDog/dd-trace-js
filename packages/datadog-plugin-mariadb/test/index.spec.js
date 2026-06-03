@@ -19,7 +19,7 @@ const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
 
 describe('Plugin', () => {
   describe('mariadb', () => {
-    withVersions('mariadb', 'mariadb', range, version => {
+    withVersions('mariadb', 'mariadb', range, (version, _, resolvedVersion) => {
       let tracer
 
       describe('without configuration - callbacks', () => {
@@ -29,7 +29,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
-            agent.close().then(done)
+            agent.close({ ritmReset: false }).then(done)
           })
         })
 
@@ -361,7 +361,7 @@ describe('Plugin', () => {
         })
       }
 
-      if (semver.intersects(version, '>=2.5.2 <3')) {
+      if (semver.satisfies(resolvedVersion, '>=2.5.2 <3')) {
         describe('without configuration - promise rejection tagging (<3)', () => {
           let mariadb
           let connection
@@ -410,7 +410,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
-            agent.close().then(done)
+            agent.close({ ritmReset: false }).then(done)
           })
         })
 
@@ -513,7 +513,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
-            agent.close().then(done)
+            agent.close({ ritmReset: false }).then(done)
           })
         })
 
@@ -626,7 +626,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!pool) return agent.close({ ritmReset: false }).then(done)
           pool.end(() => {
-            agent.close().then(done)
+            agent.close({ ritmReset: false }).then(done)
           })
         })
 
@@ -752,7 +752,7 @@ describe('Plugin', () => {
         })
       }
 
-      if (semver.intersects(version, '<3')) {
+      if (semver.satisfies(resolvedVersion, '<3')) {
         describe('v2 connection metadata from connOpts', () => {
           let connection
           let mariadb
@@ -1036,7 +1036,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           if (!pool) return agent.close({ ritmReset: false }).then(done)
           pool.end(() => {
-            agent.close().then(done)
+            agent.close({ ritmReset: false }).then(done)
           })
         })
 
