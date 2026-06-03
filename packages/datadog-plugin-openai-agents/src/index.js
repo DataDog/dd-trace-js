@@ -1,24 +1,19 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
-const { loadedAgentsCoreMods } = require('../../datadog-instrumentations/src/openai-agents')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { OpenAIAgentsIntegration } = require('./integration')
 const { DDOpenAIAgentsProcessor } = require('./processor')
 
-const agentsCoreLoadedCh = channel('apm:openai-agents:agents-core:loaded')
-const responseClientCh = channel('apm:openai-agents:response:client')
-
 /**
  * Drives the openai-agents integration through agents-core's
  * `TracingProcessor` interface. The instrumentation hook publishes the
- * loaded `@openai/agents-core` module on a channel; this plugin subscribes
+ * loaded `@openai/agents` module on a channel; this plugin subscribes
  * during its constructor (which runs synchronously between `loadChannel`'s
  * publish and the addHook callback) and registers the processor.
  *
  * The instrumentation also publishes the OpenAI-compatible client's
- * baseURL on each `getResponse` / `getStreamedResponse` call so the
+ * baseURL on each `getResponse` call, and the orchestrion traceAsyncIterator
+ * rewriter publishes it on each `getStreamedResponse` call, so the
  * integration can resolve `model_provider`.
  *
  * The integration's `enabled` flag follows this plugin's configure()
@@ -29,6 +24,7 @@ class OpenaiAgentsPlugin extends Plugin {
   static id = 'openai-agents'
 
   #integration
+  #registeredMods = new WeakSet()
 
   constructor (tracer, tracerConfig) {
     super(tracer, tracerConfig)
@@ -37,20 +33,23 @@ class OpenaiAgentsPlugin extends Plugin {
       config: tracerConfig,
     })
 
-    const registerProcessor = (mod) => {
+    this.addSub('apm:openai-agents:agents-core:loaded', ({ mod }) => {
       if (typeof mod?.addTraceProcessor !== 'function') return
+      if (this.#registeredMods.has(mod)) return
+      this.#registeredMods.add(mod)
       mod.addTraceProcessor(new DDOpenAIAgentsProcessor(() => this.#integration))
-    }
-    // Drain any agents-core mods that loaded before this plugin was
-    // constructed (e.g. another plugin's tests triggered the require first),
-    // then keep listening for future loads. Set is bounded to one entry per
-    // process — agents-core is a singleton dep.
-    for (const mod of loadedAgentsCoreMods) registerProcessor(mod)
-    agentsCoreLoadedCh.subscribe(({ mod }) => registerProcessor(mod))
+    })
 
-    responseClientCh.subscribe(({ baseURL }) => {
+    this.addSub('apm:openai-agents:response:client', ({ baseURL }) => {
       if (!this.#integration.enabled) return
       this.#integration.setClientBaseURL(baseURL)
+    })
+
+    // Capture baseURL from getStreamedResponse via the orchestrion traceAsyncIterator
+    // rewriter (helpers/rewriter/instrumentations/openai-agents.js).
+    this.addSub('tracing:orchestrion:@openai/agents-openai:OAI_getStreamedResponse:start', (ctx) => {
+      const baseURL = ctx.self?.client?.baseURL
+      if (baseURL && this.#integration.enabled) this.#integration.setClientBaseURL(baseURL)
     })
   }
 

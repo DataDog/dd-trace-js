@@ -21,7 +21,7 @@ function findSpan (traces, predicate) {
  * do NOT emit Spans because agents-core's span creation happens in the runner,
  * not in those helpers. The tests below exercise real flows.
  */
-createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
+createIntegrationTestSuite('openai-agents', '@openai/agents', {
   category: 'generative-ai',
 }, (meta) => {
   const { agent } = meta
@@ -50,7 +50,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
 
       const result = await testSetup.run()
       assert.ok(result, 'run() should return a result object')
-      assert.ok(result.finalOutput !== undefined, 'run() should have finalOutput')
+      assert.notStrictEqual(result.finalOutput, undefined, 'run() should have finalOutput')
 
       return traceAssertion
     })
