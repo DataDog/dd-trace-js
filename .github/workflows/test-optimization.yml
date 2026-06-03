@@ -124,7 +124,7 @@ jobs:
           fi
 
   integration-playwright:
-    needs: playwright-image
+    needs: image-pin
     strategy:
       fail-fast: false
       matrix:
@@ -143,7 +143,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.playwright-version] }}
+      image: ${{ fromJson(needs.image-pin.outputs.playwright-images)[matrix.playwright-version] }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -319,7 +319,7 @@ jobs:
           fi
 
   integration-selenium:
-    needs: selenium-image
+    needs: image-pin
     strategy:
       fail-fast: false
       matrix:
@@ -328,7 +328,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ${{ needs.selenium-image.outputs.image }}
+      image: ${{ needs.image-pin.outputs.selenium-image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -473,3 +473,42 @@ jobs:
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  image-pin:
+    needs: [playwright-image, selenium-image]
+    name: Pin Docker image digests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    outputs:
+      playwright-images: ${{ steps.pin.outputs.playwright-images }}
+      selenium-image: ${{ steps.pin.outputs.selenium-image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref || github.sha }}
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve digests
+        id: pin
+        env:
+          PLAYWRIGHT_IMAGES: ${{ needs.playwright-image.outputs.images }}
+          SELENIUM_IMAGE: ${{ needs.selenium-image.outputs.image }}
+        run: .github/scripts/pin-image-digests.sh
+      - name: Commit digest updates
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add .github/image-digests.json
+          git diff --cached --quiet || (
+            git commit -m "ci: update image digests" &&
+            git push origin HEAD:${{ github.head_ref }}
+          )

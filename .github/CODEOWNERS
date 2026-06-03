@@ -255,7 +255,9 @@
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
 /.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
+/.github/image-digests.json @DataDog/ci-app-libraries
 /.github/playwright/ @DataDog/ci-app-libraries
+/.github/scripts/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
 /.github/actions/upload-node-reports/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
