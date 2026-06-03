@@ -42,6 +42,7 @@
 /benchmark/sirun/plugin-graphql/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-pino/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-q/ @DataDog/apm-idm-js
 
 /integration-tests/electron/ @DataDog/apm-idm-js
