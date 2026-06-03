@@ -92,6 +92,8 @@ const plugins = {
   get mongoose () { return require('../../../datadog-plugin-mongoose/src') },
   get mysql () { return require('../../../datadog-plugin-mysql/src') },
   get mysql2 () { return require('../../../datadog-plugin-mysql2/src') },
+  get '@nats-io/nats-core' () { return require('../../../datadog-plugin-nats/src') },
+  get '@nats-io/transport-node' () { return require('../../../datadog-plugin-nats/src') },
   get net () { return require('../../../datadog-plugin-net/src') },
   get next () { return require('../../../datadog-plugin-next/src') },
   get 'node:dns' () { return require('../../../datadog-plugin-dns/src') },

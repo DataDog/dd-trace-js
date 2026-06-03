@@ -420,6 +420,7 @@ module.exports = {
   getCoveredFilenamesFromCoverage,
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
   getLineCoverageBitmap,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
@@ -957,7 +958,6 @@ function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
-    [TEST_COMMAND]: command,
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
   }
 }
@@ -1073,6 +1073,13 @@ function getExecutableFilesFromCoverage (coverage) {
   }
 
   return coverageFiles
+}
+
+function getRelativeCoverageFiles (coverageFiles, rootDir) {
+  return coverageFiles.map(({ filename, bitmap }) => ({
+    filename: getTestSuitePath(filename, rootDir),
+    bitmap,
+  }))
 }
 
 function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
@@ -1242,7 +1249,7 @@ function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
 
   const coverageMap = getCoverageMap(coverage)
   const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
-  let updated = false
+  let matched = false
 
   for (const filename of coverageMap.files()) {
     const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
@@ -1250,10 +1257,11 @@ function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
     if (!skippedBitmap) continue
 
     const fileCoverage = coverageMap.fileCoverageFor(filename)
-    updated = applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap) || updated
+    applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap)
+    matched = true
   }
 
-  return updated
+  return matched
 }
 
 function resetCoverage (coverage) {

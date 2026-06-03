@@ -54,7 +54,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     if (coverage.suiteId) keysLength++
     if (coverage.testId) keysLength++
 
-    this._encodeMapPrefix(bytes, keysLength)
+    bytes.writeMapPrefix(keysLength)
     this._encodeString(bytes, 'test_session_id')
     this._encodeId(bytes, coverage.sessionId)
     if (coverage.suiteId) {
@@ -66,16 +66,16 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       this._encodeId(bytes, coverage.testId)
     }
     this._encodeString(bytes, 'files')
-    this._encodeArrayPrefix(bytes, coverage.files)
+    bytes.writeArrayPrefix(coverage.files)
     for (const file of coverage.files) {
       const filename = typeof file === 'string' ? file : file.filename
       const bitmap = getBitmapBuffer(file.bitmap)
-      this._encodeMapPrefix(bytes, bitmap ? 2 : 1)
+      bytes.writeMapPrefix(bitmap ? 2 : 1)
       this._encodeString(bytes, 'filename')
       this._encodeString(bytes, filename)
       if (bitmap) {
         this._encodeString(bytes, 'bitmap')
-        this._encodeBuffer(bytes, bitmap)
+        bytes.writeBin(bitmap)
       }
     }
   }
@@ -83,7 +83,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   reset () {
     this._reset()
     if (this._coverageBytes) {
-      this._coverageBytes.length = 0
+      this._coverageBytes.reset()
     }
     this._coveragesCount = 0
     this._encodePayloadStart(this._coverageBytes)
@@ -94,9 +94,9 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       version: COVERAGE_PAYLOAD_VERSION,
       coverages: [],
     }
-    this._encodeMapPrefix(bytes, COVERAGE_KEYS_LENGTH)
+    bytes.writeMapPrefix(COVERAGE_KEYS_LENGTH)
     this._encodeString(bytes, 'version')
-    this._encodeInteger(bytes, payload.version)
+    bytes.writeInteger(payload.version)
     this._encodeString(bytes, 'coverages')
     // Get offset of the coverages list to update the length of the array when calling `makePayload`
     this._coveragesOffset = bytes.length

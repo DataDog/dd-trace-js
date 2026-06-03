@@ -347,10 +347,15 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         }
       } else {
         const fileCode = fs.readFileSync(args.path, 'utf8')
+        // Don't spread `...arguments`: esbuild's minifier can rewrite the surrounding
+        // `__commonJS` factory into an arrow function whose `arguments` resolves to the
+        // ESM top-level scope (see issue #8681). Pass `(module.exports, module)`
+        // explicitly; the IIFE declares no parameters so esbuild's static `require()`
+        // resolution inside `fileCode` is preserved through the factory's closure.
         contents = `
         (function() {
           ${fileCode}
-        })(...arguments);
+        })(module.exports, module);
         {
           const dc = require('dc-polyfill');
           const ch = dc.channel('${CHANNEL}');

@@ -162,8 +162,10 @@ const MINIMUM_JEST_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=2
 const MINIMUM_JEST_WORKER_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.9.0 <30.0.0'
 const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0'
 const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
+const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
+let isJestCoverageBackfillSupported = false
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
@@ -1169,7 +1171,8 @@ function hasSkippableSuitesCoverage () {
 }
 
 function shouldCollectJestCoverageForTia () {
-  return shouldReportJestSuiteCoverageForTia() || (isItrEnabled && isCoverageReportUploadEnabled)
+  return shouldReportJestSuiteCoverageForTia() ||
+    (isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled)
 }
 
 function shouldReportJestSuiteCoverageForTia () {
@@ -1182,12 +1185,18 @@ function hasJestCoverageMap () {
 
 // TIA coverage backfill is part of Datadog Code Coverage, not the per-suite TIA coverage upload.
 function isTiaCoverageBackfillEnabled () {
-  return isItrEnabled && isCoverageReportUploadEnabled && hasJestCoverageMap()
+  return isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled && hasJestCoverageMap()
 }
 
-// Non-TIA Jest coverage keeps the legacy metric. TIA only reports it from the backfill-capable path.
+// Non-TIA Jest coverage keeps the legacy metric. TIA only reports it when Datadog Code Coverage is enabled and
+// either the run is complete locally or the skipped suites can be backfilled.
 function shouldReportCodeCoverageLinesPct () {
-  return hasJestCoverageMap() && (!isItrEnabled || isTiaCoverageBackfillEnabled())
+  if (!hasJestCoverageMap()) return false
+  if (!isItrEnabled) return true
+  if (!isCoverageReportUploadEnabled) return false
+
+  // If no suites were actually skipped, the local Jest coverage map is complete and does not need backfill.
+  return !isSuitesSkipped || isTiaCoverageBackfillEnabled()
 }
 
 function getHookRequire (hookMeta) {
@@ -1441,6 +1450,8 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
 function getCliWrapper (isNewJestVersion) {
   return function cliWrapper (cli, jestVersion) {
     warnDeprecatedJestVersion(jestVersion)
+    isJestCoverageBackfillSupported = !!jestVersion &&
+      satisfies(jestVersion, MINIMUM_JEST_COVERAGE_BACKFILL_VERSION)
 
     if (isNewJestVersion) {
       cli = shimmer.wrap(

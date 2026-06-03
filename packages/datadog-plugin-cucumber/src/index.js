@@ -11,6 +11,7 @@ const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
   addIntelligentTestRunnerSpanTags,
   finishAllTraceSpans,
+  getRelativeCoverageFiles,
   getTestEndLine,
   getTestSuiteCommonTags,
   getTestSuitePath,
@@ -71,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isSuitesSkipped,
       numSkippedSuites,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       hasUnskippableSuites,
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
@@ -78,7 +80,11 @@ class CucumberPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       isParallel,
     }) => {
-      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
+      const {
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        isCoverageReportUploadEnabled,
+      } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
         this.testModuleSpan,
@@ -93,6 +99,12 @@ class CucumberPlugin extends CiPlugin {
           hasForcedToRunSuites,
         }
       )
+      if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+        this.tracer._exporter.exportCoverage({
+          sessionId: this.testSessionSpan.context()._traceId,
+          files: testSessionCoverageFiles,
+        })
+      }
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
@@ -197,8 +209,10 @@ class CucumberPlugin extends CiPlugin {
       }
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot))
+      const relativeCoverageFiles = [
+        ...getRelativeCoverageFiles(coverageFiles, this.repositoryRoot),
+        getTestSuitePath(suiteFile, this.repositoryRoot),
+      ]
 
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 

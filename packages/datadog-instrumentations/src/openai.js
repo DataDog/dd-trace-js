@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
+const aiGuard = require('./helpers/openai-ai-guard')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
@@ -216,14 +217,19 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function (...args) {
-          if (!ch.start.hasSubscribers) {
+          if (!ch.start.hasSubscribers && !aiGuard.hasSubscribers()) {
             return methodFn.apply(this, args)
           }
-
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
           const stream = streamedResponse && getOption(args, 'stream', false)
+
+          const guard = aiGuard.createGuard(baseResource, args[0], stream)
+
+          if (!ch.start.hasSubscribers && !guard) {
+            return methodFn.apply(this, args)
+          }
 
           const client = this._client || this.client
 
@@ -249,7 +255,7 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
                 })
 
                 return unwrappedPromise
@@ -262,8 +268,10 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
             })
+
+            if (guard) aiGuard.wrapAsResponse(apiProm, guard)
 
             ch.end.publish(ctx)
 
@@ -276,8 +284,10 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
-  return apiProm
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
+  const guardedApiProm = guard ? aiGuard.gateParse(apiProm, guard) : apiProm
+
+  return guardedApiProm
     .then(([{ response, options }, body]) => {
       if (stream) {
         if (body.iterator) {
@@ -287,22 +297,27 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
             body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, ctx)
           )
         }
-      } else {
-        finish(ctx, {
-          headers: response.headers,
-          data: body,
-          request: {
-            path: response.url,
-            method: options.method,
-          },
-        })
+        return body
       }
 
-      return body
+      finish(ctx, {
+        headers: response.headers,
+        data: body,
+        request: {
+          path: response.url,
+          method: options.method,
+        },
+      })
+
+      if (!guard) return body
+
+      return aiGuard.evaluateOutput(guard, body).then(() => body)
     })
     .catch(error => {
-      finish(ctx, undefined, error)
-
+      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in
+      // success branch, before-model block, or openai error) — record the error now.
+      // If finish already ran successfully (after-model block), don't double-publish.
+      if (!ctx.result) finish(ctx, undefined, error)
       throw error
     })
 }

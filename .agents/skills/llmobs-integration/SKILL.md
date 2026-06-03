@@ -1,42 +1,18 @@
 ---
 name: llmobs-integration
 description: |
-  This skill should be used when the user asks to "add LLMObs support", "create an LLMObs plugin",
-  "instrument an LLM library", "add LLM Observability", "add llmobs", "add llm observability",
-  "instrument chat completions", "instrument streaming", "instrument embeddings",
-  "instrument agent runs", "instrument orchestration", "instrument LLM",
-  "LLMObsPlugin", "LlmObsPlugin", "getLLMObsSpanRegisterOptions", "setLLMObsTags",
-  "tagLLMIO", "tagEmbeddingIO", "tagRetrievalIO", "tagTextIO", "tagMetrics", "tagMetadata",
-  "tagSpanTags", "tagPrompt", "LlmObsCategory", "LlmObsSpanKind",
-  "span kind llm", "span kind workflow", "span kind agent", "span kind embedding",
-  "span kind tool", "span kind retrieval",
-  "openai llmobs", "anthropic llmobs", "genai llmobs", "google llmobs",
-  "langchain llmobs", "langgraph llmobs", "ai-sdk llmobs",
-  "llm span", "llmobs span event", "model provider", "model name",
-  "CompositePlugin llmobs", "llmobs tracing", "VCR cassettes",
-  or needs to build, modify, or debug an LLMObs plugin for any LLM library in dd-trace-js.
+  Use when adding, debugging, or modifying LLMObs plugins for an LLM library
+  in dd-trace-js. Triggers: "add LLMObs support", "instrument chat
+  completions / streaming / embeddings / agent runs / orchestration / tool
+  calls / retrieval", "LLMObsPlugin", "getLLMObsSpanRegisterOptions",
+  "setLLMObsTags", "LlmObsCategory", "LlmObsSpanKind", any provider tag
+  ("openai" / "anthropic" / "genai" / "google" / "langchain" / "langgraph" /
+  "ai-sdk" llmobs), "VCR cassettes".
 ---
 
 # LLM Observability Integration Skill
 
-## Purpose
-
-This skill helps you create LLMObs plugins that instrument LLM library operations and emit proper span events for LLM observability in dd-trace-js. Supported operation types include:
-
-- **Chat completions** — standard request/response LLM calls
-- **Streaming chat completions** — streamed token-by-token responses
-- **Embeddings** — vector embedding generation
-- **Agent runs** — autonomous LLM agent execution loops
-- **Orchestration** — multi-step workflow and graph execution (langgraph, etc.)
-- **Tool calls** — tool/function invocations
-- **Retrieval** — vector DB / RAG operations
-
-## When to Use
-
-- Creating a new LLMObs plugin for an LLM library
-- Adding LLMObs support to an existing tracing integration
-- Understanding LLMObsPlugin architecture and patterns
-- Determining how to instrument a new LLM package
+This skill covers creating LLMObs plugins that instrument LLM library operations and emit span events. Supported operations: chat completions (streaming and non-streaming), embeddings, agent runs, orchestration (workflows / graphs), tool calls, retrieval (RAG / vector DB).
 
 ## Read Upstream Source First
 
@@ -46,24 +22,14 @@ LLM libraries iterate fast — six-month-old assumptions about an SDK's response
 
 ### 1. LLMObsPlugin Base Class
 
-All LLMObs plugins extend the `LLMObsPlugin` base class, which provides the core instrumentation framework.
+All LLMObs plugins extend `LLMObsPlugin`. Two methods must be implemented:
 
-**Key responsibilities:**
-- **Span registration**: Define span metadata (model provider, model name, span kind)
-- **Tag extraction**: Extract and tag LLM-specific data (messages, metrics, metadata)
-- **Context management**: Handle span lifecycle and parent context
+- `getLLMObsSpanRegisterOptions(ctx)` — returns `{ modelProvider, modelName, kind, name }`.
+- `setLLMObsTags(ctx)` — extracts and tags input / output messages, token metrics, and model metadata.
 
-**Required methods to implement:**
-- `getLLMObsSpanRegisterOptions(ctx)` - Returns span registration options (modelProvider, modelName, kind, name)
-- `setLLMObsTags(ctx)` - Extracts and tags LLM data (input/output messages, metrics, metadata)
+Lifecycle: `start(ctx)` registers the span and captures context; the wrapped operation runs; `asyncEnd(ctx)` calls `setLLMObsTags()`; `end(ctx)` restores the parent.
 
-**Plugin lifecycle:**
-1. `start(ctx)` - Registers span with LLMObs, captures context
-2. Operation executes (chat completion call)
-3. `asyncEnd(ctx)` - Calls `setLLMObsTags()` to extract and tag data
-4. `end(ctx)` - Restores parent context
-
-See [references/plugin-architecture.md](references/plugin-architecture.md) for complete implementation details.
+See [references/plugin-architecture.md](references/plugin-architecture.md) for the full implementation surface.
 
 ### 2. Package Category System
 
@@ -170,15 +136,6 @@ See [references/message-extraction.md](references/message-extraction.md) for pro
 
 See [references/plugin-architecture.md](references/plugin-architecture.md) for step-by-step implementation guide.
 
-## Common Patterns
-
-Based on category:
-
-- **LLM_CLIENT**: Messages in array, straightforward extraction from `result.choices[0]` or equivalent
-- **MULTI_PROVIDER**: Handle multiple provider formats with provider detection logic
-- **ORCHESTRATION**: May use `'workflow'` span kind instead of `'llm'`, focus on lifecycle events
-- **INFRASTRUCTURE**: Protocol-specific instrumentation, may not have traditional messages
-
 ## Plugin Registration
 
 All plugins must export an array:
@@ -196,12 +153,3 @@ For detailed information, see:
 - [references/category-detection.md](references/category-detection.md) - Package classification heuristics and detection process
 - [references/message-extraction.md](references/message-extraction.md) - Provider-specific message format patterns
 - [references/reference-implementations.md](references/reference-implementations.md) - Working plugin examples (Anthropic, Google GenAI)
-
-## Key Principles
-
-1. **Category determines approach** - Always detect category first using decision tree
-2. **Use enum values** - Reference `LlmObsCategory` and `LlmObsSpanKind` enums from models
-3. **Standard message format** - Always convert to `[{content, role}]` format
-4. **Complete metadata** - Extract all available model parameters and token metrics
-5. **Error handling** - Handle failures gracefully (empty messages on error)
-6. **Test strategy follows category** - VCR for clients, pure functions for orchestration
