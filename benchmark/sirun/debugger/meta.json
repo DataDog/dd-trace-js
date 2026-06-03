@@ -1,7 +1,7 @@
 {
   "name": "debugger",
   "cachegrind": false,
-  "iterations": 7,
+  "iterations": 10,
   "instructions": true,
   "variants": {
     "enabled-but-breakpoint-not-hit": {
