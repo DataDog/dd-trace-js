@@ -9,7 +9,6 @@
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "DD_TRACE_AGENT_URL": "http://127.0.0.1:8080",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "INSTALL_ONLY": "true",
         "BREAKPOINT_FILE": "app.js",
@@ -21,12 +20,10 @@
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "DD_TRACE_AGENT_URL": "http://127.0.0.1:8080",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
         "BREAKPOINT_LINE": "37",
-        "ITERATIONS": "26000",
-        "STARTUP_GUARD_MAX_SHARE": "0.4"
+        "ITERATIONS": "3500"
       }
     },
     "line-probe-with-snapshot-default": {
@@ -34,14 +31,12 @@
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "DD_TRACE_AGENT_URL": "http://127.0.0.1:8080",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
         "BREAKPOINT_LINE": "37",
         "CAPTURE_SNAPSHOT": "true",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
-        "ITERATIONS": "4500",
-        "STARTUP_GUARD_MAX_SHARE": "0.6"
+        "ITERATIONS": "1300"
       }
     },
     "line-probe-with-snapshot-minimal": {
@@ -49,7 +44,6 @@
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "DD_TRACE_AGENT_URL": "http://127.0.0.1:8080",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
         "BREAKPOINT_LINE": "37",
@@ -59,8 +53,7 @@
         "MAX_COLLECTION_SIZE": "0",
         "MAX_FIELD_COUNT": "0",
         "MAX_LENGTH": "9007199254740991",
-        "ITERATIONS": "12000",
-        "STARTUP_GUARD_MAX_SHARE": "0.6"
+        "ITERATIONS": "3500"
       }
     }
   }

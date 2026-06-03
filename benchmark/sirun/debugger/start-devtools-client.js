@@ -4,6 +4,12 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const Module = require('node:module')
 
+// Point the tracer at this variant's per-core agent (port matches `agent.js`)
+// before `getConfig()` reads the URL. Set it unconditionally so a globally
+// inherited `DD_TRACE_AGENT_URL` can't redirect us back to a shared port that
+// another parallel variant owns.
+process.env.DD_TRACE_AGENT_URL = `http://127.0.0.1:${8080 + Number(process.env.CPU_AFFINITY || 0)}`
+
 // The trace-context expression the devtools client evaluates on the paused frame
 // for every hit does `global.require('dd-trace')`. This bench loads the tracer by
 // relative path, so the bare specifier would otherwise throw MODULE_NOT_FOUND on
