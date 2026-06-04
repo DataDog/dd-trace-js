@@ -129,14 +129,27 @@ function wrapOriginalEfdTest (test, slowTestRetries) {
   })
 }
 
+/**
+ * Disables Mocha's native retry mechanism for Datadog-managed clone retries.
+ * @param {{ retries?: (count: number) => void }} test
+ * @returns {void}
+ */
+function disableMochaRetries (test) {
+  if (typeof test.retries === 'function') {
+    test.retries(0)
+  }
+}
+
 function retryTest (test, numRetries, tags, slowTestRetries) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
+  disableMochaRetries(test)
   if (isEfdRetry) {
     wrapOriginalEfdTest(test, slowTestRetries)
   }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
+    disableMochaRetries(clonedTest)
     suite.addTest(clonedTest)
     if (isEfdRetry) {
       clonedTest._ddEfdRetryIndex = retryIndex + 1
