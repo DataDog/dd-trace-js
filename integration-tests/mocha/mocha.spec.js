@@ -6104,6 +6104,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
   context('impacted tests', () => {
     const NUM_RETRIES = 3
+    // Written into the sandbox fixture by the before hook below.
+    const manualRetryTestTitle = 'fails first then passes after manual retry'
+    const manualRetryTestName = `impacted tests ${manualRetryTestTitle}`
 
     beforeEach(() => {
       receiver.setKnownTests({
@@ -6129,7 +6132,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
              assert.strictEqual(1 + 2, 4)
            })
 
-           it('fails first then passes after manual retry', function () {
+           it('${manualRetryTestTitle}', function () {
              if (process.env.SET_RETRIES_INSIDE_TEST) {
                this.retries(2)
              }
@@ -6264,13 +6267,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
 
       onlyLatestIt('disables manual Mocha retries for modified tests retried by EFD', async () => {
-        const testName = 'impacted tests fails first then passes after manual retry'
         receiver.setKnownTests({
           mocha: {
             'ci-visibility/test-impacted-test/test-impacted-1.js': [
               'impacted tests can pass normally',
               'impacted tests can fail',
-              testName,
+              manualRetryTestName,
             ],
           },
         })
@@ -6294,7 +6296,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const tests = events
               .filter(event => event.type === 'test')
               .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === testName)
+              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
               .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
             assert.strictEqual(tests.length, NUM_RETRIES + 1)
