@@ -1460,8 +1460,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
 
-        // it runs regardless of quarantine status
-        assert.match(stdout, /I am running when quarantined/)
+        // In parallel mode, the payload assertions above verify that the quarantined test ran.
+        // Jest does not print console output for the suite once the quarantined failure is suppressed.
+        if (!isParallel) {
+          assert.match(stdout, /I am running when quarantined/)
+        }
         if (isQuarantining) {
           // even though a test fails, the exit code is 0 because the test is quarantined
           assert.strictEqual(exitCode, 0)

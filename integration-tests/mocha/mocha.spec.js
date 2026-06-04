@@ -5504,7 +5504,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         receiver.setTestManagementTests({
           mocha: {
             suites: {
-              'ci-visibility/test-management/test-quarantine-eventually-passes.js': {
+              'ci-visibility/test-management/quarantine-eventually-passes.js': {
                 tests: {
                   'quarantine tests with retries can quarantine a test that eventually passes': {
                     properties: {
@@ -5556,7 +5556,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         let stdout = ''
         childProcess = exec(
           'node node_modules/mocha/bin/mocha --retries 2 ' +
-          './ci-visibility/test-management/test-quarantine-eventually-passes.js',
+          './ci-visibility/test-management/quarantine-eventually-passes.js',
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
