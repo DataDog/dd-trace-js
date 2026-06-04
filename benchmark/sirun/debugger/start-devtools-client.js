@@ -22,12 +22,10 @@ Module._resolveFilename = function (request, ...rest) {
 
 // The global snapshot cap (MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) is read in the
 // devtools worker thread at module load, with no config or env path to override
-// it. To let the snapshot variants measure capture cost on every hit instead of
-// the rate-limited path, rewrite the on-disk value before `start()` spawns the
-// worker. The worker captures the value into a const at load, so the install ack
-// restores the file right after — the long work loop runs with the source
-// unchanged. No-op unless the variant opts in via the env var.
-const restoreSnapshotCap = patchGlobalSnapshotCap(process.env.MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
+// it. Rewrite the on-disk value before `start()` spawns the worker so the snapshot
+// variants measure capture cost on every hit instead of the rate-limited path.
+// No-op unless the variant opts in via the env var.
+patchGlobalSnapshotCap(process.env.MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
 
 // Entry point normally primes this; bench imports src directly.
 globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
@@ -55,35 +53,49 @@ function intEnv (name) {
 }
 
 /**
- * Rewrite `MAX_SNAPSHOTS_PER_SECOND_GLOBALLY` in the devtools defaults file to
- * `cap` and return an idempotent restore. A single-line numeric replace keeps the
- * file byte-identical except the value. The caller restores from the install ack
- * (the worker has captured the value by then); an exit handler is a fallback.
+ * Replace `filePath` with `content` atomically, so the devtools worker's
+ * concurrent `require('./defaults')` read in another variant only ever sees
+ * complete file contents, never a half-written file.
+ *
+ * @param {string} filePath
+ * @param {string} content
+ */
+function writeFileAtomic (filePath, content) {
+  const tempPath = `${filePath}.${process.pid}.tmp`
+  fs.writeFileSync(tempPath, content)
+  fs.renameSync(tempPath, filePath)
+}
+
+/**
+ * Raise `MAX_SNAPSHOTS_PER_SECOND_GLOBALLY` in the devtools defaults file to `cap`
+ * and restore the committed default on exit.
+ *
+ * `runall.sh` pins one variant per core, so the two snapshot variants rewrite this
+ * shared file in parallel. Two properties keep that race-free without a lock (a
+ * lock would serialize startup and inflate the measured run): a sibling that has
+ * already raised the cap is left to restore it, so its value is never captured as
+ * the baseline; and the restore runs on exit, long after every worker has read the
+ * cap at load, so no worker can observe the default mid-run.
  *
  * @param {string | undefined} value Desired cap; skips the rewrite when unset.
- * @returns {() => void} Restores the original file contents (idempotent).
  */
 function patchGlobalSnapshotCap (value) {
-  if (!value) return () => {}
+  if (!value) return
 
   const cap = Number(value)
   assert(Number.isInteger(cap) && cap > 0, 'MAX_SNAPSHOTS_PER_SECOND_GLOBALLY must be a positive integer')
 
   const defaultsPath = require.resolve('../../../packages/dd-trace/src/debugger/devtools_client/defaults')
-  const pattern = /(MAX_SNAPSHOTS_PER_SECOND_GLOBALLY:\s*)\d+/
-  const original = fs.readFileSync(defaultsPath, 'utf8')
-  assert.match(original, pattern, 'MAX_SNAPSHOTS_PER_SECOND_GLOBALLY not found in defaults file')
+  const pattern = /(MAX_SNAPSHOTS_PER_SECOND_GLOBALLY:\s*)(\d+)/
+  const committed = fs.readFileSync(defaultsPath, 'utf8')
+  const match = committed.match(pattern)
+  assert(match, 'MAX_SNAPSHOTS_PER_SECOND_GLOBALLY not found in defaults file')
 
-  fs.writeFileSync(defaultsPath, original.replace(pattern, `$1${cap}`))
+  // Already raised by a sibling variant: leave its exit handler to restore it.
+  if (Number(match[2]) === cap) return
 
-  let restored = false
-  const restore = () => {
-    if (restored) return
-    restored = true
-    fs.writeFileSync(defaultsPath, original)
-  }
-  process.once('exit', restore)
-  return restore
+  writeFileAtomic(defaultsPath, committed.replace(pattern, `$1${cap}`))
+  process.once('exit', () => writeFileAtomic(defaultsPath, committed))
 }
 
 /**
@@ -108,7 +120,6 @@ module.exports = function startDebugger (onProbeInstalled) {
         },
       })
       cb(action, conf, 'id', (error) => {
-        restoreSnapshotCap()
         if (error) throw error
         onProbeInstalled()
       })
