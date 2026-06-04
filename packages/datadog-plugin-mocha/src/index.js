@@ -306,20 +306,9 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:retry', ({
-      span,
-      isFirstAttempt,
-      willBeRetried,
-      err,
-      test,
-      isAtrRetry,
-      finalStatus,
-    }) => {
+    this.addSub('ci:mocha:test:retry', ({ span, isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
-        if (finalStatus) {
-          span.setTag(TEST_FINAL_STATUS, finalStatus)
-        }
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {

@@ -265,17 +265,6 @@ function inheritDatadogPropertiesFromRetriedTest (test) {
   }
 }
 
-/**
- * Gets the final status for a Test Management suppressed test attempt.
- * @param {{ isAttemptToFix?: boolean, isQuarantined?: boolean, isDisabled?: boolean } | undefined} ctx
- * @returns {string | undefined}
- */
-function getTestManagementSkipFinalStatus (ctx) {
-  if (!ctx?.isAttemptToFix && (ctx?.isQuarantined || ctx?.isDisabled)) {
-    return 'skip'
-  }
-}
-
 function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
@@ -419,13 +408,15 @@ function getFinalStatus ({
   hasPassedAnyEfdAttempt,
   isQuarantined,
   isDisabled,
+  isFinalAttempt,
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
-  // Intermediate EFD and ATF executions must not carry a final status, regardless of quarantine/disabled state
+  // Intermediate executions must not carry a final status, regardless of quarantine/disabled state
   const isIntermediateExecution =
     (isEfdRetry && !isLastEfdRetry) ||
-    (isAttemptToFix && !isLastAttemptToFix)
+    (isAttemptToFix && !isLastAttemptToFix) ||
+    !isFinalAttempt
   if (isIntermediateExecution) {
     return
   }
@@ -511,6 +502,7 @@ function getTestFinishInfo (test, status, config, error) {
   const isAtrRetry = config.isFlakyTestRetriesEnabled &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
+  const isFinalAttempt = status !== 'fail' || test._currentRetry >= test._retries
 
   const { isFlakyTestRetriesEnabled } = config
   const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
@@ -528,6 +520,7 @@ function getTestFinishInfo (test, status, config, error) {
     hasPassedAnyEfdAttempt: testStatuses.includes('pass'),
     isQuarantined: _ddIsQuarantined,
     isDisabled: _ddIsDisabled,
+    isFinalAttempt,
   })
 
   if (_ddIsAttemptToFix) {
@@ -715,7 +708,6 @@ function getOnTestRetryHandler (config) {
         willBeRetried,
         test,
         isAtrRetry,
-        finalStatus: getTestManagementSkipFinalStatus(ctx),
         ...ctx.currentStore,
       })
     }

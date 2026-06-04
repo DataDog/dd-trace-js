@@ -5455,7 +5455,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             quarantinedTests.forEach((test, index) => {
               assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
 
               if (index === 0) {
                 assert.ok(!(TEST_IS_RETRY in test.meta))
@@ -5463,6 +5462,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               } else {
                 assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
+
+              if (index === quarantinedTests.length - 1) {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+              } else {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
               }
             })
           })
@@ -5531,7 +5536,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             quarantinedTests.forEach((test, index) => {
               assert.strictEqual(test.meta[TEST_STATUS], index === 2 ? 'pass' : 'fail')
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
 
               if (index === 0) {
                 assert.ok(!(TEST_IS_RETRY in test.meta))
@@ -5539,6 +5543,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               } else {
                 assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
+
+              if (index === quarantinedTests.length - 1) {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+              } else {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
               }
             })
           })
