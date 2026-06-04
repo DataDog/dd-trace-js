@@ -11,6 +11,7 @@ const {
   installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
+  createParallelIt,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -40,7 +41,7 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
 
@@ -69,198 +70,213 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess.kill()
-      await receiver.stop()
-    })
-
     context('flaky test retries', () => {
-      it('can automatically retry flaky tests', (done) => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
+      const it = createParallelIt(global.it)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, 3)
-
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 2)
-
-            const failedRetryTests = failedTests.filter(
-              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            )
-            assert.strictEqual(failedRetryTests.length, 1) // the first one is not a retry
-
-            const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-            assert.strictEqual(passedTests.length, 1)
-            assert.strictEqual(passedTests[0].meta[TEST_IS_RETRY], 'true')
-            assert.strictEqual(passedTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-          }, 30000)
-
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+      it('can automatically retry flaky tests', async () => {
+        const receiver = await new FakeCiVisIntake().start()
+        let proc
+        try {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: {
+              enabled: false,
             },
-          }
-        )
+          })
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 3)
+
+              const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failedTests.length, 2)
+
+              const failedRetryTests = failedTests.filter(
+                test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              )
+              assert.strictEqual(failedRetryTests.length, 1) // the first one is not a retry
+
+              const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+              assert.strictEqual(passedTests.length, 1)
+              assert.strictEqual(passedTests[0].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(passedTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            }, 30000)
+
+          proc = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              },
+            }
+          )
+
+          await Promise.all([once(proc, 'exit'), receiverPromise])
+        } finally {
+          proc?.kill()
+          await receiver.stop()
+        }
       })
 
-      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, 1)
-            assert.strictEqual(tests.filter(
-              (test) => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            ).length, 0)
-          }, 30000)
-
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async () => {
+        const receiver = await new FakeCiVisIntake().start()
+        let proc
+        try {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: {
+              enabled: false,
             },
-          }
-        )
+          })
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests.filter(
+                (test) => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              ).length, 0)
+            }, 30000)
+
+          proc = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              },
+            }
+          )
+
+          await Promise.all([once(proc, 'exit'), receiverPromise])
+        } finally {
+          proc?.kill()
+          await receiver.stop()
+        }
       })
 
-      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, 2)
-
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 2)
-
-            const failedRetryTests = failedTests.filter(
-              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            )
-            assert.strictEqual(failedRetryTests.length, 1)
-          }, 30000)
-
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', async () => {
+        const receiver = await new FakeCiVisIntake().start()
+        let proc
+        try {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: {
+              enabled: false,
             },
-          }
-        )
+          })
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 2)
+
+              const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failedTests.length, 2)
+
+              const failedRetryTests = failedTests.filter(
+                test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              )
+              assert.strictEqual(failedRetryTests.length, 1)
+            }, 30000)
+
+          proc = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
+            }
+          )
+
+          await Promise.all([once(proc, 'exit'), receiverPromise])
+        } finally {
+          proc?.kill()
+          await receiver.stop()
+        }
       })
 
       it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          flaky_test_retries_count: 1,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 2, 'initial + 1 ATR retry, both fail')
-            const lastFailed = failedTests[failedTests.length - 1]
-            assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-            assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-          }, 30000)
-
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+        const receiver = await new FakeCiVisIntake().start()
+        let proc
+        try {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            flaky_test_retries_count: 1,
+            early_flake_detection: {
+              enabled: false,
             },
-          }
-        )
+          })
 
-        await Promise.all([once(childProcess, 'exit'), receiverPromise])
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failedTests.length, 2, 'initial + 1 ATR retry, both fail')
+              const lastFailed = failedTests[failedTests.length - 1]
+              assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            }, 30000)
+
+          proc = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
+            }
+          )
+
+          await Promise.all([once(proc, 'exit'), receiverPromise])
+        } finally {
+          proc?.kill()
+          await receiver.stop()
+        }
       })
+    })
 
-      contextNewVersions('dynamic name detection', () => {
-        it('tags new tests with dynamic names and logs a warning', async () => {
+    contextNewVersions('dynamic name detection', () => {
+      const it = createParallelIt(global.it)
+
+      it('tags new tests with dynamic names and logs a warning', async () => {
+        const receiver = await new FakeCiVisIntake().start()
+        let proc
+        try {
           receiver.setSettings({
             early_flake_detection: {
               enabled: true,
@@ -271,7 +287,7 @@ versions.forEach((version) => {
           })
           receiver.setKnownTests({ playwright: {} })
 
-          childProcess = exec(
+          proc = exec(
             './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
@@ -283,13 +299,16 @@ versions.forEach((version) => {
           )
 
           let testOutput = ''
-          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-          await once(childProcess, 'exit')
+          await once(proc, 'exit')
 
           assert.match(testOutput, /detected as new but their names contain dynamic data/)
-        })
+        } finally {
+          proc?.kill()
+          await receiver.stop()
+        }
       })
     })
   })

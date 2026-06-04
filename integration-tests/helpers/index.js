@@ -1179,6 +1179,57 @@ function deepFreeze (value) {
   return value
 }
 
+/**
+ * Wraps Mocha's `it` so that all registered test scenarios start concurrently
+ * when the first `it` body executes (i.e. after `before()` hooks). Each
+ * subsequent `it` body returns its already-in-flight promise, giving Mocha
+ * individual named pass/fail results while the subprocesses run in parallel.
+ *
+ * If Mocha retries a test whose promise already settled, only that scenario's
+ * function is restarted.
+ *
+ * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
+ * @returns {(name: string, fn: () => Promise<void>, opts?: { retries?: number }) => void}
+ */
+function createParallelIt (mochaIt) {
+  const scheduled = []
+  let launched = false
+
+  function start (entry) {
+    entry.done = false
+    entry.rejected = false
+    entry.promise = entry.fn()
+    // Track settlement without swallowing the rejection — Mocha sees it via `return entry.promise`.
+    entry.promise.then(
+      () => { entry.done = true },
+      () => { entry.done = true; entry.rejected = true }
+    )
+  }
+
+  return function it (name, fn, opts = {}) {
+    const entry = { name, fn, promise: null, done: false, rejected: false }
+    scheduled.push(entry)
+
+    mochaIt(name, function () {
+      if (opts.retries !== undefined) {
+        this.retries(opts.retries)
+      }
+      if (!launched) {
+        launched = true
+        for (const e of scheduled) {
+          start(e)
+        }
+      } else if (entry.done && entry.rejected) {
+        // Mocha is retrying a failed test — restart only this scenario
+        start(entry)
+      }
+      // If done && !rejected: already passed, return resolved promise
+      // If !done: still running, return pending promise
+      return entry.promise
+    })
+  }
+}
+
 module.exports = {
   ANY_NUMBER,
   ANY_STRING,
@@ -1209,4 +1260,5 @@ module.exports = {
   useSandbox,
   varySandbox,
   warmCypressBinary,
+  createParallelIt,
 }
