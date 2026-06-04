@@ -237,6 +237,12 @@ Cypress.on('test:before:run', (attributes, test) => {
   }
 })
 
+Cypress.on('test:before:run:async', (attributes, test) => {
+  if (shouldDisableFrameworkRetries(test)) {
+    disableFrameworkRetries(test)
+  }
+})
+
 beforeEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
   const testName = currentTest.fullTitle()
