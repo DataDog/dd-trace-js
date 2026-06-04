@@ -166,7 +166,7 @@
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {
-    "@datadog/libdatadog": "0.9.3",
+    "@datadog/libdatadog": "0.9.4",
     "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.2.0",
     "@datadog/native-metrics": "3.1.2",
