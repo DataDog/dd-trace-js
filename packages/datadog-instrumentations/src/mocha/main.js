@@ -272,9 +272,10 @@ function getOnEndHandler (isParallel) {
       for (const tests of Object.values(efdTests)) {
         const failingEfdTests = tests.filter(test => isTestFailed(test))
         const areAllEfdTestsFailing = failingEfdTests.length === tests.length
-        if (failingEfdTests.length && !areAllEfdTestsFailing) {
-          this.stats.failures -= failingEfdTests.length
-          this.failures -= failingEfdTests.length
+        const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
+        if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
+          this.stats.failures -= nonQuarantinedFailingEfdTests.length
+          this.failures -= nonQuarantinedFailingEfdTests.length
         }
       }
     }
