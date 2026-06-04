@@ -182,6 +182,7 @@ versions.forEach((version) => {
 
           const getTestAssertions = ({
             isAttemptingToFix,
+            expectedExecutionCount,
             shouldAlwaysPass,
             shouldFailSometimes,
             shouldFailFirstOnly,
@@ -210,7 +211,11 @@ versions.forEach((version) => {
 
                 const attemptedToFixTests = tests.filter(
                   test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test'
-                )
+                ).sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                if (expectedExecutionCount !== undefined) {
+                  assert.strictEqual(attemptedToFixTests.length, expectedExecutionCount)
+                }
 
                 for (let i = 0; i < attemptedToFixTests.length; i++) {
                   const isFirstAttempt = i === 0
@@ -263,26 +268,31 @@ versions.forEach((version) => {
            * @param {() => void} done
            * @param {{
            *   isAttemptingToFix?: boolean,
+           *   expectedExecutionCount?: number,
            *   shouldAlwaysPass?: boolean,
            *   isQuarantining?: boolean,
            *   shouldFailSometimes?: boolean,
            *   shouldFailFirstOnly?: boolean,
            *   isDisabling?: boolean,
-           *   extraEnvVars?: Record<string, string>
+           *   extraEnvVars?: Record<string, string>,
+           *   vitestCommand?: string
            * }} [options]
            */
           const runAttemptToFixTest = (done, {
             isAttemptingToFix,
+            expectedExecutionCount,
             shouldAlwaysPass,
             isQuarantining,
             shouldFailSometimes,
             shouldFailFirstOnly,
             isDisabling,
             extraEnvVars = {},
+            vitestCommand = './node_modules/.bin/vitest run',
           } = {}) => {
             let stdout = ''
             const testAssertionsPromise = getTestAssertions({
               isAttemptingToFix,
+              expectedExecutionCount,
               shouldAlwaysPass,
               shouldFailSometimes,
               shouldFailFirstOnly,
@@ -290,7 +300,7 @@ versions.forEach((version) => {
               isDisabling,
             })
             childProcess = exec(
-              './node_modules/.bin/vitest run',
+              vitestCommand,
               {
                 cwd,
                 env: {
@@ -316,6 +326,9 @@ versions.forEach((version) => {
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 assert.match(stdout, /I am running/)
+                if (expectedExecutionCount !== undefined) {
+                  assert.strictEqual((stdout.match(/I am running/g) || []).length, expectedExecutionCount)
+                }
                 if (isAttemptingToFix) {
                   assert.match(
                     stdout,
@@ -370,6 +383,20 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
+          })
+
+          it('disables manual Vitest retries when attempting to fix a test', (done) => {
+            receiver.setSettings({
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+              flaky_test_retries_enabled: false,
+            })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              shouldFailFirstOnly: true,
+              expectedExecutionCount: 3,
+              vitestCommand: './node_modules/.bin/vitest run --retry=1',
+            })
           })
 
           it('records afterEach failures in attempt to fix summary', async () => {
