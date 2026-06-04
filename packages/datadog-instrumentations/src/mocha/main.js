@@ -194,11 +194,13 @@ function getCoverageRootDir () {
 }
 
 /**
- * Checks if a serialized parallel worker test suite is modified.
+ * Recomputes whether a parallel worker result belongs to a modified suite.
  *
- * Mocha's parallel worker result serialization does not preserve custom `_ddIsModified`
- * properties from worker Test objects, so the main process must infer modification from
- * the suite path and the impacted-tests response.
+ * In parallel mode, `_ddIsModified` is set on Mocha Test objects inside the worker.
+ * The main process receives `Test.prototype.serialize()` output for test events,
+ * and that fixed serialization drops custom properties. We still need modified-test
+ * bookkeeping in the main process for EFD failure suppression, so infer it again
+ * from the suite path.
  *
  * @param {string} testSuiteAbsolutePath
  * @returns {boolean}
