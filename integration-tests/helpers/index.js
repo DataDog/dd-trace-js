@@ -1189,10 +1189,10 @@ function deepFreeze (value) {
  * function is restarted.
  *
  * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
- * @param {{ concurrency?: number }} [options]
+ * @param {{ concurrency?: number }} [options] - defaults to 2 to limit CI resource contention
  * @returns {(name: string, fn: () => Promise<void>, opts?: { retries?: number }) => void}
  */
-function createParallelIt (mochaIt, { concurrency = os.cpus().length } = {}) {
+function createParallelIt (mochaIt, { concurrency = 2 } = {}) {
   const scheduled = []
   let launched = false
   let active = 0

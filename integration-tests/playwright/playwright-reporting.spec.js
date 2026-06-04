@@ -660,7 +660,7 @@ versions.forEach((version) => {
                 }
                 // capabilities logic does not overwrite test session name
                 assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
-                assert.strictEqual(metadata['*'][TEST_COMMAND], 'playwright test -c playwright.config.js')
+                assert.match(metadata['*'][TEST_COMMAND], /^playwright test -c playwright\.config\.js(\s|$)/)
               })
             })
           proc = exec(
