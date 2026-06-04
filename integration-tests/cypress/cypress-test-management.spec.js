@@ -480,6 +480,76 @@ moduleTypes.forEach(({
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
         })
 
+        it('disables manual Cypress retries for attempt to fix tests', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            flaky_test_retries_enabled: false,
+          })
+
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
+          const specToRun = 'cypress/e2e/attempt-to-fix.js'
+          const testName = 'attempt to fix is attempt to fix'
+
+          childProcess = exec(
+            `${version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`} --config retries=1`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                SPEC_PATTERN: specToRun,
+              },
+            }
+          )
+
+          await receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === testName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              const diagnosticTests = tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              }))
+              assert.deepStrictEqual(diagnosticTests, [
+                {
+                  status: 'fail',
+                  isAttemptToFix: 'true',
+                  isRetry: undefined,
+                  retryReason: undefined,
+                },
+                {
+                  status: 'fail',
+                  isAttemptToFix: 'true',
+                  isRetry: 'true',
+                  retryReason: TEST_RETRY_REASON_TYPES.atf,
+                },
+                {
+                  status: 'fail',
+                  isAttemptToFix: 'true',
+                  isRetry: 'true',
+                  retryReason: TEST_RETRY_REASON_TYPES.atf,
+                },
+              ])
+
+              const lastAttempt = tests[tests.length - 1]
+              assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            },
+            { hardTimeout: 60_000 }
+          )
+
+          assert.strictEqual(childProcess.exitCode, 1)
+        })
+
         it('keeps after hook failures on attempt to fix tests', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
