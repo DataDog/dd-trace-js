@@ -197,7 +197,8 @@ moduleTypes.forEach(({
         ])
       })
 
-      it('disables manual Cypress retries for new tests retried by EFD', async () => {
+      // Cypress <12 can still emit native retries for Datadog-managed cloned tests.
+      over12It('disables manual Cypress retries for new tests retried by EFD', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
