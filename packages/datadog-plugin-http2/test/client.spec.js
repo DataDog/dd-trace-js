@@ -199,7 +199,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should keep non-secret query string parameters on the URL by default', done => {
+        it('should remove the query string from the URL', done => {
           const app = (stream, headers) => {
             stream.respond({
               ':status': 200,
@@ -210,10 +210,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(
-                  traces[0][0].meta['http.url'],
-                  `${protocol}://localhost:${port}/user?foo=bar`
-                )
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
               })
               .then(done)
               .catch(done)
@@ -997,148 +994,6 @@ describe('Plugin', () => {
             client.request({ ':path': '/health' })
               .on('error', done)
               .end()
-          })
-        })
-      })
-
-      describe('http.endpoint', () => {
-        beforeEach(() => {
-          return agent.load('http2', { server: false }, { appsec: { enabled: true } })
-            .then(() => {
-              http2 = require(loadPlugin)
-            })
-        })
-
-        it('should set http.endpoint with int', done => {
-          const app = (stream) => {
-            stream.respond({ ':status': 200 })
-            stream.end()
-          }
-
-          appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}')
-              })
-              .then(done)
-              .catch(done)
-
-            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            client.request({ ':path': '/users/123' }).on('error', done).end()
-          })
-        })
-
-        it('should compute http.endpoint from the path only, ignoring the query string', done => {
-          const app = (stream) => {
-            stream.respond({ ':status': 200 })
-            stream.end()
-          }
-
-          appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}')
-              })
-              .then(done)
-              .catch(done)
-
-            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            client.request({ ':path': '/users/123?cursor=abc' }).on('error', done).end()
-          })
-        })
-      })
-
-      describe('with queryStringObfuscation set to a regex pattern', () => {
-        beforeEach(() => {
-          return agent.load('http2', { server: false, queryStringObfuscation: 'secret=.*?(&|$)' })
-            .then(() => {
-              http2 = require(loadPlugin)
-            })
-        })
-
-        it('should obfuscate matching query string parameters', done => {
-          const app = (stream) => {
-            stream.respond({ ':status': 200 })
-            stream.end()
-          }
-
-          appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(
-                  traces[0][0].meta['http.url'],
-                  `${protocol}://localhost:${port}/user?<redacted>foo=bar`
-                )
-              })
-              .then(done)
-              .catch(done)
-
-            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            client.request({ ':path': '/user?secret=password&foo=bar' }).on('error', done).end()
-          })
-        })
-      })
-
-      describe('with queryStringObfuscation set to true', () => {
-        beforeEach(() => {
-          return agent.load('http2', { server: false, queryStringObfuscation: true })
-            .then(() => {
-              http2 = require(loadPlugin)
-            })
-        })
-
-        it('should remove the entire query string', done => {
-          const app = (stream) => {
-            stream.respond({ ':status': 200 })
-            stream.end()
-          }
-
-          appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(
-                  traces[0][0].meta['http.url'],
-                  `${protocol}://localhost:${port}/user`
-                )
-              })
-              .then(done)
-              .catch(done)
-
-            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            client.request({ ':path': '/user?secret=password&foo=bar' }).on('error', done).end()
-          })
-        })
-      })
-
-      describe('with queryStringObfuscation set to false', () => {
-        beforeEach(() => {
-          return agent.load('http2', { server: false, queryStringObfuscation: false })
-            .then(() => {
-              http2 = require(loadPlugin)
-            })
-        })
-
-        it('should not obfuscate the query string', done => {
-          const app = (stream) => {
-            stream.respond({ ':status': 200 })
-            stream.end()
-          }
-
-          appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(
-                  traces[0][0].meta['http.url'],
-                  `${protocol}://localhost:${port}/user?secret=password&foo=bar`
-                )
-              })
-              .then(done)
-              .catch(done)
-
-            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            client.request({ ':path': '/user?secret=password&foo=bar' }).on('error', done).end()
           })
         })
       })

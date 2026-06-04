@@ -34,9 +34,9 @@ jobs:
       - run: yarn add @actions/core @actions/github octokit
       - run: node scripts/all-green.mjs
         env:
-          DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns
+          DELAY: ${{ github.run_attempt == 1 && '1' || '0' }} # 1 minute on first attempt, no delay on reruns
           RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
-          RETRIES: 30
+          RETRIES: 20

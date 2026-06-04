@@ -77,7 +77,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       keysLength++
     }
 
-    this._encodeMapPrefix(bytes, keysLength)
+    bytes.writeMapPrefix(keysLength)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -97,7 +97,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     }
 
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'name')
     this._encodeString(bytes, content.name)
     this._encodeString(bytes, 'service')
@@ -105,9 +105,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'resource')
     this._encodeString(bytes, content.resource)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -115,7 +115,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestModule (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_MODULE_KEYS_LENGTH)
+    bytes.writeMapPrefix(TEST_MODULE_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -126,7 +126,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeId(bytes, content.span_id)
 
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'name')
     this._encodeString(bytes, content.name)
     this._encodeString(bytes, 'service')
@@ -134,9 +134,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'resource')
     this._encodeString(bytes, content.resource)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -144,7 +144,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSession (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_SESSION_KEYS_LENGTH)
+    bytes.writeMapPrefix(TEST_SESSION_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -152,7 +152,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeId(bytes, content.trace_id)
 
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'name')
     this._encodeString(bytes, content.name)
     this._encodeString(bytes, 'service')
@@ -160,9 +160,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'resource')
     this._encodeString(bytes, content.resource)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -187,7 +187,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     if (content.type) {
       totalKeysLength += 1
     }
-    this._encodeMapPrefix(bytes, totalKeysLength)
+    bytes.writeMapPrefix(totalKeysLength)
     if (content.type) {
       this._encodeString(bytes, 'type')
       this._encodeString(bytes, content.type)
@@ -205,11 +205,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'service')
     this._encodeString(bytes, content.service)
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     /**
      * We include `test_session_id` and `test_suite_id`
      * in the root of the event by passing them via the `meta` dict.
@@ -250,12 +250,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEvent (bytes, event) {
-    this._encodeMapPrefix(bytes, Object.keys(event).length)
+    bytes.writeMapPrefix(Object.keys(event).length)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, event.type)
 
     this._encodeString(bytes, 'version')
-    this._encodeNumber(bytes, event.version)
+    bytes.writeNumber(event.version)
 
     this._encodeString(bytes, 'content')
     if (event.type === 'span' || event.type === 'test') {
@@ -339,11 +339,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       payload.metadata['*']['runtime-id'] = this.runtimeId
     }
 
-    this._encodeMapPrefix(bytes, Object.keys(payload).length)
+    bytes.writeMapPrefix(Object.keys(payload).length)
     this._encodeString(bytes, 'version')
-    this._encodeNumber(bytes, payload.version)
+    bytes.writeNumber(payload.version)
     this._encodeString(bytes, 'metadata')
-    this._encodeMapPrefix(bytes, Object.keys(payload.metadata).length)
+    bytes.writeMapPrefix(Object.keys(payload.metadata).length)
     this._encodeString(bytes, '*')
     this._encodeMap(bytes, payload.metadata['*'])
     if (payload.metadata.test) {

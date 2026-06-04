@@ -87,6 +87,151 @@ describe('Plugin', () => {
         })
       })
 
+      it('should set the correct resource name without middleware (single-handler fast path)', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
+        const bareApp = new hono.Hono()
+        bareApp.get('/product', (c) => c.json({ ok: true }))
+
+        server = serve({
+          fetch: bareApp.fetch,
+          port: 0,
+        }, ({ port }) => resolver(port))
+
+        const port = await promise
+
+        await axios.get(`http://localhost:${port}/product`)
+
+        await agent.assertFirstTraceSpan({
+          name: 'hono.request',
+          service: 'test',
+          type: 'web',
+          resource: 'GET /product',
+          meta: {
+            'span.kind': 'server',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'hono',
+          },
+        })
+      })
+
+      it('should set the correct resource name for app.all() routes', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
+        const bareApp = new hono.Hono()
+        bareApp.all('/api', (c) => c.json({ method: c.req.method }))
+
+        server = serve({
+          fetch: bareApp.fetch,
+          port: 0,
+        }, ({ port }) => resolver(port))
+
+        const port = await promise
+
+        await axios.post(`http://localhost:${port}/api`)
+
+        await agent.assertFirstTraceSpan({
+          name: 'hono.request',
+          service: 'test',
+          type: 'web',
+          resource: 'POST /api',
+          meta: {
+            'span.kind': 'server',
+            'http.method': 'POST',
+            'http.status_code': '200',
+            component: 'hono',
+          },
+        })
+      })
+
+      it('should instrument routes registered on a basePath sub-app', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
+        const bareApp = new hono.Hono()
+        const api = bareApp.basePath('/api')
+
+        api.use((c, next) => {
+          c.set('middleware', 'test')
+          return next()
+        })
+
+        api.get('/users/:id', (c) => c.json({
+          id: c.req.param('id'),
+          middleware: c.get('middleware'),
+        }))
+
+        server = serve({
+          fetch: bareApp.fetch,
+          port: 0,
+        }, ({ port }) => resolver(port))
+
+        const port = await promise
+
+        const { data } = await axios.get(`http://localhost:${port}/api/users/42`)
+
+        assert.deepStrictEqual(data, {
+          id: '42',
+          middleware: 'test',
+        })
+
+        await agent.assertFirstTraceSpan({
+          name: 'hono.request',
+          service: 'test',
+          type: 'web',
+          resource: 'GET /api/users/:id',
+          meta: {
+            'span.kind': 'server',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'hono',
+          },
+        })
+      })
+
+      it('should keep the bare resource name for middleware-only basePath matches', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
+        const bareApp = new hono.Hono()
+        const api = bareApp.basePath('/api')
+
+        api.use((c) => c.json({ ok: true }))
+
+        server = serve({
+          fetch: bareApp.fetch,
+          port: 0,
+        }, ({ port }) => resolver(port))
+
+        const port = await promise
+
+        await axios.get(`http://localhost:${port}/api/anything`)
+
+        await agent.assertFirstTraceSpan({
+          name: 'hono.request',
+          service: 'test',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            'span.kind': 'server',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'hono',
+          },
+        })
+      })
+
       it('should do automatic instrumentation on nested routes', async function () {
         let resolver
         const promise = new Promise((resolve) => {

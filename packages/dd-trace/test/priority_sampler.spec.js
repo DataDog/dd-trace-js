@@ -508,7 +508,17 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-3')
     })
 
-    it.skip('should remove the decision maker tag when dropping the trace', () => { })
+    it('should clear the decision maker tag when dropping a previously kept trace', () => {
+      prioritySampler.setPriority(span, USER_KEEP)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-4')
+
+      prioritySampler.setPriority(span, USER_REJECT)
+
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      // Cleared to undefined (not deleted) so trace.tags stays in fast mode;
+      // the key remains present but reads undefined and is not emitted.
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], undefined)
+    })
 
     it('should not crash on prototype-free tags objects', () => {
       context._tags = Object.create(null)

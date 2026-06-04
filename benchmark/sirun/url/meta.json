@@ -1,20 +1,14 @@
 {
-  "name": "plugin-q",
+  "name": "url",
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 75,
+  "iterations": 10,
   "instructions": true,
   "variants": {
-    "control": {
+    "endpoint-and-obfuscation": {
       "env": {
-        "USE_TRACER": "0"
-      }
-    },
-    "with-tracer": {
-      "baseline": "control",
-      "env": {
-        "USE_TRACER": "1"
+        "COUNT": "3000000"
       }
     }
   }

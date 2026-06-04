@@ -1,11 +1,17 @@
 'use strict'
 
 const getConfig = require('../config')
-const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
+const { MsgpackChunk } = require('../msgpack')
 const log = require('../log')
-const { normalizeSpan } = require('./tags-processors')
+const { normalizeSpan, eventTimeNano } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
+// Values longer than this byte threshold skip the `_stringMap` lookup and
+// emit through `bytes.write` directly. Hashing a multi-KiB string for
+// `Map.get` costs more than the cache hit saves on the inputs that produce
+// strings this long (events JSON, stack traces, large query bodies) — they
+// are unique per span, so the cache hit rate stays near zero anyway.
+const STRING_CACHE_BYPASS_LIMIT = 1024
 
 // Pre-encoded static keys + value-prefix bytes; the hot encode loop emits
 // each via one Uint8Array.set instead of routing through the string cache.
@@ -43,6 +49,17 @@ const KEY_SERVICE = buildKey('service')
 const KEY_ERROR = buildKey('error')
 const KEY_START = buildKey('start')
 const KEY_DURATION = buildKey('duration')
+
+// Fused `[KEY_ERROR, fixint]` payloads. `error` is `0` or `1` on nearly every
+// span (the boolean-shaped tracer field collapsed onto a single byte). One
+// `bytes.set` writes the key and the value together instead of routing the
+// value through `writeIntOrFloat`'s reserve + branch table.
+const KEY_ERROR_0 = Buffer.concat([KEY_ERROR, Buffer.from([0x00])])
+const KEY_ERROR_1 = Buffer.concat([KEY_ERROR, Buffer.from([0x01])])
+// `[KEY_START, 0xCF]` — `start` is always a nanosecond timestamp ≥ 2³², so
+// the msgpack u64 type byte is statically known and fuses with the key. The
+// 8-byte value is written inline right after.
+const KEY_START_PREFIX = buildKeyWithPrefix('start', 0xCF)
 const KEY_SPAN_EVENTS = buildKey('span_events')
 const KEY_META_STRUCT = buildKey('meta_struct')
 const KEY_TRACE_ID_PREFIX = buildKeyWithPrefix('trace_id', 0xCF)
@@ -97,6 +114,10 @@ const ATTR_PAYLOAD_BOOL_FALSE = Buffer.concat([ATTR_PREFIX_BOOL, Buffer.from([0x
 function formatSpanWithLegacyEvents (span) {
   span = normalizeSpan(span)
   if (span.span_events) {
+    // Reads the raw `_events` array directly (no formatter pre-reshape) and
+    // serializes to the legacy meta.events JSON string. The serialization is
+    // still the main cost on the legacy path; the native span_events slot
+    // (`#encodeSpanEvents`) avoids it entirely.
     span.meta.events = stringifySpanEvents(span.span_events)
     // `= undefined` over `delete` to keep the span's hidden class — `delete`
     // would push every event-bearing span into V8 dictionary mode.
@@ -106,14 +127,15 @@ function formatSpanWithLegacyEvents (span) {
 }
 
 /**
- * Hand-written stringifier for `span.span_events`. The shape is fixed by
- * `extractSpanEvents` (`{ name, time_unix_nano, attributes? }`) and attribute
- * values are pre-sanitized to primitives or arrays of primitives, so we can
- * skip everything `JSON.stringify` does for the generic case (toJSON probing,
- * key iteration over the prototype chain, replacer hooks). Output matches
- * `JSON.stringify(spanEvents)` byte-for-byte for the post-sanitization shape.
+ * Hand-written stringifier for `span.span_events`. Events arrive in their raw
+ * `{ name, startTime, attributes? }` shape; `time_unix_nano` is derived per
+ * event via `eventTimeNano` and empty attribute objects are dropped, matching
+ * what the formatter used to precompute. Attribute values are pre-sanitized to
+ * primitives or arrays of primitives, so we skip everything `JSON.stringify`
+ * does for the generic case (toJSON probing, prototype-chain key iteration,
+ * replacer hooks).
  *
- * @param {Array<{ name: string, time_unix_nano: number, attributes?: object }>} spanEvents
+ * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
  * @returns {string}
  */
 function stringifySpanEvents (spanEvents) {
@@ -121,17 +143,21 @@ function stringifySpanEvents (spanEvents) {
   for (let index = 0; index < spanEvents.length; index++) {
     if (index > 0) result += ','
     const event = spanEvents[index]
+    // `_sanitizeEventAttributes` leaves `attributes` undefined when empty, so a
+    // present value always has entries — no emptiness probe here.
+    const attributes = event.attributes
     // `addEvent` does not type-check `name`; defer the unusual cases to
-    // `JSON.stringify` so non-string names match the prior behaviour
-    // instead of throwing in `escapeJsonString`.
+    // `JSON.stringify` so non-string names match the prior behaviour instead
+    // of throwing in `escapeJsonString`. Build the wire-shaped object so the
+    // emitted key stays `time_unix_nano`, not the raw `startTime`.
     if (typeof event.name !== 'string') {
-      result += JSON.stringify(event)
+      result += JSON.stringify({ name: event.name, time_unix_nano: eventTimeNano(event), attributes })
       continue
     }
     result += '{"name":' + escapeJsonString(event.name) +
-      ',"time_unix_nano":' + jsonNumber(event.time_unix_nano)
-    if (event.attributes) {
-      result += ',"attributes":' + stringifyAttributes(event.attributes)
+      ',"time_unix_nano":' + jsonNumber(eventTimeNano(event))
+    if (attributes) {
+      result += ',"attributes":' + stringifyAttributes(attributes)
     }
     result += '}'
   }
@@ -201,8 +227,12 @@ function escapeJsonString (value) {
   return '"' + value + '"'
 }
 
+function lazyEncodedTraceBufferLogger (bytes, start, end) {
+  const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
+  return `Adding encoded trace to buffer: ${hex}`
+}
+
 class AgentEncoder {
-  #msgpack = new MsgpackEncoder()
   #limit
   #writer
   #config
@@ -218,8 +248,8 @@ class AgentEncoder {
     this.#config = getConfig()
     this.#debugEncoding = this.#config.DD_TRACE_ENCODING_DEBUG
     // Pick the per-span formatter once so the hot loop pays no per-span
-    // config check. The native path doesn't need to reshape `span_events`
-    // because `#encodeSpanEvents` works directly on the raw attributes.
+    // config check. The native path keeps the raw `span_events` slot for
+    // `#encodeSpanEvents`; the legacy path serializes it into meta.events.
     this.#formatSpan = this.#config.DD_TRACE_NATIVE_SPAN_EVENTS
       ? normalizeSpan
       : formatSpanWithLegacyEvents
@@ -239,11 +269,7 @@ class AgentEncoder {
 
     if (this.#debugEncoding) {
       const end = bytes.length
-      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-      log.debug(() => {
-        const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
-        return `Adding encoded trace to buffer: ${hex}`
-      })
+      log.debug(lazyEncodedTraceBufferLogger, bytes, start, end)
     }
 
     // Soft limit overshoot is fine — the agent caps at 50 MB.
@@ -269,7 +295,7 @@ class AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    this._encodeArrayPrefix(bytes, trace)
+    bytes.writeArrayPrefix(trace)
 
     const formatSpan = this.#formatSpan
     const stringMap = this._stringMap
@@ -286,10 +312,10 @@ class AgentEncoder {
       if (span.span_events) mapSize++
 
       // Pre-fetch the cached string entries up front and fuse the map prefix,
-      // optional `type`, three IDs, and `name` / `resource` / `service`
+      // optional `type`, three IDs, `name` / `resource` / `service`, and —
+      // in the common fixint-error case — the error/start/duration_key
       // emissions into a single `bytes.reserve` + sequential native writes.
-      // Replaces seven `bytes.reserve` calls per span (one each for the
-      // header, type, three IDs, three strings) with one.
+      // Replaces up to ten separate `bytes.reserve` calls per span with one.
       let typeEntry
       if (span.type) {
         typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
@@ -301,8 +327,19 @@ class AgentEncoder {
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
 
-      // 1 byte map prefix + 3 ID fields (10/9/11 bytes prefix + 8 bytes value
-      // each) + the three string fields.
+      // `error` is `0` or `1` on nearly every span, and `start` is a
+      // nanosecond timestamp ≥ 2³² (always a msgpack u64). Decide the fused
+      // error key+value up front (`KEY_ERROR_0` / `KEY_ERROR_1`, or `undefined`
+      // for the rare non-binary flag) so the tail fuses without re-deciding the
+      // error shape twice. The fused tail also needs `start` as a u64; when
+      // either misses (synthetic small `start`, non-binary error) the tail
+      // routes each integer through `writeIntOrFloat` for the shortest
+      // encoding.
+      const errorEntry = span.error === 0
+        ? KEY_ERROR_0
+        : span.error === 1 ? KEY_ERROR_1 : undefined
+      const fuseTail = errorEntry !== undefined && span.start >= 0x1_00_00_00_00
+
       let blockSize = 1 +
         KEY_TRACE_ID_PREFIX.length + 8 +
         KEY_SPAN_ID_PREFIX.length + 8 +
@@ -311,6 +348,9 @@ class AgentEncoder {
         KEY_RESOURCE.length + resourceLen +
         KEY_SERVICE.length + serviceLen
       if (typeEntry) blockSize += KEY_TYPE.length + typeEntry.length
+      if (fuseTail) {
+        blockSize += errorEntry.length + KEY_START_PREFIX.length + 8 + KEY_DURATION.length
+      }
 
       const blockOffset = bytes.length
       bytes.reserve(blockSize)
@@ -343,13 +383,34 @@ class AgentEncoder {
       target.set(KEY_SERVICE, cursor)
       cursor += KEY_SERVICE.length
       target.set(serviceEntry, cursor)
+      cursor += serviceLen
 
-      bytes.set(KEY_ERROR)
-      this._encodeIntOrFloat(bytes, span.error)
-      bytes.set(KEY_START)
-      this._encodeIntOrFloat(bytes, span.start)
-      bytes.set(KEY_DURATION)
-      this._encodeIntOrFloat(bytes, span.duration)
+      if (fuseTail) {
+        target.set(errorEntry, cursor)
+        cursor += errorEntry.length
+
+        target.set(KEY_START_PREFIX, cursor)
+        cursor += KEY_START_PREFIX.length
+        // Inline u64 write so the 0xCF type byte and the 8 timestamp bytes
+        // share the same reserve as the keys.
+        target.writeUInt32BE((span.start / 0x1_00_00_00_00) >>> 0, cursor)
+        target.writeUInt32BE(span.start >>> 0, cursor + 4)
+        cursor += 8
+
+        target.set(KEY_DURATION, cursor)
+      } else if (errorEntry) {
+        bytes.set(errorEntry)
+        bytes.set(KEY_START)
+        bytes.writeIntOrFloat(span.start)
+        bytes.set(KEY_DURATION)
+      } else {
+        bytes.set(KEY_ERROR)
+        bytes.writeIntOrFloat(span.error)
+        bytes.set(KEY_START)
+        bytes.writeIntOrFloat(span.start)
+        bytes.set(KEY_DURATION)
+      }
+      bytes.writeIntOrFloat(span.duration)
 
       this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
       this.#encodeMetaEntries(bytes, KEY_METRICS_PREFIX, span.metrics)
@@ -390,32 +451,12 @@ class AgentEncoder {
 
   _reset () {
     this._traceCount = 0
-    this._traceBytes.length = 0
+    this._traceBytes.reset()
     this._stringCount = 0
-    this._stringBytes.length = 0
+    this._stringBytes.reset()
     this._stringMap = Object.create(null)
 
     this._cacheString('')
-  }
-
-  _encodeBuffer (bytes, buffer) {
-    this.#msgpack.encodeBin(bytes, buffer)
-  }
-
-  _encodeBool (bytes, value) {
-    this.#msgpack.encodeBoolean(bytes, value)
-  }
-
-  _encodeArrayPrefix (bytes, value) {
-    this.#msgpack.encodeArrayPrefix(bytes, value)
-  }
-
-  _encodeMapPrefix (bytes, keysLength) {
-    this.#msgpack.encodeMapPrefix(bytes, keysLength)
-  }
-
-  _encodeByte (bytes, value) {
-    this.#msgpack.encodeByte(bytes, value)
   }
 
   // TODO: Use BigInt instead.
@@ -438,18 +479,6 @@ class AgentEncoder {
     target[offset + 8] = idBuffer[start + 7]
   }
 
-  _encodeNumber (bytes, value) {
-    this.#msgpack.encodeNumber(bytes, value)
-  }
-
-  _encodeInteger (bytes, value) {
-    this.#msgpack.encodeInteger(bytes, value)
-  }
-
-  _encodeLong (bytes, value) {
-    this.#msgpack.encodeLong(bytes, value)
-  }
-
   // Single pass: reserve the count slot, encode entries while counting, patch the count.
   // Subclasses (0.5, CI visibility encoders) inherit this; the wire stays on float64
   // for numeric values to keep their established trace / events intake unchanged.
@@ -467,7 +496,7 @@ class AgentEncoder {
         count++
       } else if (typeof entryValue === 'number') {
         this._encodeString(bytes, key)
-        this.#encodeFloat(bytes, entryValue)
+        bytes.writeFloat(entryValue)
         count++
       }
     }
@@ -480,6 +509,10 @@ class AgentEncoder {
   }
 
   _encodeString (bytes, value = '') {
+    if (value.length > STRING_CACHE_BYPASS_LIMIT) {
+      bytes.write(value)
+      return
+    }
     const entry = this._stringMap[value] ?? this._cacheString(value)
     const length = entry.length
     const offset = bytes.length
@@ -540,6 +573,17 @@ class AgentEncoder {
       const writeOffset = bytes.length
 
       if (typeof entryValue === 'string') {
+        if (entryValue.length > STRING_CACHE_BYPASS_LIMIT) {
+          // Long values (events JSON, stack traces, large query bodies) are
+          // unique per span; hashing them for the cache lookup costs more
+          // than the lookup ever recovers. Emit the key from the cache and
+          // stream the value directly.
+          bytes.reserve(keyEntryLen)
+          bytes.buffer.set(keyEntry, writeOffset)
+          bytes.write(entryValue)
+          count++
+          continue
+        }
         const valueEntry = stringMap[entryValue] ?? this._cacheString(entryValue)
         const valueEntryLen = valueEntry.length
         bytes.reserve(keyEntryLen + valueEntryLen)
@@ -547,9 +591,22 @@ class AgentEncoder {
         target.set(keyEntry, writeOffset)
         target.set(valueEntry, writeOffset + keyEntryLen)
       } else {
-        bytes.reserve(keyEntryLen)
-        bytes.buffer.set(keyEntry, writeOffset)
-        this._encodeIntOrFloat(bytes, entryValue)
+        // Speculate that `entryValue` is a positive fixint (0..127): one
+        // reserve covers both the key and the value. The metrics map (sample
+        // rate, priority, `_dd.measured`, attribute counts) is mostly small
+        // unsigned integers, so the speculation wins on every entry that
+        // doesn't go through the slow `writeIntOrFloat` dispatch chain.
+        bytes.reserve(keyEntryLen + 1)
+        const target = bytes.buffer
+        target.set(keyEntry, writeOffset)
+        if (entryValue === (entryValue & 0x7F)) {
+          target[writeOffset + keyEntryLen] = entryValue
+        } else {
+          // Speculation missed; rewind the speculative byte and route the
+          // value through the full encoder so it picks the right type.
+          bytes.length = writeOffset + keyEntryLen
+          bytes.writeIntOrFloat(entryValue)
+        }
       }
       count++
     }
@@ -590,41 +647,6 @@ class AgentEncoder {
   }
 
   /**
-   * Emit `value` as the smallest valid msgpack number encoding: compact
-   * unsigned/signed int when integer, float64 otherwise. Unlike
-   * `MsgpackEncoder#encodeNumber`, NaN keeps its float64 bits instead of
-   * coercing to fixint 0.
-   *
-   * Underscore-protected so the 0.5 subclass can call it from its own
-   * `_encode` / `_encodeMap` overrides.
-   *
-   * @param {MsgpackChunk} bytes
-   * @param {number} value
-   */
-  _encodeIntOrFloat (bytes, value) {
-    // Fast path: positive fixint (0..127). `value === (value & 0x7F)` is true
-    // iff `value` is an exact integer in that range — covers `error: 0/1`,
-    // priority flags, attribute counts, HTTP status codes mapped to numbers,
-    // and most small metrics. NaN, ±Infinity, negatives, and any non-integer
-    // float fall through.
-    if (value === (value & 0x7F)) {
-      const offset = bytes.length
-      bytes.reserve(1)
-      bytes.buffer[offset] = value
-      return
-    }
-    if (Number.isInteger(value)) {
-      if (value >= 0) {
-        this.#msgpack.encodeUnsigned(bytes, value)
-      } else {
-        this.#msgpack.encodeSigned(bytes, value)
-      }
-    } else {
-      this.#encodeFloat(bytes, value)
-    }
-  }
-
-  /**
    * @param {MsgpackChunk} bytes
    * @param {string | number | boolean} value
    */
@@ -634,21 +656,17 @@ class AgentEncoder {
         this._encodeString(bytes, value)
         break
       case 'number':
-        this.#encodeFloat(bytes, value)
+        bytes.writeFloat(value)
         break
       case 'boolean':
-        this._encodeBool(bytes, value)
+        bytes.writeBoolean(value)
         break
     }
   }
 
-  #encodeFloat (bytes, value) {
-    this.#msgpack.encodeFloat(bytes, value)
-  }
-
   #encodeMetaStruct (bytes, value) {
     if (Array.isArray(value)) {
-      this._encodeMapPrefix(bytes, 0)
+      bytes.writeMapPrefix(0)
       return
     }
 
@@ -753,7 +771,7 @@ class AgentEncoder {
    * values — no `formatSpanEvents` pre-pass and no recursive generic walk.
    *
    * @param {MsgpackChunk} bytes
-   * @param {Array<{ name: string, time_unix_nano: number, attributes?: object }>} spanEvents
+   * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
    */
   #encodeSpanEvents (bytes, spanEvents) {
     const offset = bytes.length
@@ -774,7 +792,7 @@ class AgentEncoder {
       bytes.set(KEY_NAME)
       this._encodeString(bytes, event.name)
       bytes.set(KEY_EVENT_TIME)
-      this.#encodeFloat(bytes, event.time_unix_nano)
+      bytes.writeFloat(eventTimeNano(event))
 
       const attributes = event.attributes
       if (attributes !== null && typeof attributes === 'object') {
@@ -844,7 +862,7 @@ class AgentEncoder {
     if (typeof value === 'number') {
       this._encodeString(bytes, key)
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this._encodeIntOrFloat(bytes, value)
+      bytes.writeIntOrFloat(value)
       return true
     }
     if (typeof value === 'boolean') {
@@ -855,8 +873,11 @@ class AgentEncoder {
     if (Array.isArray(value)) {
       return this.#emitArrayAttribute(bytes, key, value)
     }
-    memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
-      `${key}: with value: ${typeof value}. Skipping encoding of pair.`
+    memoizedLogDebug(
+      key,
+      'Encountered unsupported data type for span event v0.4 encoding, key: ' +
+        '%s: with value: %s. Skipping encoding of pair.',
+      value
     )
     return false
   }
@@ -914,7 +935,7 @@ class AgentEncoder {
     }
     if (typeof value === 'number') {
       bytes.set(Number.isInteger(value) ? ATTR_PREFIX_INT : ATTR_PREFIX_DOUBLE)
-      this._encodeIntOrFloat(bytes, value)
+      bytes.writeIntOrFloat(value)
       return true
     }
     if (typeof value === 'boolean') {
@@ -922,8 +943,11 @@ class AgentEncoder {
       return true
     }
     if (Array.isArray(value)) {
-      memoizedLogDebug(key, 'Encountered nested array data type for span event v0.4 encoding. ' +
-        `Skipping encoding key: ${key}: with value: ${typeof value}.`
+      memoizedLogDebug(
+        key,
+        'Encountered nested array data type for span event v0.4 encoding. ' +
+          'Skipping encoding key: %s: with value: %s.',
+        value
       )
     }
     return false
@@ -931,10 +955,10 @@ class AgentEncoder {
 }
 
 const seenKeys = new Set()
-function memoizedLogDebug (key, message) {
+function memoizedLogDebug (key, message, value) {
   if (!seenKeys.has(key)) {
     seenKeys.add(key)
-    log.debug(message)
+    log.debug(message, key, typeof value)
   }
 }
 

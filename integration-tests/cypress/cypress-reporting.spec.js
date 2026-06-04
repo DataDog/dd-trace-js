@@ -157,6 +157,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -2107,6 +2108,13 @@ moduleTypes.forEach(({
     })
 
     it('can report code coverage if it is available', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: true,
+        tests_skipping: false,
+      })
+
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
       childProcess = exec(
@@ -2125,23 +2133,31 @@ moduleTypes.forEach(({
         childProcess,
         ({ url }) => url === '/api/v2/citestcov',
         payloads => {
-          const [{ payload: coveragePayloads }] = payloads
+          const coverages = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+          const testCoverages = coverages.filter(coverage => coverage.test_suite_id)
+          const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
 
-          const coverages = coveragePayloads.map(coverage => coverage.content)
-            .flatMap(content => content.coverages)
-
-          coverages.forEach(coverage => {
+          testCoverages.forEach(coverage => {
             assert.ok(Object.hasOwn(coverage, 'test_session_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
             assert.ok(Object.hasOwn(coverage, 'test_suite_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
             assert.ok(Object.hasOwn(coverage, 'span_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
             assert.ok(Object.hasOwn(coverage, 'files'), `Available keys: ${inspect(Object.keys(coverage))}`)
           })
+          assert.ok(sessionCoverage, 'session executable-line coverage should be reported')
+          assert.ok(
+            sessionCoverage.files.every(file => file.bitmap),
+            'session executable-line coverage should include line coverage bitmaps'
+          )
 
-          const fileNames = coverages
+          const fileNames = testCoverages
             .flatMap(coverageAttachment => coverageAttachment.files)
             .map(file => file.filename)
+          const sessionFileNames = sessionCoverage.files.map(file => file.filename)
 
           assertObjectContains(fileNames, Object.keys(coverageFixture))
+          assertObjectContains(sessionFileNames, Object.keys(coverageFixture))
         }, { hardTimeout: 25000 })
 
       await Promise.all([

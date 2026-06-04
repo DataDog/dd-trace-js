@@ -369,10 +369,11 @@ describe('OpenTelemetry Traces', () => {
 
     it('transforms span events', () => {
       const transformer = new OtlpTraceTransformer({})
+      // Raw events carry startTime; the transformer derives timeUnixNano = round(startTime * 1e6).
       const span = createMockSpan({
         span_events: [{
           name: 'exception',
-          time_unix_nano: 1700000000010000000,
+          startTime: 1700000000010,
           attributes: {
             'exception.message': 'test error',
             'exception.type': 'Error',
@@ -385,6 +386,7 @@ describe('OpenTelemetry Traces', () => {
 
       assert.strictEqual(otlpSpan.events.length, 1)
       assert.strictEqual(otlpSpan.events[0].name, 'exception')
+      assert.strictEqual(Number(otlpSpan.events[0].timeUnixNano), 1700000000010000000)
 
       const eventAttrs = extractAttrs(otlpSpan.events[0].attributes)
       assert.deepStrictEqual(
@@ -461,6 +463,98 @@ describe('OpenTelemetry Traces', () => {
         [otlpSpans[0].name, otlpSpans[1].name],
         ['/api/first', '/api/second']
       )
+    })
+
+    describe('128-bit trace ID handling', () => {
+      // DD splits 128-bit trace IDs: low 64 bits live on the span Identifier,
+      // upper 64 bits live in trace-level tags as `_dd.p.tid` (16 hex chars).
+      // span_format.js#extractChunkTags only copies trace-level tags onto the
+      // first-in-chunk span, so the transformer has to look across the batch
+      // to find `_dd.p.tid` and then apply it to every span.
+
+      it('reconstructs the full 128-bit traceId for every span in a batch from _dd.p.tid', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const tidHigh = '1234567890abcdef'
+        const traceIdLow = id(lowHex)
+
+        const firstSpan = createMockSpan({
+          trace_id: traceIdLow,
+          meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
+        })
+        const secondSpan = createMockSpan({
+          trace_id: traceIdLow,
+          span_id: id('bbbbbbbbbbbbbbbb'),
+          meta: { 'span.kind': 'internal' },
+        })
+        const thirdSpan = createMockSpan({
+          trace_id: traceIdLow,
+          span_id: id('cccccccccccccccc'),
+          meta: { 'span.kind': 'internal' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([firstSpan, secondSpan, thirdSpan]))
+        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        const expectedTraceId = tidHigh + lowHex
+        for (const otlpSpan of otlpSpans) {
+          assert.strictEqual(otlpSpan.traceId, expectedTraceId)
+        }
+      })
+
+      it('drops _dd.p.tid from OTLP attributes once consumed into traceId', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({
+          trace_id: id('abcdef0123456789'),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890abcdef' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(attrs['_dd.p.tid'], undefined)
+      })
+
+      it('zero-pads traceId to 32 hex chars when no _dd.p.tid is present', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({
+          trace_id: id('abcdef0123456789'),
+          meta: { 'span.kind': 'internal' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '0000000000000000abcdef0123456789')
+      })
+
+      it('lowercases an uppercase _dd.p.tid so the OTLP traceId is canonical lowercase hex', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const span = createMockSpan({
+          trace_id: id(lowHex),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890ABCDEF' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '1234567890abcdef' + lowHex)
+      })
+
+      it('uses a full 16-byte trace_id buffer directly without consulting _dd.p.tid', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const unusedTidHigh = '1000000000000000'
+        const span = createMockSpan({
+          trace_id: id('1234567890abcdef1234567890abcdef'),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': unusedTidHigh },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '1234567890abcdef1234567890abcdef')
+      })
     })
   })
 

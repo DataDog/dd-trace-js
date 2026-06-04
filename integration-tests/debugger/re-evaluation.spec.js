@@ -52,7 +52,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
       })
 
       afterEach(async function () {
-        proc?.kill(0)
+        proc?.kill()
         await agent?.stop()
         axios = undefined
       })
