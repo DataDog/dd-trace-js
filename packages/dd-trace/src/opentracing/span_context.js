@@ -21,6 +21,10 @@ class DatadogSpanContext {
     this._spanSampling = undefined
     this._links = props.links || []
     this._baggageItems = props.baggageItems || {}
+    // True when `_baggageItems` is a reference shared with another SpanContext
+    // (e.g. a parent we forked from). The owner clones lazily on the next
+    // mutation via Span's baggage methods. Reads never need to clone.
+    this._baggageItemsShared = props.baggageItemsShared || false
     this._traceparent = props.traceparent
     this._tracestate = props.tracestate
     this._noop = props.noop || null
