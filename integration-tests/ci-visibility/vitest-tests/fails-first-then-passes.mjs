@@ -1,4 +1,3 @@
-/* eslint-disable sonarjs/stable-tests */
 import { describe, expect, test } from 'vitest'
 
 let attempt = 0
