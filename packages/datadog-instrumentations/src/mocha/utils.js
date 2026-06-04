@@ -35,6 +35,7 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const efdTests = {}
 const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
@@ -129,14 +130,61 @@ function wrapOriginalEfdTest (test, slowTestRetries) {
   })
 }
 
+/**
+ * Disables Mocha's native retry mechanism for Datadog-managed clone retries.
+ * @param {{ retries?: (count: number) => void }} test
+ * @returns {void}
+ */
+function disableMochaRetries (test) {
+  if (typeof test.retries === 'function') {
+    test.retries(0)
+  }
+}
+
+/**
+ * Checks whether a runnable belongs to a Datadog-managed clone retry feature.
+ * @param {{
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsModified?: boolean,
+ *   _ddIsNew?: boolean
+ * }} test
+ * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @returns {boolean}
+ */
+function isDatadogManagedRetryTest (test, config) {
+  return test._ddIsAttemptToFix ||
+    test._ddIsEfdRetry ||
+    (config.isEarlyFlakeDetectionEnabled && (test._ddIsNew || test._ddIsModified))
+}
+
+/**
+ * Checks whether a runnable belongs to an Early Flake Detection execution.
+ * @param {{
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsModified?: boolean,
+ *   _ddIsNew?: boolean
+ * }} test
+ * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @returns {boolean}
+ */
+function isEarlyFlakeDetectionTest (test, config) {
+  return !test._ddIsAttemptToFix &&
+    config.isEarlyFlakeDetectionEnabled &&
+    (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
+}
+
 function retryTest (test, numRetries, tags, slowTestRetries) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
+  disableMochaRetries(test)
   if (isEfdRetry) {
     wrapOriginalEfdTest(test, slowTestRetries)
   }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
+    disableMochaRetries(clonedTest)
     suite.addTest(clonedTest)
     if (isEfdRetry) {
       clonedTest._ddEfdRetryIndex = retryIndex + 1
@@ -205,6 +253,21 @@ function getTestFullName (test) {
   return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
 }
 
+/**
+ * Records every attempt for a test grouped by its full test name.
+ * @param {Record<string, Array<{ file: string, fullTitle: () => string }>>} testsByFullName
+ * @param {{ file: string, fullTitle: () => string }} test
+ * @returns {void}
+ */
+function recordTestAttempt (testsByFullName, test) {
+  const testFullName = getTestFullName(test)
+  if (testsByFullName[testFullName]) {
+    testsByFullName[testFullName].push(test)
+  } else {
+    testsByFullName[testFullName] = [test]
+  }
+}
+
 function getTestStatus (test) {
   if (test.isPending()) {
     return 'skip'
@@ -262,9 +325,6 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-    if (libraryConfig?.isFlakyTestRetriesEnabled) {
-      this.retries(libraryConfig?.flakyTestRetriesCount)
-    }
     // The reason why the wrapping logic is here is because we need to cover
     // `afterEach` and `beforeEach` hooks as well.
     // It can't be done in `getOnTestHandler` because it's only called for tests.
@@ -272,6 +332,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     const isAfterEach = this.parent._afterEach.includes(this)
 
     const isTestHook = isBeforeEach || isAfterEach
+    const test = isTestHook ? this.ctx.currentTest : this
 
     // we restore the original user defined function
     if (wrappedFunctions.has(this.fn)) {
@@ -280,8 +341,20 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       wrappedFunctions.delete(this.fn)
     }
 
+    if (isDatadogManagedRetryTest(test, libraryConfig)) {
+      disableMochaRetries(this)
+      if (typeof args[0] === 'function') {
+        const onRunnableFinished = args[0]
+        args[0] = function () {
+          disableMochaRetries(test)
+          return onRunnableFinished.apply(this, arguments)
+        }
+      }
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+      this.retries(libraryConfig.flakyTestRetriesCount)
+    }
+
     if (isTestHook || this.type === 'test') {
-      const test = isTestHook ? this.ctx.currentTest : this
       const ctx = getTestContext(test)
 
       if (ctx) {
@@ -369,12 +442,10 @@ function getOnTestHandler (isMain) {
     }
     // We want to store the result of the new tests
     if (isNew) {
-      const testFullName = getTestFullName(test)
-      if (newTests[testFullName]) {
-        newTests[testFullName].push(test)
-      } else {
-        newTests[testFullName] = [test]
-      }
+      recordTestAttempt(newTests, test)
+    }
+    if (!isAttemptToFix && (isNew || isModified)) {
+      recordTestAttempt(efdTests, test)
     }
 
     if (!isAttemptToFix && isDisabled) {
@@ -443,8 +514,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   const testName = getTestFullName(test)
   if (
-    config.isEarlyFlakeDetectionEnabled &&
-    (test._ddIsNew || test._ddIsModified) &&
+    isEarlyFlakeDetectionTest(test, config) &&
     !test._ddIsEfdRetry &&
     !efdRetryCountByTestFullName.has(testName)
   ) {
@@ -466,8 +536,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   // Needed for the getFinalStatus call. This is because EFD does NOT tag as
   // EFD retry the first run of the test. It only tags as retries the clones
-  const isEfdRetry =
-    test._ddIsEfdRetry || ((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled)
+  const isEfdRetry = isEarlyFlakeDetectionTest(test, config)
 
   if (test._ddIsAttemptToFix && isLastAttempt) {
     if (testStatuses.includes('fail')) {
@@ -837,6 +906,7 @@ module.exports = {
   testFileToSuiteCtx,
   getRunTestsWrapper,
   newTests,
+  efdTests,
   newTestsWithDynamicNames,
   testsQuarantined,
   testsAttemptToFix,
