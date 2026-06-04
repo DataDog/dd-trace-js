@@ -491,12 +491,13 @@ moduleTypes.forEach(({
           const testName = 'attempt to fix is attempt to fix'
 
           childProcess = exec(
-            `${version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`} --config retries=1`,
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
             {
               cwd,
               env: {
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
+                CYPRESS_RETRIES: '1',
                 SPEC_PATTERN: specToRun,
               },
             }

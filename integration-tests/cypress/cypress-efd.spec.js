@@ -218,12 +218,13 @@ moduleTypes.forEach(({
         const testName = 'efd with manual cypress retries fails first then passes'
 
         childProcess = exec(
-          `${version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`} --config retries=1`,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RETRIES: '1',
               SPEC_PATTERN: specToRun,
             },
           }
@@ -771,13 +772,14 @@ moduleTypes.forEach(({
         const testName = 'efd with manual cypress retries fails first then passes'
 
         childProcess = exec(
-          `${version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`} --config retries=1`,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               CYPRESS_BASE_URL: webAppBaseUrl,
               CYPRESS_EXPECTED_ATTEMPT: '1',
+              CYPRESS_RETRIES: '1',
               CYPRESS_TEST_ISOLATION: 'false',
               SPEC_PATTERN: specToRun,
             },
