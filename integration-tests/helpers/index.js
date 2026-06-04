@@ -1189,21 +1189,40 @@ function deepFreeze (value) {
  * function is restarted.
  *
  * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
+ * @param {{ concurrency?: number }} [options]
  * @returns {(name: string, fn: () => Promise<void>, opts?: { retries?: number }) => void}
  */
-function createParallelIt (mochaIt) {
+function createParallelIt (mochaIt, { concurrency = os.cpus().length } = {}) {
   const scheduled = []
   let launched = false
+  let active = 0
+  const waiting = []
 
-  function start (entry) {
+  function startNow (entry, resolve, reject) {
     entry.done = false
     entry.rejected = false
-    entry.promise = entry.fn()
-    // Track settlement without swallowing the rejection — Mocha sees it via `return entry.promise`.
-    entry.promise.then(
-      () => { entry.done = true },
-      () => { entry.done = true; entry.rejected = true }
+    active++
+    Promise.resolve(entry.fn()).then(
+      (val) => { entry.done = true; active--; flush(); resolve(val) },
+      (err) => { entry.done = true; entry.rejected = true; active--; flush(); reject(err) }
     )
+  }
+
+  function flush () {
+    while (waiting.length > 0 && active < concurrency) {
+      const { entry, resolve, reject } = waiting.shift()
+      startNow(entry, resolve, reject)
+    }
+  }
+
+  function schedule (entry) {
+    entry.promise = new Promise((resolve, reject) => {
+      if (active < concurrency) {
+        startNow(entry, resolve, reject)
+      } else {
+        waiting.push({ entry, resolve, reject })
+      }
+    })
   }
 
   return function it (name, fn, opts = {}) {
@@ -1217,14 +1236,14 @@ function createParallelIt (mochaIt) {
       if (!launched) {
         launched = true
         for (const e of scheduled) {
-          start(e)
+          schedule(e)
         }
       } else if (entry.done && entry.rejected) {
         // Mocha is retrying a failed test — restart only this scenario
-        start(entry)
+        schedule(entry)
       }
       // If done && !rejected: already passed, return resolved promise
-      // If !done: still running, return pending promise
+      // If !done: still running or queued, return pending promise
       return entry.promise
     })
   }
