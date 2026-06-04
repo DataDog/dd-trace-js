@@ -92,6 +92,7 @@ function assertItrSkippingEnabledTags (events, expected) {
 }
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
 
@@ -104,7 +105,7 @@ const fileExtension = 'js'
 
 // TODO: add esm tests
 describe(`cucumber@${version} commonJS`, () => {
-  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+  if (!isLatestCucumberSupported && version === 'latest') return
 
   let cwd, receiver, childProcess, testOutput
 
@@ -1307,6 +1308,61 @@ describe(`cucumber@${version} commonJS`, () => {
               done()
             }).catch(done)
           })
+        })
+
+        it('disables manual Cucumber retries for new tests retried by EFD', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 2,
+              },
+              faulty_session_threshold: 100,
+            },
+            flaky_test_retries_enabled: false,
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({
+            cucumber: {},
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/features-flaky/flaky.feature' &&
+                  test.meta[TEST_NAME] === 'Say flaky'
+                )
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              const diagnosticTests = tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              }))
+              assert.deepStrictEqual(diagnosticTests, [
+                { status: 'fail', isRetry: undefined, retryReason: undefined },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+              ])
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-flaky/flaky.feature --retry 1',
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+          assert.strictEqual(exitCode, 0)
         })
 
         it('aborts EFD retries when the matching slow_test_retries bucket is 0', (done) => {
@@ -2864,6 +2920,69 @@ describe(`cucumber@${version} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
 
         runTest(done, { isAttemptToFix: true, shouldFailSometimes: true, numRetries: 2 })
+      })
+
+      it('disables manual Cucumber retries for attempt to fix tests', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          flaky_test_retries_enabled: false,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'Say attempt to fix')
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            const diagnosticTests = tests.map(test => ({
+              status: test.meta[TEST_STATUS],
+              isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+              isRetry: test.meta[TEST_IS_RETRY],
+              retryReason: test.meta[TEST_RETRY_REASON],
+            }))
+            assert.deepStrictEqual(diagnosticTests, [
+              {
+                status: 'fail',
+                isAttemptToFix: 'true',
+                isRetry: undefined,
+                retryReason: undefined,
+              },
+              {
+                status: 'fail',
+                isAttemptToFix: 'true',
+                isRetry: 'true',
+                retryReason: TEST_RETRY_REASON_TYPES.atf,
+              },
+              {
+                status: 'fail',
+                isAttemptToFix: 'true',
+                isRetry: 'true',
+                retryReason: TEST_RETRY_REASON_TYPES.atf,
+              },
+            ])
+
+            const lastAttempt = tests[tests.length - 1]
+            assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            assert.strictEqual(lastAttempt.meta[TEST_FINAL_STATUS], 'fail')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature --retry 1',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 1)
       })
 
       it('does not attempt to fix tests if test management is not enabled', (done) => {

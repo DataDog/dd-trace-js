@@ -332,8 +332,24 @@ class LLMObsSpanProcessor {
     return tags
   }
 
+  /**
+   * @param {Record<string, unknown>} tags
+   */
   #objectTagsToStringArrayTags (tags) {
-    return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
+    const out = []
+    for (const [key, value] of Object.entries(tags)) {
+      // Comma is the intake-side tag delimiter, so a single `"key:v1,v2"`
+      // entry fans into two orphan tags. One-per-element keeps each value
+      // addressable; empty arrays fall through to the scalar branch and
+      // still emit `key:` so `_dd.cost_tags` references keep finding a
+      // wire entry.
+      if (Array.isArray(value) && value.length > 0) {
+        for (const item of value) out.push(`${key}:${item ?? ''}`)
+      } else {
+        out.push(`${key}:${value ?? ''}`)
+      }
+    }
+    return out
   }
 
   /**

@@ -23,7 +23,7 @@ const {
   VARIANT,
 } = process.env
 
-const ITERATIONS = 30_000
+const ITERATIONS = 24_000
 
 const writer = new LLMObsSpanWriter({
   apiKey: 'placeholder-api-key',

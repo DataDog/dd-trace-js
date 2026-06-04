@@ -3,11 +3,11 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 
 require('../setup/core')
-const { MsgpackEncoder } = require('../../src/msgpack/encoder')
+const { encode } = require('../../src/msgpack')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -15,13 +15,7 @@ function randString (length) {
   }).join('')
 }
 
-describe('msgpack/encoder', () => {
-  let encoder
-
-  beforeEach(() => {
-    encoder = new MsgpackEncoder()
-  })
-
+describe('msgpack/encode', () => {
   it('should encode to msgpack', () => {
     const data = [
       { first: 'test' },
@@ -46,7 +40,7 @@ describe('msgpack/encoder', () => {
       },
     ]
 
-    const buffer = encoder.encode(data)
+    const buffer = encode(data)
     const decoded = msgpack.decode(buffer, { useBigInt64: true })
 
     assert.ok(Array.isArray(decoded), `Expected array, got ${inspect(decoded)}`)
@@ -88,5 +82,49 @@ describe('msgpack/encoder', () => {
     assert.strictEqual(decoded[1].uint8array[1], 2)
     assert.strictEqual(decoded[1].uint8array[2], 3)
     assert.strictEqual(decoded[1].uint8array[3], 4)
+  })
+
+  it('emits 0xC0 for explicit null values', () => {
+    const buffer = encode({ value: null })
+
+    assert.deepStrictEqual(msgpack.decode(buffer), { value: null })
+  })
+
+  it('emits explicit msgpack booleans', () => {
+    const buffer = encode({ yes: true, no: false })
+
+    assert.deepStrictEqual(msgpack.decode(buffer), { yes: true, no: false })
+  })
+
+  it('encodes symbols as their `.toString()` representation', () => {
+    // `DataStreamsWriter` ships pipeline-stat shapes the caller decides at
+    // runtime, so the dispatcher accepts anything `typeof` can name. Symbols
+    // collapse to their string form so the agent receives a stable label
+    // instead of an opaque payload — and so the encoder never throws when a
+    // caller drops a `Symbol` into a stats blob.
+    const buffer = encode(Symbol('pipeline'))
+
+    assert.strictEqual(msgpack.decode(buffer), 'Symbol(pipeline)')
+  })
+
+  it('falls back to msgpack null for unsupported value types (functions, undefined)', () => {
+    // `typeof undefined === 'undefined'` and `typeof () => {} === 'function'`
+    // both hit the dispatcher's `default` arm. Encoding them as `nil` keeps
+    // the surrounding payload well-formed instead of letting the chunk
+    // emit zero bytes for the value, which would desync the map header
+    // count from the actual entries.
+    const buffer = encode({ fn: () => {}, missing: undefined })
+
+    assert.deepStrictEqual(msgpack.decode(buffer), { fn: null, missing: null })
+  })
+
+  it('emits an array32 header for arrays with 16 or more entries', () => {
+    const value = Array.from({ length: 16 }, (_, index) => index)
+
+    const buffer = encode(value)
+
+    assert.equal(buffer[0], 0xDD)
+    assert.equal(buffer.readUInt32BE(1), 16)
+    assert.deepStrictEqual(msgpack.decode(buffer), value)
   })
 })

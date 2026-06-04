@@ -3,28 +3,15 @@
   "run": "node startup-test.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node startup-test.js\"",
   "cachegrind": false,
-  "iterations": 20,
+  "iterations": 40,
   "instructions": true,
   "variants": {
-    "control": {
-      "env": {
-        "USE_TRACER": "0"
-      }
-    },
     "with-tracer": {
-      "baseline": "control",
       "env": {
         "USE_TRACER": "1"
       }
     },
-    "control-everything": {
-      "env": {
-        "USE_TRACER": "0",
-        "EVERYTHING": "1"
-      }
-    },
     "with-tracer-everything": {
-      "baseline": "control-everything",
       "env": {
         "USE_TRACER": "1",
         "EVERYTHING": "1"

@@ -225,7 +225,9 @@ function patch (http, methodName) {
             return setTimeout.apply(this, args)
           }
 
-          req.emit = function (eventName, arg) {
+          req.emit = function (...args) {
+            const eventName = args[0]
+            const arg = args[1]
             switch (eventName) {
               case 'response': {
                 const res = arg
@@ -243,7 +245,7 @@ function patch (http, methodName) {
                   break
                 }
 
-                const result = emit.apply(this, arguments)
+                const result = Reflect.apply(emit, this, args)
 
                 instrumentation.finalizeIfNeeded()
 
@@ -264,7 +266,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, args)
           }
 
           if (abortController.signal.aborted) {
@@ -302,17 +304,12 @@ function patch (http, methodName) {
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
-      try {
-        return urlToOptions(new url.URL(inputURL))
-      } catch {
-        // eslint-disable-next-line n/no-deprecated-api
-        return url.parse(inputURL)
-      }
-    } else if (inputURL instanceof url.URL) {
-      return urlToOptions(inputURL)
-    } else {
-      return inputURL
+      return urlToOptions(new url.URL(inputURL))
     }
+    if (inputURL instanceof url.URL) {
+      return urlToOptions(inputURL)
+    }
+    return inputURL
   }
 
   function urlToOptions (url) {
