@@ -301,6 +301,17 @@ function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
   return state === 'fail' ? 'fail' : 'pass'
 }
 
+/**
+ * Gets the final status for a Test Management suppressed test attempt.
+ * @param {{ isAttemptToFix?: boolean, isQuarantined?: boolean, isDisabled?: boolean } | undefined} ctx
+ * @returns {string | undefined}
+ */
+function getTestManagementSkipFinalStatus (ctx) {
+  if (!ctx?.isAttemptToFix && (ctx?.isQuarantined || ctx?.isDisabled)) {
+    return 'skip'
+  }
+}
+
 function recordFinalAttemptToFixExecution (task, status, providedContext) {
   const statuses = attemptToFixTaskToStatuses.get(task)
   if (statuses && statuses.length <= providedContext.testManagementAttemptToFixRetries) {
@@ -992,6 +1003,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           error: testError,
           shouldSetProbe,
           promises,
+          finalStatus: getTestManagementSkipFinalStatus(ctx),
           ...ctx.currentStore,
         })
         // We wait for the probe to be set

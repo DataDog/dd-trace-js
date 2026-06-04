@@ -5431,6 +5431,63 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         runQuarantineTest(done, true)
       })
 
+      onlyLatestIt('can quarantine tests retried by Mocha', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+            const quarantinedTests = tests
+              .filter(test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test')
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.strictEqual(quarantinedTests.length, 2)
+
+            quarantinedTests.forEach((test, index) => {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+
+              if (index === 0) {
+                assert.ok(!(TEST_IS_RETRY in test.meta))
+                assert.ok(!(TEST_RETRY_REASON in test.meta))
+              } else {
+                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
+            })
+          })
+
+        let stdout = ''
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --retries 1 ./ci-visibility/test-management/test-quarantine-1.js',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+        childProcess.stdout?.on('data', data => {
+          stdout += data
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise,
+        ])
+
+        assert.strictEqual(
+          (stdout.match(/I am running when quarantined/g) || []).length,
+          2
+        )
+        assert.strictEqual(exitCode, 0)
+      })
+
       onlyLatestIt('can disable tests in parallel mode', (done) => {
         receiver.setSettings({ test_management: { enabled: true } })
 

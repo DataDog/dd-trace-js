@@ -230,6 +230,52 @@ function getTestContext (test) {
   return testToContext.get(key)
 }
 
+/**
+ * Copies Datadog test metadata from Mocha's original runnable to its native retry clone.
+ * @param {{
+ *   _retriedTest?: {
+ *     _ddIsNew?: boolean,
+ *     _ddIsEfdRetry?: boolean,
+ *     _ddIsAttemptToFix?: boolean,
+ *     _ddIsDisabled?: boolean,
+ *     _ddIsQuarantined?: boolean,
+ *     _ddIsModified?: boolean
+ *   },
+ *   _ddIsNew?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsDisabled?: boolean,
+ *   _ddIsQuarantined?: boolean,
+ *   _ddIsModified?: boolean
+ * }} test
+ */
+function inheritDatadogPropertiesFromRetriedTest (test) {
+  const retriedTest = test._retriedTest
+  if (!retriedTest) return
+
+  test._ddIsNew = retriedTest._ddIsNew
+  test._ddIsEfdRetry = retriedTest._ddIsEfdRetry
+  test._ddIsAttemptToFix = retriedTest._ddIsAttemptToFix
+  test._ddIsDisabled = retriedTest._ddIsDisabled
+  test._ddIsQuarantined = retriedTest._ddIsQuarantined
+  test._ddIsModified = retriedTest._ddIsModified
+
+  if (test._ddIsQuarantined && !test._ddIsAttemptToFix) {
+    testsQuarantined.add(test)
+  }
+}
+
+/**
+ * Gets the final status for a Test Management suppressed test attempt.
+ * @param {{ isAttemptToFix?: boolean, isQuarantined?: boolean, isDisabled?: boolean } | undefined} ctx
+ * @returns {string | undefined}
+ */
+function getTestManagementSkipFinalStatus (ctx) {
+  if (!ctx?.isAttemptToFix && (ctx?.isQuarantined || ctx?.isDisabled)) {
+    return 'skip'
+  }
+}
+
 function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
@@ -287,6 +333,8 @@ function getOnTestHandler (isMain) {
       test.fn = originalFn
       wrappedFunctions.delete(test.fn)
     }
+
+    inheritDatadogPropertiesFromRetriedTest(test)
 
     const {
       file: testSuiteAbsolutePath,
@@ -661,7 +709,15 @@ function getOnTestRetryHandler (config) {
         config.isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
-      testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test, isAtrRetry, ...ctx.currentStore })
+      testRetryCh.publish({
+        isFirstAttempt,
+        err,
+        willBeRetried,
+        test,
+        isAtrRetry,
+        finalStatus: getTestManagementSkipFinalStatus(ctx),
+        ...ctx.currentStore,
+      })
     }
     const key = getTestToContextKey(test)
     testToContext.delete(key)
