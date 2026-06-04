@@ -78,6 +78,7 @@ class Crashtracker {
 
     return {
       additional_files: [],
+      collect_all_threads: true,
       create_alt_stack: true,
       use_alt_stack: true,
       endpoint: {
