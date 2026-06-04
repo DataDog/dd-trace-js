@@ -107,7 +107,7 @@ versions.forEach((version) => {
             })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -162,7 +162,7 @@ versions.forEach((version) => {
           // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
           // dd-trace won't override it since its guard is `if (project.retries === 0)`.
           proc = exec(
-            `./node_modules/.bin/playwright test --retries=2 -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
             {
               cwd,
               env: {
@@ -248,7 +248,7 @@ versions.forEach((version) => {
             }, RETRY_FINAL_STATUS_TIMEOUT)
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -311,7 +311,7 @@ versions.forEach((version) => {
             // --retries=2 is passed via CLI so test.retries is correctly set at startup.
             // dd-trace won't override it since its guard is `if (project.retries === 0)`.
             proc = exec(
-              `./node_modules/.bin/playwright test --retries=2 -c playwright.config.js --output test-results-${receiver.port}`,
+              './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
               {
                 cwd,
                 env: {
@@ -367,7 +367,7 @@ versions.forEach((version) => {
             }, 25000)
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js disabled-test.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
             {
               cwd,
               env: {
@@ -445,8 +445,8 @@ versions.forEach((version) => {
             }, 25000)
 
           proc = exec(
-            // eslint-disable-next-line @stylistic/max-len
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port} quarantine-test.js quarantine-failing-after-each-test.js`,
+            './node_modules/.bin/playwright test -c playwright.config.js ' +
+            'quarantine-test.js quarantine-failing-after-each-test.js',
             {
               cwd,
               env: {
@@ -497,7 +497,7 @@ versions.forEach((version) => {
           // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
           // dd-trace won't override it since its guard is `if (project.retries === 0)`.
           proc = exec(
-            `./node_modules/.bin/playwright test --retries=1 -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
             {
               cwd,
               env: {
@@ -552,8 +552,7 @@ versions.forEach((version) => {
             // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
             // PLAYWRIGHT_WORKERS=1 ensures the non-serial test always runs (and fails) before the serial suite.
             proc = exec(
-              // eslint-disable-next-line @stylistic/max-len
-              `./node_modules/.bin/playwright test --retries=1 -c playwright.config.js --output test-results-${receiver.port}`,
+              './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
               {
                 cwd,
                 env: {

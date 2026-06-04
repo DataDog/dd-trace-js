@@ -130,7 +130,7 @@ versions.forEach((version) => {
                     assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
                   })
                 proc = exec(
-                  `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+                  './node_modules/.bin/playwright test -c playwright.config.js',
                   {
                     cwd,
                     env: {
@@ -185,7 +185,7 @@ versions.forEach((version) => {
                       )
                     })
                   proc = exec(
-                    `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+                    './node_modules/.bin/playwright test -c playwright.config.js',
                     {
                       cwd,
                       env: {
@@ -237,7 +237,7 @@ versions.forEach((version) => {
                       )
                     })
                   proc = exec(
-                    `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+                    './node_modules/.bin/playwright test -c playwright.config.js',
                     {
                       cwd,
                       env: {
@@ -398,7 +398,7 @@ versions.forEach((version) => {
               })
 
             proc = exec(
-              `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+              './node_modules/.bin/playwright test -c playwright.config.js',
               {
                 cwd,
                 env: {
@@ -475,8 +475,8 @@ versions.forEach((version) => {
               assert.doesNotMatch(testOutput, /TypeError/)
             }, 25000)
           proc = exec(
-            // eslint-disable-next-line @stylistic/max-len
-            'node ./node_modules/typescript/bin/tsc' + `&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out --output test-results-${receiver.port}`,
+            'node ./node_modules/typescript/bin/tsc' +
+            '&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
             {
               cwd,
               env: {
@@ -514,7 +514,7 @@ versions.forEach((version) => {
               assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
             })
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -546,7 +546,7 @@ versions.forEach((version) => {
               ])
             })
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -579,7 +579,7 @@ versions.forEach((version) => {
               assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
             })
           proc = exec(
-            `../../node_modules/.bin/playwright test --output test-results-${receiver.port}`,
+            '../../node_modules/.bin/playwright test',
             {
               cwd: `${cwd}/ci-visibility/subproject`,
               env: {
@@ -610,7 +610,7 @@ versions.forEach((version) => {
               })
             })
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -660,11 +660,11 @@ versions.forEach((version) => {
                 }
                 // capabilities logic does not overwrite test session name
                 assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
-                assert.match(metadata['*'][TEST_COMMAND], /^playwright test -c playwright\.config\.js(\s|$)/)
+                assert.strictEqual(metadata['*'][TEST_COMMAND], 'playwright test -c playwright.config.js')
               })
             })
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -698,7 +698,7 @@ versions.forEach((version) => {
             })
           receiver.setSettings({ test_management: { enabled: true } })
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js',
             {
               cwd,
               env: {
@@ -765,7 +765,7 @@ versions.forEach((version) => {
                 )
               })
             proc = exec(
-              `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+              './node_modules/.bin/playwright test -c playwright.config.js',
               {
                 cwd,
                 env: {

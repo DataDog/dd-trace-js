@@ -102,7 +102,7 @@ versions.forEach((version) => {
             })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
             {
               cwd,
               env: {
@@ -142,7 +142,7 @@ versions.forEach((version) => {
             })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
             {
               cwd,
               env: {
@@ -195,7 +195,7 @@ versions.forEach((version) => {
         let proc
         try {
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -304,7 +304,7 @@ versions.forEach((version) => {
           })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js retried-test.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js retried-test.js',
             {
               cwd,
               env: {
@@ -346,7 +346,7 @@ versions.forEach((version) => {
             })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {

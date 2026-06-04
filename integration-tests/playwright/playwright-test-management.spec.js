@@ -199,7 +199,7 @@ versions.forEach((version) => {
             })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -417,8 +417,7 @@ versions.forEach((version) => {
           let proc
           try {
             proc = exec(
-              // eslint-disable-next-line @stylistic/max-len
-              `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port} ${cliArgs}`,
+              `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
               {
                 cwd,
                 env: {
@@ -576,7 +575,7 @@ versions.forEach((version) => {
               }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
             proc = exec(
-              `./node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js --output test-results-${receiver.port}`,
+              './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
               {
                 cwd,
                 env: {
@@ -755,7 +754,7 @@ versions.forEach((version) => {
           let proc
           try {
             proc = exec(
-              `./node_modules/.bin/playwright test -c playwright.config.js disabled-test.js disabled-2-test.js --output test-results-${receiver.port}`,
+              './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js disabled-2-test.js',
               {
                 cwd,
                 env: {
@@ -911,8 +910,7 @@ versions.forEach((version) => {
           let proc
           try {
             proc = exec(
-              // eslint-disable-next-line @stylistic/max-len
-              `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port} ${cliArgs}`,
+              `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
               {
                 cwd,
                 env: {
@@ -1043,7 +1041,7 @@ versions.forEach((version) => {
             )
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
             {
               cwd,
               env: {

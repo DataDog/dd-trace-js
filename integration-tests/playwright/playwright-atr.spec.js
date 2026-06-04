@@ -109,7 +109,7 @@ versions.forEach((version) => {
             }, 30000)
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -153,7 +153,7 @@ versions.forEach((version) => {
             }, 30000)
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -203,7 +203,7 @@ versions.forEach((version) => {
             }, 30000)
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -250,7 +250,7 @@ versions.forEach((version) => {
             }, 30000)
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -288,7 +288,7 @@ versions.forEach((version) => {
           receiver.setKnownTests({ playwright: {} })
 
           proc = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
