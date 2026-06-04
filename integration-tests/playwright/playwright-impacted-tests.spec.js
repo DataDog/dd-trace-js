@@ -198,7 +198,7 @@ versions.forEach((version) => {
         let proc
         try {
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {

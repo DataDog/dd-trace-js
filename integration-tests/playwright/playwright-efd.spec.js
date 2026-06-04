@@ -186,7 +186,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -238,7 +238,7 @@ versions.forEach((version) => {
             }, 45_000)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -297,7 +297,7 @@ versions.forEach((version) => {
             }, 60_000)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -351,7 +351,7 @@ versions.forEach((version) => {
             }, 45_000)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=3',
+            `./node_modules/.bin/playwright test -c playwright.config.js --repeat-each=3 --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -421,7 +421,7 @@ versions.forEach((version) => {
             }, 60_000)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=2',
+            `./node_modules/.bin/playwright test -c playwright.config.js --repeat-each=2 --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -494,7 +494,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -571,7 +571,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -627,7 +627,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -699,7 +699,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -759,7 +759,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -794,7 +794,7 @@ versions.forEach((version) => {
           receiver.setKnownTests({ playwright: {} })
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -851,7 +851,7 @@ versions.forEach((version) => {
           })
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js --retries=1',
+            `./node_modules/.bin/playwright test -c playwright.config.js --retries=1 --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
@@ -935,7 +935,7 @@ versions.forEach((version) => {
           })
 
           proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js --output test-results-${receiver.port}`,
             {
               cwd,
               env: {
