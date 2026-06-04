@@ -230,6 +230,33 @@ function getTestContext (test) {
   return testToContext.get(key)
 }
 
+/**
+ * Copies Test Management metadata from Mocha's original runnable to its native retry clone.
+ * @param {{
+ *   _retriedTest?: {
+ *     _ddIsDisabled?: boolean,
+ *     _ddIsQuarantined?: boolean
+ *   },
+ *   _ddIsDisabled?: boolean,
+ *   _ddIsQuarantined?: boolean
+ * }} test
+ */
+function inheritDatadogPropertiesFromRetriedTest (test) {
+  const retriedTest = test._retriedTest
+  if (!retriedTest) return
+
+  if (retriedTest._ddIsDisabled) {
+    test._ddIsDisabled = true
+  }
+  if (retriedTest._ddIsQuarantined) {
+    test._ddIsQuarantined = true
+  }
+
+  if (test._ddIsQuarantined && !test._ddIsAttemptToFix) {
+    testsQuarantined.add(test)
+  }
+}
+
 function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
@@ -287,6 +314,8 @@ function getOnTestHandler (isMain) {
       test.fn = originalFn
       wrappedFunctions.delete(test.fn)
     }
+
+    inheritDatadogPropertiesFromRetriedTest(test)
 
     const {
       file: testSuiteAbsolutePath,
@@ -371,13 +400,16 @@ function getFinalStatus ({
   hasPassedAnyEfdAttempt,
   isQuarantined,
   isDisabled,
+  isFinalAttempt,
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
-  // Intermediate EFD and ATF executions must not carry a final status, regardless of quarantine/disabled state
+  // Intermediate executions must not carry a final status, regardless of quarantine/disabled state
+  const isExternalIntermediateExecution = !isEfdRetry && !isAttemptToFix && !isFinalAttempt
   const isIntermediateExecution =
     (isEfdRetry && !isLastEfdRetry) ||
-    (isAttemptToFix && !isLastAttemptToFix)
+    (isAttemptToFix && !isLastAttemptToFix) ||
+    isExternalIntermediateExecution
   if (isIntermediateExecution) {
     return
   }
@@ -463,6 +495,7 @@ function getTestFinishInfo (test, status, config, error) {
   const isAtrRetry = config.isFlakyTestRetriesEnabled &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
+  const isFinalAttempt = status !== 'fail' || test._currentRetry >= test._retries
 
   const { isFlakyTestRetriesEnabled } = config
   const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
@@ -480,6 +513,7 @@ function getTestFinishInfo (test, status, config, error) {
     hasPassedAnyEfdAttempt: testStatuses.includes('pass'),
     isQuarantined: _ddIsQuarantined,
     isDisabled: _ddIsDisabled,
+    isFinalAttempt,
   })
 
   if (_ddIsAttemptToFix) {
@@ -661,7 +695,14 @@ function getOnTestRetryHandler (config) {
         config.isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
-      testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test, isAtrRetry, ...ctx.currentStore })
+      testRetryCh.publish({
+        isFirstAttempt,
+        err,
+        willBeRetried,
+        test,
+        isAtrRetry,
+        ...ctx.currentStore,
+      })
     }
     const key = getTestToContextKey(test)
     testToContext.delete(key)
