@@ -316,6 +316,10 @@ function recordFinalAttemptToFixExecution (task, status, providedContext) {
   })
 }
 
+function disableFrameworkRetries (task) {
+  task.retry = 0
+}
+
 /**
  * Wraps a function so it runs inside the current test span context.
  * @param {object} task
@@ -801,6 +805,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isAttemptToFix) => {
           if (isAttemptToFix) {
             isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
+            disableFrameworkRetries(task)
             task.repeats = testManagementAttemptToFixRetries
             attemptToFixTasks.add(task)
             attemptToFixTaskToStatuses.set(task, [])
@@ -831,6 +836,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (isImpacted) {
             if (isEarlyFlakeDetectionEnabled) {
               isRetryReasonEfd = true
+              disableFrameworkRetries(task)
               task.repeats = numRepeats
             }
             modifiedTasks.add(task)
@@ -849,6 +855,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (isNew && !attemptToFixTasks.has(task)) {
             if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
               isRetryReasonEfd = true
+              disableFrameworkRetries(task)
               task.repeats = numRepeats
             }
             newTasks.add(task)
