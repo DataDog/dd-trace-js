@@ -224,7 +224,9 @@ beforeEach(function () {
 
   if (
     currentTest._ddIsAttemptToFix ||
-    (isEarlyFlakeDetectionEnabled && (currentTest._ddIsNew || currentTest._ddIsModified))
+    (isTestIsolationEnabled &&
+      isEarlyFlakeDetectionEnabled &&
+      (currentTest._ddIsNew || currentTest._ddIsModified))
   ) {
     disableFrameworkRetries(currentTest)
   }
