@@ -149,6 +149,10 @@ function getRetriedTests (test, numRetries, tags) {
   return retriedTests
 }
 
+function disableFrameworkRetries (test) {
+  test._retries = 0
+}
+
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
   if (!isKnownTestsEnabled && !isTestManagementEnabled && !isImpactedTestsEnabled) {
@@ -215,7 +219,15 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
 }
 
 beforeEach(function () {
-  const testName = Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle()
+  const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  const testName = currentTest.fullTitle()
+
+  if (
+    currentTest._ddIsAttemptToFix ||
+    (isEarlyFlakeDetectionEnabled && (currentTest._ddIsNew || currentTest._ddIsModified))
+  ) {
+    disableFrameworkRetries(currentTest)
+  }
 
   const retryMessage = retryReasonsByTestName.get(testName)
   if (retryMessage) {
