@@ -151,6 +151,9 @@ function getRetriedTests (test, numRetries, tags) {
 }
 
 function disableFrameworkRetries (test) {
+  if (typeof test.retries === 'function') {
+    test.retries(0)
+  }
   test._retries = 0
 }
 
@@ -232,6 +235,12 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
 }
 
 Cypress.on('test:before:run', (attributes, test) => {
+  if (shouldDisableFrameworkRetries(test)) {
+    disableFrameworkRetries(test)
+  }
+})
+
+Cypress.on('test:before:run:async', (attributes, test) => {
   if (shouldDisableFrameworkRetries(test)) {
     disableFrameworkRetries(test)
   }

@@ -480,8 +480,7 @@ moduleTypes.forEach(({
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
         })
 
-        // Cypress <12 can still emit native retries for Datadog-managed cloned tests.
-        over12It('disables manual Cypress retries for attempt to fix tests', async () => {
+        it('disables manual Cypress retries for attempt to fix tests', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: 2 },
             flaky_test_retries_enabled: false,
