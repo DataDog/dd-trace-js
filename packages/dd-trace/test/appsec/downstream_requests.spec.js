@@ -35,55 +35,7 @@ describe('appsec downstream_requests', () => {
     logWarnStub.restore()
   })
 
-  describe('shouldSampleBody', () => {
-    const testUrl = 'http://example.com/api'
-
-    it('returns true when enabled with sample rate 1', () => {
-      assert.strictEqual(downstream.shouldSampleBody(req, testUrl), true)
-    })
-
-    it('returns false when per-request limit reached', () => {
-      assert.strictEqual(downstream.shouldSampleBody(req, testUrl), true)
-      assert.strictEqual(downstream.shouldSampleBody(req, 'http://example.com/api2'), false)
-    })
-
-    it('returns false when sample rate is zero', () => {
-      downstream.disable()
-      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0
-      downstream.enable(config)
-
-      assert.strictEqual(downstream.shouldSampleBody(req, testUrl), false)
-    })
-
-    it('returns stored decision from redirect', () => {
-      const redirectUrl = 'http://example.com/redirect-target'
-      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
-
-      assert.strictEqual(downstream.shouldSampleBody(req, redirectUrl), true)
-    })
-
-    it('returns stored decision even when sample rate is zero', () => {
-      downstream.disable()
-      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0
-      config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 0
-      downstream.enable(config)
-
-      const redirectUrl = 'http://example.com/redirect-target'
-      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
-
-      assert.strictEqual(downstream.shouldSampleBody(req, redirectUrl), true)
-    })
-
-    it('returns stored decision even after limit reached', () => {
-      assert.strictEqual(downstream.shouldSampleBody(req, 'http://example.com/first'), true)
-      // limit reached
-      assert.strictEqual(downstream.shouldSampleBody(req, 'http://example.com/second'), false)
-      // stored decision should still work
-      const redirectUrl = 'http://example.com/redirect-target'
-      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
-      assert.strictEqual(downstream.shouldSampleBody(req, redirectUrl), true)
-    })
-
+  describe('apiSecurity downstream body analysis sample rate', () => {
     it('logs warning and clamps value when sample rate is above 1', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.5
@@ -115,56 +67,146 @@ describe('appsec downstream_requests', () => {
       config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0.5
       downstream.enable(config)
 
-      downstream.shouldSampleBody(req, testUrl)
+      const validRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-length': '2' },
+      }
+      const ctx = {}
+      downstream.planResponseBodyCollection(req, 'http://example.com/api', validRes, ctx)
 
       sinon.assert.notCalled(logWarnStub)
     })
   })
 
-  describe('handleRedirectResponse', () => {
-    it('detects redirect with location header', () => {
+  describe('planResponseBodyCollection', () => {
+    const validJsonRes = {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json', 'content-length': '2' },
+    }
+    it('does nothing on redirect response (no ctx flags, no sampling until a non-redirect response)', () => {
+      const inboundReq = {}
+      const ctx = {}
       const res = {
         statusCode: 302,
-        headers: { location: 'http://example.com/redirect' },
+        headers: { location: 'http://example.com/next' },
       }
 
-      const isRedirect = downstream.handleRedirectResponse(req, res)
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/first', res, ctx)
 
-      assert.strictEqual(isRedirect, true)
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
+
+      const ctxAfter = {}
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/next', validJsonRes, ctxAfter)
+      assert.strictEqual(ctxAfter.shouldCollectBody, true)
     })
 
-    it('returns false for non redirect status codes', () => {
+    it('sets shouldCollectBody when sampling allows and response headers allow collection', () => {
+      const inboundReq = {}
+      const ctx = {}
       const res = {
         statusCode: 200,
-        headers: {},
+        headers: {
+          'content-type': 'application/json',
+          'content-length': '12',
+        },
       }
 
-      const isRedirect = downstream.handleRedirectResponse(req, res)
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
 
-      assert.strictEqual(isRedirect, false)
+      assert.strictEqual(ctx.shouldCollectBody, true)
     })
 
-    it('returns false for redirect without location header', () => {
-      const res = {
-        statusCode: 302,
-        headers: {},
+    it('records response body ignored metric when sampling allows but content-length is missing', () => {
+      const web = require('../../src/plugins/util/web')
+      const span = { setTag: sinon.stub() }
+      const webRootStub = sinon.stub(web, 'root').returns(span)
+      try {
+        const inboundReq = {}
+        const ctx = {}
+        const res = {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+        }
+
+        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+
+        assert.strictEqual(ctx.shouldCollectBody, undefined)
+        const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
+        sinon.assert.calledOnceWithExactly(span.setTag, tag, 1)
+      } finally {
+        webRootStub.restore()
       }
-
-      const isRedirect = downstream.handleRedirectResponse(req, res)
-
-      assert.strictEqual(isRedirect, false)
     })
 
-    it('stores body collection decision for redirect', () => {
-      const res = {
-        statusCode: 302,
-        headers: { location: 'http://example.com/target' },
+    it('increments same ignored-body metric twice when two hops fail content-type on the same request', () => {
+      const web = require('../../src/plugins/util/web')
+      const span = { setTag: sinon.stub() }
+      const webRootStub = sinon.stub(web, 'root').returns(span)
+      try {
+        const inboundReq = {}
+        const badRes = {
+          statusCode: 200,
+          headers: { 'content-type': 'image/png', 'content-length': '4' },
+        }
+        const ctx1 = {}
+        const ctx2 = {}
+        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/a', badRes, ctx1)
+        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/b', badRes, ctx2)
+
+        const tag = '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
+        sinon.assert.calledTwice(span.setTag)
+        sinon.assert.calledWith(span.setTag, tag, 1)
+        sinon.assert.calledWith(span.setTag, tag, 2)
+      } finally {
+        webRootStub.restore()
       }
+    })
 
-      downstream.handleRedirectResponse(req, res)
+    it('records response body ignored metric when content-length exceeds configured max', () => {
+      const web = require('../../src/plugins/util/web')
+      const span = { setTag: sinon.stub() }
+      const webRootStub = sinon.stub(web, 'root').returns(span)
+      try {
+        const inboundReq = {}
+        const ctx = {}
+        const res = {
+          statusCode: 200,
+          headers: {
+            'content-type': 'application/json',
+            'content-length': '5000',
+          },
+        }
 
-      const storedDecision = downstream.shouldSampleBody(req, 'http://example.com/target')
-      assert.strictEqual(storedDecision, true)
+        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+
+        assert.strictEqual(ctx.shouldCollectBody, undefined)
+        const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
+        sinon.assert.calledOnceWithExactly(span.setTag, tag, 1)
+      } finally {
+        webRootStub.restore()
+      }
+    })
+
+    it('does not plan body collection when sample rate is zero', () => {
+      downstream.disable()
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0
+      downstream.enable(config)
+
+      const inboundReq = {}
+      const ctx = {}
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', validJsonRes, ctx)
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
+    })
+
+    it('stops planning body collection when per-request analysis limit is reached', () => {
+      const inboundReq = {}
+      const ctx1 = {}
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', validJsonRes, ctx1)
+      assert.strictEqual(ctx1.shouldCollectBody, true)
+
+      const ctx2 = {}
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api2', validJsonRes, ctx2)
+      assert.strictEqual(ctx2.shouldCollectBody, undefined)
     })
   })
 
@@ -245,6 +287,17 @@ describe('appsec downstream_requests', () => {
       assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { ok: true })
     })
 
+    it('parses urlencoded response body when provided', () => {
+      const urlRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      }
+      const body = Buffer.from('a=1&b=2')
+      const addressesMap = downstream.extractResponseData(urlRes, body)
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { a: '1', b: '2' })
+    })
+
     it('omits body when not provided', () => {
       const addressesMap = downstream.extractResponseData(res)
 
@@ -252,161 +305,6 @@ describe('appsec downstream_requests', () => {
         !Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_RESPONSE_BODY),
         `Available keys: ${inspect(Object.keys(addressesMap))}`
       )
-    })
-  })
-
-  describe('parseBody', () => {
-    describe('JSON parsing', () => {
-      it('parses JSON strings', () => {
-        assert.deepStrictEqual(downstream.parseBody('{"foo":1}', 'application/json'), { foo: 1 })
-      })
-
-      it('parses JSON buffers', () => {
-        const buffer = Buffer.from('{"foo":1}')
-        assert.deepStrictEqual(downstream.parseBody(buffer, 'application/json'), { foo: 1 })
-      })
-
-      it('handles text/json content type', () => {
-        assert.deepStrictEqual(downstream.parseBody('{"foo":1}', 'text/json'), { foo: 1 })
-      })
-
-      it('handles content-type with charset', () => {
-        assert.deepStrictEqual(downstream.parseBody('{"foo":1}', 'application/json; charset=utf-8'), { foo: 1 })
-      })
-
-      it('returns null for invalid JSON', () => {
-        assert.strictEqual(downstream.parseBody('{invalid}', 'application/json'), null)
-      })
-
-      it('returns null for non-object JSON', () => {
-        assert.strictEqual(downstream.parseBody(123, 'application/json'), null)
-      })
-    })
-
-    describe('URL-encoded parsing', () => {
-      it('parses urlencoded strings', () => {
-        const parsed = downstream.parseBody('a=1&b=2', 'application/x-www-form-urlencoded')
-        assert.deepStrictEqual(parsed, { a: '1', b: '2' })
-      })
-
-      it('parses urlencoded buffers', () => {
-        const buffer = Buffer.from('a=1&b=2')
-        const parsed = downstream.parseBody(buffer, 'application/x-www-form-urlencoded')
-        assert.deepStrictEqual(parsed, { a: '1', b: '2' })
-      })
-
-      it('handles multiple values for same key', () => {
-        const parsed = downstream.parseBody('a=1&a=2&b=3', 'application/x-www-form-urlencoded')
-        assert.deepStrictEqual(parsed, { a: ['1', '2'], b: '3' })
-      })
-
-      it('handles URL encoded values', () => {
-        const parsed = downstream.parseBody('name=John%20Doe&city=New%20York', 'application/x-www-form-urlencoded')
-        assert.deepStrictEqual(parsed, { name: 'John Doe', city: 'New York' })
-      })
-
-      it('handles empty values', () => {
-        const parsed = downstream.parseBody('a=&b=2', 'application/x-www-form-urlencoded')
-        assert.deepStrictEqual(parsed, { a: '', b: '2' })
-      })
-    })
-
-    describe('Unsupported content types', () => {
-      it('returns null for text/plain', () => {
-        assert.strictEqual(downstream.parseBody('text', 'text/plain'), null)
-      })
-
-      it('returns null for multipart/form-data', () => {
-        assert.strictEqual(downstream.parseBody('data', 'multipart/form-data'), null)
-      })
-
-      it('returns null for text/html', () => {
-        assert.strictEqual(downstream.parseBody('<html></html>', 'text/html'), null)
-      })
-
-      it('returns null for application/xml', () => {
-        assert.strictEqual(downstream.parseBody('<xml></xml>', 'application/xml'), null)
-      })
-    })
-
-    describe('Edge cases', () => {
-      it('returns null when body is null', () => {
-        assert.strictEqual(downstream.parseBody(null, 'application/json'), null)
-      })
-
-      it('returns null when body is undefined', () => {
-        assert.strictEqual(downstream.parseBody(undefined, 'application/json'), null)
-      })
-
-      it('returns null when contentType is null', () => {
-        assert.strictEqual(downstream.parseBody('{"foo":1}', null), null)
-      })
-
-      it('returns null when parsing fails', () => {
-        assert.strictEqual(downstream.parseBody('not json', 'application/json'), null)
-      })
-    })
-  })
-
-  describe('getMethod', () => {
-    it('returns method when valid string', () => {
-      assert.strictEqual(downstream.getMethod('POST'), 'POST')
-    })
-
-    it('returns GET when method is null', () => {
-      assert.strictEqual(downstream.getMethod(null), 'GET')
-    })
-
-    it('returns GET when method is not a string', () => {
-      assert.strictEqual(downstream.getMethod(123), 'GET')
-    })
-  })
-
-  describe('getResponseBodyCollectionConfig', () => {
-    it('returns configured max bytes and supported mime types', () => {
-      const collectionConfig = downstream.getResponseBodyCollectionConfig()
-
-      assert.strictEqual(collectionConfig.maxBytes, 1024)
-      assert.ok(collectionConfig.supportedMimeTypes.has('application/json'))
-      assert.ok(collectionConfig.supportedMimeTypes.has('application/x-www-form-urlencoded'))
-    })
-  })
-
-  describe('recordResponseBodyIgnored', () => {
-    let web
-    let span
-
-    beforeEach(() => {
-      web = require('../../src/plugins/util/web')
-      span = {
-        setTag: sinon.stub(),
-      }
-    })
-
-    afterEach(() => {
-      sinon.restore()
-    })
-
-    it('increments ignored-body metric on span', () => {
-      const webRootStub = sinon.stub(web, 'root').returns(span)
-      const tag = '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
-
-      downstream.recordResponseBodyIgnored(req, 'content_type_invalid')
-      downstream.recordResponseBodyIgnored(req, 'content_type_invalid')
-
-      sinon.assert.calledTwice(span.setTag)
-      sinon.assert.calledWith(span.setTag, tag, 1)
-      sinon.assert.calledWith(span.setTag, tag, 2)
-      webRootStub.restore()
-    })
-
-    it('does not write tag for unknown reason', () => {
-      const webRootStub = sinon.stub(web, 'root').returns(span)
-
-      downstream.recordResponseBodyIgnored(req, 'unknown_reason')
-
-      sinon.assert.notCalled(span.setTag)
-      webRootStub.restore()
     })
   })
 
@@ -471,30 +369,41 @@ describe('appsec downstream_requests', () => {
     })
   })
 
-  describe('sampling behavior', () => {
-    it('returns true for sample rate 1.0 (100%)', () => {
+  describe('sampling behavior via planResponseBodyCollection', () => {
+    const validJsonRes = {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json', 'content-length': '2' },
+    }
+
+    it('collects body on every hop at sample rate 1.0 (100%)', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 100
       downstream.enable(config)
 
       for (let i = 0; i < 10; i++) {
-        assert.strictEqual(downstream.shouldSampleBody({}), true)
+        const inboundReq = {}
+        const ctx = {}
+        downstream.planResponseBodyCollection(inboundReq, `http://example.com/${i}`, validJsonRes, ctx)
+        assert.strictEqual(ctx.shouldCollectBody, true)
       }
     })
 
-    it('returns false for sample rate 0.0 (0%)', () => {
+    it('never collects at sample rate 0.0 (0%)', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 100
       downstream.enable(config)
 
       for (let i = 0; i < 10; i++) {
-        assert.strictEqual(downstream.shouldSampleBody({}), false)
+        const inboundReq = {}
+        const ctx = {}
+        downstream.planResponseBodyCollection(inboundReq, `http://example.com/${i}`, validJsonRes, ctx)
+        assert.strictEqual(ctx.shouldCollectBody, undefined)
       }
     })
 
-    it('produces some true and some false with rate 0.5', () => {
+    it('produces some collects and some skips with rate 0.5', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0.5
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 1000
@@ -502,7 +411,10 @@ describe('appsec downstream_requests', () => {
 
       const results = []
       for (let i = 0; i < 100; i++) {
-        results.push(downstream.shouldSampleBody({}))
+        const inboundReq = {}
+        const ctx = {}
+        downstream.planResponseBodyCollection(inboundReq, `http://example.com/${i}`, validJsonRes, ctx)
+        results.push(ctx.shouldCollectBody === true)
       }
 
       const trueCount = results.filter(r => r).length
@@ -521,15 +433,28 @@ describe('appsec downstream_requests', () => {
       const req1 = {}
       const req2 = {}
 
-      assert.strictEqual(downstream.shouldSampleBody(req1, 'http://example.com/1'), true)
-      assert.strictEqual(downstream.shouldSampleBody(req2, 'http://example.com/2'), true)
-      assert.strictEqual(downstream.shouldSampleBody(req1, 'http://example.com/3'), true)
+      const c1 = {}
+      downstream.planResponseBodyCollection(req1, 'http://example.com/1', validJsonRes, c1)
+      assert.strictEqual(c1.shouldCollectBody, true)
 
-      assert.strictEqual(downstream.shouldSampleBody(req1, 'http://example.com/4'), false)
-      assert.strictEqual(downstream.shouldSampleBody(req2, 'http://example.com/5'), true)
+      const c2 = {}
+      downstream.planResponseBodyCollection(req2, 'http://example.com/2', validJsonRes, c2)
+      assert.strictEqual(c2.shouldCollectBody, true)
+
+      const c3 = {}
+      downstream.planResponseBodyCollection(req1, 'http://example.com/3', validJsonRes, c3)
+      assert.strictEqual(c3.shouldCollectBody, true)
+
+      const c4 = {}
+      downstream.planResponseBodyCollection(req1, 'http://example.com/4', validJsonRes, c4)
+      assert.strictEqual(c4.shouldCollectBody, undefined)
+
+      const c5 = {}
+      downstream.planResponseBodyCollection(req2, 'http://example.com/5', validJsonRes, c5)
+      assert.strictEqual(c5.shouldCollectBody, true)
     })
 
-    it('increments counter correctly', () => {
+    it('increments counter only after successful header-based collection plan', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 3
@@ -537,13 +462,15 @@ describe('appsec downstream_requests', () => {
 
       const testReq = {}
 
-      // Should sample 3 times
-      assert.strictEqual(downstream.shouldSampleBody(testReq), true)
-      assert.strictEqual(downstream.shouldSampleBody(testReq), true)
-      assert.strictEqual(downstream.shouldSampleBody(testReq), true)
+      for (let i = 0; i < 3; i++) {
+        const ctx = {}
+        downstream.planResponseBodyCollection(testReq, `http://example.com/${i}`, validJsonRes, ctx)
+        assert.strictEqual(ctx.shouldCollectBody, true)
+      }
 
-      // Fourth time should be false
-      assert.strictEqual(downstream.shouldSampleBody(testReq), false)
+      const ctxLast = {}
+      downstream.planResponseBodyCollection(testReq, 'http://example.com/last', validJsonRes, ctxLast)
+      assert.strictEqual(ctxLast.shouldCollectBody, undefined)
     })
   })
 })

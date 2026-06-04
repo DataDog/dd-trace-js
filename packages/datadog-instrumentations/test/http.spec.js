@@ -17,6 +17,7 @@ describe('client', () => {
   const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
   const errorChannel = dc.channel('apm:http:client:request:error')
   const responseFinishChannel = dc.channel('apm:http:client:response:finish')
+  const responseStartChannel = dc.channel('apm:http:client:response:start')
 
   before(async () => {
     await agent.load('http')
@@ -202,7 +203,7 @@ describe('client', () => {
       })
 
       describe('response finish channel', () => {
-        let responseFinishChannelCb, responseBodyCollection
+        let responseFinishChannelCb, responseStartChannelCb
 
         before(() => {
           http = require(httpSchema)
@@ -213,18 +214,29 @@ describe('client', () => {
           responseFinishChannelCb = sinon.stub()
           responseFinishChannel.subscribe(responseFinishChannelCb)
 
-          responseBodyCollection = {
-            maxBytes: 1024 * 1024,
-            supportedMimeTypes: new Set([
-              'application/json',
-              'text/json',
-              'application/x-www-form-urlencoded',
-            ]),
-          }
+          responseStartChannelCb = sinon.stub()
+          responseStartChannel.subscribe(responseStartChannelCb)
         })
 
         afterEach(() => {
           responseFinishChannel.unsubscribe(responseFinishChannelCb)
+          responseStartChannel.unsubscribe(responseStartChannelCb)
+        })
+
+        it('publishes response:start before response:finish for the same request', (done) => {
+          http.get(url, (res) => {
+            res.resume()
+            res.on('end', () => {
+              try {
+                sinon.assert.called(responseStartChannelCb)
+                sinon.assert.called(responseFinishChannelCb)
+                assert.ok(responseStartChannelCb.calledBefore(responseFinishChannelCb))
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
         })
 
         function isLocalServerRequest (args) {
@@ -237,7 +249,6 @@ describe('client', () => {
           // External tests use `url` (datadoghq); local server tests use 127.0.0.1 and never match it.
           if (requestUrl === url || isLocalServerRequest(ctx.args)) {
             ctx.shouldCollectBody = true
-            ctx.responseBodyCollection = responseBodyCollection
           }
         }
 
@@ -426,6 +437,58 @@ describe('client', () => {
           })
 
           describe('response body limits', () => {
+            const instrumentationTestSupportedMime = new Set([
+              'application/json',
+              'text/json',
+              'application/x-www-form-urlencoded',
+            ])
+
+            let instrumentationBodyTestMaxBytes = 1024 * 1024
+
+            function extractMimeTypeForInstrumentationTest (headerVal) {
+              if (headerVal == null) return null
+              const raw = Array.isArray(headerVal) ? headerVal[0] : headerVal
+              const base = String(raw).split(';')[0].trim().toLowerCase()
+              return base || null
+            }
+
+            function parseContentLengthForInstrumentationTest (headerVal) {
+              if (headerVal == null) return null
+              const value = Array.isArray(headerVal) ? headerVal[0] : headerVal
+              const parsed = Number.parseInt(String(value), 10)
+              if (!Number.isFinite(parsed) || parsed < 0) return null
+              return parsed
+            }
+
+            function planCtxBodyCollectionForInstrumentationTest ({ ctx, res }) {
+              if (!ctx.shouldCollectBody) return
+
+              const mime = extractMimeTypeForInstrumentationTest(res.headers?.['content-type'])
+              if (!mime || !instrumentationTestSupportedMime.has(mime)) {
+                delete ctx.shouldCollectBody
+                return
+              }
+
+              const declared = parseContentLengthForInstrumentationTest(res.headers?.['content-length'])
+              if (declared == null || declared === 0) {
+                delete ctx.shouldCollectBody
+                return
+              }
+
+              if (declared > instrumentationBodyTestMaxBytes) {
+                delete ctx.shouldCollectBody
+              }
+            }
+
+            beforeEach(() => {
+              instrumentationBodyTestMaxBytes = 1024 * 1024
+              responseStartChannel.subscribe(planCtxBodyCollectionForInstrumentationTest)
+            })
+
+            afterEach(() => {
+              responseStartChannel.unsubscribe(planCtxBodyCollectionForInstrumentationTest)
+            })
+
             it('ignores body when content-type is unsupported', (done) => {
               requestWithLocalServer({
                 responseHeaders: {
@@ -439,7 +502,6 @@ describe('client', () => {
                     try {
                       const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
                       assert.strictEqual(payload.body, null)
-                      assert.strictEqual(payload.responseBodyIgnoredReason, 'content_type_invalid')
                       server.close(() => done())
                     } catch (e) {
                       server.close(() => done(e))
@@ -461,7 +523,6 @@ describe('client', () => {
                     try {
                       const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
                       assert.strictEqual(payload.body, null)
-                      assert.strictEqual(payload.responseBodyIgnoredReason, 'content_length_missing')
                       server.close(() => done())
                     } catch (e) {
                       server.close(() => done(e))
@@ -484,7 +545,6 @@ describe('client', () => {
                     try {
                       const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
                       assert.strictEqual(payload.body, null)
-                      assert.strictEqual(payload.responseBodyIgnoredReason, 'content_length_missing')
                       server.close(() => done())
                     } catch (e) {
                       server.close(() => done(e))
@@ -495,7 +555,7 @@ describe('client', () => {
             })
 
             it('ignores body when content-length exceeds maxBytes', (done) => {
-              responseBodyCollection.maxBytes = 10
+              instrumentationBodyTestMaxBytes = 10
 
               requestWithLocalServer({
                 responseHeaders: {
@@ -509,7 +569,6 @@ describe('client', () => {
                     try {
                       const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
                       assert.strictEqual(payload.body, null)
-                      assert.strictEqual(payload.responseBodyIgnoredReason, 'content_length_too_big')
                       server.close(() => done())
                     } catch (e) {
                       server.close(() => done(e))

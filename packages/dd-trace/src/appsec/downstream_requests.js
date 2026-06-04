@@ -19,11 +19,12 @@ const SUPPORTED_RESPONSE_BODY_MIME_TYPES = new Set([
   'application/x-www-form-urlencoded',
 ])
 
-const RESPONSE_BODY_IGNORED_METRIC_SUFFIX = {
-  content_type_invalid: 'content_type_invalid',
-  content_length_missing: 'content_length_missing',
-  content_length_too_big: 'content_length_too_big',
-}
+const RESPONSE_BODY_IGNORED_TAG_CONTENT_TYPE =
+  '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
+const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_MISSING =
+  '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
+const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_TOO_BIG =
+  '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
 
 let config
 let samplingRate
@@ -31,7 +32,6 @@ let globalRequestCounter
 let bodyAnalysisCount
 let downstreamAnalysisCount
 let responseBodyIgnoredCount
-let redirectBodyCollectionDecisions
 
 function enable (_config) {
   config = _config
@@ -39,7 +39,6 @@ function enable (_config) {
   bodyAnalysisCount = new WeakMap()
   downstreamAnalysisCount = new WeakMap()
   responseBodyIgnoredCount = new WeakMap()
-  redirectBodyCollectionDecisions = new WeakMap()
 
   const bodyAnalysisSampleRate = config.appsec.apiSecurity?.downstreamBodyAnalysisSampleRate
   samplingRate = Math.min(Math.max(bodyAnalysisSampleRate, 0), 1)
@@ -57,49 +56,84 @@ function disable () {
   bodyAnalysisCount = null
   downstreamAnalysisCount = null
   responseBodyIgnoredCount = null
-  redirectBodyCollectionDecisions = null
 }
 
 /**
- * Check we have a stored redirect body collection decision for a given URL.
- * @param {import('http').IncomingMessage} req outgoing request.
- * @param {string} outgoingUrl the URL being requested.
- * @returns {boolean} the stored decision
+ * @param {string|string[]|undefined} contentLength raw content-length header value.
+ * @returns {number|null} parsed content length or null when invalid.
  */
-function consumeRedirectBodyCollectionDecision (req, outgoingUrl) {
-  const decisions = redirectBodyCollectionDecisions.get(req)
-  if (!decisions) return false
-
-  return decisions.delete(outgoingUrl)
-}
-
-/**
- * Stores a redirect body collection decision for a follow-up request.
- * @param {import('http').IncomingMessage} req outgoing request.
- * @param {string} redirectUrl the URL to redirect to.
- */
-function storeRedirectBodyCollectionDecision (req, redirectUrl) {
-  let decisions = redirectBodyCollectionDecisions.get(req)
-
-  if (!decisions) {
-    decisions = new Set()
-    redirectBodyCollectionDecisions.set(req, decisions)
+function parseContentLengthHeader (contentLength) {
+  if (contentLength == null) {
+    return null
   }
 
-  decisions.add(redirectUrl)
+  const value = Array.isArray(contentLength) ? contentLength[0] : contentLength
+  const parsed = Number.parseInt(String(value), 10)
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null
+  }
+
+  return parsed
 }
 
 /**
- * Determines whether the current downstream request/responses bodies should be sampled for analysis.
- * @param {import('http').IncomingMessage} req outgoing request.
- * @param {string} outgoingUrl the URL being requested (to check for redirect decisions).
- * @returns {boolean} true when the downstream response body should be captured.
+ * Increments a response-body-ignored counter on the service-entry span.
+ * @param {import('http').IncomingMessage} req originating request.
+ * @param {string} tag full `_dd.appsec.downstream_request.response_body_ignored.*` span tag.
  */
-function shouldSampleBody (req, outgoingUrl) {
-  // Check if there's a stored decision from a previous redirect
-  const storedDecision = consumeRedirectBodyCollectionDecision(req, outgoingUrl)
-  if (storedDecision) return true
+function recordResponseBodyIgnored (req, tag) {
+  const span = web.root(req)
+  if (!span) return
 
+  let counts = responseBodyIgnoredCount.get(req)
+  if (!counts) {
+    counts = {}
+    responseBodyIgnoredCount.set(req, counts)
+  }
+
+  const current = counts[tag] || 0
+  const next = current + 1
+  counts[tag] = next
+  span.setTag(tag, next)
+}
+
+/**
+ * @param {import('http').IncomingMessage} originatingReq inbound request (for metrics).
+ * @param {import('http').IncomingMessage} res downstream response.
+ * @returns {boolean} whether downstream response body should be collected for AppSec.
+ */
+function evaluateResponseBodyCollection (originatingReq, res) {
+  const maxBytes = config.appsec.apiSecurity.maxDownstreamBodyBytes
+
+  const mime = extractMimeType(res.headers?.['content-type'])
+  if (!mime || !SUPPORTED_RESPONSE_BODY_MIME_TYPES.has(mime)) {
+    recordResponseBodyIgnored(originatingReq, RESPONSE_BODY_IGNORED_TAG_CONTENT_TYPE)
+    return false
+  }
+
+  const declaredContentLength = parseContentLengthHeader(res.headers?.['content-length'])
+  if (declaredContentLength == null || declaredContentLength === 0) {
+    recordResponseBodyIgnored(originatingReq, RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_MISSING)
+    return false
+  }
+
+  if (declaredContentLength > maxBytes) {
+    recordResponseBodyIgnored(originatingReq, RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_TOO_BIG)
+    return false
+  }
+
+  return true
+}
+
+/**
+ * Probabilistic gate for downstream response body capture (rate + per-request cap).
+ * Only used from {@link planResponseBodyCollection}; does not increment {@link bodyAnalysisCount}.
+ * @param {import('http').IncomingMessage} req originating server request.
+ * @param {string} [_outgoingUrl] reserved for future use.
+ * @returns {boolean}
+ */
+function shouldSampleBody (req, _outgoingUrl) {
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
 
   const currentCount = bodyAnalysisCount.get(req) || 0
@@ -111,14 +145,44 @@ function shouldSampleBody (req, outgoingUrl) {
   // Replace 1000n with the accuraccy that we want to maintain
   const threshold = (UINT64_MAX * BigInt(Math.round(samplingRate * 1000))) / 1000n
 
-  const shouldCollectBody = hashed <= threshold
+  return hashed <= threshold
+}
 
-  // Track body analysis count if we're sampling the response body
-  if (shouldCollectBody) {
-    incrementBodyAnalysisCount(req)
+/**
+ * @param {import('http').IncomingMessage} res downstream HTTP response.
+ * @returns {boolean}
+ */
+function isRedirectResponse (res) {
+  const location = res.headers?.location || res.headers?.Location
+  return res.statusCode >= 300 && res.statusCode < 400 && !!location
+}
+
+/**
+ * Plans downstream response body capture on the instrumentation ctx when response headers arrive.
+ * Redirect responses (3xx + Location) are ignored; each outbound hop is evaluated independently
+ * when its own non-redirect response arrives.
+ * @param {import('http').IncomingMessage} originatingReq incoming server request.
+ * @param {string} _outgoingUrl downstream URL for this hop (unused; redirect hops exit earlier).
+ * @param {import('http').IncomingMessage} res downstream response.
+ * @param {object} ctx http client instrumentation context (mutated).
+ */
+function planResponseBodyCollection (originatingReq, _outgoingUrl, res, ctx) {
+  if (!config?.appsec?.apiSecurity) {
+    return
   }
 
-  return shouldCollectBody
+  if (isRedirectResponse(res)) {
+    return
+  }
+
+  if (!shouldSampleBody(originatingReq, _outgoingUrl)) {
+    return
+  }
+
+  if (evaluateResponseBodyCollection(originatingReq, res)) {
+    ctx.shouldCollectBody = true
+    incrementBodyAnalysisCount(originatingReq)
+  }
 }
 
 /**
@@ -157,25 +221,6 @@ function extractRequestData (ctx) {
   }
 
   return addresses
-}
-
-/**
- * Checks if a response is a redirect
- * @param {import('http').IncomingMessage} req incoming server request.
- * @param {import('http').IncomingMessage} res downstream response object.
- * @returns {boolean} is redirect.
- */
-function handleRedirectResponse (req, res) {
-  const isRedirect = res.statusCode >= 300 && res.statusCode < 400
-  const redirectLocation = res.headers?.location || ''
-
-  if (isRedirect && redirectLocation) {
-    // Store the body collection decision for the redirect target
-    storeRedirectBodyCollectionDecision(req, redirectLocation)
-    return true
-  }
-
-  return false
 }
 
 /**
@@ -222,42 +267,6 @@ function incrementDownstreamAnalysisCount (req) {
   if (span) {
     span.setTag('_dd.appsec.downstream_request', currentCount + 1)
   }
-}
-
-/**
- * Returns response body collection limits for downstream instrumentation.
- * @returns {{ maxBytes: number, supportedMimeTypes: Set<string> }}
- */
-function getResponseBodyCollectionConfig () {
-  return {
-    maxBytes: config?.appsec.apiSecurity.maxDownstreamBodyBytes,
-    supportedMimeTypes: SUPPORTED_RESPONSE_BODY_MIME_TYPES,
-  }
-}
-
-/**
- * Increments a response-body-ignored counter on the service-entry span.
- * @param {import('http').IncomingMessage} req originating request.
- * @param {string} reason ignore reason key.
- */
-function recordResponseBodyIgnored (req, reason) {
-  const suffix = RESPONSE_BODY_IGNORED_METRIC_SUFFIX[reason]
-  if (!suffix) return
-
-  const span = web.root(req)
-  if (!span) return
-
-  const tag = `_dd.appsec.downstream_request.response_body_ignored.${suffix}`
-  let counts = responseBodyIgnoredCount.get(req)
-  if (!counts) {
-    counts = {}
-    responseBodyIgnoredCount.set(req, counts)
-  }
-
-  const current = counts[tag] || 0
-  const next = current + 1
-  counts[tag] = next
-  span.setTag(tag, next)
 }
 
 /**
@@ -341,17 +350,8 @@ function extractMimeType (contentType) {
 module.exports = {
   enable,
   disable,
-  shouldSampleBody,
-  handleRedirectResponse,
+  planResponseBodyCollection,
   incrementDownstreamAnalysisCount,
-  getResponseBodyCollectionConfig,
-  recordResponseBodyIgnored,
   extractRequestData,
   extractResponseData,
-  // exports for tests
-  parseBody,
-  getMethod,
-  storeRedirectBodyCollectionDecision,
-  SUPPORTED_RESPONSE_BODY_MIME_TYPES,
-  RESPONSE_BODY_IGNORED_METRIC_SUFFIX,
 }

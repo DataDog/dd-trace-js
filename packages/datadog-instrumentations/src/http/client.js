@@ -14,6 +14,7 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
+const responseStartChannel = channel('apm:http:client:response:start')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
 addHook({ name: 'http' }, hookFn)
@@ -57,71 +58,6 @@ function normalizeCallback (inputOptions, callback, inputURL) {
 }
 
 /**
- * @param {string|null|undefined} contentType raw content-type header value.
- * @returns {string|null} lowercase mime type without parameters.
- */
-function extractMimeType (contentType) {
-  if (typeof contentType !== 'string') {
-    return null
-  }
-
-  return contentType.split(';', 1)[0].trim().toLowerCase()
-}
-
-/**
- * @param {string|string[]|undefined} contentLength raw content-length header value.
- * @returns {number|null} parsed content length or null when invalid.
- */
-function parseContentLength (contentLength) {
-  if (contentLength == null) {
-    return null
-  }
-
-  const value = Array.isArray(contentLength) ? contentLength[0] : contentLength
-  const parsed = Number.parseInt(String(value), 10)
-
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return null
-  }
-
-  return parsed
-}
-
-/**
- * @param {import('http').IncomingMessage} res downstream response.
- * @param {{ maxBytes: number, supportedMimeTypes: Set<string> }} responseBodyCollection collection limits.
- * @returns {{ collect: boolean, reason?: string }}
- */
-function evaluateResponseBodyCollection (res, responseBodyCollection) {
-  const { maxBytes, supportedMimeTypes } = responseBodyCollection
-
-  const mime = extractMimeType(res.headers?.['content-type'])
-  if (!mime || !supportedMimeTypes.has(mime)) {
-    return { collect: false, reason: 'content_type_invalid' }
-  }
-
-  const declaredContentLength = parseContentLength(res.headers?.['content-length'])
-
-  const evaluationResult = { collect: true, reason: undefined }
-
-  if (declaredContentLength == null || declaredContentLength === 0) {
-    evaluationResult.collect = false
-    evaluationResult.reason = 'content_length_missing'
-
-    return evaluationResult
-  }
-
-  if (declaredContentLength > maxBytes) {
-    evaluationResult.collect = false
-    evaluationResult.reason = 'content_length_too_big'
-
-    return evaluationResult
-  }
-
-  return evaluationResult
-}
-
-/**
  * Wires the downstream response so we can observe when the customer consumes
  * the body and when the stream finishes
  *
@@ -142,19 +78,12 @@ function setupResponseInstrumentation (ctx, res) {
   let dataListenerAdded = false
   let dataReadStarted = false
 
-  const { shouldCollectBody, responseBodyCollection } = ctx
+  const { shouldCollectBody } = ctx
 
   let bodyChunks = null
-  let responseBodyIgnoredReason
 
-  if (shouldCollectBody && responseBodyCollection) {
-    const evaluation = evaluateResponseBodyCollection(res, responseBodyCollection)
-
-    if (evaluation.collect) {
-      bodyChunks = []
-    } else {
-      responseBodyIgnoredReason = evaluation.reason
-    }
+  if (shouldCollectBody) {
+    bodyChunks = []
   }
 
   const collectChunk = chunk => {
@@ -222,7 +151,7 @@ function setupResponseInstrumentation (ctx, res) {
         : Buffer.concat(bodyChunks)
     }
 
-    responseFinishChannel.publish({ ctx, res, body, responseBodyIgnoredReason })
+    responseFinishChannel.publish({ ctx, res, body })
     cleanup()
   }
 
@@ -303,6 +232,10 @@ function patch (http, methodName) {
                 ctx.res = res
                 res.once('end', finish)
                 res.once(errorMonitor, finish)
+
+                if (responseStartChannel.hasSubscribers) {
+                  responseStartChannel.publish({ ctx, res })
+                }
 
                 const instrumentation = setupResponseInstrumentation(ctx, res)
 
