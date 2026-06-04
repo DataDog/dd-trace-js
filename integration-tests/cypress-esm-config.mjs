@@ -8,7 +8,10 @@ async function runCypress () {
   const results = await cypress.run({
     config: {
       defaultCommandTimeout: 1000,
-      retries: Number(process.env.CYPRESS_RETRIES || 0),
+      retries: {
+        runMode: Number(process.env.CYPRESS_RETRIES || 0),
+        openMode: 0,
+      },
       e2e: {
         testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false',
         setupNodeEvents (on, config) {
