@@ -12,6 +12,19 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
  */
 const DD_SPAN = Symbol('dd-mariadb-span')
 
+/**
+ * Symbol key used to stash the caller's async-context store on a mariadb
+ * `Command` instance at construction time, so the completion channels can
+ * restore it inside the user callback. Needed because v2's `_queryCallback`
+ * is an arrow function assigned to a `this` property; orchestrion's
+ * arrow-function wrap cannot recover call-site arity and misroutes
+ * `(sql, cb)` calls to the promise path, dropping `:asyncStart`. Binding
+ * at `Command.successEnd` / `Command.throwError` re-establishes context
+ * synchronously around the `this.resolve(...)` / `this.reject(...)` call
+ * that fires the user callback.
+ */
+const DD_PARENT_STORE = Symbol('dd-mariadb-parent-store')
+
 // ---------------------------------------------------------------------------
 // Method-level context-propagation plugins.
 //
@@ -192,6 +205,11 @@ class MariadbCommandPlugin extends DatabasePlugin {
 
     cmd.sql = this.injectDbmQuery(span, sql, service.name)
     cmd[DD_SPAN] = span
+    // Stash the caller's store so the completion plugins can re-enter it
+    // when the user callback fires (see DD_PARENT_STORE rationale above).
+    // At this point we are still synchronously inside the user-facing
+    // query method, so the active legacy store IS the caller's store.
+    cmd[DD_PARENT_STORE] = storage('legacy').getStore()
   }
 }
 
@@ -242,6 +260,23 @@ class MariadbCommandCompletionPlugin extends DatabasePlugin {
   }
 
   /**
+   * Re-enter the caller's async store for the duration of `successEnd` /
+   * `throwError`. This is where mariadb synchronously fires the user
+   * callback (`this.resolve(rows)` / `this.reject(err)`), so binding here
+   * is what restores the parent span context inside that callback.
+   * Required for the v2 callback path, where orchestrion's `_queryCallback`
+   * wrap cannot detect the user callback (arrow + variable arity) and
+   * therefore never emits `:asyncStart`. Idempotent for v3, which also
+   * restores context at its own `ConnectionCallback.query:asyncStart`.
+   *
+   * @param {object} ctx - Orchestrion channel context for the completion call
+   * @returns {object | undefined}
+   */
+  bindStart (ctx) {
+    return ctx.self?.[DD_PARENT_STORE]
+  }
+
+  /**
    * @param {object} ctx - Orchestrion channel context for the completion call
    */
   finishSpan (ctx) {
@@ -250,6 +285,7 @@ class MariadbCommandCompletionPlugin extends DatabasePlugin {
     const span = cmd[DD_SPAN]
     if (!span) return
     cmd[DD_SPAN] = undefined
+    cmd[DD_PARENT_STORE] = undefined
 
     if (this.constructor.isError && ctx.arguments && ctx.arguments[0]) {
       this.addError(ctx.arguments[0], span)
