@@ -2922,6 +2922,69 @@ describe(`cucumber@${version} commonJS`, () => {
         runTest(done, { isAttemptToFix: true, shouldFailSometimes: true, numRetries: 2 })
       })
 
+      it('disables manual Cucumber retries for attempt to fix tests', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          flaky_test_retries_enabled: false,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'Say attempt to fix')
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            const diagnosticTests = tests.map(test => ({
+              status: test.meta[TEST_STATUS],
+              isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+              isRetry: test.meta[TEST_IS_RETRY],
+              retryReason: test.meta[TEST_RETRY_REASON],
+            }))
+            assert.deepStrictEqual(diagnosticTests, [
+              {
+                status: 'fail',
+                isAttemptToFix: 'true',
+                isRetry: undefined,
+                retryReason: undefined,
+              },
+              {
+                status: 'fail',
+                isAttemptToFix: 'true',
+                isRetry: 'true',
+                retryReason: TEST_RETRY_REASON_TYPES.atf,
+              },
+              {
+                status: 'fail',
+                isAttemptToFix: 'true',
+                isRetry: 'true',
+                retryReason: TEST_RETRY_REASON_TYPES.atf,
+              },
+            ])
+
+            const lastAttempt = tests[tests.length - 1]
+            assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            assert.strictEqual(lastAttempt.meta[TEST_FINAL_STATUS], 'fail')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature --retry 1',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 1)
+      })
+
       it('does not attempt to fix tests if test management is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
