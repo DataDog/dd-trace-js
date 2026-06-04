@@ -151,9 +151,6 @@ function getRetriedTests (test, numRetries, tags) {
 }
 
 function disableFrameworkRetries (test) {
-  if (typeof test.retries === 'function') {
-    test.retries(0)
-  }
   test._retries = 0
 }
 
