@@ -1,6 +1,5 @@
 'use strict'
 
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
@@ -112,8 +111,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         service: this.serviceName(),
         integrationName: 'aws-sdk',
       }, ctx)
-
-      analyticsSampler.sample(span, this.config.measured)
 
       storage('legacy').run(ctx.currentStore, () => {
         this.requestInject(span, request)
