@@ -529,6 +529,56 @@ describe('end to end sdk integration tests', () => {
     })
   })
 
+  describe('with a processor that filters child spans using inherited parent tags', () => {
+    before(() => {
+      llmobs.registerProcessor(span => {
+        if (span.kind === 'embedding' && span.getTag('redact_child') === 'true') return null
+        return span
+      })
+    })
+
+    after(() => {
+      llmobs.deregisterProcessor()
+    })
+
+    it('drops a child span when the direct parent has a matching tag', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'parent' }, () => {
+        llmobs.annotate({ tags: { redact_child: 'true' } })
+        llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsSpans[0].name, 'parent')
+    })
+
+    it("does not drop the child when its own tag overrides the parent's", async () => {
+      llmobs.trace({ kind: 'workflow', name: 'parent' }, () => {
+        llmobs.annotate({ tags: { redact_child: 'true' } })
+        llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+          llmobs.annotate({ tags: { redact_child: 'false' } })
+        })
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      assert.equal(llmobsSpans.length, 2)
+      assert.ok(llmobsSpans.find(s => s.name === 'embed'))
+    })
+
+    it('does not drop when the matching tag only exists on a grandparent', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'grandparent' }, () => {
+        llmobs.annotate({ tags: { redact_child: 'true' } })
+        llmobs.trace({ kind: 'workflow', name: 'parent' }, () => {
+          llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {})
+        })
+      })
+
+      const { llmobsSpans } = await getEvents(3)
+      assert.equal(llmobsSpans.length, 3)
+      assert.ok(llmobsSpans.find(s => s.name === 'embed'))
+    })
+  })
+
   describe('prompts', () => {
     it('annotates an llm span with a prompt', async () => {
       llmobs.trace({ kind: 'llm', name: 'myLLM' }, () => {
