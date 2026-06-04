@@ -24,6 +24,7 @@ const {
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  isModifiedTest,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -190,6 +191,21 @@ function isTiaCoverageBackfillEnabled () {
 
 function getCoverageRootDir () {
   return config.repositoryRoot || process.cwd()
+}
+
+/**
+ * Checks if a serialized parallel worker test suite is modified.
+ *
+ * Mocha's parallel worker result serialization does not preserve custom `_ddIsModified`
+ * properties from worker Test objects, so the main process must infer modification from
+ * the suite path and the impacted-tests response.
+ *
+ * @param {string} testSuiteAbsolutePath
+ * @returns {boolean}
+ */
+function isModifiedTestSuite (testSuiteAbsolutePath) {
+  const testPath = getTestSuitePath(testSuiteAbsolutePath, getCoverageRootDir())
+  return isModifiedTest(testPath, null, null, config.modifiedFiles, 'mocha')
 }
 
 function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
@@ -1140,6 +1156,7 @@ addHook({
       .events
       .filter(event => event.eventName === 'test end')
       .map(event => event.data)
+    const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
@@ -1155,7 +1172,7 @@ addHook({
         }
       }
       // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (isNew || test._ddIsModified) {
+      if (isNew || isModified) {
         const testFullName = getTestFullName(test)
         const tests = efdTests[testFullName]
 

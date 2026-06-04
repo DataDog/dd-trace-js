@@ -6146,6 +6146,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
            })
          })`
       )
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/test-impacted-test/parallel-helper.js'),
+        `const assert = require('assert')
+         describe('impacted tests parallel helper', () => {
+           it('can pass normally', () => {
+             assert.strictEqual(1 + 2, 3)
+           })
+         })`
+      )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })
     })
@@ -6344,6 +6353,95 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             },
           }
         )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('preserves passing exit status for modified tests retried by EFD in parallel mode', async () => {
+        receiver.setKnownTests({
+          mocha: {
+            'ci-visibility/test-impacted-test/test-impacted-1.js': [
+              'impacted tests can pass normally',
+              'impacted tests can fail',
+              manualRetryTestName,
+            ],
+            'ci-visibility/test-impacted-test/parallel-helper.js': [
+              'impacted tests parallel helper can pass normally',
+            ],
+          },
+        })
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 5,
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --parallel --jobs 2 --retries 2 ' +
+          './ci-visibility/test-impacted-test/test-impacted-1.js ' +
+          './ci-visibility/test-impacted-test/parallel-helper.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              GITHUB_BASE_REF: '',
+              SET_RETRIES_INSIDE_TEST: '1',
+              SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS: '1',
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(tests.length, NUM_RETRIES + 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+              assert.ok(!(TEST_IS_NEW in tests[0].meta))
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+
+              const retriedTests = tests.slice(1)
+              retriedTests.forEach(test => {
+                assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+                assert.ok(!(TEST_IS_NEW in test.meta))
+                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              })
+
+              const externalRetries = tests.filter(
+                test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext
+              )
+              assert.strictEqual(externalRetries.length, 0)
+            },
+            { hardTimeout: 60_000 }
+          )
 
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
