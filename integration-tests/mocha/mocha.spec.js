@@ -2808,7 +2808,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
       const NUM_RETRIES_EFD = 2
       receiver.setSettings({
-        flaky_test_retries_enabled: false,
+        flaky_test_retries_enabled: true,
+        flaky_test_retries_count: 5,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
@@ -4961,7 +4962,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const testName = 'attempt to fix tests that fail first ' +
           'can attempt to fix a test that fails first then passes'
         receiver.setSettings({
-          flaky_test_retries_enabled: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 5,
           early_flake_detection: { enabled: false },
           test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES },
         })
@@ -6268,7 +6270,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
         })
         receiver.setSettings({
-          flaky_test_retries_enabled: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 5,
           impacted_tests_enabled: true,
           early_flake_detection: {
             enabled: true,

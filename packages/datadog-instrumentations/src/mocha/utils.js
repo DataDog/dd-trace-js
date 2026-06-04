@@ -140,6 +140,23 @@ function disableMochaRetries (test) {
   }
 }
 
+/**
+ * Checks whether a runnable belongs to a Datadog-managed clone retry feature.
+ * @param {{
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsModified?: boolean,
+ *   _ddIsNew?: boolean
+ * }} test
+ * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @returns {boolean}
+ */
+function isDatadogManagedRetryTest (test, config) {
+  return test._ddIsAttemptToFix ||
+    test._ddIsEfdRetry ||
+    (config.isEarlyFlakeDetectionEnabled && (test._ddIsNew || test._ddIsModified))
+}
+
 function retryTest (test, numRetries, tags, slowTestRetries) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
@@ -275,9 +292,6 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-    if (libraryConfig?.isFlakyTestRetriesEnabled) {
-      this.retries(libraryConfig?.flakyTestRetriesCount)
-    }
     // The reason why the wrapping logic is here is because we need to cover
     // `afterEach` and `beforeEach` hooks as well.
     // It can't be done in `getOnTestHandler` because it's only called for tests.
@@ -285,6 +299,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     const isAfterEach = this.parent._afterEach.includes(this)
 
     const isTestHook = isBeforeEach || isAfterEach
+    const test = isTestHook ? this.ctx.currentTest : this
 
     // we restore the original user defined function
     if (wrappedFunctions.has(this.fn)) {
@@ -293,8 +308,13 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       wrappedFunctions.delete(this.fn)
     }
 
+    if (isDatadogManagedRetryTest(test, libraryConfig)) {
+      disableMochaRetries(this)
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+      this.retries(libraryConfig.flakyTestRetriesCount)
+    }
+
     if (isTestHook || this.type === 'test') {
-      const test = isTestHook ? this.ctx.currentTest : this
       const ctx = getTestContext(test)
 
       if (ctx) {
