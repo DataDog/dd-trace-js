@@ -6124,11 +6124,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         `const assert = require('assert')
          let manualRetryAttempts = 0
          describe('impacted tests', () => {
-           it('can pass normally', () => {
+           it('can pass normally', function () {
+             if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
+               this.skip()
+             }
              assert.strictEqual(2 + 2, 3)
            })
 
-           it('can fail', () => {
+           it('can fail', function () {
+             if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
+               this.skip()
+             }
              assert.strictEqual(1 + 2, 4)
            })
 
@@ -6333,14 +6339,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               GITHUB_BASE_REF: '',
               MOCHA_RETRIES: '2',
               SET_RETRIES_INSIDE_TEST: '1',
+              SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS: '1',
+              SHOULD_CHECK_RESULTS: '1',
             },
           }
         )
 
-        await Promise.all([
+        const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
           eventsPromise,
         ])
+        assert.strictEqual(exitCode, 0)
       })
 
       it('should not be detected as impacted if disabled', async () => {

@@ -35,6 +35,7 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const efdTests = {}
 const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
@@ -235,6 +236,21 @@ function getTestFullName (test) {
   return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
 }
 
+/**
+ * Records every attempt for a test grouped by its full test name.
+ * @param {Record<string, Array<{ file: string, fullTitle: () => string }>>} testsByFullName
+ * @param {{ file: string, fullTitle: () => string }} test
+ * @returns {void}
+ */
+function recordTestAttempt (testsByFullName, test) {
+  const testFullName = getTestFullName(test)
+  if (testsByFullName[testFullName]) {
+    testsByFullName[testFullName].push(test)
+  } else {
+    testsByFullName[testFullName] = [test]
+  }
+}
+
 function getTestStatus (test) {
   if (test.isPending()) {
     return 'skip'
@@ -409,12 +425,10 @@ function getOnTestHandler (isMain) {
     }
     // We want to store the result of the new tests
     if (isNew) {
-      const testFullName = getTestFullName(test)
-      if (newTests[testFullName]) {
-        newTests[testFullName].push(test)
-      } else {
-        newTests[testFullName] = [test]
-      }
+      recordTestAttempt(newTests, test)
+    }
+    if (isNew || isModified) {
+      recordTestAttempt(efdTests, test)
     }
 
     if (!isAttemptToFix && isDisabled) {
@@ -877,6 +891,7 @@ module.exports = {
   testFileToSuiteCtx,
   getRunTestsWrapper,
   newTests,
+  efdTests,
   newTestsWithDynamicNames,
   testsQuarantined,
   testsAttemptToFix,

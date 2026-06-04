@@ -39,6 +39,7 @@ const {
   getOnPendingHandler,
   testFileToSuiteCtx,
   newTests,
+  efdTests,
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
@@ -252,12 +253,12 @@ function getOnEndHandler (isParallel) {
        * The rationale behind is the following: you may still be able to block your CI pipeline by gating
        * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
        */
-      for (const tests of Object.values(newTests)) {
-        const failingNewTests = tests.filter(test => isTestFailed(test))
-        const areAllNewTestsFailing = failingNewTests.length === tests.length
-        if (failingNewTests.length && !areAllNewTestsFailing) {
-          this.stats.failures -= failingNewTests.length
-          this.failures -= failingNewTests.length
+      for (const tests of Object.values(efdTests)) {
+        const failingEfdTests = tests.filter(test => isTestFailed(test))
+        const areAllEfdTestsFailing = failingEfdTests.length === tests.length
+        if (failingEfdTests.length && !areAllEfdTestsFailing) {
+          this.stats.failures -= failingEfdTests.length
+          this.failures -= failingEfdTests.length
         }
       }
     }
@@ -1142,7 +1143,8 @@ addHook({
 
     for (const test of tests) {
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
+      const isNew = config.isKnownTestsEnabled && isNewTest(test, config.knownTests)
+      if (isNew) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
@@ -1150,6 +1152,17 @@ addHook({
           tests.push(test)
         } else {
           newTests[testFullName] = [test]
+        }
+      }
+      // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (isNew || test._ddIsModified) {
+        const testFullName = getTestFullName(test)
+        const tests = efdTests[testFullName]
+
+        if (tests) {
+          tests.push(test)
+        } else {
+          efdTests[testFullName] = [test]
         }
       }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
