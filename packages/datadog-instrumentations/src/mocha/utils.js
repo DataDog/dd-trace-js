@@ -231,34 +231,26 @@ function getTestContext (test) {
 }
 
 /**
- * Copies Datadog test metadata from Mocha's original runnable to its native retry clone.
+ * Copies Test Management metadata from Mocha's original runnable to its native retry clone.
  * @param {{
  *   _retriedTest?: {
- *     _ddIsNew?: boolean,
- *     _ddIsEfdRetry?: boolean,
- *     _ddIsAttemptToFix?: boolean,
  *     _ddIsDisabled?: boolean,
- *     _ddIsQuarantined?: boolean,
- *     _ddIsModified?: boolean
+ *     _ddIsQuarantined?: boolean
  *   },
- *   _ddIsNew?: boolean,
- *   _ddIsEfdRetry?: boolean,
- *   _ddIsAttemptToFix?: boolean,
  *   _ddIsDisabled?: boolean,
- *   _ddIsQuarantined?: boolean,
- *   _ddIsModified?: boolean
+ *   _ddIsQuarantined?: boolean
  * }} test
  */
 function inheritDatadogPropertiesFromRetriedTest (test) {
   const retriedTest = test._retriedTest
   if (!retriedTest) return
 
-  test._ddIsNew = retriedTest._ddIsNew
-  test._ddIsEfdRetry = retriedTest._ddIsEfdRetry
-  test._ddIsAttemptToFix = retriedTest._ddIsAttemptToFix
-  test._ddIsDisabled = retriedTest._ddIsDisabled
-  test._ddIsQuarantined = retriedTest._ddIsQuarantined
-  test._ddIsModified = retriedTest._ddIsModified
+  if (retriedTest._ddIsDisabled) {
+    test._ddIsDisabled = true
+  }
+  if (retriedTest._ddIsQuarantined) {
+    test._ddIsQuarantined = true
+  }
 
   if (test._ddIsQuarantined && !test._ddIsAttemptToFix) {
     testsQuarantined.add(test)
@@ -413,10 +405,11 @@ function getFinalStatus ({
   // Note that intermediate executions DO NOT report a final status tag
 
   // Intermediate executions must not carry a final status, regardless of quarantine/disabled state
+  const isExternalIntermediateExecution = !isEfdRetry && !isAttemptToFix && !isFinalAttempt
   const isIntermediateExecution =
     (isEfdRetry && !isLastEfdRetry) ||
     (isAttemptToFix && !isLastAttemptToFix) ||
-    !isFinalAttempt
+    isExternalIntermediateExecution
   if (isIntermediateExecution) {
     return
   }
