@@ -564,17 +564,27 @@ function readArgs (args) {
 // Set a wrapped fieldResolver on the underlying arguments array so graphql.execute
 // uses our wrapped default resolver. Works for both v16 (single-object) and v15
 // (positional) call signatures.
+//
+// Constraints:
+//   - frozen/sealed args objects must not be modified (would throw TypeError)
+//   - caller-supplied fieldResolver must not be overwritten in-place
 function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
   if (!rawArgs || rawArgs.length === 0) return
 
   if (rawArgs.length === 1 && rawArgs[0] && typeof rawArgs[0] === 'object' && !Array.isArray(rawArgs[0])) {
-    rawArgs[0].fieldResolver = wrapResolve(rawArgs[0].fieldResolver || defaultFieldResolver)
+    const argsObj = rawArgs[0]
+    if (!Object.isExtensible(argsObj)) return
+    if (!Object.hasOwn(argsObj, 'fieldResolver')) {
+      argsObj.fieldResolver = wrapResolve(defaultFieldResolver)
+    }
     return
   }
 
-  // Positional call: pad the arguments array if the caller omitted fieldResolver.
-  rawArgs[6] = wrapResolve(rawArgs[6] || defaultFieldResolver)
-  if (rawArgs.length < 7) rawArgs.length = 7
+  // Positional call: only inject if caller omitted fieldResolver.
+  if (rawArgs[6] == null) {
+    rawArgs[6] = wrapResolve(defaultFieldResolver)
+    if (rawArgs.length < 7) rawArgs.length = 7
+  }
 }
 
 // Ensure contextValue is an object (required for WeakMap keying). Mutates rawArgs
