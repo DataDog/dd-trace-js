@@ -5432,7 +5432,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
 
       onlyLatestIt('can quarantine tests retried by Mocha', async () => {
-        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false,
+        })
 
         const testAssertionsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

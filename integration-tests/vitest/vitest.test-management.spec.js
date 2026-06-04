@@ -818,7 +818,10 @@ versions.forEach((version) => {
           })
 
           it('can quarantine tests retried by Vitest', async () => {
-            receiver.setSettings({ test_management: { enabled: true } })
+            receiver.setSettings({
+              test_management: { enabled: true },
+              flaky_test_retries_enabled: false,
+            })
 
             const testAssertionsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
