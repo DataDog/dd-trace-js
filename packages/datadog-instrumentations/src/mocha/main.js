@@ -1159,6 +1159,9 @@ addHook({
     const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
+      const testProperties = getTestProperties(test, config.testManagementTests)
+      const isAttemptToFix = config.isTestManagementTestsEnabled && testProperties.isAttemptToFix
+
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
       const isNew = config.isKnownTestsEnabled && isNewTest(test, config.knownTests)
       if (isNew) {
@@ -1172,7 +1175,7 @@ addHook({
         }
       }
       // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (isNew || isModified) {
+      if (!isAttemptToFix && (isNew || isModified)) {
         const testFullName = getTestFullName(test)
         const tests = efdTests[testFullName]
 
@@ -1183,7 +1186,6 @@ addHook({
         }
       }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-      const testProperties = getTestProperties(test, config.testManagementTests)
       if (config.isTestManagementTestsEnabled && testProperties.isQuarantined && !testProperties.isAttemptToFix) {
         testsQuarantined.add(test)
       }

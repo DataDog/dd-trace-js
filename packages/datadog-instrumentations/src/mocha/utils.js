@@ -158,6 +158,23 @@ function isDatadogManagedRetryTest (test, config) {
     (config.isEarlyFlakeDetectionEnabled && (test._ddIsNew || test._ddIsModified))
 }
 
+/**
+ * Checks whether a runnable belongs to an Early Flake Detection execution.
+ * @param {{
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsModified?: boolean,
+ *   _ddIsNew?: boolean
+ * }} test
+ * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @returns {boolean}
+ */
+function isEarlyFlakeDetectionTest (test, config) {
+  return !test._ddIsAttemptToFix &&
+    config.isEarlyFlakeDetectionEnabled &&
+    (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
+}
+
 function retryTest (test, numRetries, tags, slowTestRetries) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
@@ -427,7 +444,7 @@ function getOnTestHandler (isMain) {
     if (isNew) {
       recordTestAttempt(newTests, test)
     }
-    if (isNew || isModified) {
+    if (!isAttemptToFix && (isNew || isModified)) {
       recordTestAttempt(efdTests, test)
     }
 
@@ -497,8 +514,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   const testName = getTestFullName(test)
   if (
-    config.isEarlyFlakeDetectionEnabled &&
-    (test._ddIsNew || test._ddIsModified) &&
+    isEarlyFlakeDetectionTest(test, config) &&
     !test._ddIsEfdRetry &&
     !efdRetryCountByTestFullName.has(testName)
   ) {
@@ -520,8 +536,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   // Needed for the getFinalStatus call. This is because EFD does NOT tag as
   // EFD retry the first run of the test. It only tags as retries the clones
-  const isEfdRetry =
-    test._ddIsEfdRetry || ((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled)
+  const isEfdRetry = isEarlyFlakeDetectionTest(test, config)
 
   if (test._ddIsAttemptToFix && isLastAttempt) {
     if (testStatuses.includes('fail')) {

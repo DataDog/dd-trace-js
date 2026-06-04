@@ -6274,6 +6274,45 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ])
     }
 
+    const setAttemptToFixForManualRetryTest = () => {
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-impacted-test/test-impacted-1.js': {
+              tests: {
+                [manualRetryTestName]: {
+                  properties: {
+                    attempt_to_fix: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+    }
+
+    const assertAttemptToFixFailThenPass = (tests) => {
+      assert.strictEqual(tests.length, 3)
+      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+      assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+      assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+      assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+
+      const retriedTests = tests.slice(1)
+      retriedTests.forEach(test => {
+        assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+        assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+      })
+
+      assert.strictEqual(tests[tests.length - 1].meta[TEST_FINAL_STATUS], 'fail')
+      assert.strictEqual(tests[tests.length - 1].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+    }
+
     context('test is not new', () => {
       it('should be detected as impacted', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
@@ -6448,6 +6487,113 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           eventsPromise,
         ])
         assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('does not suppress attempt-to-fix failures for modified tests when EFD is enabled', async () => {
+        setAttemptToFixForManualRetryTest()
+        receiver.setSettings({
+          flaky_test_retries_enabled: false,
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES,
+            },
+            faulty_session_threshold: 100,
+          },
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assertAttemptToFixFailThenPass(tests)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './test-impacted-test/test-impacted-1',
+              ]),
+              GITHUB_BASE_REF: '',
+              SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS: '1',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      onlyLatestIt('does not suppress attempt-to-fix failures for modified tests in parallel mode', async () => {
+        setAttemptToFixForManualRetryTest()
+        receiver.setSettings({
+          flaky_test_retries_enabled: false,
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES,
+            },
+            faulty_session_threshold: 100,
+          },
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+        })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --parallel --jobs 2 ' +
+          './ci-visibility/test-impacted-test/test-impacted-1.js ' +
+          './ci-visibility/test-impacted-test/parallel-helper.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              GITHUB_BASE_REF: '',
+              SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS: '1',
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assertAttemptToFixFailThenPass(tests)
+            },
+            { hardTimeout: 60_000 }
+          )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 1)
       })
 
       it('should not be detected as impacted if disabled', async () => {
