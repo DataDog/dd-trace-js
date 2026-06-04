@@ -2859,6 +2859,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-early-flake-detection/fails-first-then-passes.js',
             ]),
             MOCHA_RETRIES: '2',
+            SET_RETRIES_INSIDE_TEST: '1',
             SHOULD_CHECK_RESULTS: '1',
           },
         }
@@ -5026,6 +5027,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 './test-management/test-attempt-to-fix-fails-first.js',
               ]),
               MOCHA_RETRIES: '2',
+              SET_RETRIES_INSIDE_TEST: '1',
               SHOULD_CHECK_RESULTS: '1',
             },
           }
@@ -6127,7 +6129,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
              assert.strictEqual(1 + 2, 4)
            })
 
-           it('fails first then passes after manual retry', () => {
+           it('fails first then passes after manual retry', function () {
+             if (process.env.SET_RETRIES_INSIDE_TEST) {
+               this.retries(2)
+             }
              assert.strictEqual(manualRetryAttempts++ > 0, true)
            })
          })`
@@ -6325,6 +6330,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ]),
               GITHUB_BASE_REF: '',
               MOCHA_RETRIES: '2',
+              SET_RETRIES_INSIDE_TEST: '1',
             },
           }
         )

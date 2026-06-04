@@ -310,6 +310,13 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
     if (isDatadogManagedRetryTest(test, libraryConfig)) {
       disableMochaRetries(this)
+      if (typeof args[0] === 'function') {
+        const onRunnableFinished = args[0]
+        args[0] = function () {
+          disableMochaRetries(test)
+          return onRunnableFinished.apply(this, arguments)
+        }
+      }
     } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
       this.retries(libraryConfig.flakyTestRetriesCount)
     }

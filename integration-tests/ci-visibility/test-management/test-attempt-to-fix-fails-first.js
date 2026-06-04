@@ -4,7 +4,10 @@ const assert = require('assert')
 let numAttempts = 0
 
 describe('attempt to fix tests that fail first', () => {
-  it('can attempt to fix a test that fails first then passes', () => {
+  it('can attempt to fix a test that fails first then passes', function () {
+    if (process.env.SET_RETRIES_INSIDE_TEST) {
+      this.retries(2)
+    }
     assert.strictEqual(numAttempts++ > 0, true)
   })
 })
