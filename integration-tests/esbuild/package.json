@@ -22,13 +22,13 @@
   "dependencies": {
     "@apollo/server": "5.5.1",
     "@koa/router": "15.6.0",
-    "@smithy/smithy-client": "4.13.5",
+    "@smithy/smithy-client": "4.13.6",
     "aws-sdk": "2.1693.0",
     "axios": "1.16.1",
     "esbuild": "^0.28.0",
     "express": "4.22.2",
     "knex": "3.2.10",
     "koa": "3.2.1",
-    "openai": "6.39.1"
+    "openai": "6.41.0"
   }
 }
