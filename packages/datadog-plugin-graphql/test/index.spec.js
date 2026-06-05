@@ -1922,7 +1922,8 @@ describe('Plugin', () => {
           }
         `
 
-        it('counts selection-set depth only, so a collapsed list field still resolves at its field depth', done => {
+        const v6DepthTest = DD_MAJOR >= 6 ? it : it.skip
+        v6DepthTest('counts selection-set depth only, so a collapsed list field resolves at its field depth', done => {
           // friends.*.name sits two fields deep (friends -> name); the list index
           // between them is an execution artifact, not a query level, so depth: 2
           // reaches it. address.civicNumber / address.street sit three fields deep
