@@ -12,6 +12,14 @@ experiments:
       - name: Run benchmarks
         run: run_microbenchmarks
         repo: Datadog/dd-trace-js
+        # Run the candidate's benchmark suite on the baseline checkout too, so a PR
+        # that adds or renames benchmarks still compares scenario-for-scenario.
+        # Benchmarks that fail on the older baseline source are tolerated unless the
+        # PR also changes non-benchmark source (enforced in runall.sh).
+        env:
+          BENCHMARKS_FROM: candidate
+          BENCHMARKS_PATH: benchmark/sirun
+          TOLERATE_NEW_BENCHMARK_FAILURES: "1"
         how_to_run_benchmarks: |
           cd ./benchmark/sirun
           ./runall.sh
