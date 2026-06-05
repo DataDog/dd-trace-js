@@ -17,6 +17,7 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
+const { createReleaseChangelog } = require('./changelog')
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
@@ -97,11 +98,20 @@ try {
     process.exit(0)
   }
 
-  // notesDiff is scoped to upperBoundSha so isMinor and release notes only reflect
+  // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
   // the capped commits actually included in the proposal, not deferred ones.
   // Excludes semver-major (gated behind a flag, not user-visible).
-  const notesDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
-  const isMinor = notesDiff.includes('SEMVER-MINOR')
+  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundSha}`)
+    .split('\n').filter(Boolean)
+  const notesEntries = []
+  for (const sha of notesShas) {
+    notesEntries.push({
+      sha,
+      subject: capture(`git show -s --format=%s ${sha}`),
+    })
+  }
+  const notes = createReleaseChangelog(notesEntries)
+  const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
@@ -181,9 +191,13 @@ try {
   start('Save release notes draft')
 
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, notesDiff)
+  fs.writeFileSync(notesFile, notes.markdown)
 
   pass(notesFile)
+
+  for (const warning of notes.warnings) {
+    log(`Warning: ${warning}`)
+  }
 
   if (flags.n) process.exit(0)
   if (!flags.y) {
