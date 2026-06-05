@@ -532,6 +532,15 @@ moduleTypes.forEach(({
         }
       )
 
+      childProcess.stdout?.on('data', (d) => {
+        testOutput += d.toString()
+        process.stdout.write(d)
+      })
+      childProcess.stderr?.on('data', (d) => {
+        testOutput += d.toString()
+        process.stderr.write(d)
+      })
+
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
           childProcess,
@@ -551,9 +560,6 @@ moduleTypes.forEach(({
               },
             })
           }, { hardTimeout: 20000 })
-      childProcess.stdout?.on('data', (d) => { testOutput += d })
-      childProcess.stderr?.on('data', (d) => { testOutput += d })
-
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         receiverPromise,
@@ -580,6 +586,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -681,6 +691,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
+
         const receiverPromise = receiver
           .gatherPayloadsUntilChildExit(
             childProcess,
@@ -736,6 +750,10 @@ moduleTypes.forEach(({
             }
           )
 
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
@@ -784,6 +802,15 @@ moduleTypes.forEach(({
         }
       )
 
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+        process.stdout.write(chunk)
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
+        process.stderr.write(chunk)
+      })
+
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
           childProcess,
@@ -809,13 +836,6 @@ moduleTypes.forEach(({
             error: event.content.meta?.[ERROR_MESSAGE],
           })), null, 2)}\nCypress output:\n${testOutput}`)
           }, { hardTimeout: 20000 })
-      childProcess.stdout?.on('data', chunk => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr?.on('data', chunk => {
-        testOutput += chunk.toString()
-      })
-
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         receiverPromise,
@@ -904,6 +924,15 @@ moduleTypes.forEach(({
           }
         )
 
+        childProcess.stdout?.on('data', (d) => {
+          testOutput += d.toString()
+          process.stdout.write(d)
+        })
+        childProcess.stderr?.on('data', (d) => {
+          testOutput += d.toString()
+          process.stderr.write(d)
+        })
+
         const receiverPromise = receiver
           .gatherPayloadsUntilChildExit(
             childProcess,
@@ -931,9 +960,6 @@ moduleTypes.forEach(({
                 },
               })
             }, { hardTimeout: 20000 })
-        childProcess.stdout?.on('data', (d) => { testOutput += d })
-        childProcess.stderr?.on('data', (d) => { testOutput += d })
-
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,
@@ -969,6 +995,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -1182,6 +1212,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -1716,6 +1750,10 @@ moduleTypes.forEach(({
             }
           )
 
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
@@ -1759,6 +1797,10 @@ moduleTypes.forEach(({
               },
             }
           )
+
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
 
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1807,6 +1849,10 @@ moduleTypes.forEach(({
             }
           )
 
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
@@ -1851,6 +1897,10 @@ moduleTypes.forEach(({
               },
             }
           )
+
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
 
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1958,6 +2008,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -2128,6 +2182,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
