@@ -88,6 +88,7 @@ for (const [product, scopes] of PRODUCTS) {
  * @typedef {object} CommitEntry
  * @property {string} sha
  * @property {string} subject
+ * @property {string} [author] Display string for the release contributor, e.g. `@handle`.
  */
 
 /**
@@ -113,6 +114,7 @@ for (const [product, scopes] of PRODUCTS) {
  */
 function createReleaseChangelog (entries) {
   const sections = new Map()
+  const contributors = new Set()
   const warnings = []
   let isMinor = false
 
@@ -121,6 +123,7 @@ function createReleaseChangelog (entries) {
 
     if (change.warning) warnings.push(change.warning)
     if (change.category === 'Features') isMinor = true
+    if (entry.author) contributors.add(entry.author)
 
     const section = sections.get(change.category)
     if (section) {
@@ -131,7 +134,7 @@ function createReleaseChangelog (entries) {
   }
 
   return {
-    markdown: renderSections(sections),
+    markdown: renderMarkdown(sections, contributors),
     isMinor,
     warnings,
   }
@@ -258,8 +261,9 @@ function sentenceCase (subject) {
 
 /**
  * @param {Map<string, Change[]>} sections
+ * @param {Set<string>} contributors
  */
-function renderSections (sections) {
+function renderMarkdown (sections, contributors) {
   const lines = []
 
   for (const category of CATEGORY_ORDER) {
@@ -273,7 +277,23 @@ function renderSections (sections) {
     lines.push('')
   }
 
+  if (contributors.size > 0) {
+    lines.push('Contributors')
+    for (const contributor of [...contributors].sort(compareContributors)) {
+      lines.push(`- ${contributor}`)
+    }
+    lines.push('')
+  }
+
   return lines.join('\n')
+}
+
+/**
+ * @param {string} a
+ * @param {string} b
+ */
+function compareContributors (a, b) {
+  return a.toLowerCase().localeCompare(b.toLowerCase())
 }
 
 /**

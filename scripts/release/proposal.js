@@ -103,11 +103,13 @@ try {
   // Excludes semver-major (gated behind a flag, not user-visible).
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundSha}`)
     .split('\n').filter(Boolean)
+  const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
   for (const sha of notesShas) {
     notesEntries.push({
       sha,
       subject: capture(`git show -s --format=%s ${sha}`),
+      author: contributorBySha.get(sha),
     })
   }
   const notes = createReleaseChangelog(notesEntries)
@@ -280,4 +282,34 @@ try {
   }
 } catch (e) {
   fail(e)
+}
+
+/**
+ * Map each release commit SHA to its GitHub contributor handle (`@login`), or
+ * the git author name when the commit author is not a GitHub user. Bot accounts
+ * (dependabot, github-actions) are skipped so the Contributors list stays human.
+ *
+ * @param {string} base Release branch the proposal lands on, e.g. `v5.x`.
+ * @param {string} head Upper-bound commit the proposal is capped at.
+ */
+function getContributorsBySha (base, head) {
+  const contributors = new Map()
+  const jq = '.commits[] | [.sha, (.author.login // ""), (.author.type // ""), .commit.author.name] | @tsv'
+
+  let output
+  try {
+    output = capture(`gh api "repos/DataDog/dd-trace-js/compare/${base}...${head}" --paginate --jq '${jq}'`)
+  } catch {
+    log('Warning: unable to fetch contributors from GitHub; skipping the Contributors section.')
+    return contributors
+  }
+
+  for (const line of output.split('\n')) {
+    if (!line) continue
+    const [sha, login, type, name] = line.split('\t')
+    if (type === 'Bot') continue
+    contributors.set(sha, login ? `@${login}` : name)
+  }
+
+  return contributors
 }

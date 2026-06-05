@@ -154,6 +154,42 @@ describe('release changelog', () => {
     ].join('\n'))
   })
 
+  it('lists unique contributors sorted case-insensitively after the change sections', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'feat(appsec): add thing (#1)', author: '@Zoe' },
+      { sha: 'abc002', subject: 'fix(profiling): fix thing (#2)', author: '@alice' },
+      { sha: 'abc003', subject: 'ci(release): tweak the workflow (#3)', author: '@Zoe' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      'Features',
+      '- <b>AppSec</b> Add thing #1',
+      '',
+      'Fixes',
+      '- <b>Profiling</b> Fix thing #2',
+      '',
+      '<b>Internal</b> (CI, Testing, Benchmarking)',
+      '- Tweak the workflow #3',
+      '',
+      'Contributors',
+      '- @alice',
+      '- @Zoe',
+      '',
+    ].join('\n'))
+  })
+
+  it('omits the Contributors section when no entry carries an author', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'fix(appsec): handle thing (#1)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      'Fixes',
+      '- <b>AppSec</b> Handle thing #1',
+      '',
+    ].join('\n'))
+  })
+
   it('treats unsupported conventional types as non-conventional', () => {
     const changelog = createReleaseChangelog([
       {
