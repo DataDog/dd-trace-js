@@ -29,7 +29,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     const handler = args[5]
 
     const meta = {
-      'aws.durable.replayed': String(durableExecutionMode === 'ReplayMode'),
+      'aws.durable.replayed': durableExecutionMode === 'ReplayMode' ? 'true' : 'false',
     }
     const arn = event?.DurableExecutionArn
     if (arn) {
