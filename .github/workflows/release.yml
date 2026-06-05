@@ -126,7 +126,7 @@ jobs:
           ref: gh-pages
       - name: Deploy
         run: |
-          rm -rf *
+          rm -rf ./*
           mv /tmp/out/* .
           git config user.name github-actions
           git config user.email github-actions@github.com
@@ -158,7 +158,7 @@ jobs:
         run: |
           content=$(tr '\n' ' ' < ./package.json)
           echo "json=$content" >> "$GITHUB_OUTPUT"
-      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+      - run: npm version --no-git-tag-version "${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}"
       - run: npm publish --tag dev
       - run: |
           git tag --force dev
