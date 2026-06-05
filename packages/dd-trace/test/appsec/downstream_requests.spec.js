@@ -261,6 +261,19 @@ describe('appsec downstream_requests', () => {
       }
     })
 
+    const urlencodedRes = () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+
+    function assertOmitsResponseBody (response, body) {
+      const addressesMap = downstream.extractResponseData(response, body)
+      assert.ok(
+        !Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_RESPONSE_BODY),
+        `Expected no body address, got keys: ${inspect(Object.keys(addressesMap))}`
+      )
+    }
+
     it('collects status and headers', () => {
       const addressesMap = downstream.extractResponseData(res)
 
@@ -278,15 +291,136 @@ describe('appsec downstream_requests', () => {
       assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { ok: true })
     })
 
-    it('parses urlencoded response body when provided', () => {
-      const urlRes = {
+    it('parses JSON strings', () => {
+      const jsonRes = {
         statusCode: 200,
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: { 'content-type': 'application/json' },
       }
-      const body = Buffer.from('a=1&b=2')
-      const addressesMap = downstream.extractResponseData(urlRes, body)
+      const addressesMap = downstream.extractResponseData(jsonRes, '{"foo":1}')
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { foo: 1 })
+    })
+
+    it('parses JSON buffers', () => {
+      const jsonRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+      }
+      const body = Buffer.from('{"foo":1}')
+      const addressesMap = downstream.extractResponseData(jsonRes, body)
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { foo: 1 })
+    })
+
+    it('handles text/json content type', () => {
+      const jsonRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'text/json' },
+      }
+      const addressesMap = downstream.extractResponseData(jsonRes, '{"foo":1}')
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { foo: 1 })
+    })
+
+    it('handles content-type with charset', () => {
+      const jsonRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      }
+      const addressesMap = downstream.extractResponseData(jsonRes, '{"foo":1}')
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { foo: 1 })
+    })
+
+    it('returns null for invalid JSON (omits response body address)', () => {
+      const jsonRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+      }
+      const addressesMap = downstream.extractResponseData(jsonRes, '{invalid}')
+
+      assert.ok(
+        !Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_RESPONSE_BODY),
+        `Expected no body address, got keys: ${inspect(Object.keys(addressesMap))}`
+      )
+    })
+
+    it('returns null for non-object JSON input (omits response body address)', () => {
+      const jsonRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+      }
+      const addressesMap = downstream.extractResponseData(jsonRes, 123)
+
+      assert.ok(
+        !Object.hasOwn(addressesMap, addresses.HTTP_OUTGOING_RESPONSE_BODY),
+        `Expected no body address, got keys: ${inspect(Object.keys(addressesMap))}`
+      )
+    })
+
+    it('parses urlencoded strings', () => {
+      const addressesMap = downstream.extractResponseData(urlencodedRes(), 'a=1&b=2')
 
       assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { a: '1', b: '2' })
+    })
+
+    it('parses urlencoded buffers', () => {
+      const body = Buffer.from('a=1&b=2')
+      const addressesMap = downstream.extractResponseData(urlencodedRes(), body)
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { a: '1', b: '2' })
+    })
+
+    it('handles multiple urlencoded values for the same key', () => {
+      const addressesMap = downstream.extractResponseData(urlencodedRes(), 'a=1&a=2&b=3')
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { a: ['1', '2'], b: '3' })
+    })
+
+    it('handles percent-encoded characters in urlencoded body', () => {
+      const addressesMap = downstream.extractResponseData(
+        urlencodedRes(),
+        'name=John%20Doe&city=New%20York'
+      )
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], {
+        name: 'John Doe',
+        city: 'New York',
+      })
+    })
+
+    it('handles empty values in urlencoded body', () => {
+      const addressesMap = downstream.extractResponseData(urlencodedRes(), 'a=&b=2')
+
+      assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY], { a: '', b: '2' })
+    })
+
+    it('omits response body for text/plain', () => {
+      assertOmitsResponseBody(
+        { statusCode: 200, headers: { 'content-type': 'text/plain' } },
+        'text'
+      )
+    })
+
+    it('omits response body for multipart/form-data', () => {
+      assertOmitsResponseBody(
+        { statusCode: 200, headers: { 'content-type': 'multipart/form-data' } },
+        'data'
+      )
+    })
+
+    it('omits response body for text/html', () => {
+      assertOmitsResponseBody(
+        { statusCode: 200, headers: { 'content-type': 'text/html' } },
+        '<html></html>'
+      )
+    })
+
+    it('omits response body for application/xml', () => {
+      assertOmitsResponseBody(
+        { statusCode: 200, headers: { 'content-type': 'application/xml' } },
+        '<xml></xml>'
+      )
     })
 
     it('omits body when not provided', () => {
