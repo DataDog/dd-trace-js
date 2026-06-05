@@ -11,6 +11,7 @@ import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
+import eslintPluginRegexp from 'eslint-plugin-regexp'
 import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
@@ -530,6 +531,79 @@ export default [
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
       'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
+    },
+  },
+  eslintPluginRegexp.configs['flat/recommended'],
+  {
+    name: 'dd-trace/regexp',
+    rules: {
+      // `recommended` already enables `no-super-linear-backtracking`, which supersedes the
+      // disabled `sonarjs/slow-regex`. The rules below were audited finding-by-finding and
+      // enabled because each remaining finding is a provably-safe simplification.
+      'regexp/no-dupe-disjunctions': 'error', // Dead/overlapping branches; 0 outside the gitleaks port.
+      'regexp/optimal-lookaround-quantifier': 'error', // Drops no-op trailing `.*` inside lookarounds.
+      'regexp/no-useless-flag': 'error', // Removes flags with no effect (e.g. `i` on case-invariant patterns).
+      'regexp/no-useless-lazy': 'error', // A lazy modifier on a constant quantifier is a no-op.
+      'regexp/prefer-predefined-assertion': 'error', // `\b` for the equivalent lookarounds we use.
+      'regexp/strict': 'error', // Flags genuinely ambiguous unescaped regex syntax.
+      'regexp/prefer-range': 'error', // 0 findings outside the gitleaks port.
+
+      // Enabled as errors so a new regex with poor matching performance is caught by
+      // default; each existing finding is opted out with an inline `eslint-disable` that
+      // names why its input is trusted or bounded. Findings in tests/scripts and the
+      // gitleaks port are scoped off in the blocks below instead. `no-super-linear-move`
+      // flags matching cost that `no-super-linear-backtracking` does not catch.
+      'regexp/no-super-linear-move': 'error',
+      'regexp/optimal-quantifier-concatenation': 'error', // Adjacent quantifiers that can be merged.
+      'regexp/no-misleading-capturing-group': 'error', // Group captures fewer chars than its pattern suggests.
+
+      // --- Audited, deliberately off (counts are findings on master) ---
+      // Blind to numeric `match[n]` extraction (used heavily here), so it reports false
+      // "unused" groups in propagation and stack-trace parsers.
+      'regexp/no-unused-capturing-group': 'off', // 21 findings, mostly false positives here.
+      'regexp/negation': 'off', // 2 findings. Cosmetic; explicit negated classes read clearer.
+
+      // --- Deferred: purely cosmetic, large mechanical diff across parsers/fixtures ---
+      // These rewrite deliberately spec-shaped regexes (propagation, SQL/obfuscation,
+      // CI parsers) for zero correctness gain. Not worth the review/backport churn now.
+      'regexp/prefer-character-class': 'off', // 246 errors.
+      'regexp/no-useless-non-capturing-group': 'off', // 162 errors.
+      'regexp/prefer-w': 'off', // 154 errors. `\w` also matches `_`; explicit classes read clearer in parsers.
+      'regexp/use-ignore-case': 'off', // 25 errors. Changes the matched set; audit before flipping.
+      'regexp/prefer-d': 'off', // 21 errors.
+      'regexp/sort-flags': 'off', // 15 errors.
+    },
+  },
+  {
+    // The hardcoded-secret / hardcoded-password analyzers are a byte-for-byte port of
+    // the upstream gitleaks ruleset (rule ids, the `(?:[\s|']|[\s|"])` shape). They must
+    // stay verbatim to match canonical detection and re-sync cleanly, so the structural
+    // and cosmetic regexp rules that only fire there are disabled, not "fixed". Upstream
+    // gitleaks has since collapsed that separator to `[\s'"]{0,3}`; re-syncing from a
+    // current release is what drops these findings, not a local rewrite.
+    name: 'dd-trace/regexp-generated',
+    files: [
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-secret-rules.js',
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-password-rules.js',
+    ],
+    rules: {
+      'regexp/no-dupe-disjunctions': 'off',
+      'regexp/prefer-range': 'off',
+      'regexp/optimal-quantifier-concatenation': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/regexp-trusted-input',
+    // Matching-performance and quantifier/capture nits on trusted build/test/CI input
+    // (mocha stacks, fixture strings, script glue) are low-value here. Keep these
+    // detectors focused on production runtime code; production findings opt out inline
+    // at the call site.
+    files: [...TEST_FILES, 'scripts/**/*.js', 'scripts/**/*.mjs', 'benchmark/**/*.js', 'benchmark/**/*.mjs'],
+    rules: {
+      'regexp/no-super-linear-backtracking': 'off',
+      'regexp/no-super-linear-move': 'off',
+      'regexp/optimal-quantifier-concatenation': 'off',
+      'regexp/no-misleading-capturing-group': 'off',
     },
   },
   {

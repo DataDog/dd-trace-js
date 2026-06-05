@@ -2,6 +2,7 @@
 
 const log = require('../../../../../log')
 
+// eslint-disable-next-line regexp/no-super-linear-move -- IAST evidence redaction; opt-in, bounded input.
 const COMMAND_PATTERN = String.raw`^(?:\s*(?:sudo|doas)\s+)?\b\S+\b\s(.*)`
 const pattern = new RegExp(COMMAND_PATTERN, 'gmi')
 

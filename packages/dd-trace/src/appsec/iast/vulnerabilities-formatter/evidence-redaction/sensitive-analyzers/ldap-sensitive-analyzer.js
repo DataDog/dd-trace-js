@@ -2,8 +2,10 @@
 
 const log = require('../../../../../log')
 
+/* eslint-disable-next-line regexp/no-super-linear-backtracking, regexp/no-super-linear-move --
+   IAST opt-in; fix needs AppSec specs. TODO(BridgeAR) */
 const LDAP_PATTERN = String.raw`\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\)`
-const pattern = new RegExp(LDAP_PATTERN, 'gmi')
+const pattern = new RegExp(LDAP_PATTERN, 'g')
 
 module.exports = function extractSensitiveRanges (evidence) {
   try {

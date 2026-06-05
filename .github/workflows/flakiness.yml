@@ -41,9 +41,9 @@ jobs:
           version: active
       - run: yarn install --frozen-lockfile --ignore-scripts
       - run: node scripts/flakiness.mjs
-      - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
+      - run: cat flakiness.md >> "$GITHUB_STEP_SUMMARY"
       - id: slack
-        run: echo "report=$(cat flakiness.txt)" >> $GITHUB_OUTPUT
+        run: echo "report=$(cat flakiness.txt)" >> "$GITHUB_OUTPUT"
       - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
         if: github.event_name == 'schedule'
         with:

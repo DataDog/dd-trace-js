@@ -139,7 +139,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
-        assert.match(builtFile, /\/\* js test \*\//m)
+        assert.match(builtFile, /\/\* js test \*\//)
       })
 
       it('should contain the definitions when esm is inferred from outfile', () => {
@@ -148,7 +148,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
-        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should contain the definitions when esm is inferred from format', () => {
@@ -157,7 +157,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
-        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should contain the definitions when format is inferred from out extension', () => {
@@ -166,7 +166,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./basic-test.mjs').toString()
-        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should not contain the definitions when no esm is specified', () => {
@@ -175,7 +175,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.js').toString()
-        assert.doesNotMatch(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.doesNotMatch(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should not crash when it is already patched using global', () => {
