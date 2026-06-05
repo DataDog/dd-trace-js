@@ -46,6 +46,8 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
     let cwd, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
     this.timeout(80000)
@@ -85,8 +87,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('active test span', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('can grab the test span and add tags', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -147,8 +147,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       const getTestAssertions = (receiver, { isRedirecting }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -240,8 +238,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('check retries tagging', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('does not send attempt to fix tags if test is retried and not attempt to fix', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -287,8 +283,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('playwright early bail', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('reports tests that did not run', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {

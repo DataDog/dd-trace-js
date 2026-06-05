@@ -47,6 +47,8 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
     let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
@@ -77,8 +79,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('early flake detection', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('retries new tests', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {

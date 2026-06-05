@@ -1181,10 +1181,14 @@ function deepFreeze (value) {
 }
 
 /**
- * Wraps Mocha's `it` so that all registered test scenarios start concurrently
- * when the first `it` body executes (i.e. after `before()` hooks). Each
- * subsequent `it` body returns its already-in-flight promise, giving Mocha
- * individual named pass/fail results while the subprocesses run in parallel.
+ * Wraps Mocha's `it` so that all tests in the same suite start concurrently
+ * when the first body executes (i.e. after `before()` hooks). Each subsequent
+ * body returns its already-in-flight promise, giving Mocha individual named
+ * pass/fail results while the subprocesses run in parallel.
+ *
+ * Tests are grouped by Mocha suite automatically, so a single instance can be
+ * shared across multiple `context()` blocks — each suite's tests run in
+ * parallel with each other while suites themselves remain sequential.
  *
  * If Mocha retries a test whose promise already settled, only that scenario's
  * function is restarted.
@@ -1197,34 +1201,41 @@ function deepFreeze (value) {
  * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
  */
 function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
-  const scheduled = []
-  let launched = false
-  let active = 0
-  const waiting = []
+  // Keyed by Mocha Suite object; populated lazily on first run within each suite.
+  const suiteStates = new Map()
+  // All registered entries, looked up by test title when a suite first starts.
+  const entriesByTitle = new Map()
 
-  function startNow (entry, resolve, reject) {
+  function getState (suite) {
+    if (!suiteStates.has(suite)) {
+      suiteStates.set(suite, { launched: false, active: 0, waiting: [] })
+    }
+    return suiteStates.get(suite)
+  }
+
+  function startNow (entry, state, resolve, reject) {
     entry.done = false
     entry.rejected = false
-    active++
+    state.active++
     Promise.resolve(entry.fn()).then(
-      (val) => { entry.done = true; active--; flush(); resolve(val) },
-      (err) => { entry.done = true; entry.rejected = true; active--; flush(); reject(err) }
+      (val) => { entry.done = true; state.active--; flush(state); resolve(val) },
+      (err) => { entry.done = true; entry.rejected = true; state.active--; flush(state); reject(err) }
     )
   }
 
-  function flush () {
-    while (waiting.length > 0 && active < concurrency) {
-      const { entry, resolve, reject } = waiting.shift()
-      startNow(entry, resolve, reject)
+  function flush (state) {
+    while (state.waiting.length > 0 && state.active < concurrency) {
+      const { entry, resolve, reject } = state.waiting.shift()
+      startNow(entry, state, resolve, reject)
     }
   }
 
-  function schedule (entry) {
+  function schedule (entry, state) {
     entry.promise = new Promise((resolve, reject) => {
-      if (active < concurrency) {
-        startNow(entry, resolve, reject)
+      if (state.active < concurrency) {
+        startNow(entry, state, resolve, reject)
       } else {
-        waiting.push({ entry, resolve, reject })
+        state.waiting.push({ entry, resolve, reject })
       }
     })
   }
@@ -1232,20 +1243,23 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
   return function it (name, fn, opts = {}) {
     const wrappedFn = useReceiver ? withReceiver(fn) : fn
     const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
-    scheduled.push(entry)
+    entriesByTitle.set(name, entry)
 
     mochaIt(name, function () {
       if (opts.retries !== undefined) {
         this.retries(opts.retries)
       }
-      if (!launched) {
-        launched = true
-        for (const e of scheduled) {
-          schedule(e)
+      const suite = this.test.parent
+      const state = getState(suite)
+      if (!state.launched) {
+        state.launched = true
+        for (const test of suite.tests) {
+          const e = entriesByTitle.get(test.title)
+          if (e) schedule(e, state)
         }
       } else if (entry.done && entry.rejected) {
         // Mocha is retrying a failed test — restart only this scenario
-        schedule(entry)
+        schedule(entry, state)
       }
       // If done && !rejected: already passed, return resolved promise
       // If !done: still running or queued, return pending promise

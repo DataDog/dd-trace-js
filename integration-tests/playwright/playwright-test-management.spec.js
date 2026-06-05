@@ -114,6 +114,8 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
     let cwd, webAppPort, webAppServer
 
     this.timeout(120000)
@@ -144,8 +146,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('known tests without early flake detection', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('detects new tests without retrying them', async (receiver, run) => {
         receiver.setSettings({
           known_tests_enabled: true,
@@ -213,8 +213,6 @@ versions.forEach((version) => {
       const ATTEMPT_TO_FIX_NUM_RETRIES = 3
 
       context('attempt to fix', () => {
-        const it = createParallelIt(global.it, { withReceiver: true })
-
         const getTestAssertions = (receiver, {
           isAttemptingToFix,
           shouldAlwaysPass,
@@ -641,8 +639,6 @@ versions.forEach((version) => {
       })
 
       context('disabled', () => {
-        const it = createParallelIt(global.it, { withReceiver: true })
-
         const getTestAssertions = (receiver, isDisabling) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -759,8 +755,6 @@ versions.forEach((version) => {
       })
 
       context('quarantine', () => {
-        const it = createParallelIt(global.it, { withReceiver: true })
-
         const getTestAssertions = (receiver, { isQuarantining, hasFlakyTests }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -902,8 +896,6 @@ versions.forEach((version) => {
           )
         })
       })
-
-      const it = createParallelIt(global.it, { withReceiver: true })
 
       it('does not crash if the request to get test management tests fails', async (receiver, run) => {
         let testOutput = ''

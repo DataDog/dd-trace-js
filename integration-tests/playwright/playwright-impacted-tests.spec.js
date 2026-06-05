@@ -53,6 +53,8 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
     let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
@@ -217,8 +219,6 @@ versions.forEach((version) => {
       }
 
       context('test is not new', () => {
-        const it = createParallelIt(global.it, { withReceiver: true })
-
         it('should be detected as impacted', async (receiver) => {
           receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
           receiver.setSettings({ impacted_tests_enabled: true })
@@ -244,8 +244,6 @@ versions.forEach((version) => {
       })
 
       context('test is new', () => {
-        const it = createParallelIt(global.it, { withReceiver: true })
-
         it('should be retried and marked both as new and modified', async (receiver) => {
           receiver.setKnownTests({
             playwright: {},

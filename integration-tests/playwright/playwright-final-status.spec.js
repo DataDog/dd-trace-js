@@ -42,6 +42,8 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
     let cwd, webAppPort, webAppServer
 
     // eslint-disable-next-line sonarjs/stable-tests -- chromium download is flaky in CI
@@ -75,8 +77,6 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('final status tag', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('sets final_status tag to test status on regular tests without retry features', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,

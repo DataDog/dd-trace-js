@@ -62,6 +62,8 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
     let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
@@ -96,8 +98,6 @@ versions.forEach((version) => {
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
         context('error tags', () => {
-          const it = createParallelIt(global.it, { withReceiver: true })
-
           it(
             'tags session and children with _dd.ci.library_configuration_error.settings when settings fail 4xx',
             async (receiver, run) => {
@@ -232,8 +232,6 @@ versions.forEach((version) => {
               })
           })
         })
-
-        const it = createParallelIt(global.it, { withReceiver: true })
 
         it('can run and report tests', async (receiver, run) => {
           const envVars = reportMethod === 'agentless'
@@ -389,23 +387,20 @@ versions.forEach((version) => {
       })
     })
 
-    {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
-      it('works when tests are compiled to a different location', async (receiver, run) => {
-        let testOutput = ''
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testEvents = events.filter(event => event.type === 'test')
-            const expectedResources = [
-              'playwright-tests-ts/one-test.js.playwright should work with passing tests',
-              'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
-            ]
-            const actualResources = testEvents.map(test => test.content.resource).sort()
-            for (const expectedResource of expectedResources) {
-              assert.ok(
-                actualResources.includes(expectedResource),
+    it('works when tests are compiled to a different location', async (receiver, run) => {
+      let testOutput = ''
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event => event.type === 'test')
+          const expectedResources = [
+            'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+            'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
+          ]
+          const actualResources = testEvents.map(test => test.content.resource).sort()
+          for (const expectedResource of expectedResources) {
+            assert.ok(
+              actualResources.includes(expectedResource),
                 `expected ${expectedResource}, got events: ${JSON.stringify(events.map(event => ({
                   type: event.type,
                   resource: event.content.resource,
@@ -414,161 +409,158 @@ versions.forEach((version) => {
                   status: event.content.meta?.[TEST_STATUS],
                   error: event.content.meta?.[ERROR_MESSAGE],
                 })), null, 2)}\nPlaywright output:\n${testOutput}`
-              )
-            }
-            assert.deepStrictEqual(
-              testEvents
-                .map(test => ({
-                  resource: test.content.resource,
-                  sourceFile: test.content.meta[TEST_SOURCE_FILE],
-                  sourceStart: test.content.metrics[TEST_SOURCE_START],
-                }))
-                .sort((left, right) => left.resource.localeCompare(right.resource)),
-              [
-                {
-                  resource: 'playwright-tests-ts/one-test.js.playwright should work with passing tests',
-                  sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
-                  sourceStart: 9,
-                },
-                {
-                  resource: 'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
-                  sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
-                  sourceStart: 14,
-                },
-              ]
             )
-            assert.match(testOutput, /1 passed/)
-            assert.match(testOutput, /1 skipped/)
-            assert.doesNotMatch(testOutput, /TypeError/)
-          }, 25000)
-        const proc = run(
-          'node ./node_modules/typescript/bin/tsc' +
+          }
+          assert.deepStrictEqual(
+            testEvents
+              .map(test => ({
+                resource: test.content.resource,
+                sourceFile: test.content.meta[TEST_SOURCE_FILE],
+                sourceStart: test.content.metrics[TEST_SOURCE_START],
+              }))
+              .sort((left, right) => left.resource.localeCompare(right.resource)),
+            [
+              {
+                resource: 'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+                sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+                sourceStart: 9,
+              },
+              {
+                resource: 'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
+                sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+                sourceStart: 14,
+              },
+            ]
+          )
+          assert.match(testOutput, /1 passed/)
+          assert.match(testOutput, /1 skipped/)
+          assert.doesNotMatch(testOutput, /TypeError/)
+        }, 25000)
+      const proc = run(
+        'node ./node_modules/typescript/bin/tsc' +
           '&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PW_RUNNER_DEBUG: '1',
+          },
+        }
+      )
+      proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      await Promise.all([receiverPromise, once(proc, 'exit')])
+    }, { retries: 1 })
+
+    it('works when before all fails and step durations are negative', async (receiver, run) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+          const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+          assertObjectContains(testSuiteEvent.meta, {
+            [TEST_STATUS]: 'fail',
+          })
+          assertObjectContains(testSessionEvent.meta, {
+            [TEST_STATUS]: 'fail',
+          })
+          assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
+          assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
+        })
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-error',
+            TEST_TIMEOUT: '3000',
+          },
+        }
+      )
+      await Promise.all([receiverPromise, once(proc, 'exit')])
+    })
+
+    it('does not crash when maxFailures=1 and there is an error', async (receiver, run) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event => event.type === 'test')
+          assertObjectContains(testEvents.map(test => test.content.resource), [
+            'failing-test-and-another-test.js.should work with failing tests',
+            'failing-test-and-another-test.js.does not crash afterwards',
+          ])
+        })
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            MAX_FAILURES: '1',
+            TEST_DIR: './ci-visibility/playwright-tests-max-failures',
+          },
+        }
+      )
+      await Promise.all([receiverPromise, once(proc, 'exit')])
+    })
+
+    it(
+      'correctly calculates test code owners when working directory is not repository root',
+      async (receiver, run) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
+            const testSuite = events.find(event => event.type === 'test_suite_end').content
+            // The test is in a subproject
+            assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+            assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          })
+        const proc = run(
+          '../../node_modules/.bin/playwright test',
           {
-            cwd,
+            cwd: `${cwd}/ci-visibility/subproject`,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               PW_RUNNER_DEBUG: '1',
+              TEST_DIR: '.',
             },
           }
         )
-        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
-        await Promise.all([receiverPromise, once(proc, 'exit')])
-      }, { retries: 1 })
+        await Promise.all([eventsPromise, once(proc, 'exit')])
+      }
+    )
 
-      it('works when before all fails and step durations are negative', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assertObjectContains(testSuiteEvent.meta, {
-              [TEST_STATUS]: 'fail',
-            })
-            assertObjectContains(testSessionEvent.meta, {
-              [TEST_STATUS]: 'fail',
-            })
-            assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
-            assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async (receiver, run) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          tests.forEach(test => {
+            assert.strictEqual(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
           })
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-error',
-              TEST_TIMEOUT: '3000',
-            },
-          }
-        )
-        await Promise.all([receiverPromise, once(proc, 'exit')])
-      })
-
-      it('does not crash when maxFailures=1 and there is an error', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testEvents = events.filter(event => event.type === 'test')
-            assertObjectContains(testEvents.map(test => test.content.resource), [
-              'failing-test-and-another-test.js.should work with failing tests',
-              'failing-test-and-another-test.js.does not crash afterwards',
-            ])
-          })
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              MAX_FAILURES: '1',
-              TEST_DIR: './ci-visibility/playwright-tests-max-failures',
-            },
-          }
-        )
-        await Promise.all([receiverPromise, once(proc, 'exit')])
-      })
-
-      it(
-        'correctly calculates test code owners when working directory is not repository root',
-        async (receiver, run) => {
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const test = events.find(event => event.type === 'test').content
-              const testSuite = events.find(event => event.type === 'test_suite_end').content
-              // The test is in a subproject
-              assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
-              assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-              assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-            })
-          const proc = run(
-            '../../node_modules/.bin/playwright test',
-            {
-              cwd: `${cwd}/ci-visibility/subproject`,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                PW_RUNNER_DEBUG: '1',
-                TEST_DIR: '.',
-              },
-            }
-          )
-          await Promise.all([eventsPromise, once(proc, 'exit')])
+        })
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_SERVICE: 'my-service',
+          },
         }
       )
-
-      it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            tests.forEach(test => {
-              assert.strictEqual(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
-            })
-          })
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_SERVICE: 'my-service',
-            },
-          }
-        )
-        await Promise.all([receiverPromise, once(proc, 'exit')])
-      })
-    }
+      await Promise.all([receiverPromise, once(proc, 'exit')])
+    })
 
     context('libraries capabilities', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('adds capabilities to tests', async (receiver, run) => {
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -615,8 +607,6 @@ versions.forEach((version) => {
     })
 
     context('run session status', () => {
-      const it = createParallelIt(global.it, { withReceiver: true })
-
       it('session status is not changed if it fails before running any test', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -645,8 +635,6 @@ versions.forEach((version) => {
 
     fullyParallelConfigValue.forEach((parallelism) => {
       context(`with fullyParallel=${parallelism}`, () => {
-        const it = createParallelIt(global.it, { withReceiver: true })
-
         /**
          * Due to a bug in the playwright plugin, durations of test suites that included skipped tests
          * were not reported correctly, as they dragged out until the end of the test session.
