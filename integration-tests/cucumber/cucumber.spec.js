@@ -607,6 +607,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
                 DD_TEST_DELAY_CUCUMBER_WORKER_MESSAGES_MS: '100',
                 DD_TEST_SESSION_NAME: 'my-test-session',
+                NODE_OPTIONS: '-r ./ci-visibility/cucumber-worker-message-delay.js -r dd-trace/ci/init',
                 DD_SERVICE: undefined,
               },
             }
