@@ -499,6 +499,107 @@ describe('Config', () => {
     })
   })
 
+  describe('sensitive configurations excluded from telemetry', () => {
+    const SENTINELS = {
+      DD_API_KEY: 'SENTINEL_DD_API_KEY',
+      DD_APP_KEY: 'SENTINEL_DD_APP_KEY',
+      OTEL_EXPORTER_OTLP_HEADERS: 'dd-api-key=SENTINEL_OTLP_BASE',
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'dd-api-key=SENTINEL_OTLP_TRACES',
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'dd-api-key=SENTINEL_OTLP_METRICS',
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: 'dd-api-key=SENTINEL_OTLP_LOGS',
+    }
+
+    function telemetryEntries () {
+      sinon.assert.calledOnce(updateConfig)
+      return updateConfig.getCall(0).args[0]
+    }
+
+    it('should not report any sensitive value in the telemetry configuration array', () => {
+      Object.assign(process.env, SENTINELS)
+
+      getConfig()
+
+      const entries = telemetryEntries()
+      const sentinelValues = Object.values(SENTINELS).map(value => value.split('=').pop())
+      for (const entry of entries) {
+        const value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)
+        if (value == null) continue
+        for (const sentinel of sentinelValues) {
+          assert.ok(
+            !value.includes(sentinel),
+            `Expected telemetry entry ${entry.name} (${entry.origin}) not to contain ${sentinel}, got ${value}`
+          )
+        }
+      }
+    })
+
+    it('should omit sensitive configuration names entirely from telemetry', () => {
+      Object.assign(process.env, SENTINELS)
+
+      getConfig()
+
+      const reportedNames = new Set(telemetryEntries().map(entry => entry.name))
+      for (const name of Object.keys(SENTINELS)) {
+        assert.ok(!reportedNames.has(name), `Expected ${name} to be omitted from telemetry`)
+      }
+    })
+
+    it('should still report non-sensitive exporter configurations', () => {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = SENTINELS.OTEL_EXPORTER_OTLP_HEADERS
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
+      process.env.OTEL_EXPORTER_OTLP_TIMEOUT = '1234'
+
+      getConfig()
+
+      assertConfigUpdateContains(telemetryEntries(), [
+        { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: 'http://collector:4318', origin: 'env_var' },
+        { name: 'OTEL_EXPORTER_OTLP_TIMEOUT', value: 1234, origin: 'env_var' },
+        { name: 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT', value: 1234, origin: 'calculated' },
+        { name: 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT', value: 1234, origin: 'calculated' },
+      ])
+    })
+
+    it('should omit OTLP header values inherited via the OTEL_EXPORTER_OTLP_HEADERS fallback', () => {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'dd-api-key=SENTINEL_FALLBACK'
+
+      getConfig()
+
+      const reportedNames = new Set(telemetryEntries().map(entry => entry.name))
+      const inheritedNames = [
+        'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+        'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+        'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+      ]
+      for (const name of inheritedNames) {
+        assert.ok(!reportedNames.has(name), `Expected ${name} to be omitted from telemetry`)
+      }
+
+      for (const entry of telemetryEntries()) {
+        const value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)
+        assert.ok(
+          value == null || !value.includes('SENTINEL_FALLBACK'),
+          `Expected inherited value to be excluded from telemetry, got ${entry.name}=${value}`
+        )
+      }
+    })
+
+    it('should not report DD_API_KEY supplied via the DATADOG_API_KEY alias', () => {
+      process.env.DATADOG_API_KEY = 'SENTINEL_DATADOG_API_KEY'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.apiKey, 'SENTINEL_DATADOG_API_KEY')
+      for (const entry of telemetryEntries()) {
+        const value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)
+        assert.ok(
+          value == null || !value.includes('SENTINEL_DATADOG_API_KEY'),
+          `Expected alias value to be excluded from telemetry, got ${entry.name}=${value}`
+        )
+      }
+    })
+  })
+
   it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'

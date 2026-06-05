@@ -12,6 +12,16 @@ const {
 
 applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
+// Canonical names of configurations whose value is excluded from configuration
+// telemetry. Driven by the `sensitive: true` attribute in
+// `supported-configurations.json` so new entries opt in without code changes.
+const sensitiveConfigurations = new Set()
+for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
+  if (entries.some(entry => entry.sensitive)) {
+    sensitiveConfigurations.add(canonicalName)
+  }
+}
+
 let log
 let seqId = 0
 const configWithOrigin = new Map()
@@ -72,6 +82,12 @@ for (const [name, value] of Object.entries(defaults)) {
 function generateTelemetry (value = null, origin, optionName) {
   const tableEntry = configurationsTable[optionName]
   const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  // Sensitive configurations are excluded from configuration telemetry: their
+  // entry is never added to `configWithOrigin`, the single source for every
+  // telemetry path (app-started and app-client-configuration-change).
+  if (sensitiveConfigurations.has(canonicalName)) {
+    return
+  }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
