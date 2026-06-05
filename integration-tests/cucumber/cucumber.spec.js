@@ -596,6 +596,57 @@ describe(`cucumber@${version} commonJS`, () => {
         })
       })
 
+      if (reportMethod === 'agentless' && version !== '7.0.0') {
+        it('keeps module tags when worker traces arrive before parallel suite start', async () => {
+          childProcess = exec(
+            parallelModeCommand,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                DD_TEST_DELAY_CUCUMBER_WORKER_MESSAGES_MS: '100',
+                DD_TEST_SESSION_NAME: 'my-test-session',
+                DD_SERVICE: undefined,
+              },
+            }
+          )
+
+          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testModuleEvent = events.find(event => event.type === 'test_module_end')
+              const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+              const testEvents = events.filter(event => event.type === 'test')
+
+              assert.ok(testModuleEvent, 'should have test module event')
+              assert.ok(testSuiteEvent, 'should have test suite event')
+              assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
+                `${featuresPath}farewell.feature.Say farewell`,
+                `${featuresPath}farewell.feature.Say whatever`,
+                `${featuresPath}greetings.feature.Say greetings`,
+                `${featuresPath}greetings.feature.Say skip`,
+                `${featuresPath}greetings.feature.Say yeah`,
+                `${featuresPath}greetings.feature.Say yo`,
+              ])
+              testEvents.forEach(({ content: { meta, test_suite_id: testSuiteId } }) => {
+                assert.strictEqual(meta[TEST_MODULE], 'cucumber')
+                assert.ok(testSuiteId)
+                assert.strictEqual(meta[CUCUMBER_IS_PARALLEL], 'true')
+              })
+            },
+            { hardTimeout: 10000 }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
+      }
+
       context('intelligent test runner', () => {
         it('can report git metadata', (done) => {
           const searchCommitsRequestPromise = receiver.payloadReceived(
