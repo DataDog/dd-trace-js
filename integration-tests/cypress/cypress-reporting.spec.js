@@ -40,6 +40,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_HAS_IMAGES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -2217,6 +2218,60 @@ moduleTypes.forEach(({
           assertObjectContains(fileNames, Object.keys(coverageFixture))
           assertObjectContains(sessionFileNames, Object.keys(coverageFixture))
         }, { hardTimeout: 25000 })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    over12It('tags test spans with test.has_images when a failure screenshot is taken', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_SCREENSHOT_ON_FAILURE: 'true',
+            SPEC_PATTERN: 'cypress/e2e/screenshot.cy.js',
+          },
+        }
+      )
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const testEvents = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+
+            const failedTest = testEvents.find(event =>
+              event.content.resource ===
+                'cypress/e2e/screenshot.cy.js.screenshot suite fails and takes a screenshot'
+            )
+            const passedTest = testEvents.find(event =>
+              event.content.resource ===
+                'cypress/e2e/screenshot.cy.js.screenshot suite passes without a screenshot'
+            )
+
+            assert.ok(failedTest, 'failed test span should exist')
+            assert.strictEqual(
+              failedTest.content.meta[TEST_HAS_IMAGES],
+              'true',
+              'failed test with screenshot should be tagged with test.has_images'
+            )
+
+            assert.ok(passedTest, 'passed test span should exist')
+            assert.ok(
+              !passedTest.content.meta[TEST_HAS_IMAGES],
+              'passed test without screenshot should not have test.has_images tag'
+            )
+          }, { hardTimeout: 60000 })
 
       await Promise.all([
         once(childProcess, 'exit'),

@@ -24,7 +24,7 @@ async function runCypress () {
         specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
       },
       video: false,
-      screenshotOnRunFailure: false,
+      screenshotOnRunFailure: process.env.CYPRESS_SCREENSHOT_ON_FAILURE === 'true',
     },
   })
 
