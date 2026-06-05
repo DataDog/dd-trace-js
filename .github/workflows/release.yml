@@ -34,8 +34,8 @@ jobs:
       - run: npm publish --tag latest-node14
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
@@ -62,8 +62,8 @@ jobs:
       - run: npm publish --tag latest-node16
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
@@ -92,8 +92,8 @@ jobs:
       - run: npm publish
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
@@ -112,8 +112,8 @@ jobs:
       - uses: ./.github/actions/node
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - run: yarn
       - name: Build
         working-directory: docs
@@ -156,8 +156,8 @@ jobs:
       - uses: ./.github/actions/install
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
       - run: npm publish --tag dev
       - run: |
