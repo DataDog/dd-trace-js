@@ -129,6 +129,8 @@ function maybeSaveCheckpoint (state) {
     state.durableContext,
     state.firstExecutionSpanId,
     state.invocationEvent,
+    /* istanbul ignore next: defense-in-depth — saveTraceContextCheckpointIfUpdated catches
+       internally and never rejects, so this handler is unreachable in practice */
   ).catch(() => {
     // Best-effort — never break customer workloads.
   }).finally(() => {
