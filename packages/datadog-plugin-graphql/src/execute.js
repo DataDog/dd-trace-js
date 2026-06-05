@@ -19,6 +19,19 @@ const types = new Set(['query', 'mutation', 'subscription'])
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 
+// Legacy AppSec/WAF contract: emitted once per resolver invocation (including
+// each sibling of a collapsed list) right after the resolver settles. Payload
+// carries the parent `rootCtx` (with the execute-level abortController) and the
+// field's pathString so subscribers can abort the rest of the execute mid-flight.
+const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
+
+// Internal coordination channel published by the outer execute wrap in
+// packages/datadog-instrumentations/src/graphql.js when an `apm:graphql:execute:start`
+// subscriber aborted synchronously. The outer wrap throws AbortError before
+// delegating, so orchestrion's lifecycle never runs; this channel exists so the
+// plugin can still produce a clean execute span for the trace.
+const abortExecuteCh = dc.channel('datadog:graphql:execute:abort')
+
 // contexts: contextValue -> rootCtx. Holds per-execute tracing state so the wrapped
 // resolvers can look up the active execute context without walking any stack.
 // Also serves as the re-entrance short-circuit (master's contexts.has pattern):
@@ -88,6 +101,36 @@ class GraphQLExecutePlugin extends TracingPlugin {
         }
       }
     }
+
+    // Off-orchestrion path: the outer execute wrap publishes here when an
+    // `apm:graphql:execute:start` subscriber aborted synchronously. We create
+    // and immediately finish a clean execute span so the trace still shows the
+    // operation. No resolve spans, no error tag — matches master's contract.
+    this.addSub(abortExecuteCh.name, message => this._handleAbort(message))
+  }
+
+  _handleAbort (message) {
+    const args = message?.args || {}
+    const document = args.document
+    const operation = getOperation(document, args.operationName)
+    const type = operation?.operation
+    const name = operation?.name?.value
+    const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
+    const source = this.config.source && document && docSource
+
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
+      resource: getSignature(document, name, type, this.config.signature),
+      kind: this.constructor.kind,
+      type: this.constructor.type,
+      meta: {
+        'graphql.operation.type': type,
+        'graphql.operation.name': name,
+        'graphql.source': source,
+      },
+    }, false)
+
+    span.finish()
   }
 
   bindStart (ctx) {
@@ -376,8 +419,17 @@ function wrapResolve (resolve) {
       })
     }
 
-    // Collapsed duplicates run the original resolver without capturing timing.
-    if (!isFirst) return resolve.apply(this, arguments)
+    // Collapsed duplicates run the resolver but skip span creation. They still
+    // publish updateField (master's contract: one publish per resolver call,
+    // even when the span is collapsed) and route through callInAsyncScope so the
+    // execute-level abort signal stops siblings once a subscriber aborts.
+    if (!isFirst) {
+      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err) => {
+        if (updateFieldCh.hasSubscribers) {
+          updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
+        }
+      })
+    }
 
     // Use the execute span's clock so the recorded Unix-ms timestamps line up
     // with the trace's reference; performance.now() alone would be ~0 since
@@ -393,6 +445,9 @@ function wrapResolve (resolve) {
     return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err, res) => {
       const endTime = executeSpan._getTime ? executeSpan._getTime() : undefined
       rootCtx.plugin._finishResolveSpan(span, field, err, res, endTime || startTime)
+      if (updateFieldCh.hasSubscribers) {
+        updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
+      }
     })
   }
 
