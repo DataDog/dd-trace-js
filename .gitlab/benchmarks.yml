@@ -20,13 +20,12 @@ variables:
     - interruptible: true
   timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
   script:
-    - git clone --branch dd-trace-js https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
-    - bp-runner bp-runner.yml --debug
+    - cd benchmark/platform && bp-runner bp-runner.yml --debug
   artifacts:
     name: "artifacts"
     when: always
     paths:
-      - platform/artifacts/
+      - benchmark/platform/artifacts/
     expire_in: 3 months
   retry:
     max: 2
@@ -47,8 +46,7 @@ benchmarks-pr-comment:
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
-    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
-    - bp-runner bp-runner.pr-comment.yml --debug
+    - cd benchmark/platform && bp-runner bp-runner.pr-comment.yml --debug
   allow_failure: true
 
 check-big-regressions:
@@ -63,8 +61,7 @@ check-big-regressions:
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
-    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
-    - bp-runner bp-runner.fail-on-regression.yml --debug
+    - cd benchmark/platform && bp-runner bp-runner.fail-on-regression.yml --debug
 
 benchmark:
   extends: .benchmarks
