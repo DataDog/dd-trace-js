@@ -3,6 +3,8 @@
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const getConfig = require('../../dd-trace/src/config')
+const { uploadTestScreenshot } = require('../../dd-trace/src/ci-visibility/requests/upload-test-screenshot')
 
 const {
   finishAllTraceSpans,
@@ -322,6 +324,7 @@ class PlaywrightPlugin extends CiPlugin {
       isModified,
       finalStatus,
       earlyFlakeAbortReason,
+      screenshotPaths,
       onDone,
     }) => {
       if (!span) return
@@ -425,9 +428,33 @@ class PlaywrightPlugin extends CiPlugin {
           isModified,
         }
       )
+      const traceId = span.context().toTraceId()
+      const testName = span.context()._tags[TEST_NAME]
+      const testSuite = span.context()._tags[TEST_SUITE]
+
       span.finish()
 
       finishAllTraceSpans(span)
+
+      if (screenshotPaths?.length) {
+        const { apiKey, site, url } = getConfig()
+        if (apiKey) {
+          const uploadUrl = url || new URL(`https://ci-intake.${site}`)
+          for (const filePath of screenshotPaths) {
+            uploadTestScreenshot({
+              filePath,
+              traceId,
+              testName,
+              testSuite,
+              testEnvironmentMetadata: this.testEnvironmentMetadata,
+              url: uploadUrl,
+            }, (err) => {
+              if (err) log.error('Error uploading test screenshot: %s', err.message)
+            })
+          }
+        }
+      }
+
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
         this.tracer._exporter.flush(onDone)
       }

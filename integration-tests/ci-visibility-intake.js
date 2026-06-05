@@ -227,6 +227,31 @@ class FakeCiVisIntake extends FakeAgent {
     })
 
     app.post([
+      '/api/v2/ci/tests/screenshots',
+      '/evp_proxy/:version/api/v2/ci/tests/screenshots',
+    ], upload.any(), (req, res) => {
+      res.status(200).send('OK')
+
+      const screenshotFile = req.files.find(f => f.fieldname === 'screenshot')
+      const eventFile = req.files.find(f => f.fieldname === 'event')
+
+      this.emit('message', {
+        headers: req.headers,
+        screenshotFile: screenshotFile && {
+          name: screenshotFile.fieldname,
+          filename: screenshotFile.originalname,
+          type: screenshotFile.mimetype,
+          content: screenshotFile.buffer,
+        },
+        eventFile: eventFile && {
+          name: eventFile.fieldname,
+          content: JSON.parse(eventFile.buffer.toString('utf8')),
+        },
+        url: req.url,
+      })
+    })
+
+    app.post([
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {

@@ -68,6 +68,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           evpProxyPrefix,
         })
         this._codeCoverageReportUrl = this._url
+        this._testScreenshotUploadUrl = this._url
         if (isTestDynamicInstrumentationEnabled) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {
