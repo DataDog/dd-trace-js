@@ -1,6 +1,6 @@
 'use strict'
 const { version: ddTraceVersion } = require('../../../../package.json')
-const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const { ITR_CORRELATION_ID, TEST_LEVELS_METADATA } = require('../../src/plugins/util/test')
 const id = require('../../src/id')
 const {
   distributionMetric,
@@ -13,6 +13,7 @@ const { truncateSpanTestOpt, normalizeSpan } = require('./tags-processors')
 
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
+const ALLOWED_METADATA_TARGETS = new Set([...ALLOWED_CONTENT_TYPES, TEST_LEVELS_METADATA])
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
@@ -34,6 +35,10 @@ function formatSpan (span) {
     version: encodingVersion,
     content: normalizeSpan(truncateSpanTestOpt(span)),
   }
+}
+
+function isAllowedMetadataTarget (target) {
+  return ALLOWED_METADATA_TARGETS.has(target)
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
@@ -60,11 +65,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         ...tags['*'],
       }
     }
-    for (const type of ALLOWED_CONTENT_TYPES) {
-      if (tags[type]) {
-        this.metadataTags[type] = {
-          ...this.metadataTags[type],
-          ...tags[type],
+
+    for (const target of Object.keys(tags)) {
+      if (target !== '*' && tags[target] && isAllowedMetadataTarget(target)) {
+        this.metadataTags[target] = {
+          ...this.metadataTags[target],
+          ...tags[target],
         }
       }
     }
@@ -343,24 +349,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'version')
     bytes.writeNumber(payload.version)
     this._encodeString(bytes, 'metadata')
-    bytes.writeMapPrefix(Object.keys(payload.metadata).length)
-    this._encodeString(bytes, '*')
-    this._encodeMap(bytes, payload.metadata['*'])
-    if (payload.metadata.test) {
-      this._encodeString(bytes, 'test')
-      this._encodeMap(bytes, payload.metadata.test)
-    }
-    if (payload.metadata.test_suite_end) {
-      this._encodeString(bytes, 'test_suite_end')
-      this._encodeMap(bytes, payload.metadata.test_suite_end)
-    }
-    if (payload.metadata.test_module_end) {
-      this._encodeString(bytes, 'test_module_end')
-      this._encodeMap(bytes, payload.metadata.test_module_end)
-    }
-    if (payload.metadata.test_session_end) {
-      this._encodeString(bytes, 'test_session_end')
-      this._encodeMap(bytes, payload.metadata.test_session_end)
+    const metadataKeys = Object.keys(payload.metadata)
+    bytes.writeMapPrefix(metadataKeys.length)
+    for (const metadataKey of metadataKeys) {
+      this._encodeString(bytes, metadataKey)
+      this._encodeMap(bytes, payload.metadata[metadataKey])
     }
     this._encodeString(bytes, 'events')
     this._eventsOffset = bytes.length

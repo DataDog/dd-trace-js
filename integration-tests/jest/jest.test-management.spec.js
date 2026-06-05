@@ -112,7 +112,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
           metadataDicts.forEach(metadata => {
-            assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-lage-package')
+            assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-lage-package')
           })
         })
 
@@ -157,11 +157,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
           assert.ok(
-            metadataDicts.some(metadata => metadata['*']?.[TEST_SESSION_NAME] === 'my-lage-package-a'),
+            metadataDicts.some(metadata => metadata.test_levels?.[TEST_SESSION_NAME] === 'my-lage-package-a'),
             `Got: ${inspect(metadataDicts)}`
           )
           assert.ok(
-            metadataDicts.some(metadata => metadata['*']?.[TEST_SESSION_NAME] === 'my-lage-package-b'),
+            metadataDicts.some(metadata => metadata.test_levels?.[TEST_SESSION_NAME] === 'my-lage-package-b'),
             `Got: ${inspect(metadataDicts)}`
           )
         })
@@ -2015,7 +2015,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
             assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
             // capabilities logic does not overwrite test session name
-            assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+            assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
           })
         })
 

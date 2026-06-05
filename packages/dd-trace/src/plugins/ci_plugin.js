@@ -44,6 +44,7 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
+  TEST_LEVELS_METADATA,
   TEST_MODULE,
   TEST_SESSION_NAME,
   getTestSuiteCommonTags,
@@ -218,7 +219,9 @@ module.exports = class CiPlugin extends Plugin {
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = { '*': { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName } }
+      const metadataTags = {
+        [TEST_LEVELS_METADATA]: { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName },
+      }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {
         this.tracer._exporter.addMetadataTags(metadataTags)
