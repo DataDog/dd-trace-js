@@ -207,11 +207,14 @@ function preHandler (request, reply, done) {
 
 function preValidation (request, reply, done) {
   const req = getReq(request)
-  const res = getRes(reply)
   const ctx = parsingContexts.get(req)
-  ctx.res = res
 
-  if (!ctx) return processInContext(request, ctx, done, req)
+  // No stored context means the onRequest/preParsing fast path ran (no error /
+  // cookie / callback subscribers), so there is nothing to publish on; forward
+  // `done` instead of dereferencing a missing ctx in processInContext.
+  if (!ctx) return done()
+
+  ctx.res = getRes(reply)
 
   preValidationCh.runStores(ctx, processInContext, undefined, request, ctx, done, req)
 }
@@ -276,7 +279,7 @@ function wrapSend (send, req) {
     const ctx = { req }
     if (payload instanceof Error) {
       ctx.error = payload
-      errorChannel.publish(ctx)
+      publishError(ctx)
     } else if (canPublishResponsePayload(payload)) {
       const res = getRes(this)
       ctx.res = res
@@ -300,9 +303,18 @@ function getRouteConfig (request) {
   return request?.routeOptions?.config
 }
 
+let publishingError = false
+
 function publishError (ctx) {
-  if (ctx.error) {
-    errorChannel.publish(ctx)
+  // `errorChannel` is public: a subscriber that re-enters the hook pipeline while
+  // handling the error republishes here and recurses until the stack overflows.
+  if (ctx.error && !publishingError) {
+    publishingError = true
+    try {
+      errorChannel.publish(ctx)
+    } finally {
+      publishingError = false
+    }
   }
 
   return ctx.error
