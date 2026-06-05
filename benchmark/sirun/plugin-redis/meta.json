@@ -7,13 +7,13 @@
   "instructions": true,
   "variants": {
     "get": {
-      "env": { "VARIANT": "get", "ITERATIONS": "20000000" }
+      "env": { "VARIANT": "get", "ITERATIONS": "13500000" }
     },
     "long-value": {
       "env": { "VARIANT": "long-value", "ITERATIONS": "13000000" }
     },
     "mset-wide": {
-      "env": { "VARIANT": "mset-wide", "ITERATIONS": "2200000" }
+      "env": { "VARIANT": "mset-wide", "ITERATIONS": "1150000" }
     },
     "mixed": {
       "env": { "VARIANT": "mixed", "ITERATIONS": "13000000" }
