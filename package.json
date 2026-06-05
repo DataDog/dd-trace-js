@@ -7,7 +7,6 @@
   "scripts": {
     "env": "bash ./plugin-env",
     "prepare": "node scripts/patch-istanbul-lib-coverage.js && cd vendor && npm ci --include=dev",
-    "preinstall": "node scripts/preinstall.js",
     "prepack": "node scripts/release/swap-v5-types.js",
     "bench": "node benchmark/index.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
@@ -153,7 +152,6 @@
     "packages/datadog-instrumentations/orchestrion.yml",
     "README.md",
     "register.js",
-    "scripts/preinstall.js",
     "vendor/dist/**/*.d.ts",
     "vendor/dist/**/*.js",
     "vendor/dist/**/*.wasm",
