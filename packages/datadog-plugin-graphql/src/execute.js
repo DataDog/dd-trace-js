@@ -1,5 +1,6 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('node:async_hooks')
 const dc = require('dc-polyfill')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
@@ -24,6 +25,10 @@ const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 // when yoga's normalizedExecutor internally calls execute, the inner call sees
 // this map already populated and skips the whole setup.
 const contexts = new WeakMap()
+
+// ALS fallback for non-WeakMap-keyable contextValues (primitives, Symbols on Node 18).
+// set via enterWith() in bindStart; read via getStore() in resolveAsync.
+const primitiveContextAls = new AsyncLocalStorage()
 
 // WeakSet caches: wrap each resolver and each type at most once across the process.
 // Critical for recursive types (Human.friends: [Human]) — without patchedTypes the
@@ -137,9 +142,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
       wrapFields(schema._subscriptionType)
     }
 
-    // Register execute context so the wrapped resolvers can find their rootCtx.
-    // Normalize contextValue to an object for WeakMap keying (matches master).
-    const cv = normalizeContextValue(ctx.arguments)
+    // Register execute context so wrapped resolvers can find their rootCtx.
+    // contextValue is used as-is — we never mutate the caller's args.
+    // WeakMap requires an object or function key (Node.js 18 doesn't allow
+    // Symbols; Node.js 20+ does but we target 18). For non-keyable values
+    // (primitives, Symbols on Node 18) we skip the WeakMap; resolvers will
+    // run without tracing rather than crashing.
+    const cv = args.contextValue
     const rootCtx = {
       // Raw document source text, used by:
       //  (a) the graphql.source span tag on resolve spans (when this.config.source
@@ -153,9 +162,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
       executeSpan: span,
       plugin: this,
     }
-    contexts.set(cv, rootCtx)
     ctx._ddRootCtx = rootCtx
-    ctx._ddContextValue = cv
+    if (isWeakMapKey(cv)) {
+      contexts.set(cv, rootCtx)
+      ctx._ddContextValue = cv
+    } else {
+      // Primitive / non-keyable: store rootCtx in ALS so wrapped resolvers
+      // (which receive the original contextValue) can still find it.
+      primitiveContextAls.enterWith(rootCtx)
+    }
 
     return ctx.currentStore
   }
@@ -230,7 +245,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   // hot when each span finishes — in benchmarks the batch pattern produced a
   // bursty encoding stall on collapse-off.
   _startResolveSpan (field, rootCtx, executeSpan, startTime) {
-    const { fieldNode, fieldName, returnType, variableValues, collapsedKey } = field
+    const { fieldNode, fieldName, returnType, baseTypeName, variableValues, collapsedKey } = field
 
     const parent = getParentField(rootCtx, field)
     const childOf = parent?.span || executeSpan
@@ -248,7 +263,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       meta: {
         'graphql.field.name': fieldName,
         'graphql.field.path': collapsedKey,
-        'graphql.field.type': returnType?.name,
+        'graphql.field.type': baseTypeName,
         'graphql.source': source,
       },
     }, false)
@@ -295,7 +310,7 @@ function wrapResolve (resolve) {
     // the cost of master's startResolveCh.hasSubscribers gate.
     if (_depthDisabled) return resolve.apply(this, arguments)
 
-    const rootCtx = contexts.get(contextValue)
+    const rootCtx = contexts.get(contextValue) ?? primitiveContextAls.getStore()
     if (!rootCtx) return resolve.apply(this, arguments)
 
     const infoPath = info?.path
@@ -333,6 +348,7 @@ function wrapResolve (resolve) {
         fieldNode: info.fieldNodes?.[0],
         fieldName: info.fieldName,
         returnType: info.returnType,
+        baseTypeName: getBaseTypeName(info.returnType),
         variableValues: info.variableValues,
         args,
         infoPath,
@@ -587,16 +603,16 @@ function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
   }
 }
 
-// Ensure contextValue is an object (required for WeakMap keying). Mutates rawArgs
-// in-place so graphql and our wrapped resolvers see the same object reference.
-function normalizeContextValue (rawArgs) {
-  if (rawArgs.length === 1 && rawArgs[0] && typeof rawArgs[0] === 'object' && !Array.isArray(rawArgs[0])) {
-    rawArgs[0].contextValue ||= {}
-    return rawArgs[0].contextValue
-  }
+function isWeakMapKey (value) {
+  return value !== null && (typeof value === 'object' || typeof value === 'function')
+}
 
-  rawArgs[3] = rawArgs[3] || {}
-  return rawArgs[3]
+// Unwrap GraphQL List/NonNull wrappers to get the underlying named type's name.
+// e.g. [Human] → 'Human', [Pet!] → 'Pet', String → 'String'
+function getBaseTypeName (type) {
+  let t = type
+  while (t && t.ofType) t = t.ofType
+  return t?.name
 }
 
 // Fallback resolver used when graphql.execute() is called without an explicit
