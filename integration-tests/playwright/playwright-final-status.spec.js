@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
@@ -12,7 +11,6 @@ const {
   getCiVisAgentlessConfig,
   createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
@@ -77,129 +75,184 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('final status tag', () => {
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
-      it('sets final_status tag to test status on regular tests without retry features', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          receiver.setSettings({
-            itr_enabled: false,
-            code_coverage: false,
-            tests_skipping: false,
-            flaky_test_retries_enabled: false,
-            early_flake_detection: { enabled: false },
-          })
+      it('sets final_status tag to test status on regular tests without retry features', async (receiver, run) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              // All playwright test fixtures use beforeEach for page.goto (hooks scenario covered)
-              tests.forEach(test => {
-                assert.strictEqual(
-                  test.meta[TEST_FINAL_STATUS],
-                  test.meta[TEST_STATUS],
-                  `Expected TEST_FINAL_STATUS to match TEST_STATUS for test "${test.meta[TEST_NAME]}"`
-                )
-              })
-            })
-
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-              },
-            }
-          )
-
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
-      })
-
-      it('sets final_status tag to test status on last retry (ATR active only)', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          receiver.setSettings({
-            itr_enabled: false,
-            code_coverage: false,
-            tests_skipping: false,
-            flaky_test_retries_enabled: true,
-            early_flake_detection: { enabled: false },
-          })
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              const eventuallyPassingTests = tests.filter(
-                test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
+            // All playwright test fixtures use beforeEach for page.goto (hooks scenario covered)
+            tests.forEach(test => {
+              assert.strictEqual(
+                test.meta[TEST_FINAL_STATUS],
+                test.meta[TEST_STATUS],
+                `Expected TEST_FINAL_STATUS to match TEST_STATUS for test "${test.meta[TEST_NAME]}"`
               )
-              // retry=0 fail, retry=1 fail, retry=2 pass → 3 runs total
-              assert.strictEqual(eventuallyPassingTests.length, 3)
+            })
+          })
 
-              // Exactly one ATR run has TEST_FINAL_STATUS; all others must not.
-              // We avoid sorting by start time because parallel workers make
-              // wall-clock order non-deterministic.
-              const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
-              assert.strictEqual(finalRuns.length, 1,
-                `Exactly one ATR run should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
-              assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], 'pass')
-              const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
-              assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
-                'All other ATR runs should not have TEST_FINAL_STATUS')
-            }, RETRY_FINAL_STATUS_TIMEOUT)
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
 
-          // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
-          // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-          proc = exec(
-            './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
-              },
-            }
-          )
-
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('sets final_status tag only on last EFD retry (EFD active only)', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
+      it('sets final_status tag to test status on last retry (ATR active only)', async (receiver, run) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: { enabled: false },
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const eventuallyPassingTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
+            )
+            // retry=0 fail, retry=1 fail, retry=2 pass → 3 runs total
+            assert.strictEqual(eventuallyPassingTests.length, 3)
+
+            // Exactly one ATR run has TEST_FINAL_STATUS; all others must not.
+            // We avoid sorting by start time because parallel workers make
+            // wall-clock order non-deterministic.
+            const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
+            assert.strictEqual(finalRuns.length, 1,
+              `Exactly one ATR run should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+            assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], 'pass')
+            const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
+            assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
+              'All other ATR runs should not have TEST_FINAL_STATUS')
+          }, RETRY_FINAL_STATUS_TIMEOUT)
+
+        // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
+        // dd-trace won't override it since its guard is `if (project.retries === 0)`.
+        const proc = run(
+          './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+            },
+          }
+        )
+
+        await Promise.all([once(proc, 'exit'), receiverPromise])
+      })
+
+      it('sets final_status tag only on last EFD retry (EFD active only)', async (receiver, run) => {
+        receiver.setKnownTests({
+          playwright: {
+            'landing-page-test.js': [
+              'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+              'highest-level-describe  leading and trailing spaces    should work with fixme',
+            ],
+            'skipped-suite-test.js': [
+              'should work with fixme root',
+            ],
+            'todo-list-page-test.js': [
+              'playwright should work with failing tests',
+              'should work with fixme root',
+            ],
+          },
+        })
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': NUM_RETRIES_EFD },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Known tests: not retried, every execution is already the final one
+            const knownTest = tests.find(
+              test => test.meta[TEST_NAME] === 'playwright should work with failing tests'
+            )
+            assert.ok(knownTest)
+            assert.ok(!(TEST_IS_NEW in knownTest.meta))
+            assert.strictEqual(knownTest.meta[TEST_FINAL_STATUS], knownTest.meta[TEST_STATUS])
+
+            // New tests: exactly one run (the last EFD clone by repeat index) has TEST_FINAL_STATUS;
+            // all others must not. We avoid sorting by start time because parallel workers make
+            // wall-clock order non-deterministic.
+            const assertEfdFinalStatus = (testName, expectedFinalStatus) => {
+              const group = tests.filter(t => t.meta[TEST_NAME] === testName)
+              const finalRuns = group.filter(t => TEST_FINAL_STATUS in t.meta)
+              assert.strictEqual(finalRuns.length, 1,
+                `Exactly one run of "${testName}" should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+              assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], expectedFinalStatus)
+              const nonFinalRuns = group.filter(t => !(TEST_FINAL_STATUS in t.meta))
+              assert.strictEqual(nonFinalRuns.length, group.length - 1,
+                `All other runs of "${testName}" should not have TEST_FINAL_STATUS`)
+            }
+
+            // should work with passing tests is new and passes consistently → final_status='pass'
+            assertEfdFinalStatus(
+              'highest-level-describe  leading and trailing spaces    should work with passing tests',
+              'pass'
+            )
+            // should work with annotated tests is new and passes consistently → final_status='pass'
+            assertEfdFinalStatus(
+              'highest-level-describe  leading and trailing spaces    should work with annotated tests',
+              'pass'
+            )
+          }, RETRY_FINAL_STATUS_TIMEOUT)
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        await Promise.all([once(proc, 'exit'), receiverPromise])
+      })
+
+      it('sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active',
+        async (receiver, run) => {
           receiver.setKnownTests({
             playwright: {
-              'landing-page-test.js': [
-                'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                'highest-level-describe  leading and trailing spaces    should work with fixme',
-              ],
-              'skipped-suite-test.js': [
-                'should work with fixme root',
-              ],
-              'todo-list-page-test.js': [
-                'playwright should work with failing tests',
-                'should work with fixme root',
+              'automatic-retry-test.js': [
+                'playwright should eventually pass after retrying',
               ],
             },
           })
           receiver.setSettings({
+            flaky_test_retries_enabled: true,
             early_flake_detection: {
               enabled: true,
               slow_test_retries: { '5s': NUM_RETRIES_EFD },
@@ -213,262 +266,207 @@ versions.forEach((version) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              // Known tests: not retried, every execution is already the final one
-              const knownTest = tests.find(
-                test => test.meta[TEST_NAME] === 'playwright should work with failing tests'
+              const eventuallyPassingTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
               )
-              assert.ok(knownTest)
-              assert.ok(!(TEST_IS_NEW in knownTest.meta))
-              assert.strictEqual(knownTest.meta[TEST_FINAL_STATUS], knownTest.meta[TEST_STATUS])
+              assert.ok(eventuallyPassingTests.length > 1, `Expected ${eventuallyPassingTests.length} > 1`)
 
-              // New tests: exactly one run (the last EFD clone by repeat index) has TEST_FINAL_STATUS;
-              // all others must not. We avoid sorting by start time because parallel workers make
-              // wall-clock order non-deterministic.
-              const assertEfdFinalStatus = (testName, expectedFinalStatus) => {
-                const group = tests.filter(t => t.meta[TEST_NAME] === testName)
-                const finalRuns = group.filter(t => TEST_FINAL_STATUS in t.meta)
-                assert.strictEqual(finalRuns.length, 1,
-                  `Exactly one run of "${testName}" should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
-                assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], expectedFinalStatus)
-                const nonFinalRuns = group.filter(t => !(TEST_FINAL_STATUS in t.meta))
-                assert.strictEqual(nonFinalRuns.length, group.length - 1,
-                  `All other runs of "${testName}" should not have TEST_FINAL_STATUS`)
-              }
+              const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
+              assert.strictEqual(finalRuns.length, 1,
+                `Exactly one ATR run should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
+              assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], finalRuns[0].meta[TEST_STATUS])
+              assert.strictEqual(finalRuns[0].meta[TEST_STATUS], 'pass')
 
-              // should work with passing tests is new and passes consistently → final_status='pass'
-              assertEfdFinalStatus(
-                'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                'pass'
-              )
-              // should work with annotated tests is new and passes consistently → final_status='pass'
-              assertEfdFinalStatus(
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests',
-                'pass'
-              )
+              const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
+              assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
+                'All other ATR runs should not have TEST_FINAL_STATUS')
             }, RETRY_FINAL_STATUS_TIMEOUT)
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+          // --retries=2 is passed via CLI so test.retries is correctly set at startup.
+          // dd-trace won't override it since its guard is `if (project.retries === 0)`.
+          const proc = run(
+            './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
             {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
               },
             }
           )
 
           await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
-      })
-
-      it('sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active',
-        async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          let proc
-          try {
-            receiver.setKnownTests({
-              playwright: {
-                'automatic-retry-test.js': [
-                  'playwright should eventually pass after retrying',
-                ],
-              },
-            })
-            receiver.setSettings({
-              flaky_test_retries_enabled: true,
-              early_flake_detection: {
-                enabled: true,
-                slow_test_retries: { '5s': NUM_RETRIES_EFD },
-                faulty_session_threshold: 100,
-              },
-              known_tests_enabled: true,
-            })
-
-            const receiverPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-                const eventuallyPassingTests = tests.filter(
-                  test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
-                )
-                assert.ok(eventuallyPassingTests.length > 1, `Expected ${eventuallyPassingTests.length} > 1`)
-
-                const finalRuns = eventuallyPassingTests.filter(t => TEST_FINAL_STATUS in t.meta)
-                assert.strictEqual(finalRuns.length, 1,
-                  `Exactly one ATR run should have TEST_FINAL_STATUS, got ${finalRuns.length}`)
-                assert.strictEqual(finalRuns[0].meta[TEST_FINAL_STATUS], finalRuns[0].meta[TEST_STATUS])
-                assert.strictEqual(finalRuns[0].meta[TEST_STATUS], 'pass')
-
-                const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
-                assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
-                  'All other ATR runs should not have TEST_FINAL_STATUS')
-              }, RETRY_FINAL_STATUS_TIMEOUT)
-
-            // --retries=2 is passed via CLI so test.retries is correctly set at startup.
-            // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-            proc = exec(
-              './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
-                },
-              }
-            )
-
-            await Promise.all([once(proc, 'exit'), receiverPromise])
-          } finally {
-            proc?.kill()
-            await receiver.stop()
-          }
         })
 
-      it('sets final_status tag to skip for disabled tests', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          receiver.setSettings({ test_management: { enabled: true } })
-          receiver.setTestManagementTests({
-            playwright: {
-              suites: {
-                'disabled-test.js': {
-                  tests: {
-                    'disable should disable test': {
-                      properties: { disabled: true },
-                    },
+      it('sets final_status tag to skip for disabled tests', async (receiver, run) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          playwright: {
+            suites: {
+              'disabled-test.js': {
+                tests: {
+                  'disable should disable test': {
+                    properties: { disabled: true },
                   },
                 },
               },
             },
-          })
+          },
+        })
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'disable should disable test')
-              assert.ok(disabledTest, 'Expected to find the disabled test')
-              assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+            const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'disable should disable test')
+            assert.ok(disabledTest, 'Expected to find the disabled test')
+            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
 
-              // Non-disabled tests with hooks (beforeEach) run normally
-              const passingTest = tests.find(test => test.meta[TEST_NAME] === 'not disabled should not disable test')
-              assert.ok(passingTest, 'Expected to find the passing non-disabled test')
-              assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
-            }, 25000)
+            // Non-disabled tests with hooks (beforeEach) run normally
+            const passingTest = tests.find(test => test.meta[TEST_NAME] === 'not disabled should not disable test')
+            assert.ok(passingTest, 'Expected to find the passing non-disabled test')
+            assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+          }, 25000)
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-              },
-            }
-          )
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+            },
+          }
+        )
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('sets final_status tag to skip for quarantined tests', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          receiver.setSettings({ test_management: { enabled: true } })
-          receiver.setTestManagementTests({
-            playwright: {
-              suites: {
-                'quarantine-test.js': {
-                  tests: {
-                    'quarantine should quarantine failed test': {
-                      properties: { quarantined: true },
-                    },
+      it('sets final_status tag to skip for quarantined tests', async (receiver, run) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          playwright: {
+            suites: {
+              'quarantine-test.js': {
+                tests: {
+                  'quarantine should quarantine failed test': {
+                    properties: { quarantined: true },
                   },
                 },
-                'quarantine-failing-after-each-test.js': {
-                  tests: {
-                    'quarantine with failing afterEach should quarantine a test whose afterEach hook fails': {
-                      properties: { quarantined: true },
-                    },
+              },
+              'quarantine-failing-after-each-test.js': {
+                tests: {
+                  'quarantine with failing afterEach should quarantine a test whose afterEach hook fails': {
+                    properties: { quarantined: true },
                   },
                 },
               },
             },
-          })
+          },
+        })
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              // Quarantined test still runs and fails, but final_status must be 'skip'
-              const quarantinedTest = tests.find(
-                test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test'
-              )
-              assert.ok(quarantinedTest, 'Expected to find the quarantined test')
-              assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+            // Quarantined test still runs and fails, but final_status must be 'skip'
+            const quarantinedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test'
+            )
+            assert.ok(quarantinedTest, 'Expected to find the quarantined test')
+            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
 
-              // Quarantined test whose afterEach throws: test body passes but hook causes failure — still skip
-              const quarantinedAfterEachTest = tests.find(
-                test => test.meta[TEST_NAME] ===
-                  'quarantine with failing afterEach should quarantine a test whose afterEach hook fails'
-              )
-              assert.ok(quarantinedAfterEachTest, 'Expected to find the quarantined test with failing afterEach')
-              assert.strictEqual(quarantinedAfterEachTest.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(quarantinedAfterEachTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedAfterEachTest.meta[TEST_FINAL_STATUS], 'skip')
+            // Quarantined test whose afterEach throws: test body passes but hook causes failure — still skip
+            const quarantinedAfterEachTest = tests.find(
+              test => test.meta[TEST_NAME] ===
+                'quarantine with failing afterEach should quarantine a test whose afterEach hook fails'
+            )
+            assert.ok(quarantinedAfterEachTest, 'Expected to find the quarantined test with failing afterEach')
+            assert.strictEqual(quarantinedAfterEachTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedAfterEachTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedAfterEachTest.meta[TEST_FINAL_STATUS], 'skip')
 
-              // Non-quarantined test with hooks runs and passes normally
-              const passingTest = tests.find(
-                test => test.meta[TEST_NAME] === 'not quarantined should pass normally'
-              )
-              assert.ok(passingTest, 'Expected to find the passing non-quarantined test')
-              assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
-            }, 25000)
+            // Non-quarantined test with hooks runs and passes normally
+            const passingTest = tests.find(
+              test => test.meta[TEST_NAME] === 'not quarantined should pass normally'
+            )
+            assert.ok(passingTest, 'Expected to find the passing non-quarantined test')
+            assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+          }, 25000)
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js ' +
-            'quarantine-test.js quarantine-failing-after-each-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-              },
-            }
-          )
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js ' +
+          'quarantine-test.js quarantine-failing-after-each-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+            },
+          }
+        )
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not set final_status on intermediate skipped executions in serial mode', async () => {
+      it('does not set final_status on intermediate skipped executions in serial mode', async (receiver, run) => {
         if (version === 'latest') return
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const seriallySkippedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+            )
+            // playwright never fires testEnd for serial-mode-skipped tests (they don't
+            // run in a worker), so only the final passing execution reaches us.
+            assert.strictEqual(seriallySkippedTests.length, 1)
+
+            const passExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'pass')
+            assert.ok(passExecution, 'Expected a passing execution on the retry cycle')
+            assert.strictEqual(passExecution.meta[TEST_FINAL_STATUS], 'pass')
+          }, 30000)
+
+        // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
+        // dd-trace won't override it since its guard is `if (project.retries === 0)`.
+        const proc = run(
+          './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
+            },
+          }
+        )
+
+        await Promise.all([once(proc, 'exit'), receiverPromise])
+      })
+
+      it(
+        'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled',
+        async (receiver, run) => {
           receiver.setSettings({
             itr_enabled: false,
             code_coverage: false,
@@ -482,21 +480,25 @@ versions.forEach((version) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              const seriallySkippedTests = tests.filter(
-                test => test.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+              // These serial tests never ran — abandoned when maxFailures cut the run after the
+              // non-serial test exhausted its retries. Each must appear exactly once: the fallback
+              // loop at the end of the run must not re-emit them as duplicates.
+              const abandonedTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
+                t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
               )
-              // playwright never fires testEnd for serial-mode-skipped tests (they don't
-              // run in a worker), so only the final passing execution reaches us.
-              assert.strictEqual(seriallySkippedTests.length, 1)
+              assert.strictEqual(abandonedTests.length, 2)
+              abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
 
-              const passExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'pass')
-              assert.ok(passExecution, 'Expected a passing execution on the retry cycle')
-              assert.strictEqual(passExecution.meta[TEST_FINAL_STATUS], 'pass')
+              // Suite finalization must not be blocked by the abandoned tests staying in remainingTestsByFile
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+              assert.ok(suiteEvents.length > 0, 'Expected test_suite_end — suite must be finalized')
             }, 30000)
 
-          // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
-          // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-          proc = exec(
+          // --retries=1: `should eventually pass after retrying` needs retry>=2 to pass, so it exhausts
+          // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
+          // PLAYWRIGHT_WORKERS=1 ensures the non-serial test always runs (and fails) before the serial suite.
+          const proc = run(
             './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
             {
               cwd,
@@ -504,72 +506,13 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
+                MAX_FAILURES: '1',
+                PLAYWRIGHT_WORKERS: '1',
               },
             }
           )
 
           await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
-      })
-
-      it(
-        'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          let proc
-          try {
-            receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
-              flaky_test_retries_enabled: false,
-              early_flake_detection: { enabled: false },
-            })
-
-            const receiverPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-                // These serial tests never ran — abandoned when maxFailures cut the run after the
-                // non-serial test exhausted its retries. Each must appear exactly once: the fallback
-                // loop at the end of the run must not re-emit them as duplicates.
-                const abandonedTests = tests.filter(t =>
-                  t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
-                  t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
-                )
-                assert.strictEqual(abandonedTests.length, 2)
-                abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
-
-                // Suite finalization must not be blocked by the abandoned tests staying in remainingTestsByFile
-                const suiteEvents = events.filter(event => event.type === 'test_suite_end')
-                assert.ok(suiteEvents.length > 0, 'Expected test_suite_end — suite must be finalized')
-              }, 30000)
-
-            // --retries=1: `should eventually pass after retrying` needs retry>=2 to pass, so it exhausts
-            // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
-            // PLAYWRIGHT_WORKERS=1 ensures the non-serial test always runs (and fails) before the serial suite.
-            proc = exec(
-              './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
-                  MAX_FAILURES: '1',
-                  PLAYWRIGHT_WORKERS: '1',
-                },
-              }
-            )
-
-            await Promise.all([once(proc, 'exit'), receiverPromise])
-          } finally {
-            proc?.kill()
-            await receiver.stop()
-          }
         })
     })
   })

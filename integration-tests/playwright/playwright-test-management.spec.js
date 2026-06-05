@@ -14,7 +14,6 @@ const {
   assertObjectContains,
   createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
@@ -145,75 +144,68 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('known tests without early flake detection', () => {
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
-      it('detects new tests without retrying them', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          receiver.setSettings({
-            known_tests_enabled: true,
-          })
+      it('detects new tests without retrying them', async (receiver, run) => {
+        receiver.setSettings({
+          known_tests_enabled: true,
+        })
 
-          receiver.setKnownTests(
-            {
-              playwright: {
-                'landing-page-test.js': [
-                  // it will be considered new
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                  'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
-                ],
-                'skipped-suite-test.js': [
-                  'should work with fixme root',
-                ],
-                'todo-list-page-test.js': [
-                  'playwright should work with failing tests',
-                  'should work with fixme root',
-                ],
-              },
-            }
-          )
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-test.js': [
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                'highest-level-describe  leading and trailing spaces    should work with fixme',
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests',
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root',
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root',
+              ],
+            },
+          }
+        )
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const newTests = tests.filter(test =>
-                test.resource.endsWith('should work with passing tests')
-              )
-              // new tests detected but no retries
-              newTests.forEach(test => {
-                assertObjectContains(test.meta, {
-                  [TEST_IS_NEW]: 'true',
-                })
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with passing tests')
+            )
+            // new tests detected but no retries
+            newTests.forEach(test => {
+              assertObjectContains(test.meta, {
+                [TEST_IS_NEW]: 'true',
               })
-
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.strictEqual(retriedTests.length, 0)
             })
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-              },
-            }
-          )
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 0)
+          })
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
 
@@ -221,7 +213,7 @@ versions.forEach((version) => {
       const ATTEMPT_TO_FIX_NUM_RETRIES = 3
 
       context('attempt to fix', () => {
-        const it = createParallelIt(global.it)
+        const it = createParallelIt(global.it, { withReceiver: true })
 
         const getTestAssertions = (receiver, {
           isAttemptingToFix,
@@ -470,238 +462,186 @@ versions.forEach((version) => {
           }
         }
 
-        it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, { isAttemptingToFix: true })
-          } finally {
-            await receiver.stop()
-          }
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true })
         })
 
-        it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, { isAttemptingToFix: true, shouldAlwaysPass: true })
-          } finally {
-            await receiver.stop()
-          }
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, shouldAlwaysPass: true })
         })
 
-        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, { isAttemptingToFix: true, shouldFailSometimes: true })
-          } finally {
-            await receiver.stop()
-          }
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, shouldFailSometimes: true })
         })
 
-        it('does not attempt to fix tests if test management is not enabled', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver)
-          } finally {
-            await receiver.stop()
-          }
+        it('does not attempt to fix tests if test management is not enabled', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver)
         })
 
-        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
-          } finally {
-            await receiver.stop()
-          }
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
 
-        it('does not tag known attempt to fix tests as new', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          let proc
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setKnownTests({
-              playwright: {
-                'attempt-to-fix-test.js': [
-                  'attempt to fix should attempt to fix failed test',
-                  'attempt to fix should attempt to fix passed test',
-                ],
-              },
-            })
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: 2 },
-              early_flake_detection: {
-                enabled: true,
-                slow_test_retries: { '5s': 2 },
-                faulty_session_threshold: 100,
-              },
-              known_tests_enabled: true,
-            })
+        it('does not tag known attempt to fix tests as new', async (receiver, run) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setKnownTests({
+            playwright: {
+              'attempt-to-fix-test.js': [
+                'attempt to fix should attempt to fix failed test',
+                'attempt to fix should attempt to fix passed test',
+              ],
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
 
-            const eventsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const atfTests = tests.filter(
-                  t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const atfTests = tests.filter(
+                t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              )
+              assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
+              for (const test of atfTests) {
+                assert.ok(
+                  !(TEST_IS_NEW in test.meta),
+                  'ATF test that is in known tests should not be tagged as new'
                 )
-                assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
-                for (const test of atfTests) {
-                  assert.ok(
-                    !(TEST_IS_NEW in test.meta),
-                    'ATF test that is in known tests should not be tagged as new'
-                  )
-                }
-              }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
-
-            proc = exec(
-              './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                },
               }
-            )
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
-            await Promise.all([once(proc, 'exit'), eventsPromise])
-          } finally {
-            proc?.kill()
-            await receiver.stop()
-          }
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+              },
+            }
+          )
+
+          await Promise.all([once(proc, 'exit'), eventsPromise])
         })
 
-        it('ignores quarantine when attempting to fix a test', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'attempt-to-fix-test.js': {
-                    tests: {
-                      'attempt to fix should attempt to fix failed test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          quarantined: true,
-                        },
+        it('ignores quarantine when attempting to fix a test', async (receiver) => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
                       },
-                      'attempt to fix should attempt to fix passed test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          quarantined: true,
-                        },
+                    },
+                    'attempt to fix should attempt to fix passed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
                       },
                     },
                   },
                 },
               },
-            })
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isQuarantined: true })
-          } finally {
-            await receiver.stop()
-          }
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isQuarantined: true })
         })
 
-        it('ignores disabled when attempting to fix a test', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'attempt-to-fix-test.js': {
-                    tests: {
-                      'attempt to fix should attempt to fix failed test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          disabled: true,
-                        },
+        it('ignores disabled when attempting to fix a test', async (receiver) => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true,
                       },
-                      'attempt to fix should attempt to fix passed test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          disabled: true,
-                        },
+                    },
+                    'attempt to fix should attempt to fix passed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true,
                       },
                     },
                   },
                 },
               },
-            })
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isDisabled: true })
-          } finally {
-            await receiver.stop()
-          }
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isDisabled: true })
         })
 
-        it('--retries is disabled for an attempt to fix test', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            })
-            await runAttemptToFixTest(receiver, {
-              isAttemptingToFix: true,
-              shouldFailSometimes: true,
-              // passing retries has no effect
-              cliArgs: 'attempt-to-fix-test.js --retries=20',
-              shouldIncludeFlakyTest: true,
-            })
-          } finally {
-            await receiver.stop()
-          }
+        it('--retries is disabled for an attempt to fix test', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, {
+            isAttemptingToFix: true,
+            shouldFailSometimes: true,
+            // passing retries has no effect
+            cliArgs: 'attempt-to-fix-test.js --retries=20',
+            shouldIncludeFlakyTest: true,
+          })
         })
 
-        it('ATR is disabled for an attempt to fix test', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-              flaky_test_retries_enabled: true,
-            })
-            await runAttemptToFixTest(receiver, {
-              isAttemptingToFix: true,
-              shouldFailSometimes: true,
-              extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '20' },
-              shouldIncludeFlakyTest: true,
-            })
-          } finally {
-            await receiver.stop()
-          }
+        it('ATR is disabled for an attempt to fix test', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+            flaky_test_retries_enabled: true,
+          })
+          await runAttemptToFixTest(receiver, {
+            isAttemptingToFix: true,
+            shouldFailSometimes: true,
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '20' },
+            shouldIncludeFlakyTest: true,
+          })
         })
       })
 
       context('disabled', () => {
-        const it = createParallelIt(global.it)
+        const it = createParallelIt(global.it, { withReceiver: true })
 
         const getTestAssertions = (receiver, isDisabling) =>
           receiver
@@ -793,53 +733,33 @@ versions.forEach((version) => {
           }
         }
 
-        it('can disable tests', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: true } })
-            await runDisableTest(receiver, true)
-          } finally {
-            await receiver.stop()
-          }
+        it('can disable tests', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runDisableTest(receiver, true)
         })
 
-        it('can disable tests in fullyParallel mode', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: true } })
-            await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
-          } finally {
-            await receiver.stop()
-          }
+        it('can disable tests in fullyParallel mode', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
         })
 
-        it('fails if disable is not enabled', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: false } })
-            await runDisableTest(receiver, false)
-          } finally {
-            await receiver.stop()
-          }
+        it('fails if disable is not enabled', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: false } })
+          await runDisableTest(receiver, false)
         })
 
-        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: true } })
-            await runDisableTest(receiver, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-          } finally {
-            await receiver.stop()
-          }
+        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runDisableTest(receiver, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
       context('quarantine', () => {
-        const it = createParallelIt(global.it)
+        const it = createParallelIt(global.it, { withReceiver: true })
 
         const getTestAssertions = (receiver, { isQuarantining, hasFlakyTests }) =>
           receiver
@@ -937,140 +857,108 @@ versions.forEach((version) => {
           }
         }
 
-        it('can quarantine tests', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: true } })
-            await runQuarantineTest(receiver, { isQuarantining: true })
-          } finally {
-            await receiver.stop()
-          }
+        it('can quarantine tests', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runQuarantineTest(receiver, { isQuarantining: true })
         })
 
-        it('can quarantine tests when there are other flaky tests retried with --retries', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: true } })
-            await runQuarantineTest(receiver, {
-              isQuarantining: true,
-              cliArgs: 'quarantine-test.js quarantine-2-test.js --retries=1',
-              hasFlakyTests: true,
-            })
-          } finally {
-            await receiver.stop()
-          }
+        it('can quarantine tests when there are other flaky tests retried with --retries', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runQuarantineTest(receiver, {
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js quarantine-2-test.js --retries=1',
+            hasFlakyTests: true,
+          })
         })
 
-        it('can quarantine tests when there are other flaky tests retried with ATR', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
-            receiver.setSettings({
-              test_management: { enabled: true },
-              flaky_test_retries_enabled: true,
-            })
-            await runQuarantineTest(receiver, {
-              isQuarantining: true,
-              cliArgs: 'quarantine-test.js quarantine-2-test.js',
-              hasFlakyTests: true,
-              extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1' },
-            })
-          } finally {
-            await receiver.stop()
-          }
+        it('can quarantine tests when there are other flaky tests retried with ATR', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true,
+          })
+          await runQuarantineTest(receiver, {
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js quarantine-2-test.js',
+            hasFlakyTests: true,
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1' },
+          })
         })
 
-        it('fails if quarantine is not enabled', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: false } })
-            await runQuarantineTest(receiver, { isQuarantining: false })
-          } finally {
-            await receiver.stop()
-          }
+        it('fails if quarantine is not enabled', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: false } })
+          await runQuarantineTest(receiver, { isQuarantining: false })
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
-            receiver.setSettings({ test_management: { enabled: true } })
-            await runQuarantineTest(
-              receiver,
-              { isQuarantining: false, extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } }
-            )
-          } finally {
-            await receiver.stop()
-          }
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runQuarantineTest(
+            receiver,
+            { isQuarantining: false, extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } }
+          )
         })
       })
 
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
-      it('does not crash if the request to get test management tests fails', async () => {
+      it('does not crash if the request to get test management tests fails', async (receiver, run) => {
         let testOutput = ''
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          receiver.setSettings({
-            test_management: { enabled: true },
-            flaky_test_retries_enabled: false,
-          })
-          receiver.setTestManagementTestsResponseCode(500)
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false,
+        })
+        receiver.setTestManagementTestsResponseCode(500)
 
-          // Playwright runs are slow (browser startup); need longer than default 15s to receive test_session_end
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(
-              ({ url }) => url.endsWith('/api/v2/citestcycle'),
-              (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const testSessionEnd = events.find(event => event.type === 'test_session_end')
-                assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
-                const testSession = testSessionEnd.content
-                assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                // they are not retried
-                assert.strictEqual(tests.length, 2)
-                const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-                assert.strictEqual(retriedTests.length, 0)
-              },
-              120000
-            )
-
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                DD_TRACE_DEBUG: '1',
-              },
-            }
+        // Playwright runs are slow (browser startup); need longer than default 15s to receive test_session_end
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              // they are not retried
+              assert.strictEqual(tests.length, 2)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, 0)
+            },
+            120000
           )
 
-          proc.stdout?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          proc.stderr?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+              DD_TRACE_DEBUG: '1',
+            },
+          }
+        )
 
-          await Promise.all([
-            once(proc, 'exit'),
-            once(proc.stdout, 'end'),
-            once(proc.stderr, 'end'),
-            eventsPromise,
-          ])
-          assert.match(testOutput, /Test management tests could not be fetched/)
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        proc.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        proc.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(proc, 'exit'),
+          once(proc.stdout, 'end'),
+          once(proc.stderr, 'end'),
+          eventsPromise,
+        ])
+        assert.match(testOutput, /Test management tests could not be fetched/)
       })
     })
   })

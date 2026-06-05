@@ -15,7 +15,6 @@ const {
   assertObjectContains,
   createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
 const {
@@ -86,83 +85,69 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('active test span', () => {
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
-      it('can grab the test span and add tags', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+      it('can grab the test span and add tags', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const test = events.find(event => event.type === 'test').content
+            const test = events.find(event => event.type === 'test').content
 
-              assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
-            })
+            assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
+          })
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
-              },
-            }
-          )
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+            },
+          }
+        )
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('can grab the test span and add spans', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+      it('can grab the test span and add spans', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const test = events.find(event => event.type === 'test').content
-              const spans = events.filter(event => event.type === 'span').map(event => event.content)
+            const test = events.find(event => event.type === 'test').content
+            const spans = events.filter(event => event.type === 'span').map(event => event.content)
 
-              const customSpan = spans.find(span => span.name === 'my custom span')
+            const customSpan = spans.find(span => span.name === 'my custom span')
 
-              assert.ok(customSpan)
-              assert.strictEqual(customSpan.meta['test.really_custom_tag'], 'this is really custom')
+            assert.ok(customSpan)
+            assert.strictEqual(customSpan.meta['test.really_custom_tag'], 'this is really custom')
 
-              // custom span is children of active test span
-              assert.strictEqual(customSpan.trace_id.toString(), test.trace_id.toString())
-              assert.strictEqual(customSpan.parent_id.toString(), test.span_id.toString())
-            })
+            // custom span is children of active test span
+            assert.strictEqual(customSpan.trace_id.toString(), test.trace_id.toString())
+            assert.strictEqual(customSpan.parent_id.toString(), test.span_id.toString())
+          })
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
-              },
-            }
-          )
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+            },
+          }
+        )
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
       const getTestAssertions = (receiver, { isRedirecting }) =>
         receiver
@@ -213,156 +198,127 @@ versions.forEach((version) => {
         }
       }
 
-      it('can correlate tests and RUM sessions', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        try {
-          await runRumTest(receiver, { isRedirecting: false })
-        } finally {
-          await receiver.stop()
-        }
+      it('can correlate tests and RUM sessions', async (receiver) => {
+        await runRumTest(receiver, { isRedirecting: false })
       })
 
-      it('sends telemetry for RUM browser tests when telemetry is enabled', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        try {
-          const telemetryPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-              const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
+      it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver) => {
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
 
-              const testSessionMetric = telemetryEvents.find(
-                ({ metric }) => metric === 'test_session'
-              )
-              assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+            const testSessionMetric = telemetryEvents.find(
+              ({ metric }) => metric === 'test_session'
+            )
+            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
 
-              const eventFinishedTestEvents = telemetryEvents
-                .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+            const eventFinishedTestEvents = telemetryEvents
+              .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
-              eventFinishedTestEvents.forEach(({ tags }) => {
-                assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
-                assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
-              })
+            eventFinishedTestEvents.forEach(({ tags }) => {
+              assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+              assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
             })
+          })
 
-          await Promise.all([
-            runRumTest(
-              receiver,
-              { isRedirecting: false },
-              {
-                ...getCiVisEvpProxyConfig(receiver.port),
-                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
-              }
-            ),
-            telemetryPromise,
-          ])
-        } finally {
-          await receiver.stop()
-        }
+        await Promise.all([
+          runRumTest(
+            receiver,
+            { isRedirecting: false },
+            {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            }
+          ),
+          telemetryPromise,
+        ])
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        try {
-          await runRumTest(receiver, { isRedirecting: true })
-        } finally {
-          await receiver.stop()
-        }
+      it('do not crash when redirecting and RUM sessions are not active', async (receiver) => {
+        await runRumTest(receiver, { isRedirecting: true })
       })
     })
 
     contextNewVersions('check retries tagging', () => {
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
-      it('does not send attempt to fix tags if test is retried and not attempt to fix', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+      it('does not send attempt to fix tags if test is retried and not attempt to fix', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              assert.strictEqual(tests.length, NUM_RETRIES_EFD + 1)
-              for (const test of tests) {
-                assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-              }
-            })
-
-          receiver.setKnownTests({ playwright: {} })
-          receiver.setSettings({
-            impacted_tests_enabled: true,
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: {
-                '5s': NUM_RETRIES_EFD,
-              },
-            },
-            known_tests_enabled: true,
-            test_management: {
-              attempt_to_fix_retries: NUM_RETRIES_EFD,
-            },
+            assert.strictEqual(tests.length, NUM_RETRIES_EFD + 1)
+            for (const test of tests) {
+              assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+            }
           })
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js retried-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-retries-tagging',
-              },
-            }
-          )
+        receiver.setKnownTests({ playwright: {} })
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+          },
+          known_tests_enabled: true,
+          test_management: {
+            attempt_to_fix_retries: NUM_RETRIES_EFD,
+          },
+        })
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js retried-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-retries-tagging',
+            },
+          }
+        )
+
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
 
     contextNewVersions('playwright early bail', () => {
-      const it = createParallelIt(global.it)
+      const it = createParallelIt(global.it, { withReceiver: true })
 
-      it('reports tests that did not run', async () => {
-        const receiver = await new FakeCiVisIntake().start()
-        let proc
-        try {
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.strictEqual(tests.length, 2)
-              const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
-              assertObjectContains(failedTest.meta, {
-                [TEST_NAME]: 'failing test fails and causes early bail',
-              })
-              const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
-              assertObjectContains(didNotRunTest.meta, {
-                [TEST_NAME]: 'did not run because of early bail',
-              })
+      it('reports tests that did not run', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assertObjectContains(failedTest.meta, {
+              [TEST_NAME]: 'failing test fails and causes early bail',
             })
+            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+            assertObjectContains(didNotRunTest.meta, {
+              [TEST_NAME]: 'did not run because of early bail',
+            })
+          })
 
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-did-not-run',
-                ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
-              },
-            }
-          )
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-did-not-run',
+              ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
+            },
+          }
+        )
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
-        } finally {
-          proc?.kill()
-          await receiver.stop()
-        }
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
   })

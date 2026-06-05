@@ -8,7 +8,7 @@ const msgpack = require('@msgpack/msgpack')
 const multer = require('multer')
 const upload = multer()
 
-const { FakeAgent } = require('./helpers')
+const FakeAgent = require('./helpers/fake-agent')
 
 const DEFAULT_SETTINGS = {
   code_coverage: true,

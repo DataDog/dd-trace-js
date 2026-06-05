@@ -15,7 +15,6 @@ const {
   assertObjectContains,
   createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_SOURCE_FILE,
@@ -218,74 +217,54 @@ versions.forEach((version) => {
       }
 
       context('test is not new', () => {
-        const it = createParallelIt(global.it)
+        const it = createParallelIt(global.it, { withReceiver: true })
 
-        it('should be detected as impacted', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
-            receiver.setSettings({ impacted_tests_enabled: true })
-            await runImpactedTest(receiver, { isModified: true })
-          } finally {
-            await receiver.stop()
-          }
+        it('should be detected as impacted', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
+          receiver.setSettings({ impacted_tests_enabled: true })
+          await runImpactedTest(receiver, { isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
-            receiver.setSettings({ impacted_tests_enabled: false })
-            await runImpactedTest(receiver, { isModified: false })
-          } finally {
-            await receiver.stop()
-          }
+        it('should not be detected as impacted if disabled', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
+          receiver.setSettings({ impacted_tests_enabled: false })
+          await runImpactedTest(receiver, { isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          async () => {
-            const receiver = await new FakeCiVisIntake().start()
-            try {
-              receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
-              receiver.setSettings({ impacted_tests_enabled: true })
-              await runImpactedTest(
-                receiver,
-                { isModified: false },
-                { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
-              )
-            } finally {
-              await receiver.stop()
-            }
+          async (receiver) => {
+            receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
+            receiver.setSettings({ impacted_tests_enabled: true })
+            await runImpactedTest(
+              receiver,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
           })
       })
 
       context('test is new', () => {
-        const it = createParallelIt(global.it)
+        const it = createParallelIt(global.it, { withReceiver: true })
 
-        it('should be retried and marked both as new and modified', async () => {
-          const receiver = await new FakeCiVisIntake().start()
-          try {
-            receiver.setKnownTests({
-              playwright: {},
-            })
-            receiver.setSettings({
-              impacted_tests_enabled: true,
-              early_flake_detection: {
-                enabled: true,
-                slow_test_retries: {
-                  '5s': NUM_RETRIES_EFD,
-                  '10s': NUM_RETRIES_EFD,
-                },
+        it('should be retried and marked both as new and modified', async (receiver) => {
+          receiver.setKnownTests({
+            playwright: {},
+          })
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD,
+                '10s': NUM_RETRIES_EFD,
               },
-              known_tests_enabled: true,
-            })
-            await runImpactedTest(
-              receiver,
-              { isModified: true, isEfd: true, isNew: true }
-            )
-          } finally {
-            await receiver.stop()
-          }
+            },
+            known_tests_enabled: true,
+          })
+          await runImpactedTest(
+            receiver,
+            { isModified: true, isEfd: true, isNew: true }
+          )
         })
       })
     })

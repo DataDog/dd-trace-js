@@ -21,6 +21,7 @@ const {
   isCoverageActive,
   resolveCoverageRoot,
 } = require('../coverage/runtime')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
@@ -1188,11 +1189,14 @@ function deepFreeze (value) {
  * If Mocha retries a test whose promise already settled, only that scenario's
  * function is restarted.
  *
+ * When `withReceiver: true` is set, each test function receives
+ * `(receiver, run)` arguments automatically — see `withReceiver` for details.
+ *
  * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
- * @param {{ concurrency?: number }} [options] - defaults to 2 to limit CI resource contention
- * @returns {(name: string, fn: () => Promise<void>, opts?: { retries?: number }) => void}
+ * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
+ * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
  */
-function createParallelIt (mochaIt, { concurrency = 2 } = {}) {
+function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
   const scheduled = []
   let launched = false
   let active = 0
@@ -1226,7 +1230,8 @@ function createParallelIt (mochaIt, { concurrency = 2 } = {}) {
   }
 
   return function it (name, fn, opts = {}) {
-    const entry = { name, fn, promise: null, done: false, rejected: false }
+    const wrappedFn = useReceiver ? withReceiver(fn) : fn
+    const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
     scheduled.push(entry)
 
     mochaIt(name, function () {
@@ -1246,6 +1251,34 @@ function createParallelIt (mochaIt, { concurrency = 2 } = {}) {
       // If !done: still running or queued, return pending promise
       return entry.promise
     })
+  }
+}
+
+/**
+ * Wraps a test body with FakeCiVisIntake lifecycle management. Starts a
+ * receiver before the test, passes it (and an optional `run` exec helper that
+ * auto-kills on cleanup) to `fn`, then stops the receiver in a finally block.
+ *
+ * @param {(
+ *   receiver: FakeCiVisIntake,
+ *   run: (cmd: string, opts?: object) => import('child_process').ChildProcess
+ * ) => Promise<void>} fn
+ * @returns {() => Promise<void>}
+ */
+function withReceiver (fn) {
+  return async () => {
+    const receiver = await new FakeCiVisIntake().start()
+    let lastProc
+    const run = (cmd, opts) => {
+      lastProc = exec(cmd, opts)
+      return lastProc
+    }
+    try {
+      await fn(receiver, run)
+    } finally {
+      lastProc?.kill()
+      await receiver.stop()
+    }
   }
 }
 
@@ -1280,4 +1313,5 @@ module.exports = {
   varySandbox,
   warmCypressBinary,
   createParallelIt,
+  withReceiver,
 }
