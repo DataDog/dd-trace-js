@@ -4,6 +4,13 @@
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
+  "bin": {
+    "dd-trace-ci-analyze-intake": "ci/test-optimization-analyze-intake.js",
+    "dd-trace-ci-debug": "ci/test-optimization-debug.js",
+    "dd-trace-ci-diagnose": "ci/diagnose.js",
+    "dd-trace-ci-intake": "ci/test-optimization-intake.js",
+    "dd-trace-ci-render-report": "ci/test-optimization-render-report.js"
+  },
   "scripts": {
     "env": "bash ./plugin-env",
     "prepare": "node scripts/patch-istanbul-lib-coverage.js && cd vendor && npm ci --include=dev",
