@@ -522,15 +522,13 @@ moduleTypes.forEach(({
               })
             }, { hardTimeout: 25000 })
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
+          process.stdout.write(data)
         })
         childProcess.stderr?.on('data', (data) => {
           testOutput += data.toString()
+          process.stderr.write(data)
         })
 
         await Promise.all([
