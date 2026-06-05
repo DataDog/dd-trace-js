@@ -54,8 +54,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   const { agent } = meta
 
   // Run with the cross-invocation trace-context checkpoint feature (default-on) disabled,
-  // restoring the previous value afterwards. 
-  // TODO: Remove this once the bug is fixed upstream in aws/aws-durable-execution-sdk-js#544. 
+  // restoring the previous value afterwards.
+  // TODO: Remove this once the bug is fixed upstream in aws/aws-durable-execution-sdk-js#544.
   async function withCrossInvocationTracingDisabled (fn) {
     const config = meta.tracer._tracer._config
     const previous = config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED

@@ -22,7 +22,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:withDurableExecution'
 
-  bindStart(ctx) {
+  bindStart (ctx) {
     const args = ctx.arguments || []
     const event = args[0]
     const durableExecutionMode = args[3]
@@ -52,7 +52,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   // suspends (PENDING) we persist the current trace context as a `_datadog`
   // checkpoint, which subsequent invocations consume to extract the parent
   // trace context.
-  #installTerminationCheckpointHook(ctx, event) {
+  #installTerminationCheckpointHook (ctx, event) {
     if (!this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED) return
 
     const args = ctx.arguments || []
@@ -92,7 +92,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     }
   }
 
-  asyncEnd(ctx) {
+  asyncEnd (ctx) {
     const span = ctx?.currentStore?.span
     const status = ctx?.result?.Status
     if (span && typeof status === 'string') {
@@ -106,7 +106,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   }
 }
 
-function finishOpenChildSpans(executeSpan) {
+function finishOpenChildSpans (executeSpan) {
   const trace = executeSpan?._spanContext?._trace
   if (!trace?.started) return
 
@@ -119,7 +119,7 @@ function finishOpenChildSpans(executeSpan) {
   }
 }
 
-function maybeSaveCheckpoint(state) {
+function maybeSaveCheckpoint (state) {
   if (state.saved || state.savePromise) return state.savePromise
   if (!state.tracer || !state.span || !state.durableContext) return
 
