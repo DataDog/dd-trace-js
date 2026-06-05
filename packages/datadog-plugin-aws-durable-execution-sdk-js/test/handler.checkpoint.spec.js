@@ -39,7 +39,15 @@ function buildCtx (executionContext, handler) {
 }
 
 function buildPlugin (Plugin, tracer) {
-  const plugin = new Plugin(tracer, {})
+  // Mirror Config's handling of DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED (default-on, disabled
+  // only when explicitly "false") so the termination hook installs the same way it does in
+  // production. The real value is read off `_tracerConfig`, not `process.env`, so the env-driven
+  // tests below must bridge it here.
+  const tracerConfig = {
+    DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED:
+      process.env.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED !== 'false',
+  }
+  const plugin = new Plugin(tracer, tracerConfig)
   plugin.startSpan = (_name, _options, ctx) => {
     const span = {
       context () {
