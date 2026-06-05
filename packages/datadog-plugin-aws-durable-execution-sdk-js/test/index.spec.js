@@ -53,6 +53,20 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 }, (meta) => {
   const { agent } = meta
 
+  // Run with the cross-invocation trace-context checkpoint feature (default-on) disabled,
+  // restoring the previous value afterwards. 
+  // TODO: Remove this once the bug is fixed upstream in aws/aws-durable-execution-sdk-js#544. 
+  async function withCrossInvocationTracingDisabled (fn) {
+    const config = meta.tracer._tracer._config
+    const previous = config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED
+    config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED = false
+    try {
+      return await fn()
+    } finally {
+      config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED = previous
+    }
+  }
+
   beforeEach(async () => setup(meta.mod, meta.versionMod))
   afterEach(async () => teardown())
 
@@ -102,7 +116,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  for (const { span, operationName, run, opts } of [
+  for (const { span, operationName, run, opts, disableCrossInvocationTracing } of [
     {
       span: 'aws.durable.step',
       operationName: 'test-step',
@@ -131,6 +145,9 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       operationName: 'test-callback',
       run: ctx => ctx.waitForCallback('test-callback', async () => {}),
       opts: { resolveCallback: 'test-callback' },
+      // Resume is driven externally by sendCallbackSuccess(); run with the checkpoint feature
+      // disabled to avoid the #544 race (see withCrossInvocationTracingDisabled).
+      disableCrossInvocationTracing: true,
     },
     {
       span: 'aws.durable.create_callback',
@@ -148,11 +165,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       run: ctx => ctx.parallel('test-parallel', [async () => {}, async () => {}]),
     },
   ]) {
-    // TODO: re-enable when aws/aws-durable-execution-sdk-js#544 is released.
-    // wait_for_callback is the only entry whose resume races against the
-    // TimerScheduler bug fixed there; production is unaffected.
-    const itFn = span === 'aws.durable.wait_for_callback' ? it.skip : it
-    itFn(`${span} (happy path): emits span with expected tags`, async () => {
+    it(`${span} (happy path): emits span with expected tags`, async () => {
       const tracePromise = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
           name: span,
@@ -162,7 +175,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
         assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
       })
-      await invokeHandler(async (event, ctx) => run(ctx), opts)
+      const invoke = () => invokeHandler(async (event, ctx) => run(ctx), opts)
+      await (disableCrossInvocationTracing ? withCrossInvocationTracingDisabled(invoke) : invoke())
       return tracePromise
     })
   }
@@ -264,11 +278,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  // TODO: re-enable when aws/aws-durable-execution-sdk-js#544 is released.
-  // Both tests race against the same TimerScheduler bug via the chained-invoke
-  // resume path; production is unaffected.
-  // eslint-disable-next-line mocha/no-pending-tests
-  describe.skip('DurableContextImpl.invoke() - aws.durable.invoke', () => {
+  // The chained-invoke resume (target completing) is driven externally, so the checkpoint hook
+  // races the #544 TimerScheduler bug. These assert invoke span shape only — independent of the
+  // checkpoint feature — so we run them with the feature disabled (see
+  // withCrossInvocationTracingDisabled) rather than skipping them.
+  describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
     it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
       const tracePromise = agent.assertSomeTraces(traces => {
         const matched = assertSpanByName(traces, {
@@ -285,10 +299,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
       })
 
-      const result = await invokeHandler(
+      const result = await withCrossInvocationTracingDisabled(() => invokeHandler(
         async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),
-        { invokeTarget: async () => {} }
-      )
+        { invokeTarget: async () => { } }
+      ))
       assert.notStrictEqual(result, undefined, 'invoke should return a result')
 
       return tracePromise
@@ -307,10 +321,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       }))
 
       try {
-        await invokeHandler(
+        await withCrossInvocationTracingDisabled(() => invokeHandler(
           async (event, ctx) => ctx.invoke('error-func', TEST_FUNC_ARN, {}),
           { invokeTarget: async () => { throw new Error('Intentional invoke error') } }
-        )
+        ))
       } catch { /* expected */ }
 
       return tracePromise
