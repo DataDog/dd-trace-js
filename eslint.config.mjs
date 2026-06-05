@@ -630,6 +630,7 @@ export default [
   {
     name: 'dd-trace/scripts',
     files: [
+      '.mocharc.js',
       'scripts/**/*.js',
       'scripts/**/*.mjs',
     ],
