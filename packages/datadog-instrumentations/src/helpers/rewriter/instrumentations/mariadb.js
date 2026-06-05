@@ -20,6 +20,25 @@ module.exports = [
     },
     channelName: 'Pool_getConnection',
   },
+  // Pool._createConnection — pre-3.4.1 the pool's lazy connection growth
+  // (including `initSql` / `sessionVariables` setup queries) goes through
+  // this method. Clear context so those internal queries don't get
+  // attributed to whatever user span happened to trigger pool growth.
+  // 3.4.1+ moved this work behind private fields, where Pool.getConnection
+  // already covers it.
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=3 <3.4.1',
+      filePath: 'lib/pool.js',
+    },
+    functionQuery: {
+      methodName: '_createConnection',
+      className: 'Pool',
+      kind: 'Async',
+    },
+    channelName: 'Pool_createConnection',
+  },
   // -------------------------------------------------------------------------
   // v2 constructor hooks — stash connection opts on the instance as __ddConf
   // -------------------------------------------------------------------------

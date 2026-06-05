@@ -136,6 +136,33 @@ class PoolGetConnectionPlugin extends Plugin {
 }
 
 /**
+ * Handles Pool._createConnection (v>=3 <3.4.1).
+ *
+ * Pre-3.4.1, the pool's lazy connection growth path runs through
+ * `Pool.prototype._createConnection`, which internally executes the pool's
+ * `initSql` / `sessionVariables` setup queries on each new connection.
+ * Without context clearing, those internal queries inherit whichever user
+ * span happened to trigger pool growth and get mis-attributed to the
+ * caller. Returning null from `:start` runs the body under a null store.
+ *
+ * 3.4.1+ moves this work behind private fields and is already covered by
+ * `Pool.getConnection`, so this plugin is intentionally scoped to the gap.
+ */
+class PoolCreateConnectionPlugin extends Plugin {
+  static id = 'mariadb'
+
+  constructor () {
+    super(...arguments)
+
+    this.addBind('tracing:orchestrion:mariadb:Pool_createConnection:start', () => null)
+  }
+
+  configure (config) {
+    return super.configure(config)
+  }
+}
+
+/**
  * Handles v<3 Connection constructor wrapping.
  * Stashes config on the new connection instance via ctx.self.
  */
@@ -203,6 +230,7 @@ module.exports = [
   CreateConnectionPlugin,
   CreatePoolPlugin,
   PoolGetConnectionPlugin,
+  PoolCreateConnectionPlugin,
   V2ConnectionPlugin,
   V2PoolBasePlugin,
   V2PoolBaseGetConnectionPlugin,

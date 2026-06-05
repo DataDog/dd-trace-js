@@ -1118,6 +1118,64 @@ describe('Plugin', () => {
           })
         })
       }
+
+      if (semver.intersects(version, '>=3')) {
+        // Regression guard for the gap Codex flagged on the orchestrion
+        // migration: pre-3.4.1 v3 has `Pool.prototype._createConnection` as
+        // the entry point for pool growth, and any `initSql` /
+        // `sessionVariables` queries it issues used to be suppressed by the
+        // old `skipCh.runStores({}, ...)` wrap. Without an equivalent in
+        // the new instrumentation, those internal queries would become
+        // children of the user's active span.
+        describe('with a connection pool started during a request and initSql - promises', () => {
+          let pool
+          let mariadb
+
+          afterEach(async () => {
+            if (pool) await pool.end()
+            await agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb')
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+          })
+
+          it('should not attribute pool-internal initSql queries to the caller span', async () => {
+            const span = tracer.startSpan('outer-test')
+            const outerSpanId = span.context().toSpanId()
+
+            const assertion = agent.assertSomeTraces((traces) => {
+              const internalInit = traces
+                .flat()
+                .find(s => s.resource && /SELECT 1 AS pool_init_marker/.test(s.resource))
+              assert.notStrictEqual(internalInit, undefined, 'initSql span was emitted')
+              assert.notStrictEqual(
+                internalInit.parent_id?.toString(),
+                outerSpanId,
+                'initSql span must not be a child of the caller span'
+              )
+            })
+
+            await tracer.scope().activate(span, async () => {
+              pool = mariadb.createPool({
+                host: 'localhost',
+                user: 'root',
+                database: 'db',
+                connectionLimit: 1,
+                initSql: 'SELECT 1 AS pool_init_marker',
+              })
+
+              const conn = await pool.getConnection()
+              await conn.query('SELECT 1 + 1 AS solution')
+              await conn.end()
+              span.finish()
+            })
+
+            await assertion
+          })
+        })
+      }
     })
   })
 })
