@@ -61,6 +61,7 @@ function decodeVLQ (str, cursor) {
  * @returns {string | null}
  */
 function resolveSourcePath (mapDir, sourceRoot, sourcePath) {
+  // eslint-disable-next-line regexp/no-super-linear-move -- sourcemap source path, trusted build artifact.
   const cleanSourcePath = sourcePath.replace(/[?#].*$/, '')
   if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(cleanSourcePath)) {
     // Virtual sources may use URL-like schemes (e.g. file://, webpack://, vite://).

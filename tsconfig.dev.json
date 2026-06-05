@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    // `baseUrl` is deprecated in TS 6.0 but still resolves bare specifiers used here; bridge
+    // the deprecation until a TS 7 `paths` migration removes the need.
+    "ignoreDeprecations": "6.0",
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
@@ -10,7 +13,6 @@
     "strictBuiltinIteratorReturn": true,
     "strictFunctionTypes": true,
 
-    "alwaysStrict": false,
     "exactOptionalPropertyTypes": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,

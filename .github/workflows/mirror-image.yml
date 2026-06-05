@@ -32,7 +32,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           GHCR_TARGET="$(echo "ghcr.io/${REPOSITORY}/${IMAGE}" | tr '[:upper:]' '[:lower:]')"
-          echo "GHCR_TARGET=${GHCR_TARGET}" >> $GITHUB_ENV
+          echo "GHCR_TARGET=${GHCR_TARGET}" >> "$GITHUB_ENV"
 
       - name: Mirror manifest to GHCR
         env:

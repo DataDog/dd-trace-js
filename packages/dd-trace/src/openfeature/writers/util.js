@@ -18,6 +18,7 @@ function setAgentStrategy (config, setWriterEnabledValue) {
     }
 
     const endpoints = agentInfo.endpoints
+    // eslint-disable-next-line regexp/no-super-linear-move -- normalizes a constant path.
     const normalizedPath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
     const hasEndpoint = Array.isArray(endpoints) &&
       endpoints.includes(normalizedPath) || endpoints.includes(normalizedPath + '/')

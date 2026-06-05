@@ -31,6 +31,7 @@ function isValid (logEntry) {
 }
 
 const EOL = '\n'
+// eslint-disable-next-line regexp/no-super-linear-move -- internal log stack-trace text, trusted.
 const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
 
 function sanitize (logEntry) {

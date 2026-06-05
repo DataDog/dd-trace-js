@@ -878,6 +878,7 @@ function getCodeOwnersPatternRegex (pattern) {
   }
 
   const directoryOnly = pattern.endsWith('/')
+  // eslint-disable-next-line regexp/no-super-linear-move -- test path glob, trusted config.
   const normalizedPattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '')
   const anchored = pattern.startsWith('/') || normalizedPattern.includes('/')
 
@@ -1315,6 +1316,7 @@ function getTestLineStart (err, testSuitePath) {
   // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
   const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
   try {
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- V8-generated stack-trace line; trusted input.
     const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
     return Number.parseInt(testFileLineMatch[3], 10) || null
   } catch {
@@ -1342,6 +1344,7 @@ function parseAnnotations (annotations) {
     }
     const { type, description } = annotation
     if (type.startsWith('DD_TAGS')) {
+      // eslint-disable-next-line regexp/no-super-linear-move -- test annotation metadata, trusted.
       const regex = /\[(.*?)\]/
       const match = regex.exec(type)
       let tagValue = ''
@@ -1472,6 +1475,8 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
 
   const topFrame = frames[topRelevantFrameIndex]
   // Regular expression to match the file path, line number, and column number
+  /* eslint-disable-next-line regexp/no-super-linear-backtracking, regexp/no-super-linear-move --
+     V8-generated stack-trace line; trusted input. */
   const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
   const match = topFrame.match(regex)
 
