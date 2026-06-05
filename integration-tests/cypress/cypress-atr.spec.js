@@ -227,10 +227,6 @@ moduleTypes.forEach(({
               assert.equal(testExecutionOrder[9].isRetry, false)
             }, { hardTimeout: 30000 })
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,

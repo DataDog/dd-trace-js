@@ -532,6 +532,10 @@ moduleTypes.forEach(({
         }
       )
 
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
+
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
           childProcess,
@@ -580,6 +584,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -681,6 +689,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
+
         const receiverPromise = receiver
           .gatherPayloadsUntilChildExit(
             childProcess,
@@ -736,6 +748,10 @@ moduleTypes.forEach(({
             }
           )
 
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
@@ -783,6 +799,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -904,6 +924,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
+
         const receiverPromise = receiver
           .gatherPayloadsUntilChildExit(
             childProcess,
@@ -969,6 +993,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -1182,6 +1210,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -1716,6 +1748,10 @@ moduleTypes.forEach(({
             }
           )
 
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
@@ -1759,6 +1795,10 @@ moduleTypes.forEach(({
               },
             }
           )
+
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
 
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1807,6 +1847,10 @@ moduleTypes.forEach(({
             }
           )
 
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
@@ -1851,6 +1895,10 @@ moduleTypes.forEach(({
               },
             }
           )
+
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
 
           const eventsPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1958,6 +2006,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -2128,6 +2180,10 @@ moduleTypes.forEach(({
           },
         }
       )
+
+      // TODO: remove this once we have figured out flakiness
+      childProcess.stdout?.pipe(process.stdout)
+      childProcess.stderr?.pipe(process.stderr)
 
       const receiverPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,

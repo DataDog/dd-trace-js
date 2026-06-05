@@ -175,10 +175,6 @@ moduleTypes.forEach(({
               })
             }, { hardTimeout: 25000 })
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,
@@ -318,10 +314,6 @@ moduleTypes.forEach(({
         )
 
         const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew }, childProcess)
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -529,6 +521,10 @@ moduleTypes.forEach(({
                 [TEST_EARLY_FLAKE_ENABLED]: 'true',
               })
             }, { hardTimeout: 25000 })
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
