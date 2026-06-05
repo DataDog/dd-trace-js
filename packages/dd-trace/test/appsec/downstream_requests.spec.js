@@ -32,7 +32,7 @@ describe('appsec downstream_requests', () => {
 
   afterEach(() => {
     downstream.disable()
-    logWarnStub.restore()
+    sinon.restore()
   })
 
   describe('apiSecurity downstream body analysis sample rate', () => {
@@ -119,72 +119,63 @@ describe('appsec downstream_requests', () => {
     it('records response body ignored metric when sampling allows but content-length is missing', () => {
       const web = require('../../src/plugins/util/web')
       const span = { setTag: sinon.stub() }
-      const webRootStub = sinon.stub(web, 'root').returns(span)
-      try {
-        const inboundReq = {}
-        const ctx = {}
-        const res = {
-          statusCode: 200,
-          headers: { 'content-type': 'application/json' },
-        }
+      sinon.stub(web, 'root').returns(span)
 
-        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
-
-        assert.strictEqual(ctx.shouldCollectBody, undefined)
-        const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
-        sinon.assert.calledOnceWithExactly(span.setTag, tag, 1)
-      } finally {
-        webRootStub.restore()
+      const inboundReq = {}
+      const ctx = {}
+      const res = {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
       }
+
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
+      const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
+      sinon.assert.calledOnceWithExactly(span.setTag, tag, 1)
     })
 
     it('increments same ignored-body metric twice when two hops fail content-type on the same request', () => {
       const web = require('../../src/plugins/util/web')
       const span = { setTag: sinon.stub() }
-      const webRootStub = sinon.stub(web, 'root').returns(span)
-      try {
-        const inboundReq = {}
-        const badRes = {
-          statusCode: 200,
-          headers: { 'content-type': 'image/png', 'content-length': '4' },
-        }
-        const ctx1 = {}
-        const ctx2 = {}
-        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/a', badRes, ctx1)
-        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/b', badRes, ctx2)
+      sinon.stub(web, 'root').returns(span)
 
-        const tag = '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
-        sinon.assert.calledTwice(span.setTag)
-        sinon.assert.calledWith(span.setTag, tag, 1)
-        sinon.assert.calledWith(span.setTag, tag, 2)
-      } finally {
-        webRootStub.restore()
+      const inboundReq = {}
+      const badRes = {
+        statusCode: 200,
+        headers: { 'content-type': 'image/png', 'content-length': '4' },
       }
+      const ctx1 = {}
+      const ctx2 = {}
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/a', badRes, ctx1)
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/b', badRes, ctx2)
+
+      const tag = '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
+      sinon.assert.calledTwice(span.setTag)
+      sinon.assert.calledWith(span.setTag, tag, 1)
+      sinon.assert.calledWith(span.setTag, tag, 2)
     })
 
     it('records response body ignored metric when content-length exceeds configured max', () => {
       const web = require('../../src/plugins/util/web')
       const span = { setTag: sinon.stub() }
-      const webRootStub = sinon.stub(web, 'root').returns(span)
-      try {
-        const inboundReq = {}
-        const ctx = {}
-        const res = {
-          statusCode: 200,
-          headers: {
-            'content-type': 'application/json',
-            'content-length': '5000',
-          },
-        }
+      sinon.stub(web, 'root').returns(span)
 
-        downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
-
-        assert.strictEqual(ctx.shouldCollectBody, undefined)
-        const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
-        sinon.assert.calledOnceWithExactly(span.setTag, tag, 1)
-      } finally {
-        webRootStub.restore()
+      const inboundReq = {}
+      const ctx = {}
+      const res = {
+        statusCode: 200,
+        headers: {
+          'content-type': 'application/json',
+          'content-length': '5000',
+        },
       }
+
+      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
+      const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
+      sinon.assert.calledOnceWithExactly(span.setTag, tag, 1)
     })
 
     it('does not plan body collection when sample rate is zero', () => {
@@ -319,21 +310,16 @@ describe('appsec downstream_requests', () => {
       }
     })
 
-    afterEach(() => {
-      sinon.restore()
-    })
-
     it('increments count and sets metric on span', () => {
-      const webRootStub = sinon.stub(web, 'root').returns(span)
+      sinon.stub(web, 'root').returns(span)
 
       downstream.incrementDownstreamAnalysisCount(req)
 
       sinon.assert.calledOnceWithExactly(span.setTag, '_dd.appsec.downstream_request', 1)
-      webRootStub.restore()
     })
 
     it('increments count on multiple calls', () => {
-      const webRootStub = sinon.stub(web, 'root').returns(span)
+      sinon.stub(web, 'root').returns(span)
 
       downstream.incrementDownstreamAnalysisCount(req)
       downstream.incrementDownstreamAnalysisCount(req)
@@ -343,18 +329,16 @@ describe('appsec downstream_requests', () => {
       sinon.assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 1)
       sinon.assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 2)
       sinon.assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 3)
-      webRootStub.restore()
     })
 
     it('does not error when span is null', () => {
-      const webRootStub = sinon.stub(web, 'root').returns(null)
+      sinon.stub(web, 'root').returns(null)
 
       downstream.incrementDownstreamAnalysisCount(req)
-      webRootStub.restore()
     })
 
     it('tracks count per request independently', () => {
-      const webRootStub = sinon.stub(web, 'root').returns(span)
+      sinon.stub(web, 'root').returns(span)
       const req1 = {}
       const req2 = {}
 
@@ -365,7 +349,6 @@ describe('appsec downstream_requests', () => {
       assert.deepStrictEqual(span.setTag.getCall(0).args, ['_dd.appsec.downstream_request', 1])
       assert.deepStrictEqual(span.setTag.getCall(1).args, ['_dd.appsec.downstream_request', 1])
       assert.deepStrictEqual(span.setTag.getCall(2).args, ['_dd.appsec.downstream_request', 2])
-      webRootStub.restore()
     })
   })
 

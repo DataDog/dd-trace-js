@@ -167,7 +167,7 @@ function isRedirectResponse (res) {
  * @param {object} ctx http client instrumentation context (mutated).
  */
 function planResponseBodyCollection (originatingReq, _outgoingUrl, res, ctx) {
-  if (!config?.appsec?.apiSecurity) {
+  if (!config?.appsec.apiSecurity) {
     return
   }
 
