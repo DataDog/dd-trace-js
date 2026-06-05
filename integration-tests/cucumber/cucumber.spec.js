@@ -458,8 +458,8 @@ describe(`cucumber@${version} commonJS`, () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
               metadataDicts.forEach(metadata => {
-                assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
-                assert.ok(metadata['*'][TEST_COMMAND])
+                assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
+                assert.ok(metadata.test_levels[TEST_COMMAND])
               })
 
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3565,7 +3565,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
             })
           })
 

@@ -1968,8 +1968,8 @@ moduleTypes.forEach(({
             const ciVisMetadataDicts = ciVisPayloads.flatMap(({ payload }) => payload.metadata)
 
             ciVisMetadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
-              assert.ok(metadata['*'][TEST_COMMAND])
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
+              assert.ok(metadata.test_levels[TEST_COMMAND])
             })
             const events = ciVisPayloads.flatMap(({ payload }) => payload.events)
 

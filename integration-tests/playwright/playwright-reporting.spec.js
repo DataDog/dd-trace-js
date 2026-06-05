@@ -238,7 +238,7 @@ versions.forEach((version) => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -595,8 +595,8 @@ versions.forEach((version) => {
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], undefined)
               }
               // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
-              assert.strictEqual(metadata['*'][TEST_COMMAND], 'playwright test -c playwright.config.js')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata.test_levels[TEST_COMMAND], 'playwright test -c playwright.config.js')
             })
           })
 

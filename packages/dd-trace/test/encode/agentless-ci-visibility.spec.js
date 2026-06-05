@@ -290,6 +290,18 @@ describe('agentless-ci-visibility-encode', () => {
       assert.deepStrictEqual(encoder.metadataTags, { test: { tag: 'value1' } })
     })
 
+    it('stores metadata tags for the test levels target', () => {
+      encoder.addMetadataTags({
+        test_levels: { 'test.command': 'mocha' },
+        'test*': { tag: 'value' },
+        invalid: { tag: 'value' },
+      })
+
+      assert.deepStrictEqual(encoder.metadataTags, {
+        test_levels: { 'test.command': 'mocha' },
+      })
+    })
+
     // The CI Visibility flow calls `addMetadataTags` from two channels —
     // `ci:<framework>:session:start` adds `test_session.name`, and the async
     // `ci:<framework>:library-configuration` callback adds capability tags
@@ -375,6 +387,21 @@ describe('agentless-ci-visibility-encode', () => {
       assert.strictEqual(decoded.metadata['*']['test_session.name'], 'my-session')
       assert.deepStrictEqual(decoded.metadata.test, {
         '_dd.library_capabilities.auto_test_retries': '1',
+      })
+    })
+
+    it('encodes test levels target tags into the payload', () => {
+      encoder.addMetadataTags({
+        test_levels: { 'test.command': 'mocha', 'test_session.name': 'my-session' },
+      })
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'test.command': 'mocha',
+        'test_session.name': 'my-session',
       })
     })
   })
