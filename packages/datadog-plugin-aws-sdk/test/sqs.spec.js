@@ -3,12 +3,14 @@
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
 const { inspect } = require('node:util')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 
 const getQueueParams = (queueName) => {
@@ -25,7 +27,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions((version, moduleName, resolvedVersion) => {
       let AWS
       let sqs
       let queueName
@@ -34,6 +36,8 @@ describe('Plugin', () => {
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
+      const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
 
       beforeEach(() => {
         const id = randomUUID()
@@ -166,6 +170,35 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (promisesSupported) {
+          it('should propagate the tracing context from the producer to the consumer with promises', async () => {
+            let parentId
+            let traceId
+
+            const parentPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assert.strictEqual(span.resource.startsWith('sendMessage'), true)
+
+              parentId = span.span_id.toString()
+              traceId = span.trace_id.toString()
+            }, { timeoutMs: 10000 })
+
+            const childPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assert.strictEqual(typeof parentId, 'string')
+              assert.strictEqual(span.parent_id.toString(), parentId)
+              assert.strictEqual(span.trace_id.toString(), traceId)
+            }, { timeoutMs: 10000 })
+
+            await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test body', QueueUrl })
+            await callViaPromise(sqs, 'receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+
+            await Promise.all([parentPromise, childPromise])
+          })
+        }
 
         it('should propagate the tracing context from the producer to the consumer in batch operations', async () => {
           let parentId

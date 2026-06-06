@@ -54,47 +54,59 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addBind('apm:aws:response:start:sqs', ctx => {
-      const { request, response } = ctx
-      const contextExtraction = this.responseExtract(request.params, request.operation, response)
+    this.addBind('apm:aws:response:start:sqs', ctx => this.#startResponseSpan(ctx))
 
-      let store = this._parentMap.get(request)
-      let span
-      let parsedMessageAttributes
-      let parsedFirstBody
-      let firstBodyChecked = false
-      if (contextExtraction !== undefined) {
-        parsedFirstBody = contextExtraction.parsedBody
-        firstBodyChecked = contextExtraction.bodyChecked === true
-        if (contextExtraction.datadogContext !== undefined) {
-          ctx.needsFinish = true
-          const options = {
-            childOf: contextExtraction.datadogContext,
-            meta: {
-              ...this.requestTags.get(request),
-              'span.kind': 'server',
-            },
-            integrationName: 'aws-sdk',
-          }
-          parsedMessageAttributes = contextExtraction.parsedAttributes
-          span = this.startSpan('aws.response', options, ctx)
-          store = ctx.currentStore
-        }
-      }
-
-      // Extract DSM context after, as we might not have a parent-child but may have a DSM context.
-      this.responseExtractDSMContext(
-        request.operation, request.params, response, span ?? null,
-        { parsedAttributes: parsedMessageAttributes, parsedFirstBody, firstBodyChecked }
-      )
-
-      return store
+    // No-callback receives (promises, event emitters) never publish response:start, so link and
+    // finish the consumer span here instead. Callback paths reach the same logic via the bind above.
+    this.addSub('apm:aws:request:complete:sqs', ctx => {
+      if (ctx.cbExists) return
+      // v2 nests the SDK payload under response.data; v3 spreads the output onto response.
+      const responseCtx = { request: ctx.request, response: ctx.response?.data ?? ctx.response }
+      this.#startResponseSpan(responseCtx)
+      if (responseCtx.needsFinish) this.finish(responseCtx)
     })
 
     this.addSub('apm:aws:response:finish:sqs', ctx => {
       if (!ctx.needsFinish) return
       this.finish(ctx)
     })
+  }
+
+  #startResponseSpan (ctx) {
+    const { request, response } = ctx
+    const contextExtraction = this.responseExtract(request.params, request.operation, response)
+
+    let store = this._parentMap.get(request)
+    let span
+    let parsedMessageAttributes
+    let parsedFirstBody
+    let firstBodyChecked = false
+    if (contextExtraction !== undefined) {
+      parsedFirstBody = contextExtraction.parsedBody
+      firstBodyChecked = contextExtraction.bodyChecked === true
+      if (contextExtraction.datadogContext !== undefined) {
+        ctx.needsFinish = true
+        const options = {
+          childOf: contextExtraction.datadogContext,
+          meta: {
+            ...this.requestTags.get(request),
+            'span.kind': 'server',
+          },
+          integrationName: 'aws-sdk',
+        }
+        parsedMessageAttributes = contextExtraction.parsedAttributes
+        span = this.startSpan('aws.response', options, ctx)
+        store = ctx.currentStore
+      }
+    }
+
+    // Extract DSM context after, as we might not have a parent-child but may have a DSM context.
+    this.responseExtractDSMContext(
+      request.operation, request.params, response, span ?? null,
+      { parsedAttributes: parsedMessageAttributes, parsedFirstBody, firstBodyChecked }
+    )
+
+    return store
   }
 
   operationFromRequest (request) {

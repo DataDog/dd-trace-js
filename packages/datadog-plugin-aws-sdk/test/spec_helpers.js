@@ -8,6 +8,18 @@ const AWS_SDK_V3_RANGE = NODE_MAJOR === 18 ? '3.0.0' : '>3.0.0'
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 /**
+ * @param {object} client SQS client (v2 `AWS.SQS` or v3 aggregated client).
+ * @param {string} method Operation name, e.g. `sendMessage`.
+ * @param {object} params Operation parameters.
+ * @returns {Promise<object>} Resolves with the operation result.
+ */
+function callViaPromise (client, method, params) {
+  const result = client[method](params)
+  // v2 returns an AWS.Request exposing `.promise()`; v3's aggregated client returns a Promise directly.
+  return typeof result.promise === 'function' ? result.promise() : result
+}
+
+/**
  * @callback AwsSdkVersionCallback
  * @param {string} version
  * @param {string} moduleName
@@ -67,6 +79,7 @@ function getAwsSdkV3Range (range) {
 }
 
 const helpers = {
+  callViaPromise,
   sort,
   withAwsSdkV2Versions,
   withAwsSdkV3Versions,
