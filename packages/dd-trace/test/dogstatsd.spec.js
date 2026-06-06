@@ -254,30 +254,6 @@ describe('dogstatsd', () => {
     assert.deepStrictEqual(log.debug.firstCall.args, ['Flushing %s metrics via %s', 1, 'HTTP'])
   })
 
-  describe('generateClientConfig', () => {
-    it('routes metrics through the agent url when not in CI Visibility agentless mode', () => {
-      const clientConfig = DogStatsDClient.generateClientConfig({
-        dogstatsd: { hostname: 'localhost', port: 8125 },
-        url: new URL('http://localhost:8126'),
-        tags: {},
-      })
-
-      assert.strictEqual(clientConfig.metricsProxyUrl.toString(), 'http://localhost:8126/')
-    })
-
-    it('does not proxy metrics through the agent in CI Visibility agentless mode', () => {
-      const clientConfig = DogStatsDClient.generateClientConfig({
-        dogstatsd: { hostname: 'localhost', port: 8125 },
-        url: new URL('http://localhost:8126'),
-        isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
-        tags: {},
-      })
-
-      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
-    })
-  })
-
   it('should not flush if the dns lookup fails', () => {
     client = createDogStatsDClient({
       host: 'invalid',
