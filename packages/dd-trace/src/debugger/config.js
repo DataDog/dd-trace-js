@@ -1,5 +1,7 @@
 'use strict'
 
+const { format } = require('node:url')
+
 const getGitMetadata = require('../git_metadata')
 
 module.exports = function getDebuggerConfig (config, inputPath) {
@@ -16,7 +18,11 @@ module.exports = function getDebuggerConfig (config, inputPath) {
     repositoryUrl,
     runtimeId: config.tags['runtime-id'],
     service: config.service,
-    url: config.url?.toString(),
+    // CI Visibility agentless mode leaves `config.url` empty; the worker still needs the local
+    // agent URL, so resolve host/port here instead of shipping an empty string to `new URL()`.
+    url: config.url
+      ? config.url.toString()
+      : format({ protocol: 'http:', hostname: config.hostname, port: config.port }),
     version: config.version,
     inputPath,
   }
