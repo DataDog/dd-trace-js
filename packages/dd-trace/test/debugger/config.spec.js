@@ -55,27 +55,6 @@ describe('getDebuggerConfig', function () {
     })
   })
 
-  it('should resolve url from host/port when CI Visibility agentless leaves it empty', function () {
-    const previous = process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
-    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
-    let tracerConfig
-    try {
-      // Fresh config module so the singleton does not leak a `url` from another test.
-      tracerConfig = proxyquire.noPreserveCache()('../../src/config', {})()
-    } finally {
-      if (previous === undefined) {
-        delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
-      } else {
-        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = previous
-      }
-    }
-
-    assert.strictEqual(tracerConfig.url, '')
-    const config = getDebuggerConfig(tracerConfig)
-    assert.strictEqual(config.url, `http://${tracerConfig.hostname}:${tracerConfig.port}`)
-    assert.strictEqual(new URL(config.url).href, `http://${tracerConfig.hostname}:${tracerConfig.port}/`)
-  })
-
   it('should be able to send the config over a MessageChannel', function () {
     const config = getDebuggerConfig(getConfig())
     const channel = new MessageChannel()

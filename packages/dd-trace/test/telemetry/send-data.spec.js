@@ -179,4 +179,24 @@ describe('sendData', () => {
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
   })
+
+  it('uses civisibilityAgentlessUrl for telemetry when the agentless intake is overridden', () => {
+    sendDataModule.sendData(
+      {
+        isCiVisibility: true,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+        civisibilityAgentlessUrl: new URL('https://my-intake.example/'),
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    const { url } = options
+    assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
+  })
 })

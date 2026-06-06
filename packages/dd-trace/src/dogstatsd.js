@@ -190,7 +190,8 @@ class DogStatsDClient {
       lookup: config.lookup,
     }
 
-    if (config.url) {
+    // In CI Visibility agentless mode there may be no agent to proxy metrics through, so skip the proxy.
+    if (!(config.isCiVisibility && config.DD_CIVISIBILITY_AGENTLESS_ENABLED)) {
       clientConfig.metricsProxyUrl = config.url
     }
 

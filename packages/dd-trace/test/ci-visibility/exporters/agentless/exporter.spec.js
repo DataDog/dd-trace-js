@@ -52,7 +52,9 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   it('can use CI Vis protocol right away', () => {
-    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    const agentlessExporter = new AgentlessCiVisibilityExporter({
+      civisibilityAgentlessUrl: url, isGitUploadEnabled: true, tags: {},
+    })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
 
@@ -128,7 +130,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        civisibilityAgentlessUrl: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -151,7 +153,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        civisibilityAgentlessUrl: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -177,7 +179,7 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        civisibilityAgentlessUrl: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return /** @type {Promise<void>} */ (new Promise(resolve => {
@@ -231,6 +233,15 @@ describe('CI Visibility Agentless Exporter', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
       assert.strictEqual(agentlessExporter._url.href, `https://citestcycle-intake.${site}/`)
       assert.strictEqual(agentlessExporter._coverageUrl.href, `https://citestcov-intake.${site}/`)
+    })
+
+    it('uses civisibilityAgentlessUrl as the intake override for every endpoint', () => {
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        civisibilityAgentlessUrl: url, site: 'd4tad0g.com', tags: {},
+      })
+      assert.strictEqual(agentlessExporter._url.href, 'http://www.example.com/')
+      assert.strictEqual(agentlessExporter._coverageUrl.href, 'http://www.example.com/')
+      assert.strictEqual(agentlessExporter._apiUrl.href, 'http://www.example.com/')
     })
   })
 })
