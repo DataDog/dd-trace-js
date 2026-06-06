@@ -18,3 +18,7 @@ insert_final_newline = unset
 # TODO: fix OpenAI tests
 [packages/datadog-plugin-openai/test/fine-tune.jsonl]
 insert_final_newline = unset
+
+# Streamed verbatim and asserted byte-for-byte by the response-blocking test.
+[packages/dd-trace/test/appsec/streamtest.txt]
+insert_final_newline = false
