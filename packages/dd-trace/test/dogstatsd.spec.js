@@ -9,6 +9,8 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const datadogCore = require('../../datadog-core')
+
 require('./setup/core')
 
 describe('dogstatsd', () => {
@@ -75,6 +77,7 @@ describe('dogstatsd', () => {
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
+      '../../datadog-core': datadogCore,
       './exporters/common/docker': docker,
       './log': log,
     })
@@ -289,6 +292,42 @@ describe('dogstatsd', () => {
 
     sinon.assert.called(udp6.send)
     sinon.assert.notCalled(dns.lookup)
+  })
+
+  it('runs the UDP send inside the noop store so its own dns.lookup is not traced', () => {
+    const legacyStorage = datadogCore.storage('legacy')
+    let noopDuringSend
+
+    udp4.send = sinon.stub().callsFake(() => {
+      noopDuringSend = legacyStorage.getHandle()?.noop
+    })
+
+    client = createDogStatsDClient({ host: '127.0.0.1' })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(noopDuringSend, true)
+    assert.strictEqual(legacyStorage.getHandle(), undefined)
+  })
+
+  it('runs the UDP send inside the noop store after a DNS lookup resolves the host', () => {
+    const legacyStorage = datadogCore.storage('legacy')
+    let noopDuringSend
+
+    udp4.send = sinon.stub().callsFake(() => {
+      noopDuringSend = legacyStorage.getHandle()?.noop
+    })
+
+    client = createDogStatsDClient({ host: 'localhost' })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    sinon.assert.called(dns.lookup)
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(noopDuringSend, true)
   })
 
   it('should support configuration', () => {
