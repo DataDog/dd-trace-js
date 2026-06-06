@@ -296,6 +296,7 @@ describe('dogstatsd', () => {
 
   it('runs the UDP send inside the noop store so its own dns.lookup is not traced', () => {
     const legacyStorage = datadogCore.storage('legacy')
+    const noopBeforeSend = legacyStorage.getHandle()?.noop
     let noopDuringSend
 
     udp4.send = sinon.stub().callsFake(() => {
@@ -309,7 +310,7 @@ describe('dogstatsd', () => {
 
     sinon.assert.called(udp4.send)
     assert.strictEqual(noopDuringSend, true)
-    assert.strictEqual(legacyStorage.getHandle(), undefined)
+    assert.strictEqual(legacyStorage.getHandle()?.noop, noopBeforeSend)
   })
 
   it('runs the UDP send inside the noop store after a DNS lookup resolves the host', () => {
