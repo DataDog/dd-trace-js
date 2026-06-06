@@ -3103,10 +3103,17 @@ describe('Config', () => {
 
   context('auto configuration w/ unix domain sockets', () => {
     context('socket does not exist', () => {
-      it('should not be used', () => {
+      it('should fall back to an HTTP URL built from hostname and port', () => {
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+      })
+
+      it('should bracket an IPv6 hostname when building the HTTP URL', () => {
+        const config = getConfig({ hostname: '::1' })
+
+        assert.strictEqual(config.url.toString(), 'http://[::1]:8126/')
+        assert.strictEqual(config.url.hostname, '[::1]')
       })
     })
 
@@ -3120,7 +3127,7 @@ describe('Config', () => {
 
         if (os.type() === 'Windows_NT') {
           assert.strictEqual(existsSyncParam, undefined)
-          assert.strictEqual(config.url, '')
+          assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
         } else {
           assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
@@ -3154,13 +3161,13 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:12345/')
       })
 
       it('should not be used when options.port provided', () => {
         const config = getConfig({ port: 12345 })
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:12345/')
       })
 
       it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
@@ -3168,7 +3175,7 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
       it('should not be used when DD_AGENT_HOST provided', () => {
@@ -3176,16 +3183,16 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
       it('should not be used when options.hostname provided', () => {
         const config = getConfig({ hostname: 'example.com' })
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
-      it('should not be used when DD_CIVISIBILITY_AGENTLESS_ENABLED provided', () => {
+      it('should remain unset in CI Visibility agentless mode so telemetry uses the agentless intake', () => {
         process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
 
         const config = getConfig()

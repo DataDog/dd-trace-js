@@ -2,7 +2,7 @@
 
 const fs = require('node:fs')
 const os = require('node:os')
-const { URL } = require('node:url')
+const { URL, format } = require('node:url')
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -334,6 +334,10 @@ class Config extends ConfigBase {
         'url',
         new URL(this.DD_CIVISIBILITY_AGENTLESS_URL || this.url || 'unix:///var/run/datadog/apm.socket')
       )
+    } else if (!this.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
+      // CI Visibility agentless mode keeps `url` unset on purpose so telemetry falls back to the
+      // agentless intake (see telemetry/send-data.js); every other mode resolves it here.
+      setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 
     if (this.isCiVisibility) {
