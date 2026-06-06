@@ -19,9 +19,9 @@ export default {
 
     const isLogCall = (node) => {
       return node.type === 'CallExpression' &&
-             node.callee.type === 'MemberExpression' &&
-             node.callee.object.name === 'log' &&
-             LOG_METHODS.includes(node.callee.property.name)
+        node.callee.type === 'MemberExpression' &&
+        node.callee.object.name === 'log' &&
+        LOG_METHODS.includes(node.callee.property.name)
     }
 
     const hasBinaryStringConcat = (node) => {

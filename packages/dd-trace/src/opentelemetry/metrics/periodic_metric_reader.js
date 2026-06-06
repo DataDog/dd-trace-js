@@ -444,8 +444,8 @@ class MetricAggregator {
    */
   #isDeltaType (type) {
     return type === METRIC_TYPES.COUNTER ||
-           type === METRIC_TYPES.OBSERVABLECOUNTER ||
-           type === METRIC_TYPES.HISTOGRAM
+          type === METRIC_TYPES.OBSERVABLECOUNTER ||
+          type === METRIC_TYPES.HISTOGRAM
   }
 
   /**

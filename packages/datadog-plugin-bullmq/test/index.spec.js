@@ -172,7 +172,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'messaging.system': 'bullmq',
           'error.type': 'TypeError',
           'error.message': 'Converting circular structure to JSON\n    --> ' +
-           "starting at object with constructor 'Object'\n    --- property 'self' closes the circle",
+            "starting at object with constructor 'Object'\n    --- property 'self' closes the circle",
           'error.stack': ANY_STRING,
         },
       })
