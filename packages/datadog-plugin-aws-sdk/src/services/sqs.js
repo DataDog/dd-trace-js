@@ -85,18 +85,23 @@ class Sqs extends BaseAwsSdkPlugin {
       parsedFirstBody = contextExtraction.parsedBody
       firstBodyChecked = contextExtraction.bodyChecked === true
       if (contextExtraction.datadogContext !== undefined) {
-        ctx.needsFinish = true
-        const options = {
-          childOf: contextExtraction.datadogContext,
-          meta: {
-            ...this.requestTags.get(request),
-            'span.kind': 'server',
-          },
-          integrationName: 'aws-sdk',
-        }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = this.startSpan('aws.response', options, ctx)
-        store = ctx.currentStore
+        // request:start records requestTags only after the isEnabled gate, so an absent entry
+        // means this consumer is disabled — gate on it instead of paying isEnabled again here.
+        const requestTags = this.requestTags.get(request)
+        if (requestTags !== undefined) {
+          ctx.needsFinish = true
+          const options = {
+            childOf: contextExtraction.datadogContext,
+            meta: {
+              ...requestTags,
+              'span.kind': 'server',
+            },
+            integrationName: 'aws-sdk',
+          }
+          span = this.startSpan('aws.response', options, ctx)
+          store = ctx.currentStore
+        }
       }
     }
 

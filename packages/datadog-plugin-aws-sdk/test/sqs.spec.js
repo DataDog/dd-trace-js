@@ -439,6 +439,39 @@ describe('Plugin', () => {
             }
           }, 250)
         })
+
+        it('should not create a consumer span when the consumer is disabled', async () => {
+          let consumerSpans = 0
+          const callViaCallback = (method, params) => new Promise((resolve, reject) => {
+            sqs[method](params, error => error ? reject(error) : resolve())
+          })
+
+          await Promise.all([
+            // Resolves the moment a consumer span leaks; otherwise it times out (swallowed) with none seen.
+            agent.assertSomeTraces(traces => {
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'aws.response') {
+                    consumerSpans++
+                    return
+                  }
+                }
+              }
+              throw new Error('no consumer span yet')
+            }).catch(() => {}),
+            (async () => {
+              await callViaCallback('sendMessage', { MessageBody: 'callback body', QueueUrl })
+              await callViaCallback('receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+
+              if (promisesSupported) {
+                await callViaPromise(sqs, 'sendMessage', { MessageBody: 'promise body', QueueUrl })
+                await callViaPromise(sqs, 'receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+              }
+            })(),
+          ])
+
+          assert.strictEqual(consumerSpans, 0)
+        })
       })
     })
   })
