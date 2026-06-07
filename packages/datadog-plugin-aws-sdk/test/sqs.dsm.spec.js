@@ -194,10 +194,13 @@ describe('Plugin', () => {
                 })
               })
 
-              await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test DSM', QueueUrl: QueueUrlDsm })
-              await callViaPromise(sqs, 'receiveMessage', { QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] })
-
-              return tracePromise
+              await Promise.all([
+                tracePromise,
+                (async () => {
+                  await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test DSM', QueueUrl: QueueUrlDsm })
+                  await callViaPromise(sqs, 'receiveMessage', { QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] })
+                })(),
+              ])
             })
         }
 

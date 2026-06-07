@@ -193,10 +193,14 @@ describe('Plugin', () => {
               assert.strictEqual(span.trace_id.toString(), traceId)
             }, { timeoutMs: 10000 })
 
-            await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test body', QueueUrl })
-            await callViaPromise(sqs, 'receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
-
-            await Promise.all([parentPromise, childPromise])
+            await Promise.all([
+              parentPromise,
+              childPromise,
+              (async () => {
+                await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test body', QueueUrl })
+                await callViaPromise(sqs, 'receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+              })(),
+            ])
           })
         }
 
