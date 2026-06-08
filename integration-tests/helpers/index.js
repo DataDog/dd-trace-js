@@ -1203,7 +1203,8 @@ function deepFreeze (value) {
 function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
   // Keyed by Mocha Suite object; populated lazily on first run within each suite.
   const suiteStates = new Map()
-  // All registered entries, looked up by test title when a suite first starts.
+  // All registered entries, queued by test title. A queue (array) per title
+  // lets multiple suites with duplicate test names each claim their own entry.
   const entriesByTitle = new Map()
 
   function getState (suite) {
@@ -1238,12 +1239,16 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
         state.waiting.push({ entry, resolve, reject })
       }
     })
+    // Suppress unhandled-rejection until Mocha attaches its own handler via
+    // `return entry.promise`. The original promise still rejects for Mocha.
+    entry.promise.catch(() => {})
   }
 
   return function it (name, fn, opts = {}) {
     const wrappedFn = useReceiver ? withReceiver(fn) : fn
     const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
-    entriesByTitle.set(name, entry)
+    if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
+    entriesByTitle.get(name).push(entry)
 
     mochaIt(name, function () {
       if (opts.retries !== undefined) {
@@ -1254,7 +1259,8 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
       if (!state.launched) {
         state.launched = true
         for (const test of suite.tests) {
-          const e = entriesByTitle.get(test.title)
+          const queue = entriesByTitle.get(test.title)
+          const e = queue && queue.shift()
           if (e) schedule(e, state)
         }
       } else if (entry.done && entry.rejected) {

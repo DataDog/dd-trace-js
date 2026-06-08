@@ -2576,16 +2576,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
       // FakeCiVisIntake was refactored from shared module-level variables to
       // per-instance #private fields so that concurrent Playwright tests don't
-      // interfere with each other. A side-effect is that each new receiver now
-      // starts with DEFAULT_KNOWN_TESTS (an array), which triggers paginated
-      // mode and returns malformed data — causing the known-tests request to
-      // fail and EFD to be disabled. Setting an explicit empty map makes the
-      // request succeed (non-paginated mode) so EFD stays enabled.
-      // it.failing tests are skipped entirely from EFD new-test analysis (the
-      // jest instrumentation returns early on add_test when event.failing is
-      // set), so they won't be retried or flagged as new regardless of whether
-      // failing-test.js appears in the known-tests list.
-      receiver.setKnownTests({})
+      // interfere with each other. Each new receiver starts with DEFAULT_KNOWN_TESTS
+      // (an array), which triggers paginated mode and returns malformed data,
+      // causing the known-tests request to fail and EFD to be disabled.
+      // Setting an explicit map fixes this. The map must include a `jest` key:
+      // jest.js treats a missing `jest` key as "all suites are new" which exceeds
+      // the faulty threshold, disabling EFD. An empty `jest: {}` passes that check
+      // without causing faulty detection (only 1 suite, threshold is 100).
+      // it.failing tests are excluded from EFD new-test analysis in jest.js
+      // (`if (event.failing) { return }` in the add_test handler), so they won't
+      // be retried or flagged as new regardless of known-tests contents.
+      receiver.setKnownTests({ jest: {} })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
